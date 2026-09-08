@@ -33,15 +33,15 @@ export default async function PermissionsPage() {
         actions={
           <div className="flex items-center gap-2">
             <Badge tone="brand">{PERMISSIONS.length} in registry</Badge>
-            <Badge tone={dbCount === PERMISSIONS.length ? "green" : "amber"}>{dbCount} in database</Badge>
+            <Badge tone={dbCount === PERMISSIONS.length ? "good" : "warn"}>{dbCount} in database</Badge>
           </div>
         }
       />
 
       {dbCount !== PERMISSIONS.length && (
-        <Card className="mb-3 border-amber-200 bg-amber-50">
+        <Card className="mb-3 border-warn-050 bg-warn-050">
           <CardBody>
-            <p className="text-sm text-amber-900">
+            <p className="text-sm text-warn-800">
               The database catalogue is out of step with the code registry. Run{" "}
               <code className="rounded bg-white px-1 py-0.5 text-xs">pnpm perms:sync</code> to
               reconcile them.

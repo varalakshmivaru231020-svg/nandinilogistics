@@ -45,12 +45,12 @@ export default async function StockPage() {
       header: "Item",
       render: (b) => (
         <div>
-          <p className="text-sm text-slate-800">{b.item.name}</p>
-          <p className="text-xs text-slate-500"><code>{b.item.code}</code> · {b.item.category.name}</p>
+          <p className="text-sm text-navy-900">{b.item.name}</p>
+          <p className="text-xs text-muted-500"><code>{b.item.code}</code> · {b.item.category.name}</p>
         </div>
       ),
     },
-    { key: "store", header: "Store", render: (b) => <span className="text-xs text-slate-600">{b.store.name}</span> },
+    { key: "store", header: "Store", render: (b) => <span className="text-xs text-muted-600">{b.store.name}</span> },
     {
       key: "qty",
       header: "On hand",
@@ -59,7 +59,7 @@ export default async function StockPage() {
       render: (b) => {
         const low = Number(b.item.reorderLevel) > 0 && Number(b.quantity) <= Number(b.item.reorderLevel);
         return (
-          <span className={low ? "font-semibold text-red-600" : "text-slate-800"}>
+          <span className={low ? "font-semibold text-bad-600" : "text-navy-900"}>
             {qty(b.quantity, 3)} {b.item.uom.code}
           </span>
         );
@@ -70,7 +70,7 @@ export default async function StockPage() {
       header: "Reorder level",
       align: "right",
       className: "num",
-      render: (b) => <span className="text-xs text-slate-500">{qty(b.item.reorderLevel, 3)}</span>,
+      render: (b) => <span className="text-xs text-muted-500">{qty(b.item.reorderLevel, 3)}</span>,
     },
     {
       key: "rate",
@@ -86,7 +86,7 @@ export default async function StockPage() {
       align: "right",
       className: "num",
       visible: showValuation,
-      render: (b) => <span className="font-medium text-slate-900">{money(b.value)}</span>,
+      render: (b) => <span className="font-medium text-navy-950">{money(b.value)}</span>,
     },
     {
       key: "flag",
@@ -94,7 +94,7 @@ export default async function StockPage() {
       align: "center",
       render: (b) => {
         const low = Number(b.item.reorderLevel) > 0 && Number(b.quantity) <= Number(b.item.reorderLevel);
-        return low ? <Badge tone="red">Reorder</Badge> : null;
+        return low ? <Badge tone="bad">Reorder</Badge> : null;
       },
     },
   ];
@@ -106,7 +106,7 @@ export default async function StockPage() {
         description="Item-wise position per store, valued at weighted average."
         actions={
           <div className="flex items-center gap-2">
-            {belowReorder > 0 && <Badge tone="red">{belowReorder} below reorder</Badge>}
+            {belowReorder > 0 && <Badge tone="bad">{belowReorder} below reorder</Badge>}
             {showValuation && <Badge tone="brand">{moneyShort(totalValue)} on hand</Badge>}
           </div>
         }

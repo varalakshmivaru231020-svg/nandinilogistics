@@ -57,8 +57,8 @@ export default async function AccountPage() {
                 ["Last sign-in", formatDateTime(user?.lastLoginAt)],
               ].map(([label, value]) => (
                 <div key={label}>
-                  <dt className="text-xs text-slate-500">{label}</dt>
-                  <dd className="mt-0.5 text-sm text-slate-800">{value}</dd>
+                  <dt className="text-xs text-muted-500">{label}</dt>
+                  <dd className="mt-0.5 text-sm text-navy-900">{value}</dd>
                 </div>
               ))}
             </dl>
@@ -69,30 +69,30 @@ export default async function AccountPage() {
           <CardHeader><CardTitle>Access summary</CardTitle></CardHeader>
           <CardBody className="space-y-3">
             <div>
-              <p className="text-xs text-slate-500">Roles</p>
+              <p className="text-xs text-muted-500">Roles</p>
               <div className="mt-1 flex flex-wrap gap-1">
-                {ctx.roles.length === 0 && <span className="text-xs text-amber-600">None assigned</span>}
+                {ctx.roles.length === 0 && <span className="text-xs text-warn-700">None assigned</span>}
                 {ctx.roles.map((r) => <Badge key={r.code} tone="brand">{r.name}</Badge>)}
               </div>
             </div>
 
             <div>
-              <p className="text-xs text-slate-500">Effective permissions</p>
-              <p className="num text-2xl font-semibold text-slate-900">
+              <p className="text-xs text-muted-500">Effective permissions</p>
+              <p className="num text-2xl font-semibold text-navy-950">
                 {ctx.isSuperAdmin ? PERMISSIONS.length : ctx.permissions.size}
-                <span className="ml-1 text-sm font-normal text-slate-400">of {PERMISSIONS.length}</span>
+                <span className="ml-1 text-sm font-normal text-muted-400">of {PERMISSIONS.length}</span>
               </p>
-              {ctx.isSuperAdmin && <Badge tone="violet">Super administrator</Badge>}
+              {ctx.isSuperAdmin && <Badge tone="navy">Super administrator</Badge>}
             </div>
 
             {Object.keys(ctx.approvalLimits).length > 0 && (
-              <div className="border-t border-slate-100 pt-2">
-                <p className="mb-1 text-xs text-slate-500">Your approval ceilings</p>
+              <div className="border-t border-line-200 pt-2">
+                <p className="mb-1 text-xs text-muted-500">Your approval ceilings</p>
                 <ul className="space-y-0.5">
                   {Object.entries(ctx.approvalLimits).map(([scope, value]) => (
                     <li key={scope} className="flex justify-between text-xs">
-                      <span className="text-slate-600">{scope}</span>
-                      <span className="num font-medium text-slate-800">{money(value)}</span>
+                      <span className="text-muted-600">{scope}</span>
+                      <span className="num font-medium text-navy-900">{money(value)}</span>
                     </li>
                   ))}
                 </ul>
@@ -106,18 +106,18 @@ export default async function AccountPage() {
         <Card>
           <CardHeader>
             <CardTitle>What you can do</CardTitle>
-            <span className="text-xs text-slate-500">By area</span>
+            <span className="text-xs text-muted-500">By area</span>
           </CardHeader>
           <CardBody className="p-0">
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line-200">
               {groups.map(([group, count]) => (
                 <li key={group} className="flex items-center justify-between px-4 py-2">
-                  <span className="text-sm text-slate-700">{group}</span>
-                  <span className="num text-xs font-medium text-slate-500">{count}</span>
+                  <span className="text-sm text-navy-600">{group}</span>
+                  <span className="num text-xs font-medium text-muted-500">{count}</span>
                 </li>
               ))}
               {groups.length === 0 && (
-                <li className="px-4 py-8 text-center text-sm text-slate-500">
+                <li className="px-4 py-8 text-center text-sm text-muted-500">
                   No permissions granted yet.
                 </li>
               )}
@@ -128,23 +128,23 @@ export default async function AccountPage() {
         <Card>
           <CardHeader>
             <CardTitle>Your projects</CardTitle>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-muted-500">
               {ctx.canAccessAllProjects ? "You can access every project" : "Data is scoped to these"}
             </span>
           </CardHeader>
           <CardBody className="p-0">
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line-200">
               {projects.map((p) => (
                 <li key={p.id} className="flex items-center justify-between px-4 py-2">
                   <div>
-                    <p className="text-sm text-slate-800">{p.name}</p>
-                    <code className="text-xs text-slate-400">{p.code}</code>
+                    <p className="text-sm text-navy-900">{p.name}</p>
+                    <code className="text-xs text-muted-400">{p.code}</code>
                   </div>
-                  <Badge tone={p.status === "ACTIVE" ? "green" : "slate"}>{p.status}</Badge>
+                  <Badge tone={p.status === "ACTIVE" ? "good" : "slate"}>{p.status}</Badge>
                 </li>
               ))}
               {projects.length === 0 && (
-                <li className="px-4 py-8 text-center text-sm text-slate-500">
+                <li className="px-4 py-8 text-center text-sm text-muted-500">
                   You are not mapped to any project.
                 </li>
               )}
@@ -159,14 +159,14 @@ export default async function AccountPage() {
             <CardTitle>Direct permission overrides on your account</CardTitle>
           </CardHeader>
           <CardBody className="p-0">
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line-200">
               {user.permissions.map((p) => (
                 <li key={p.id} className="flex items-center justify-between px-4 py-2">
                   <div>
-                    <p className="text-sm text-slate-700">{p.permission.label}</p>
-                    <code className="text-[11px] text-slate-400">{p.permission.code}</code>
+                    <p className="text-sm text-navy-600">{p.permission.label}</p>
+                    <code className="text-[11px] text-muted-400">{p.permission.code}</code>
                   </div>
-                  <Badge tone={p.effect === "ALLOW" ? "green" : "red"}>{p.effect}</Badge>
+                  <Badge tone={p.effect === "ALLOW" ? "good" : "bad"}>{p.effect}</Badge>
                 </li>
               ))}
             </ul>

@@ -61,7 +61,7 @@ export default async function CostSheetDetailPage({ params }: { params: Promise<
         }
         actions={
           sheet.bookings.length > 0
-            ? <Badge tone="green">Booked</Badge>
+            ? <Badge tone="good">Booked</Badge>
             : <Badge tone="slate">Quoted</Badge>
         }
       />

@@ -21,9 +21,12 @@ export function AppShell({
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar onOpenMobile={() => setMobileOpen(true)} />
-        <main className="flex-1 px-4 py-5 sm:px-6">{children}</main>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-surface-page">
+        <Topbar
+          onOpenMobile={() => setMobileOpen(true)}
+          pendingCount={badges?.indentPending ?? 0}
+        />
+        <main className="flex-1 overflow-y-auto px-[26px] pb-10 pt-6">{children}</main>
       </div>
     </div>
   );

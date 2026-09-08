@@ -12,8 +12,8 @@ import { formatDate, qty } from "@/lib/utils";
 
 export const metadata = { title: "Goods Receipt" };
 
-const STATUS_TONE: Record<string, "slate" | "amber" | "green" | "red"> = {
-  DRAFT: "slate", INSPECTED: "amber", POSTED: "green", CANCELLED: "red",
+const STATUS_TONE: Record<string, "slate" | "warn" | "good" | "bad"> = {
+  DRAFT: "slate", INSPECTED: "warn", POSTED: "good", CANCELLED: "bad",
 };
 
 type GrnRow = {
@@ -45,10 +45,10 @@ export default async function GrnListPage() {
       header: "Receipt",
       render: (g) => (
         <div>
-          <Link href={`/material/grn/${g.id}`} className="text-sm font-medium text-slate-900 hover:text-brand-600">
+          <Link href={`/material/grn/${g.id}`} className="text-sm font-medium text-navy-950 hover:text-brand-600">
             {g.grnNo}
           </Link>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-500">
             against{" "}
             <Link href={`/material/purchase-orders/${g.purchaseOrder.id}`} className="hover:text-brand-600">
               {g.purchaseOrder.poNo}
@@ -58,13 +58,13 @@ export default async function GrnListPage() {
       ),
     },
     { key: "vendor", header: "Vendor", render: (g) => <span className="text-sm">{g.vendor.name}</span> },
-    { key: "store", header: "Store", render: (g) => <span className="text-xs text-slate-600">{g.store.name}</span> },
+    { key: "store", header: "Store", render: (g) => <span className="text-xs text-muted-600">{g.store.name}</span> },
     {
       key: "challan",
       header: "Challan",
-      render: (g) => <span className="text-xs text-slate-600">{g.challanNo ?? "—"}</span>,
+      render: (g) => <span className="text-xs text-muted-600">{g.challanNo ?? "—"}</span>,
     },
-    { key: "date", header: "Received", render: (g) => <span className="text-xs text-slate-500">{formatDate(g.grnDate)}</span> },
+    { key: "date", header: "Received", render: (g) => <span className="text-xs text-muted-500">{formatDate(g.grnDate)}</span> },
     {
       key: "accepted",
       header: "Accepted",
@@ -75,8 +75,8 @@ export default async function GrnListPage() {
         const received = g.items.reduce((s, i) => s + Number(i.receivedQty), 0);
         return (
           <span className="text-xs">
-            <span className="font-medium text-emerald-700">{qty(accepted, 2)}</span>
-            <span className="text-slate-400"> / {qty(received, 2)}</span>
+            <span className="font-medium text-good-700">{qty(accepted, 2)}</span>
+            <span className="text-muted-400"> / {qty(received, 2)}</span>
           </span>
         );
       },
@@ -89,8 +89,8 @@ export default async function GrnListPage() {
       render: (g) => {
         const rejected = g.items.reduce((s, i) => s + Number(i.rejectedQty), 0);
         return rejected > 0
-          ? <span className="text-xs font-medium text-red-600">{qty(rejected, 2)}</span>
-          : <span className="text-xs text-slate-400">—</span>;
+          ? <span className="text-xs font-medium text-bad-600">{qty(rejected, 2)}</span>
+          : <span className="text-xs text-muted-400">—</span>;
       },
     },
     {
@@ -108,7 +108,7 @@ export default async function GrnListPage() {
         description="Accepted, rejected and short quantities recorded against the challan. Only accepted stock enters the ledger."
         actions={
           <div className="flex items-center gap-2">
-            {awaitingPost > 0 && <Badge tone="amber">{awaitingPost} inspected, not posted</Badge>}
+            {awaitingPost > 0 && <Badge tone="warn">{awaitingPost} inspected, not posted</Badge>}
             {ctx.has(PERM.material.grn.create) && (
               <Link href="/material/grn/new">
                 <Button size="sm">

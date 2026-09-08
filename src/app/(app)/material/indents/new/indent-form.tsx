@@ -154,14 +154,14 @@ export function IndentForm({
             const amount = (Number(line.requestedQty) || 0) * (Number(line.estimatedRate) || 0);
 
             return (
-              <div key={line.key} className="rounded-md border border-slate-200 p-3">
+              <div key={line.key} className="rounded-md border border-line-400 p-3">
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-medium text-slate-500">Line {idx + 1}</span>
+                  <span className="text-xs font-medium text-muted-500">Line {idx + 1}</span>
                   {lines.length > 1 && (
                     <button
                       type="button"
                       onClick={() => setLines((ls) => ls.filter((l) => l.key !== line.key))}
-                      className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      className="rounded p-1 text-muted-400 hover:bg-bad-050 hover:text-bad-600"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -195,7 +195,7 @@ export function IndentForm({
                   </Field>
 
                   <Field label="Amount" className="sm:col-span-3">
-                    <div className="num flex h-9 items-center justify-end rounded-md bg-slate-50 px-3 text-sm font-medium text-slate-800">
+                    <div className="num flex h-9 items-center justify-end rounded-md bg-surface-sunken px-3 text-sm font-medium text-navy-900">
                       {money(amount)}
                     </div>
                   </Field>
@@ -212,9 +212,9 @@ export function IndentForm({
             );
           })}
 
-          <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-3">
-            <span className="text-sm text-slate-500">Estimated value</span>
-            <span className="num text-lg font-semibold text-slate-900">{money(total)}</span>
+          <div className="flex items-center justify-end gap-3 border-t border-line-400 pt-3">
+            <span className="text-sm text-muted-500">Estimated value</span>
+            <span className="num text-lg font-semibold text-navy-950">{money(total)}</span>
           </div>
         </CardBody>
       </Card>

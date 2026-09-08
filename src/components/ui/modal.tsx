@@ -38,30 +38,30 @@ export function Modal({
   const sizes = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl", xl: "max-w-6xl" };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-[1px] sm:p-8">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy-950/35 p-4 backdrop-blur-[2px] sm:p-8">
       <div
-        className={cn("w-full rounded-lg bg-white shadow-xl ring-1 ring-slate-900/5", sizes[size])}
+        className={cn("animate-fade-up w-full rounded-[14px] border border-line-400 bg-white shadow-[0_24px_60px_rgba(25,26,92,.18)]", sizes[size])}
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-3.5">
+        <div className="flex items-start justify-between gap-4 border-b border-line-200 px-[20px] py-4">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-            {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
+            <h2 className="font-display text-[15px] font-bold text-navy-950">{title}</h2>
+            {description && <p className="mt-1 text-[11.5px] font-medium leading-relaxed text-muted-600">{description}</p>}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-[8px] p-1.5 text-muted-400 hover:bg-surface-hover hover:text-navy-900"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="scroll-thin max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
+        <div className="scroll-thin max-h-[70vh] overflow-y-auto px-[20px] py-[18px]">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+          <div className="flex items-center justify-end gap-2 border-t border-line-200 bg-surface-sunken px-[20px] py-3.5">
             {footer}
           </div>
         )}
@@ -99,7 +99,7 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onClose}
-            className="h-9 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="h-9 rounded-[9px] border border-line-400 bg-white px-4 text-[12.5px] font-bold text-navy-600 hover:bg-surface-hover"
           >
             Cancel
           </button>
@@ -107,14 +107,14 @@ export function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="h-9 rounded-md bg-red-600 px-4 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            className="h-9 rounded-[9px] bg-bad-600 px-4 text-[12.5px] font-bold text-white hover:brightness-95 disabled:opacity-50"
           >
             {loading ? "Working…" : confirmLabel}
           </button>
         </>
       }
     >
-      <p className="text-sm text-slate-600">{message}</p>
+      <p className="text-[12.5px] font-medium leading-relaxed text-navy-600">{message}</p>
     </Modal>
   );
 }

@@ -54,7 +54,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </span>
         }
         actions={
-          <Badge tone={invoice.status === "MISMATCH" ? "red" : invoice.status === "PAID" ? "violet" : "slate"}>
+          <Badge tone={invoice.status === "MISMATCH" ? "bad" : invoice.status === "PAID" ? "navy" : "slate"}>
             {invoice.status.replace(/_/g, " ")}
           </Badge>
         }

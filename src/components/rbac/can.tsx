@@ -55,5 +55,5 @@ export function Sensitive({
   masked?: React.ReactNode;
 }) {
   const perms = usePermissions();
-  return <>{perms.has(I) ? children : <span className="text-slate-400">{masked}</span>}</>;
+  return <>{perms.has(I) ? children : <span className="text-muted-400">{masked}</span>}</>;
 }

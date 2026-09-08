@@ -163,19 +163,19 @@ export function IssueForm({
         </CardHeader>
         <CardBody className="space-y-3">
           {stockInStore.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-500">
+            <p className="py-6 text-center text-sm text-muted-500">
               This store has no stock on hand. Post a goods receipt first.
             </p>
           ) : (
             <>
               {rows.map(({ l, s, over, value }, idx) => (
-                <div key={l.key} className={`rounded-md border p-3 ${over ? "border-red-300 bg-red-50/40" : "border-slate-200"}`}>
+                <div key={l.key} className={`rounded-md border p-3 ${over ? "border-bad-600 bg-bad-050" : "border-line-400"}`}>
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-medium text-slate-500">Line {idx + 1}</span>
+                    <span className="text-xs font-medium text-muted-500">Line {idx + 1}</span>
                     {lines.length > 1 && (
                       <button type="button"
                         onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}
-                        className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600">
+                        className="rounded p-1 text-muted-400 hover:bg-bad-050 hover:text-bad-600">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
@@ -201,14 +201,14 @@ export function IssueForm({
                     </Field>
 
                     <Field label={canViewValue ? "Value" : "Available"} className="sm:col-span-3">
-                      <div className="num flex h-9 items-center justify-end rounded-md bg-slate-50 px-3 text-sm text-slate-700">
+                      <div className="num flex h-9 items-center justify-end rounded-md bg-surface-sunken px-3 text-sm text-navy-600">
                         {canViewValue ? money(value) : s ? qty(s.available, 3) : "—"}
                       </div>
                     </Field>
                   </div>
 
                   {over && s && (
-                    <p className="mt-2 text-xs text-red-600">
+                    <p className="mt-2 text-xs text-bad-600">
                       Only {qty(s.available, 3)} {s.uom} in this store.
                     </p>
                   )}
@@ -216,9 +216,9 @@ export function IssueForm({
               ))}
 
               {canViewValue && (
-                <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-3">
-                  <span className="text-sm text-slate-500">Consumption value</span>
-                  <span className="num text-lg font-semibold text-slate-900">{money(totalValue)}</span>
+                <div className="flex items-center justify-end gap-3 border-t border-line-400 pt-3">
+                  <span className="text-sm text-muted-500">Consumption value</span>
+                  <span className="num text-lg font-semibold text-navy-950">{money(totalValue)}</span>
                 </div>
               )}
             </>
@@ -227,7 +227,7 @@ export function IssueForm({
       </Card>
 
       <div className="flex items-center justify-end gap-2">
-        {hasError && <Badge tone="red">Reduce the highlighted quantities</Badge>}
+        {hasError && <Badge tone="bad">Reduce the highlighted quantities</Badge>}
         <Button onClick={save} loading={busy} disabled={!ready}>
           <ArrowLeftRight className="h-3.5 w-3.5" />
           Issue material

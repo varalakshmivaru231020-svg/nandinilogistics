@@ -72,21 +72,21 @@ export function IssuesScreen({
                       return next;
                     })
                   }
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-hover"
                 >
-                  <ChevronDown className={cn("h-4 w-4 shrink-0 text-slate-400 transition-transform", !isOpen && "-rotate-90")} />
+                  <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-400 transition-transform", !isOpen && "-rotate-90")} />
 
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-slate-900">{issue.issueNo}</span>
+                      <span className="text-sm font-medium text-navy-950">{issue.issueNo}</span>
                       <Badge tone="slate">{issue.projectCode}</Badge>
                       {issue.acknowledgedAt ? (
-                        <Badge tone="green">Acknowledged</Badge>
+                        <Badge tone="good">Acknowledged</Badge>
                       ) : (
-                        <Badge tone="amber">Awaiting acknowledgement</Badge>
+                        <Badge tone="warn">Awaiting acknowledgement</Badge>
                       )}
                     </div>
-                    <p className="mt-0.5 text-xs text-slate-500">
+                    <p className="mt-0.5 text-xs text-muted-500">
                       {issue.storeName} → {issue.issuedToName} · {formatDate(issue.issueDate)}
                       {issue.workPackage && ` · ${issue.workPackage}`}
                       {issue.purpose && ` · ${issue.purpose}`}
@@ -94,20 +94,20 @@ export function IssuesScreen({
                   </div>
 
                   <div className="shrink-0 text-right">
-                    <p className="num text-sm font-medium text-slate-800">
+                    <p className="num text-sm font-medium text-navy-900">
                       {canViewValue ? money(issue.totalValue) : `${issue.lines.length} line(s)`}
                     </p>
-                    <p className="text-xs text-slate-400">issued by {issue.issuedByName}</p>
+                    <p className="text-xs text-muted-400">issued by {issue.issuedByName}</p>
                   </div>
                 </button>
 
                 {isOpen && (
-                  <div className="border-t border-slate-100 px-4 py-3">
-                    <ul className="divide-y divide-slate-100">
+                  <div className="border-t border-line-200 px-4 py-3">
+                    <ul className="divide-y divide-line-200">
                       {issue.lines.map((l) => (
                         <li key={l.id} className="flex items-center justify-between py-1.5">
-                          <span className="text-sm text-slate-700">{l.name}</span>
-                          <span className="num text-xs text-slate-600">
+                          <span className="text-sm text-navy-600">{l.name}</span>
+                          <span className="num text-xs text-muted-600">
                             {qty(l.issuedQty, 3)} {l.uom}
                             {canViewValue && ` @ ${money(l.rate, true)} = ${money(l.value)}`}
                           </span>
@@ -116,7 +116,7 @@ export function IssuesScreen({
                     </ul>
 
                     {!issue.acknowledgedAt && canAcknowledge && mine && (
-                      <div className="mt-3 flex justify-end border-t border-slate-100 pt-3">
+                      <div className="mt-3 flex justify-end border-t border-line-200 pt-3">
                         <Button size="sm" variant="success" loading={busy === issue.id}
                           onClick={() => acknowledge(issue.id)}>
                           <Check className="h-3.5 w-3.5" />
@@ -126,13 +126,13 @@ export function IssuesScreen({
                     )}
 
                     {!issue.acknowledgedAt && !mine && (
-                      <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                      <p className="mt-3 border-t border-line-200 pt-3 text-xs text-muted-500">
                         Only {issue.issuedToName} can acknowledge this slip — on the mobile app, at site.
                       </p>
                     )}
 
                     {issue.acknowledgedAt && (
-                      <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-emerald-700">
+                      <p className="mt-3 border-t border-line-200 pt-3 text-xs text-good-700">
                         Acknowledged on {formatDate(issue.acknowledgedAt)}.
                       </p>
                     )}

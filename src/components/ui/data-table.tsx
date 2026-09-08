@@ -41,8 +41,10 @@ export function DataTable<T>({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white">
-        {empty ?? <EmptyState title="Nothing here yet" description="No records match the current filter." />}
+      <div className="rounded-[13px] border border-line-400 bg-white">
+        {empty ?? (
+          <EmptyState title="Nothing here yet" description="No records match the current filter." />
+        )}
       </div>
     );
   }
@@ -50,15 +52,20 @@ export function DataTable<T>({
   const align = { left: "text-left", right: "text-right", center: "text-center" };
 
   return (
-    <div className={cn("scroll-thin overflow-x-auto rounded-lg border border-slate-200 bg-white", className)}>
-      <table className="w-full border-collapse text-sm">
+    <div
+      className={cn(
+        "scroll-thin overflow-x-auto rounded-[13px] border border-line-400 bg-white",
+        className,
+      )}
+    >
+      <table className="w-full border-collapse">
         <thead>
-          <tr className="border-b border-slate-200 bg-slate-50">
+          <tr className="bg-surface-sunken">
             {cols.map((c) => (
               <th
                 key={c.key}
                 className={cn(
-                  "whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600",
+                  "whitespace-nowrap border-b border-line-300 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
                   align[c.align ?? "left"],
                   c.headerClassName,
                 )}
@@ -72,14 +79,14 @@ export function DataTable<T>({
           {rows.map((row, i) => (
             <tr
               key={rowKey(row, i)}
-              className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
+              className="border-b border-[#F0F3FA] transition-colors last:border-0 hover:bg-surface-tint"
             >
               {cols.map((c) => (
                 <td
                   key={c.key}
                   className={cn(
-                    dense ? "px-3 py-1.5" : "px-3 py-2.5",
-                    "text-slate-700",
+                    dense ? "px-4 py-2.5" : "px-4 py-3",
+                    "text-[12px] font-medium text-navy-600",
                     align[c.align ?? "left"],
                     c.className,
                   )}
@@ -90,7 +97,11 @@ export function DataTable<T>({
             </tr>
           ))}
         </tbody>
-        {footer && <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-medium">{footer}</tfoot>}
+        {footer && (
+          <tfoot className="border-t border-line-300 bg-surface-sunken text-[12px] font-bold text-navy-950">
+            {footer}
+          </tfoot>
+        )}
       </table>
     </div>
   );
@@ -114,7 +125,7 @@ export function Pagination({
   const to = Math.min(page * pageSize, total);
 
   return (
-    <div className="flex items-center justify-between gap-3 px-1 py-2 text-xs text-slate-600">
+    <div className="flex items-center justify-between gap-3 px-1 py-2 text-[11.5px] font-medium text-muted-600">
       <span className="num">
         Showing {from}–{to} of {total.toLocaleString("en-IN")}
       </span>
@@ -123,8 +134,8 @@ export function Pagination({
           href={buildHref(Math.max(1, page - 1))}
           aria-disabled={page <= 1}
           className={cn(
-            "rounded border border-slate-300 bg-white px-2 py-1",
-            page <= 1 ? "pointer-events-none opacity-40" : "hover:bg-slate-50",
+            "rounded-[8px] border border-line-400 bg-white px-2.5 py-1.5 font-semibold text-navy-600",
+            page <= 1 ? "pointer-events-none opacity-40" : "hover:bg-surface-hover",
           )}
         >
           Previous
@@ -136,8 +147,8 @@ export function Pagination({
           href={buildHref(Math.min(pages, page + 1))}
           aria-disabled={page >= pages}
           className={cn(
-            "rounded border border-slate-300 bg-white px-2 py-1",
-            page >= pages ? "pointer-events-none opacity-40" : "hover:bg-slate-50",
+            "rounded-[8px] border border-line-400 bg-white px-2.5 py-1.5 font-semibold text-navy-600",
+            page >= pages ? "pointer-events-none opacity-40" : "hover:bg-surface-hover",
           )}
         >
           Next

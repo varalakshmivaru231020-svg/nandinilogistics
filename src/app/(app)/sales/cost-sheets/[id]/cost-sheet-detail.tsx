@@ -94,17 +94,17 @@ export function CostSheetDetail({
                 ["Valid until", formatDate(sheet.validUntil)],
               ].map(([label, value]) => (
                 <div key={label}>
-                  <dt className="text-xs text-slate-500">{label}</dt>
-                  <dd className="mt-0.5 text-sm text-slate-800">{value}</dd>
+                  <dt className="text-xs text-muted-500">{label}</dt>
+                  <dd className="mt-0.5 text-sm text-navy-900">{value}</dd>
                 </div>
               ))}
             </dl>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-              {sheet.plcTag && <Badge tone="amber">{sheet.plcTag}</Badge>}
-              <Badge tone={sheet.unitStatus === "AVAILABLE" ? "green" : "slate"}>{sheet.unitStatus}</Badge>
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line-200 pt-3">
+              {sheet.plcTag && <Badge tone="warn">{sheet.plcTag}</Badge>}
+              <Badge tone={sheet.unitStatus === "AVAILABLE" ? "good" : "slate"}>{sheet.unitStatus}</Badge>
               {sheet.leadName && (
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-muted-500">
                   For{" "}
                   <Link href={`/sales/leads?q=${encodeURIComponent(sheet.leadNo ?? "")}`} className="text-brand-600 hover:underline">
                     {sheet.leadName}
@@ -120,26 +120,26 @@ export function CostSheetDetail({
           <CardBody className="space-y-3">
             <div className="space-y-1 text-xs">
               <div className="flex justify-between">
-                <span className="text-slate-500">Sub-total</span>
-                <span className="num text-slate-700">{money(sheet.subTotal)}</span>
+                <span className="text-muted-500">Sub-total</span>
+                <span className="num text-navy-600">{money(sheet.subTotal)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">GST</span>
-                <span className="num text-slate-700">{money(sheet.taxAmount)}</span>
+                <span className="text-muted-500">GST</span>
+                <span className="num text-navy-600">{money(sheet.taxAmount)}</span>
               </div>
               {hasDiscount && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Discount</span>
-                  <span className="num text-amber-700">−{money(sheet.discountAmount)}</span>
+                  <span className="text-muted-500">Discount</span>
+                  <span className="num text-warn-700">−{money(sheet.discountAmount)}</span>
                 </div>
               )}
-              <div className="flex items-baseline justify-between border-t border-slate-100 pt-1.5">
-                <span className="text-sm text-slate-600">Total</span>
-                <span className="num text-xl font-semibold text-slate-900">{money(sheet.totalAmount)}</span>
+              <div className="flex items-baseline justify-between border-t border-line-200 pt-1.5">
+                <span className="text-sm text-muted-600">Total</span>
+                <span className="num text-xl font-semibold text-navy-950">{money(sheet.totalAmount)}</span>
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
+            <div className="flex flex-col gap-2 border-t border-line-200 pt-3">
               {blockedByDiscount && can.approveDiscount && (
                 <>
                   <Button size="sm" variant="success" onClick={() => setApproving(true)} disabled={aboveCeiling}>
@@ -147,7 +147,7 @@ export function CostSheetDetail({
                     Approve discount
                   </Button>
                   {aboveCeiling && (
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-warn-700">
                       {money(sheet.discountAmount)} is above your ceiling of {money(discountCeiling)}.
                     </p>
                   )}
@@ -155,13 +155,13 @@ export function CostSheetDetail({
               )}
 
               {blockedByDiscount && !can.approveDiscount && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-500">
                   Discount approval is not part of your role — the sales head clears this.
                 </p>
               )}
 
               {discountApproved && (
-                <p className="text-xs text-emerald-700">
+                <p className="text-xs text-good-700">
                   Discount approved on {formatDate(sheet.discountApprovedAt)}.
                 </p>
               )}
@@ -189,7 +189,7 @@ export function CostSheetDetail({
         <CardBody className="scroll-thin overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-line-400 text-xs uppercase tracking-wide text-muted-500">
                 <th className="py-2 text-left font-semibold">Charge</th>
                 <th className="py-2 text-right font-semibold">Qty</th>
                 <th className="py-2 text-right font-semibold">Rate</th>
@@ -200,15 +200,15 @@ export function CostSheetDetail({
             </thead>
             <tbody>
               {lines.map((l) => (
-                <tr key={l.id} className="border-b border-slate-100">
-                  <td className="py-2 text-slate-800">{l.label}</td>
-                  <td className="num py-2 text-right text-slate-600">{qty(l.quantity, 2)}</td>
-                  <td className="num py-2 text-right text-slate-600">{money(l.rate, true)}</td>
-                  <td className="num py-2 text-right text-slate-800">{money(l.amount)}</td>
-                  <td className="num py-2 text-right text-slate-500">
+                <tr key={l.id} className="border-b border-line-200">
+                  <td className="py-2 text-navy-900">{l.label}</td>
+                  <td className="num py-2 text-right text-muted-600">{qty(l.quantity, 2)}</td>
+                  <td className="num py-2 text-right text-muted-600">{money(l.rate, true)}</td>
+                  <td className="num py-2 text-right text-navy-900">{money(l.amount)}</td>
+                  <td className="num py-2 text-right text-muted-500">
                     {l.taxPct > 0 ? `${money(l.taxAmount)} (${l.taxPct}%)` : "—"}
                   </td>
-                  <td className="num py-2 text-right font-medium text-slate-900">
+                  <td className="num py-2 text-right font-medium text-navy-950">
                     {money(l.amount + l.taxAmount)}
                   </td>
                 </tr>

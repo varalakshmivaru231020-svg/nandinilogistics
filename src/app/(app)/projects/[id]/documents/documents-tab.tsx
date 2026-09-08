@@ -103,7 +103,7 @@ export function DocumentsTab({
               description="Drawings, approvals, licences and agreements live here, with version history."
             />
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line-200">
               {current.map((doc) => {
                 const older = chainFor(doc);
                 const expired = doc.expiryDate ? new Date(doc.expiryDate).getTime() < nowMs : false;
@@ -112,12 +112,12 @@ export function DocumentsTab({
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-medium text-slate-900">{doc.title}</span>
+                          <span className="text-sm font-medium text-navy-950">{doc.title}</span>
                           <Badge tone="slate">{doc.typeName}</Badge>
                           {doc.version > 1 && <Badge tone="brand">v{doc.version}</Badge>}
-                          {expired && <Badge tone="red">Expired</Badge>}
+                          {expired && <Badge tone="bad">Expired</Badge>}
                         </div>
-                        <p className="mt-0.5 text-xs text-slate-500">
+                        <p className="mt-0.5 text-xs text-muted-500">
                           {doc.fileName} · {readableSize(doc.fileSize)} · {formatDate(doc.createdAt)}
                           {doc.uploadedByName && ` · ${doc.uploadedByName}`}
                           {doc.expiryDate && ` · expires ${formatDate(doc.expiryDate)}`}
@@ -128,10 +128,10 @@ export function DocumentsTab({
                               <History className="h-3 w-3" />
                               {older.length} earlier version(s)
                             </summary>
-                            <ul className="mt-1 space-y-0.5 border-l-2 border-slate-200 pl-3">
+                            <ul className="mt-1 space-y-0.5 border-l-2 border-line-400 pl-3">
                               {older.map((old) => (
                                 <li key={old.id} className="flex items-center justify-between py-0.5">
-                                  <span className="text-xs text-slate-500">
+                                  <span className="text-xs text-muted-500">
                                     v{old.version} · {old.fileName} · {formatDate(old.createdAt)}
                                   </span>
                                   {can.download && (
@@ -164,7 +164,7 @@ export function DocumentsTab({
                         )}
                         {can.delete && (
                           <button type="button" disabled={busy === doc.id} onClick={() => remove(doc)}
-                            className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600">
+                            className="rounded p-1.5 text-muted-400 hover:bg-bad-050 hover:text-bad-600">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         )}
@@ -256,7 +256,7 @@ function UploadModal({
             type="file"
             name="file"
             required
-            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-600 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-brand-700"
+            className="block w-full text-sm text-muted-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-600 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-brand-700"
           />
         </Field>
       </form>

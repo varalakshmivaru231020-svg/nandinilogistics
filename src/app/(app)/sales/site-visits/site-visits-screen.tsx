@@ -74,21 +74,21 @@ export function SiteVisitsScreen({
             </CardHeader>
             <CardBody className="p-0">
               {pending.length === 0 ? (
-                <p className="px-4 py-8 text-center text-sm text-slate-500">Nothing scheduled.</p>
+                <p className="px-4 py-8 text-center text-sm text-muted-500">Nothing scheduled.</p>
               ) : (
-                <ul className="divide-y divide-slate-100">
+                <ul className="divide-y divide-line-200">
                   {pending.map((v) => {
                     const overdue = new Date(v.scheduledAt).getTime() < nowMs;
                     return (
-                      <li key={v.id} className={`flex flex-wrap items-center gap-3 px-4 py-2.5 ${overdue ? "bg-amber-50/50" : ""}`}>
+                      <li key={v.id} className={`flex flex-wrap items-center gap-3 px-4 py-2.5 ${overdue ? "bg-warn-050" : ""}`}>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-slate-900">{v.leadName}</p>
-                          <p className="text-xs text-slate-500">
+                          <p className="text-sm font-medium text-navy-950">{v.leadName}</p>
+                          <p className="text-xs text-muted-500">
                             {v.leadNo}
                             {can.viewContact && ` · ${v.leadPhone}`} · with {v.conductedByName}
                           </p>
                         </div>
-                        <span className={`shrink-0 text-xs ${overdue ? "font-medium text-amber-700" : "text-slate-600"}`}>
+                        <span className={`shrink-0 text-xs ${overdue ? "font-medium text-warn-700" : "text-muted-600"}`}>
                           {formatDateTime(v.scheduledAt)}
                           {overdue && " · due"}
                         </span>
@@ -117,17 +117,17 @@ export function SiteVisitsScreen({
             <Card>
               <CardHeader><CardTitle>Completed ({done.length})</CardTitle></CardHeader>
               <CardBody className="p-0">
-                <ul className="divide-y divide-slate-100">
+                <ul className="divide-y divide-line-200">
                   {done.map((v) => (
                     <li key={v.id} className="px-4 py-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-sm text-slate-800">{v.leadName}</span>
+                        <span className="text-sm text-navy-900">{v.leadName}</span>
                         <div className="flex items-center gap-2">
-                          {v.rating && <Badge tone={v.rating >= 4 ? "green" : v.rating >= 3 ? "amber" : "red"}>{v.rating}/5</Badge>}
-                          <span className="text-xs text-slate-400">{formatDateTime(v.visitedAt)}</span>
+                          {v.rating && <Badge tone={v.rating >= 4 ? "good" : v.rating >= 3 ? "warn" : "bad"}>{v.rating}/5</Badge>}
+                          <span className="text-xs text-muted-400">{formatDateTime(v.visitedAt)}</span>
                         </div>
                       </div>
-                      {v.feedback && <p className="mt-0.5 text-xs text-slate-600">{v.feedback}</p>}
+                      {v.feedback && <p className="mt-0.5 text-xs text-muted-600">{v.feedback}</p>}
                     </li>
                   ))}
                 </ul>

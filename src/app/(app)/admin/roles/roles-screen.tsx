@@ -68,21 +68,21 @@ export function RolesScreen({
       render: (r) => (
         <div>
           <div className="flex items-center gap-2">
-            <Link href={`/admin/roles/${r.id}`} className="font-medium text-slate-900 hover:text-brand-600">
+            <Link href={`/admin/roles/${r.id}`} className="font-medium text-navy-950 hover:text-brand-600">
               {r.name}
             </Link>
             {r.isSystem && <Badge tone="brand">System</Badge>}
           </div>
-          <p className="mt-0.5 text-xs text-slate-500">{r.description ?? r.code}</p>
+          <p className="mt-0.5 text-xs text-muted-500">{r.description ?? r.code}</p>
         </div>
       ),
     },
-    { key: "code", header: "Code", render: (r) => <code className="text-xs text-slate-600">{r.code}</code> },
+    { key: "code", header: "Code", render: (r) => <code className="text-xs text-muted-600">{r.code}</code> },
     {
       key: "level",
       header: "Authority",
       align: "center",
-      render: (r) => <span className="num text-xs text-slate-600">{r.level}</span>,
+      render: (r) => <span className="num text-xs text-muted-600">{r.level}</span>,
     },
     {
       key: "permissions",
@@ -91,7 +91,7 @@ export function RolesScreen({
       render: (r) => (
         <Link href={`/admin/roles/${r.id}`} className="num inline-flex items-center gap-1.5 text-sm hover:text-brand-600">
           <span className="font-medium">{r.permissionCount}</span>
-          <span className="text-xs text-slate-400">/ {totalPermissions}</span>
+          <span className="text-xs text-muted-400">/ {totalPermissions}</span>
         </Link>
       ),
     },
@@ -100,8 +100,8 @@ export function RolesScreen({
       header: "Users",
       align: "right",
       render: (r) => (
-        <span className="num inline-flex items-center gap-1 text-sm text-slate-600">
-          <Users className="h-3.5 w-3.5 text-slate-400" />
+        <span className="num inline-flex items-center gap-1 text-sm text-muted-600">
+          <Users className="h-3.5 w-3.5 text-muted-400" />
           {r.userCount}
         </span>
       ),
@@ -111,7 +111,7 @@ export function RolesScreen({
       header: "Status",
       align: "center",
       render: (r) =>
-        r.status === "ACTIVE" ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge>,
+        r.status === "ACTIVE" ? <Badge tone="good">Active</Badge> : <Badge tone="slate">Inactive</Badge>,
     },
     {
       key: "actions",
@@ -122,29 +122,29 @@ export function RolesScreen({
           {can.managePermissions && (
             <Link
               href={`/admin/roles/${r.id}`}
-              className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600"
+              className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-600"
               title="Edit permissions"
             >
               <KeyRound className="h-3.5 w-3.5" />
             </Link>
           )}
           {can.update && (
-            <button type="button" onClick={() => setEditing(r)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600" title="Edit role">
+            <button type="button" onClick={() => setEditing(r)} className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-600" title="Edit role">
               <Pencil className="h-3.5 w-3.5" />
             </button>
           )}
           {can.clone && (
-            <button type="button" onClick={() => setCloning(r)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600" title="Clone role">
+            <button type="button" onClick={() => setCloning(r)} className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-600" title="Clone role">
               <Copy className="h-3.5 w-3.5" />
             </button>
           )}
           {can.toggleStatus && (
-            <button type="button" onClick={() => onToggle(r)} disabled={busy} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-amber-600" title="Activate / deactivate">
+            <button type="button" onClick={() => onToggle(r)} disabled={busy} className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-warn-700" title="Activate / deactivate">
               <Power className="h-3.5 w-3.5" />
             </button>
           )}
           {can.delete && !r.isSystem && (
-            <button type="button" onClick={() => setDeleting(r)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Delete role">
+            <button type="button" onClick={() => setDeleting(r)} className="rounded p-1.5 text-muted-400 hover:bg-bad-050 hover:text-bad-600" title="Delete role">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}

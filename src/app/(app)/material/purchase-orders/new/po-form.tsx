@@ -146,18 +146,18 @@ export function PoForm({
         <Card>
           <CardHeader>
             <CardTitle>Start from an approved indent</CardTitle>
-            <span className="text-xs text-slate-500">{openIndents.length} waiting to be ordered</span>
+            <span className="text-xs text-muted-500">{openIndents.length} waiting to be ordered</span>
           </CardHeader>
           <CardBody className="flex flex-wrap gap-2">
             {openIndents.slice(0, 8).map((i) => (
               <a
                 key={i.id}
                 href={`/material/purchase-orders/new?indent=${i.id}`}
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-brand-300 hover:bg-brand-50"
+                className="inline-flex items-center gap-1.5 rounded-md border border-line-400 bg-white px-2.5 py-1.5 text-xs text-navy-600 hover:border-brand-300 hover:bg-brand-50"
               >
-                <Link2 className="h-3 w-3 text-slate-400" />
+                <Link2 className="h-3 w-3 text-muted-400" />
                 <span className="font-medium">{i.indentNo}</span>
-                {i.purpose && <span className="text-slate-500">· {i.purpose}</span>}
+                {i.purpose && <span className="text-muted-500">· {i.purpose}</span>}
               </a>
             ))}
           </CardBody>
@@ -217,14 +217,14 @@ export function PoForm({
             const item = itemById.get(line.itemId);
             const c = computed[idx];
             return (
-              <div key={line.key} className="rounded-md border border-slate-200 p-3">
+              <div key={line.key} className="rounded-md border border-line-400 p-3">
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-medium text-slate-500">Line {idx + 1}</span>
+                  <span className="text-xs font-medium text-muted-500">Line {idx + 1}</span>
                   {lines.length > 1 && (
                     <button
                       type="button"
                       onClick={() => setLines((ls) => ls.filter((l) => l.key !== line.key))}
-                      className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      className="rounded p-1 text-muted-400 hover:bg-bad-050 hover:text-bad-600"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -260,7 +260,7 @@ export function PoForm({
                   </Field>
 
                   <Field label="Amount" className="sm:col-span-2">
-                    <div className="num flex h-9 items-center justify-end rounded-md bg-slate-50 px-3 text-sm font-medium text-slate-800">
+                    <div className="num flex h-9 items-center justify-end rounded-md bg-surface-sunken px-3 text-sm font-medium text-navy-900">
                       {money(c.total)}
                     </div>
                   </Field>
@@ -275,26 +275,26 @@ export function PoForm({
             );
           })}
 
-          <div className="space-y-1 border-t border-slate-200 pt-3">
+          <div className="space-y-1 border-t border-line-400 pt-3">
             <div className="flex items-center justify-end gap-3 text-sm">
-              <span className="text-slate-500">Sub-total</span>
-              <span className="num w-36 text-right text-slate-800">{money(subTotal)}</span>
+              <span className="text-muted-500">Sub-total</span>
+              <span className="num w-36 text-right text-navy-900">{money(subTotal)}</span>
             </div>
             <div className="flex items-center justify-end gap-3 text-sm">
-              <span className="text-slate-500">GST</span>
-              <span className="num w-36 text-right text-slate-800">{money(taxAmount)}</span>
+              <span className="text-muted-500">GST</span>
+              <span className="num w-36 text-right text-navy-900">{money(taxAmount)}</span>
             </div>
             <div className="flex items-center justify-end gap-3 text-sm">
-              <span className="text-slate-500">Other charges</span>
+              <span className="text-muted-500">Other charges</span>
               <Input
                 type="number" step="any" min={0} value={otherCharges}
                 onChange={(e) => setOtherCharges(e.target.value)}
                 className="num w-36 text-right"
               />
             </div>
-            <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-2">
-              <span className="text-sm font-medium text-slate-700">Order total</span>
-              <span className="num w-36 text-right text-lg font-semibold text-slate-900">{money(grandTotal)}</span>
+            <div className="flex items-center justify-end gap-3 border-t border-line-400 pt-2">
+              <span className="text-sm font-medium text-navy-600">Order total</span>
+              <span className="num w-36 text-right text-lg font-semibold text-navy-950">{money(grandTotal)}</span>
             </div>
           </div>
         </CardBody>

@@ -64,26 +64,26 @@ export function GrnDetail({
       header: "Item",
       render: (l) => (
         <div>
-          <p className="text-sm text-slate-800">{l.name}</p>
-          <p className="text-xs text-slate-500"><code>{l.code}</code></p>
+          <p className="text-sm text-navy-900">{l.name}</p>
+          <p className="text-xs text-muted-500"><code>{l.code}</code></p>
         </div>
       ),
     },
     { key: "received", header: "Received", align: "right", className: "num", render: (l) => `${qty(l.receivedQty, 3)} ${l.uom}` },
     {
       key: "accepted", header: "Accepted", align: "right", className: "num",
-      render: (l) => <span className="font-medium text-emerald-700">{qty(l.acceptedQty, 3)}</span>,
+      render: (l) => <span className="font-medium text-good-700">{qty(l.acceptedQty, 3)}</span>,
     },
     {
       key: "rejected", header: "Rejected", align: "right", className: "num",
       render: (l) =>
         l.rejectedQty > 0
-          ? <span className="font-medium text-red-600">{qty(l.rejectedQty, 3)}</span>
-          : <span className="text-slate-400">—</span>,
+          ? <span className="font-medium text-bad-600">{qty(l.rejectedQty, 3)}</span>
+          : <span className="text-muted-400">—</span>,
     },
     {
       key: "short", header: "Short", align: "right", className: "num",
-      render: (l) => (l.shortQty > 0 ? <span className="text-amber-700">{qty(l.shortQty, 3)}</span> : <span className="text-slate-400">—</span>),
+      render: (l) => (l.shortQty > 0 ? <span className="text-warn-700">{qty(l.shortQty, 3)}</span> : <span className="text-muted-400">—</span>),
     },
     { key: "rate", header: "Rate", align: "right", className: "num", visible: can.viewValuation, render: (l) => money(l.rate, true) },
     {
@@ -92,7 +92,7 @@ export function GrnDetail({
     },
     {
       key: "reason", header: "Rejection reason",
-      render: (l) => <span className="text-xs text-slate-600">{l.rejectionReason ?? "—"}</span>,
+      render: (l) => <span className="text-xs text-muted-600">{l.rejectionReason ?? "—"}</span>,
     },
   ];
 
@@ -126,8 +126,8 @@ export function GrnDetail({
                 ["Inspected on", formatDate(grn.inspectedAt)],
               ].map(([label, value]) => (
                 <div key={label}>
-                  <dt className="text-xs text-slate-500">{label}</dt>
-                  <dd className="mt-0.5 text-sm text-slate-800">
+                  <dt className="text-xs text-muted-500">{label}</dt>
+                  <dd className="mt-0.5 text-sm text-navy-900">
                     {label === "Purchase order" ? (
                       <Link href={`/material/purchase-orders/${grn.poId}`} className="text-brand-600 hover:underline">
                         {value}
@@ -140,7 +140,7 @@ export function GrnDetail({
               ))}
             </dl>
             {grn.remarks && (
-              <p className="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-600">{grn.remarks}</p>
+              <p className="mt-3 border-t border-line-200 pt-3 text-sm text-muted-600">{grn.remarks}</p>
             )}
           </CardBody>
         </Card>
@@ -150,15 +150,15 @@ export function GrnDetail({
           <CardBody className="space-y-3">
             {can.viewValuation && (
               <div>
-                <p className="text-xs text-slate-500">Value of accepted stock</p>
-                <p className="num text-2xl font-semibold text-slate-900">{money(acceptedValue)}</p>
+                <p className="text-xs text-muted-500">Value of accepted stock</p>
+                <p className="num text-2xl font-semibold text-navy-950">{money(acceptedValue)}</p>
                 {totalRejected > 0 && (
-                  <p className="mt-0.5 text-xs text-red-600">{qty(totalRejected, 3)} rejected, not stocked</p>
+                  <p className="mt-0.5 text-xs text-bad-600">{qty(totalRejected, 3)} rejected, not stocked</p>
                 )}
               </div>
             )}
 
-            <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
+            <div className="flex flex-col gap-2 border-t border-line-200 pt-3">
               {!posted && !cancelled && can.inspect && (
                 <Button size="sm" variant="secondary" onClick={() => setInspecting(true)}>
                   <ClipboardCheck className="h-3.5 w-3.5" />
@@ -173,7 +173,7 @@ export function GrnDetail({
                     Post to stock
                   </Button>
                   {nothingAccepted && (
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-warn-700">
                       Nothing on this receipt is accepted, so there is nothing to post.
                     </p>
                   )}
@@ -188,7 +188,7 @@ export function GrnDetail({
               )}
 
               {!posted && !cancelled && !can.post && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-500">
                   You can see this receipt but not post it to stock.
                 </p>
               )}
@@ -208,17 +208,17 @@ export function GrnDetail({
         <Card>
           <CardHeader>
             <CardTitle>Stock ledger entries</CardTitle>
-            <span className="text-xs text-slate-500">Written when this receipt was posted</span>
+            <span className="text-xs text-muted-500">Written when this receipt was posted</span>
           </CardHeader>
           <CardBody className="p-0">
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line-200">
               {ledger.map((l) => (
                 <li key={l.id} className="flex items-center justify-between px-4 py-2">
-                  <span className="text-sm text-slate-700">{l.itemName}</span>
-                  <span className="num text-xs text-slate-600">
+                  <span className="text-sm text-navy-600">{l.itemName}</span>
+                  <span className="num text-xs text-muted-600">
                     +{qty(l.quantity, 3)} @ {money(l.rate, true)}
                     {can.viewValuation && ` = ${money(l.value)}`}
-                    <span className="ml-2 text-slate-400">balance {qty(l.balanceQty, 3)}</span>
+                    <span className="ml-2 text-muted-400">balance {qty(l.balanceQty, 3)}</span>
                   </span>
                 </li>
               ))}
@@ -302,9 +302,9 @@ function InspectModal({
         {invalid && <Alert tone="error">Accepted plus rejected cannot exceed what was received.</Alert>}
 
         {items.map((l) => (
-          <div key={l.id} className="rounded-md border border-slate-200 p-3">
-            <p className="text-sm text-slate-800">{l.name}</p>
-            <p className="mb-2 text-xs text-slate-500">
+          <div key={l.id} className="rounded-md border border-line-400 p-3">
+            <p className="text-sm text-navy-900">{l.name}</p>
+            <p className="mb-2 text-xs text-muted-500">
               Received {qty(l.receivedQty, 3)} {l.uom}
             </p>
             <div className="grid gap-3 sm:grid-cols-3">

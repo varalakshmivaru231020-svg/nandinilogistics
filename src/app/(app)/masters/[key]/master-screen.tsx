@@ -138,7 +138,7 @@ export function MasterScreen({
           const v = row[f.name];
 
           if (f.type === "checkbox") {
-            return v ? <Badge tone="green">Yes</Badge> : <span className="text-slate-400">No</span>;
+            return v ? <Badge tone="good">Yes</Badge> : <span className="text-muted-400">No</span>;
           }
           if (f.type === "select") {
             // Prefer the joined relation label when the list config includes it.
@@ -148,13 +148,13 @@ export function MasterScreen({
               return String(relation[def.listRelations[relationKey]] ?? "—");
             }
             const opt = options[f.name]?.find((o) => o.value === String(v));
-            return opt?.label ?? <span className="text-slate-400">—</span>;
+            return opt?.label ?? <span className="text-muted-400">—</span>;
           }
           if (v === null || v === undefined || v === "") {
-            return <span className="text-slate-400">—</span>;
+            return <span className="text-muted-400">—</span>;
           }
           if (f.type === "decimal") return qty(v, 3);
-          if (f.name === "code") return <span className="font-medium text-slate-900">{String(v)}</span>;
+          if (f.name === "code") return <span className="font-medium text-navy-950">{String(v)}</span>;
           return String(v);
         },
       })),
@@ -164,7 +164,7 @@ export function MasterScreen({
       align: "center",
       render: (row) =>
         row.status === "ACTIVE" ? (
-          <Badge tone="green">Active</Badge>
+          <Badge tone="good">Active</Badge>
         ) : (
           <Badge tone="slate">Inactive</Badge>
         ),
@@ -180,7 +180,7 @@ export function MasterScreen({
             <button
               type="button"
               onClick={() => setEditing(row)}
-              className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600"
+              className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-600"
               title="Edit"
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -192,10 +192,10 @@ export function MasterScreen({
               onClick={() => onToggle(row)}
               disabled={busy}
               className={cn(
-                "rounded p-1.5 hover:bg-slate-100",
+                "rounded p-1.5 hover:bg-surface-hover",
                 row.status === "ACTIVE"
-                  ? "text-slate-400 hover:text-amber-600"
-                  : "text-slate-400 hover:text-emerald-600",
+                  ? "text-muted-400 hover:text-warn-700"
+                  : "text-muted-400 hover:text-good-600",
               )}
               title={row.status === "ACTIVE" ? "Deactivate" : "Activate"}
             >
@@ -206,7 +206,7 @@ export function MasterScreen({
             <button
               type="button"
               onClick={() => setDeleting(row)}
-              className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+              className="rounded p-1.5 text-muted-400 hover:bg-bad-050 hover:text-bad-600"
               title="Delete"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -226,7 +226,7 @@ export function MasterScreen({
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-56 flex-1 sm:max-w-sm">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-400" />
           <Input
             defaultValue={query}
             placeholder={`Search ${def.label.toLowerCase()}…`}
@@ -269,10 +269,10 @@ export function MasterScreen({
         rowKey={(r) => String(r.id)}
         empty={
           <div className="px-6 py-14 text-center">
-            <p className="text-sm font-medium text-slate-800">
+            <p className="text-sm font-medium text-navy-900">
               {query ? "No matches" : `No ${def.label.toLowerCase()} yet`}
             </p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-muted-500">
               {query
                 ? "Try a different search term."
                 : can.create
@@ -409,14 +409,14 @@ function MasterForm({
                     ))}
                   </Select>
                 ) : f.type === "checkbox" ? (
-                  <label className="flex h-9 items-center gap-2 text-sm text-slate-700">
+                  <label className="flex h-9 items-center gap-2 text-sm text-navy-600">
                     <input
                       type="checkbox"
                       name={f.name}
                       defaultChecked={Boolean(value)}
-                      className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                      className="h-4 w-4 rounded border-line-400 text-brand-600 focus:ring-brand-500"
                     />
-                    <span className="text-xs text-slate-500">Yes</span>
+                    <span className="text-xs text-muted-500">Yes</span>
                   </label>
                 ) : (
                   <Input

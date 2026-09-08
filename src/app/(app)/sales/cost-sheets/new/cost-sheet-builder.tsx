@@ -106,12 +106,12 @@ export function CostSheetBuilder({
           </div>
 
           {unit && rate && (
-            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-600">
+            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-line-200 pt-3 text-xs text-muted-600">
               <span>Floor <strong>{unit.floorNumber}</strong></span>
               <span>Super built-up <strong className="num">{qty(unit.superBuiltUpArea, 0)}</strong> sq.ft</span>
               <span>Parking <strong className="num">{unit.parkingSlots}</strong></span>
-              {unit.plcTag && <Badge tone="amber">{unit.plcTag}</Badge>}
-              <span className="text-slate-400">Price list: {rate.name} @ {money(rate.baseRate)}/sq.ft</span>
+              {unit.plcTag && <Badge tone="warn">{unit.plcTag}</Badge>}
+              <span className="text-muted-400">Price list: {rate.name} @ {money(rate.baseRate)}/sq.ft</span>
             </div>
           )}
 
@@ -127,7 +127,7 @@ export function CostSheetBuilder({
         <Card>
           <CardHeader>
             <CardTitle>Optional charges</CardTitle>
-            <span className="text-xs text-slate-500">Mandatory heads are always applied</span>
+            <span className="text-xs text-muted-500">Mandatory heads are always applied</span>
           </CardHeader>
           <CardBody className="flex flex-wrap gap-2">
             {optionalHeads.map((h) => {
@@ -145,11 +145,11 @@ export function CostSheetBuilder({
                     })
                   }
                   className={`rounded-md border px-2.5 py-1.5 text-xs transition ${
-                    on ? "border-brand-400 bg-brand-50 text-brand-800" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                    on ? "border-brand-400 bg-brand-50 text-brand-800" : "border-line-400 bg-white text-muted-600 hover:bg-surface-hover"
                   }`}
                 >
                   {h.name}
-                  <span className="num ml-1.5 text-slate-400">{money(h.defaultValue)}</span>
+                  <span className="num ml-1.5 text-muted-400">{money(h.defaultValue)}</span>
                 </button>
               );
             })}
@@ -160,17 +160,17 @@ export function CostSheetBuilder({
       <Card>
         <CardHeader>
           <CardTitle>Cost sheet</CardTitle>
-          <span className="text-xs text-slate-500">Live preview — this is exactly what gets saved</span>
+          <span className="text-xs text-muted-500">Live preview — this is exactly what gets saved</span>
         </CardHeader>
         <CardBody>
           {!preview ? (
-            <p className="py-6 text-center text-sm text-slate-500">Select a unit to generate the sheet.</p>
+            <p className="py-6 text-center text-sm text-muted-500">Select a unit to generate the sheet.</p>
           ) : (
             <>
               <div className="scroll-thin overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                    <tr className="border-b border-line-400 text-xs uppercase tracking-wide text-muted-500">
                       <th className="py-2 text-left font-semibold">Charge</th>
                       <th className="py-2 text-right font-semibold">Qty</th>
                       <th className="py-2 text-right font-semibold">Rate</th>
@@ -180,12 +180,12 @@ export function CostSheetBuilder({
                   </thead>
                   <tbody>
                     {preview.lines.map((l) => (
-                      <tr key={l.code} className="border-b border-slate-100">
-                        <td className="py-2 text-slate-800">{l.label}</td>
-                        <td className="num py-2 text-right text-slate-600">{qty(l.quantity, 2)}</td>
-                        <td className="num py-2 text-right text-slate-600">{money(l.rate, true)}</td>
-                        <td className="num py-2 text-right font-medium text-slate-900">{money(l.amount)}</td>
-                        <td className="num py-2 text-right text-slate-500">
+                      <tr key={l.code} className="border-b border-line-200">
+                        <td className="py-2 text-navy-900">{l.label}</td>
+                        <td className="num py-2 text-right text-muted-600">{qty(l.quantity, 2)}</td>
+                        <td className="num py-2 text-right text-muted-600">{money(l.rate, true)}</td>
+                        <td className="num py-2 text-right font-medium text-navy-950">{money(l.amount)}</td>
+                        <td className="num py-2 text-right text-muted-500">
                           {l.taxPct > 0 ? `${money(l.taxAmount)} (${l.taxPct}%)` : "—"}
                         </td>
                       </tr>
@@ -194,31 +194,31 @@ export function CostSheetBuilder({
                 </table>
               </div>
 
-              <div className="mt-4 space-y-1.5 border-t border-slate-200 pt-3">
+              <div className="mt-4 space-y-1.5 border-t border-line-400 pt-3">
                 <div className="flex items-center justify-end gap-3 text-sm">
-                  <span className="text-slate-500">Sub-total</span>
-                  <span className="num w-40 text-right text-slate-800">{money(preview.subTotal)}</span>
+                  <span className="text-muted-500">Sub-total</span>
+                  <span className="num w-40 text-right text-navy-900">{money(preview.subTotal)}</span>
                 </div>
                 <div className="flex items-center justify-end gap-3 text-sm">
-                  <span className="text-slate-500">GST</span>
-                  <span className="num w-40 text-right text-slate-800">{money(preview.taxAmount)}</span>
+                  <span className="text-muted-500">GST</span>
+                  <span className="num w-40 text-right text-navy-900">{money(preview.taxAmount)}</span>
                 </div>
                 <div className="flex items-center justify-end gap-3 text-sm">
-                  <span className="text-slate-500">Discount</span>
+                  <span className="text-muted-500">Discount</span>
                   <Input
                     type="number" step="any" min={0} value={discount}
                     onChange={(e) => setDiscount(e.target.value)}
                     className="num w-40 text-right"
                   />
                 </div>
-                <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-2">
-                  <span className="text-sm font-medium text-slate-700">Total consideration</span>
-                  <span className="num w-40 text-right text-xl font-semibold text-slate-900">
+                <div className="flex items-center justify-end gap-3 border-t border-line-400 pt-2">
+                  <span className="text-sm font-medium text-navy-600">Total consideration</span>
+                  <span className="num w-40 text-right text-xl font-semibold text-navy-950">
                     {money(preview.totalAmount)}
                   </span>
                 </div>
                 {Number(discount) > 0 && (
-                  <p className="pt-1 text-right text-xs text-amber-700">
+                  <p className="pt-1 text-right text-xs text-warn-700">
                     A discount needs approval before this sheet can be booked.
                   </p>
                 )}

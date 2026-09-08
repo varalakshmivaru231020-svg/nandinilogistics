@@ -10,9 +10,9 @@ export const metadata = { title: "Units" };
 
 const PAGE_SIZE = 50;
 
-const STATUS_TONE: Record<string, "green" | "amber" | "sky" | "violet" | "slate" | "red"> = {
-  AVAILABLE: "green", HELD: "amber", BOOKED: "sky",
-  AGREEMENT: "violet", REGISTERED: "slate", BLOCKED: "red",
+const STATUS_TONE: Record<string, "good" | "warn" | "brand" | "navy" | "slate" | "bad"> = {
+  AVAILABLE: "good", HELD: "warn", BOOKED: "brand",
+  AGREEMENT: "navy", REGISTERED: "slate", BLOCKED: "bad",
 };
 
 type UnitRow = {
@@ -69,8 +69,8 @@ export default async function UnitsPage({
       header: "Unit",
       render: (u) => (
         <div>
-          <p className="text-sm font-medium text-slate-900">{u.unitNumber}</p>
-          <p className="text-xs text-slate-500">{u.project.code} · {u.block?.name ?? "—"}</p>
+          <p className="text-sm font-medium text-navy-950">{u.unitNumber}</p>
+          <p className="text-xs text-muted-500">{u.project.code} · {u.block?.name ?? "—"}</p>
         </div>
       ),
     },
@@ -85,10 +85,10 @@ export default async function UnitsPage({
       key: "sba", header: "Super built-up", align: "right", className: "num",
       render: (u) => qty(u.superBuiltUpArea, 0),
     },
-    { key: "facing", header: "Facing", render: (u) => u.facing ?? <span className="text-slate-400">—</span> },
+    { key: "facing", header: "Facing", render: (u) => u.facing ?? <span className="text-muted-400">—</span> },
     {
       key: "plc", header: "PLC", align: "center",
-      render: (u) => (u.plcTag ? <Badge tone="amber">{u.plcTag}</Badge> : <span className="text-slate-400">—</span>),
+      render: (u) => (u.plcTag ? <Badge tone="warn">{u.plcTag}</Badge> : <span className="text-muted-400">—</span>),
     },
     { key: "parking", header: "Parking", align: "right", className: "num", render: (u) => u.parkingSlots },
     {
@@ -109,7 +109,7 @@ export default async function UnitsPage({
         <UnitFilters q={q} status={status} />
 
         {units.length === 0 ? (
-          <Card><CardBody><p className="py-8 text-center text-sm text-slate-500">No units match these filters.</p></CardBody></Card>
+          <Card><CardBody><p className="py-8 text-center text-sm text-muted-500">No units match these filters.</p></CardBody></Card>
         ) : (
           <>
             <DataTable columns={columns} rows={units} rowKey={(u) => u.id} dense />

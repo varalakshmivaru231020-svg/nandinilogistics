@@ -71,20 +71,20 @@ export function PermissionCatalogue({
       header: "Permission",
       render: (p) => (
         <div>
-          <p className="text-sm text-slate-800">{p.label}</p>
-          <code className="text-[11px] text-slate-400">{p.code}</code>
-          {p.description && <p className="mt-0.5 max-w-md text-xs text-slate-500">{p.description}</p>}
+          <p className="text-sm text-navy-900">{p.label}</p>
+          <code className="text-[11px] text-muted-400">{p.code}</code>
+          {p.description && <p className="mt-0.5 max-w-md text-xs text-muted-500">{p.description}</p>}
         </div>
       ),
     },
-    { key: "group", header: "Group", render: (p) => <span className="text-xs text-slate-600">{p.group}</span> },
+    { key: "group", header: "Group", render: (p) => <span className="text-xs text-muted-600">{p.group}</span> },
     { key: "kind", header: "Guards", align: "center", render: (p) => <Badge tone="slate">{p.kind}</Badge> },
     {
       key: "roles",
       header: "Held by roles",
       render: (p) =>
         p.roles.length === 0 ? (
-          <span className="text-xs text-amber-600">No role</span>
+          <span className="text-xs text-warn-700">No role</span>
         ) : (
           <div className="flex flex-wrap gap-1">
             {p.roles.map((r) => <Badge key={r} tone="brand">{r}</Badge>)}
@@ -97,7 +97,7 @@ export function PermissionCatalogue({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-56 flex-1 sm:max-w-sm">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-400" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search code, label or group…" className="pl-8" />
         </div>
         <Select value={module} onChange={(e) => setModule(e.target.value)} className="w-52">

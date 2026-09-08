@@ -147,7 +147,7 @@ export function GrnForm({
               <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2} />
             </Field>
           </div>
-          <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
+          <p className="mt-3 border-t border-line-200 pt-3 text-xs text-muted-500">
             Challan photo capture arrives with the mobile app and the storage integration; the field
             is already on the record.
           </p>
@@ -157,24 +157,24 @@ export function GrnForm({
       <Card>
         <CardHeader>
           <CardTitle>What arrived</CardTitle>
-          <span className="text-xs text-slate-500">Accepted + rejected cannot exceed received</span>
+          <span className="text-xs text-muted-500">Accepted + rejected cannot exceed received</span>
         </CardHeader>
         <CardBody className="space-y-3">
           {rows.map(({ line, s, outstanding, short, overReceived, overAllocated }) => (
             <div
               key={line.poItemId}
-              className={`rounded-md border p-3 ${overReceived || overAllocated ? "border-red-300 bg-red-50/40" : "border-slate-200"}`}
+              className={`rounded-md border p-3 ${overReceived || overAllocated ? "border-bad-600 bg-bad-050" : "border-line-400"}`}
             >
               <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium text-slate-800">{line.name}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-sm font-medium text-navy-900">{line.name}</p>
+                  <p className="text-xs text-muted-500">
                     <code>{line.code}</code> · ordered {qty(line.orderedQty, 3)} {line.uom}
                     {line.alreadyReceived > 0 && ` · already received ${qty(line.alreadyReceived, 3)}`}
                     {" · "}outstanding <span className="font-medium">{qty(outstanding, 3)}</span>
                   </p>
                 </div>
-                <span className="num text-xs text-slate-500">{money(line.rate, true)} / {line.uom}</span>
+                <span className="num text-xs text-muted-500">{money(line.rate, true)} / {line.uom}</span>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-12">
@@ -191,7 +191,7 @@ export function GrnForm({
                     onChange={(e) => update(line.poItemId, { rejectedQty: e.target.value })} className="num text-right" />
                 </Field>
                 <Field label="Short" className="sm:col-span-2">
-                  <div className="num flex h-9 items-center justify-end rounded-md bg-slate-50 px-3 text-sm text-slate-700">
+                  <div className="num flex h-9 items-center justify-end rounded-md bg-surface-sunken px-3 text-sm text-navy-600">
                     {qty(short, 3)}
                   </div>
                 </Field>
@@ -204,27 +204,27 @@ export function GrnForm({
               </div>
 
               {overReceived && (
-                <p className="mt-2 text-xs text-red-600">
+                <p className="mt-2 text-xs text-bad-600">
                   Receiving more than the {qty(outstanding, 3)} outstanding on this PO line.
                 </p>
               )}
               {overAllocated && (
-                <p className="mt-2 text-xs text-red-600">
+                <p className="mt-2 text-xs text-bad-600">
                   Accepted plus rejected is more than what was received.
                 </p>
               )}
             </div>
           ))}
 
-          <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-3">
-            <span className="text-sm text-slate-500">Value of accepted stock</span>
-            <span className="num text-lg font-semibold text-slate-900">{money(acceptedValue)}</span>
+          <div className="flex items-center justify-end gap-3 border-t border-line-400 pt-3">
+            <span className="text-sm text-muted-500">Value of accepted stock</span>
+            <span className="num text-lg font-semibold text-navy-950">{money(acceptedValue)}</span>
           </div>
         </CardBody>
       </Card>
 
       <div className="flex items-center justify-end gap-2">
-        {hasError && <Badge tone="red">Fix the highlighted lines</Badge>}
+        {hasError && <Badge tone="bad">Fix the highlighted lines</Badge>}
         {!anyReceived && !hasError && <Badge tone="slate">Enter what was received</Badge>}
         <Button onClick={save} loading={busy} disabled={hasError || !anyReceived || !storeId}>
           <PackageCheck className="h-3.5 w-3.5" />

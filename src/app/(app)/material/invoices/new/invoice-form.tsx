@@ -118,19 +118,19 @@ export function InvoiceForm({
       <Card>
         <CardHeader>
           <CardTitle>Lines</CardTitle>
-          <span className="text-xs text-slate-500">Received quantity is the billing ceiling</span>
+          <span className="text-xs text-muted-500">Received quantity is the billing ceiling</span>
         </CardHeader>
         <CardBody className="space-y-3">
           {rows.map(({ l, s, net, tax, overBilled, overPriced }) => (
             <div
               key={l.itemId}
-              className={`rounded-md border p-3 ${overBilled || overPriced ? "border-amber-300 bg-amber-50/40" : "border-slate-200"}`}
+              className={`rounded-md border p-3 ${overBilled || overPriced ? "border-warn-700 bg-warn-050" : "border-line-400"}`}
             >
               <div className="mb-2">
-                <p className="text-sm font-medium text-slate-800">{l.name}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm font-medium text-navy-900">{l.name}</p>
+                <p className="text-xs text-muted-500">
                   <code>{l.code}</code> · ordered {qty(l.orderedQty, 3)} · received &amp; accepted{" "}
-                  <span className="font-medium text-emerald-700">{qty(l.receivedQty, 3)}</span> {l.uom}
+                  <span className="font-medium text-good-700">{qty(l.receivedQty, 3)}</span> {l.uom}
                   {" · PO rate "}{money(l.poRate, true)}
                 </p>
               </div>
@@ -149,20 +149,20 @@ export function InvoiceForm({
                     value={s.taxPct} onChange={(e) => update(l.itemId, { taxPct: e.target.value })} />
                 </Field>
                 <Field label="Line total" className="sm:col-span-4">
-                  <div className="num flex h-9 items-center justify-end rounded-md bg-slate-50 px-3 text-sm font-medium text-slate-800">
+                  <div className="num flex h-9 items-center justify-end rounded-md bg-surface-sunken px-3 text-sm font-medium text-navy-900">
                     {money(net + tax)}
                   </div>
                 </Field>
               </div>
 
               {overBilled && (
-                <p className="mt-2 flex items-center gap-1 text-xs text-amber-700">
+                <p className="mt-2 flex items-center gap-1 text-xs text-warn-700">
                   <TriangleAlert className="h-3 w-3" />
                   Billing more than the {qty(l.receivedQty, 3)} received and accepted.
                 </p>
               )}
               {overPriced && (
-                <p className="mt-1 flex items-center gap-1 text-xs text-amber-700">
+                <p className="mt-1 flex items-center gap-1 text-xs text-warn-700">
                   <TriangleAlert className="h-3 w-3" />
                   Rate is above the PO rate of {money(l.poRate, true)}.
                 </p>
@@ -170,18 +170,18 @@ export function InvoiceForm({
             </div>
           ))}
 
-          <div className="space-y-1 border-t border-slate-200 pt-3 text-sm">
+          <div className="space-y-1 border-t border-line-400 pt-3 text-sm">
             <div className="flex justify-end gap-3">
-              <span className="text-slate-500">Sub-total</span>
-              <span className="num w-36 text-right text-slate-800">{money(subTotal)}</span>
+              <span className="text-muted-500">Sub-total</span>
+              <span className="num w-36 text-right text-navy-900">{money(subTotal)}</span>
             </div>
             <div className="flex justify-end gap-3">
-              <span className="text-slate-500">GST</span>
-              <span className="num w-36 text-right text-slate-800">{money(taxAmount)}</span>
+              <span className="text-muted-500">GST</span>
+              <span className="num w-36 text-right text-navy-900">{money(taxAmount)}</span>
             </div>
-            <div className="flex justify-end gap-3 border-t border-slate-200 pt-2">
-              <span className="font-medium text-slate-700">Invoice total</span>
-              <span className="num w-36 text-right text-lg font-semibold text-slate-900">
+            <div className="flex justify-end gap-3 border-t border-line-400 pt-2">
+              <span className="font-medium text-navy-600">Invoice total</span>
+              <span className="num w-36 text-right text-lg font-semibold text-navy-950">
                 {money(subTotal + taxAmount)}
               </span>
             </div>

@@ -92,14 +92,14 @@ export default async function ProjectDetailPage({
             <code>{project.code}</code>
           </span>
         }
-        actions={<Badge tone={project.status === "ACTIVE" ? "green" : "slate"}>{project.status.replace("_", " ")}</Badge>}
+        actions={<Badge tone={project.status === "ACTIVE" ? "good" : "slate"}>{project.status.replace("_", " ")}</Badge>}
       />
 
       {availableTabs.length === 0 ? (
-        <Card><CardBody><p className="text-sm text-slate-500">Your role does not include any project tab.</p></CardBody></Card>
+        <Card><CardBody><p className="text-sm text-muted-500">Your role does not include any project tab.</p></CardBody></Card>
       ) : (
         <>
-          <div className="mb-4 flex flex-wrap gap-1 border-b border-slate-200">
+          <div className="mb-4 flex flex-wrap gap-1 border-b border-line-400">
             {availableTabs.map((t) => (
               <Link
                 key={t.key}
@@ -108,7 +108,7 @@ export default async function ProjectDetailPage({
                   "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
                   tab === t.key
                     ? "border-brand-600 text-brand-700"
-                    : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700",
+                    : "border-transparent text-muted-500 hover:border-line-500 hover:text-navy-600",
                 )}
               >
                 {t.label}
@@ -136,13 +136,13 @@ export default async function ProjectDetailPage({
                       ...(showBudget ? [["Sanctioned budget", money(project.budgetAmount)]] as Array<[string, string]> : []),
                     ].map(([label, value]) => (
                       <div key={label}>
-                        <dt className="text-xs text-slate-500">{label}</dt>
-                        <dd className="mt-0.5 text-sm text-slate-800">{value}</dd>
+                        <dt className="text-xs text-muted-500">{label}</dt>
+                        <dd className="mt-0.5 text-sm text-navy-900">{value}</dd>
                       </div>
                     ))}
                   </dl>
                   {project.description && (
-                    <p className="mt-4 border-t border-slate-100 pt-3 text-sm leading-relaxed text-slate-600">
+                    <p className="mt-4 border-t border-line-200 pt-3 text-sm leading-relaxed text-muted-600">
                       {project.description}
                     </p>
                   )}
@@ -161,9 +161,9 @@ export default async function ProjectDetailPage({
                     ["Leads", project._count.leads],
                     ["Bookings", project._count.bookings],
                   ].map(([label, value]) => (
-                    <div key={String(label)} className="flex items-center justify-between border-b border-slate-100 pb-1.5 last:border-0">
-                      <span className="text-xs text-slate-500">{label}</span>
-                      <span className="num text-sm font-medium text-slate-800">{value}</span>
+                    <div key={String(label)} className="flex items-center justify-between border-b border-line-200 pb-1.5 last:border-0">
+                      <span className="text-xs text-muted-500">{label}</span>
+                      <span className="num text-sm font-medium text-navy-900">{value}</span>
                     </div>
                   ))}
                 </CardBody>
@@ -176,32 +176,32 @@ export default async function ProjectDetailPage({
             <Card>
               <CardHeader>
                 <CardTitle>Project → Phase → Work Package</CardTitle>
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-muted-500">
                   The spine the schedule, tasks and indents all hang from.
                 </span>
               </CardHeader>
               <CardBody className="p-0">
                 {project.phases.length === 0 ? (
-                  <p className="px-4 py-10 text-center text-sm text-slate-500">
+                  <p className="px-4 py-10 text-center text-sm text-muted-500">
                     No phases defined yet.
                   </p>
                 ) : (
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-line-200">
                     {project.phases.map((phase) => (
                       <li key={phase.id} className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <Badge tone="brand">{phase.code}</Badge>
-                          <span className="text-sm font-medium text-slate-800">{phase.name}</span>
-                          <span className="text-xs text-slate-400">
+                          <span className="text-sm font-medium text-navy-900">{phase.name}</span>
+                          <span className="text-xs text-muted-400">
                             {phase.workPackages.length} work package(s)
                           </span>
                         </div>
                         {phase.workPackages.length > 0 && (
-                          <ul className="mt-2 space-y-1 border-l-2 border-slate-200 pl-4">
+                          <ul className="mt-2 space-y-1 border-l-2 border-line-400 pl-4">
                             {phase.workPackages.map((wp) => (
                               <li key={wp.id} className="flex items-center gap-2 text-sm">
-                                <code className="text-xs text-slate-400">{wp.code}</code>
-                                <span className="text-slate-700">{wp.name}</span>
+                                <code className="text-xs text-muted-400">{wp.code}</code>
+                                <span className="text-navy-600">{wp.name}</span>
                               </li>
                             ))}
                           </ul>
@@ -219,22 +219,22 @@ export default async function ProjectDetailPage({
             <Card>
               <CardHeader>
                 <CardTitle>Project team ({project.team.length})</CardTitle>
-                <span className="text-xs text-slate-500">Access follows this mapping.</span>
+                <span className="text-xs text-muted-500">Access follows this mapping.</span>
               </CardHeader>
               <CardBody className="p-0">
                 {project.team.length === 0 ? (
-                  <p className="px-4 py-10 text-center text-sm text-slate-500">Nobody mapped yet.</p>
+                  <p className="px-4 py-10 text-center text-sm text-muted-500">Nobody mapped yet.</p>
                 ) : (
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-line-200">
                     {project.team.map((t) => (
                       <li key={t.id} className="flex items-center justify-between px-4 py-2.5">
                         <div>
-                          <p className="text-sm text-slate-800">{t.user.name}</p>
-                          <p className="text-xs text-slate-500">
+                          <p className="text-sm text-navy-900">{t.user.name}</p>
+                          <p className="text-xs text-muted-500">
                             {t.user.designation?.name ?? "—"} · {t.user.email}
                           </p>
                         </div>
-                        <Badge tone={t.user.status === "ACTIVE" ? "green" : "slate"}>{t.user.status}</Badge>
+                        <Badge tone={t.user.status === "ACTIVE" ? "good" : "slate"}>{t.user.status}</Badge>
                       </li>
                     ))}
                   </ul>
@@ -277,23 +277,23 @@ export default async function ProjectDetailPage({
             <Card>
               <CardHeader>
                 <CardTitle>Daily site progress log</CardTitle>
-                <span className="text-xs text-slate-500">Geo-tagged, date-stamped, from the mobile app.</span>
+                <span className="text-xs text-muted-500">Geo-tagged, date-stamped, from the mobile app.</span>
               </CardHeader>
               <CardBody className="p-0">
                 {project.progressLogs.length === 0 ? (
-                  <p className="px-4 py-10 text-center text-sm text-slate-500">
+                  <p className="px-4 py-10 text-center text-sm text-muted-500">
                     No site logs captured yet. These are written from the supervisor&rsquo;s phone.
                   </p>
                 ) : (
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-line-200">
                     {project.progressLogs.map((log) => (
                       <li key={log.id} className="px-4 py-3">
                         <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium text-slate-800">{log.title}</p>
-                          <span className="text-xs text-slate-500">{formatDate(log.logDate)}</span>
+                          <p className="text-sm font-medium text-navy-900">{log.title}</p>
+                          <span className="text-xs text-muted-500">{formatDate(log.logDate)}</span>
                         </div>
-                        {log.notes && <p className="mt-1 text-xs text-slate-600">{log.notes}</p>}
-                        <p className="mt-1 text-[11px] text-slate-400">
+                        {log.notes && <p className="mt-1 text-xs text-muted-600">{log.notes}</p>}
+                        <p className="mt-1 text-[11px] text-muted-400">
                           {log.loggedBy?.name ?? "—"}
                           {log.manpowerCount > 0 && ` · ${log.manpowerCount} workers`}
                           {log.latitude && ` · ${log.latitude}, ${log.longitude}`}
@@ -313,8 +313,8 @@ export default async function ProjectDetailPage({
                 {unitStatusCounts.map((s) => (
                   <Card key={s.status}>
                     <CardBody className="py-3">
-                      <p className="text-xs text-slate-500">{s.status}</p>
-                      <p className="num mt-0.5 text-xl font-semibold text-slate-900">{s._count}</p>
+                      <p className="text-xs text-muted-500">{s.status}</p>
+                      <p className="num mt-0.5 text-xl font-semibold text-navy-950">{s._count}</p>
                     </CardBody>
                   </Card>
                 ))}
@@ -328,18 +328,18 @@ export default async function ProjectDetailPage({
                   </Link>
                 </CardHeader>
                 <CardBody className="p-0">
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-line-200">
                     {project.blocks.map((b) => (
                       <li key={b.id} className="flex items-center justify-between px-4 py-2.5">
                         <div>
-                          <p className="text-sm text-slate-800">{b.name}</p>
-                          <p className="text-xs text-slate-500">{b.totalFloors} floors</p>
+                          <p className="text-sm text-navy-900">{b.name}</p>
+                          <p className="text-xs text-muted-500">{b.totalFloors} floors</p>
                         </div>
-                        <span className="num text-sm text-slate-600">{b._count.units} units</span>
+                        <span className="num text-sm text-muted-600">{b._count.units} units</span>
                       </li>
                     ))}
                     {project.blocks.length === 0 && (
-                      <li className="px-4 py-10 text-center text-sm text-slate-500">No blocks defined.</li>
+                      <li className="px-4 py-10 text-center text-sm text-muted-500">No blocks defined.</li>
                     )}
                   </ul>
                 </CardBody>

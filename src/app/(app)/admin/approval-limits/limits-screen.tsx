@@ -57,7 +57,7 @@ export function ApprovalLimitsScreen({
     {
       key: "scope",
       header: "Approval chain",
-      render: (l) => <span className="text-sm text-slate-800">{scopeLabel.get(l.scope) ?? l.scope}</span>,
+      render: (l) => <span className="text-sm text-navy-900">{scopeLabel.get(l.scope) ?? l.scope}</span>,
     },
     {
       key: "who",
@@ -65,7 +65,7 @@ export function ApprovalLimitsScreen({
       render: (l) =>
         l.userName ? (
           <span className="flex items-center gap-1.5 text-sm">
-            <Badge tone="violet">User</Badge> {l.userName}
+            <Badge tone="navy">User</Badge> {l.userName}
           </span>
         ) : (
           <span className="flex items-center gap-1.5 text-sm">
@@ -78,7 +78,7 @@ export function ApprovalLimitsScreen({
       header: "Ceiling",
       align: "right",
       className: "num",
-      render: (l) => <span className="font-medium text-slate-900">{money(l.maxValue)}</span>,
+      render: (l) => <span className="font-medium text-navy-950">{money(l.maxValue)}</span>,
     },
     {
       key: "actions",
@@ -86,7 +86,7 @@ export function ApprovalLimitsScreen({
       align: "right",
       visible: can.delete,
       render: (l) => (
-        <button type="button" onClick={() => onDelete(l.id)} disabled={busy} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Remove limit">
+        <button type="button" onClick={() => onDelete(l.id)} disabled={busy} className="rounded p-1.5 text-muted-400 hover:bg-bad-050 hover:text-bad-600" title="Remove limit">
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       ),

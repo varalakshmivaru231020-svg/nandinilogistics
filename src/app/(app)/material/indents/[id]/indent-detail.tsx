@@ -94,8 +94,8 @@ export function IndentDetail({
       header: "Item",
       render: (l) => (
         <div>
-          <p className="text-sm text-slate-800">{l.name}</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-sm text-navy-900">{l.name}</p>
+          <p className="text-xs text-muted-500">
             <code>{l.code}</code>
             {l.specification && ` · ${l.specification}`}
           </p>
@@ -115,10 +115,10 @@ export function IndentDetail({
       align: "right",
       className: "num",
       render: (l) => {
-        if (l.approvedQty === null) return <span className="text-slate-400">—</span>;
+        if (l.approvedQty === null) return <span className="text-muted-400">—</span>;
         const revised = l.approvedQty !== l.requestedQty;
         return (
-          <span className={revised ? "font-medium text-amber-700" : ""}>
+          <span className={revised ? "font-medium text-warn-700" : ""}>
             {qty(l.approvedQty, 3)} {l.uom}
             {revised && <span className="ml-1 text-[10px]">revised</span>}
           </span>
@@ -131,7 +131,7 @@ export function IndentDetail({
       align: "right",
       className: "num",
       render: (l) => (
-        <span className={l.onHand > 0 ? "text-emerald-700" : "text-slate-400"}>
+        <span className={l.onHand > 0 ? "text-good-700" : "text-muted-400"}>
           {qty(l.onHand, 3)}
         </span>
       ),
@@ -143,9 +143,9 @@ export function IndentDetail({
       className: "num",
       render: (l) =>
         l.issueFromStockQty > 0 ? (
-          <span className="font-medium text-emerald-700">{qty(l.issueFromStockQty, 3)}</span>
+          <span className="font-medium text-good-700">{qty(l.issueFromStockQty, 3)}</span>
         ) : (
-          <span className="text-slate-400">—</span>
+          <span className="text-muted-400">—</span>
         ),
     },
     {
@@ -155,9 +155,9 @@ export function IndentDetail({
       className: "num",
       render: (l) =>
         l.toPurchaseQty > 0 ? (
-          <span className="font-medium text-slate-800">{qty(l.toPurchaseQty, 3)}</span>
+          <span className="font-medium text-navy-900">{qty(l.toPurchaseQty, 3)}</span>
         ) : (
-          <span className="text-slate-400">—</span>
+          <span className="text-muted-400">—</span>
         ),
     },
     { key: "rate", header: "Rate", align: "right", className: "num", render: (l) => money(l.estimatedRate) },
@@ -193,22 +193,22 @@ export function IndentDetail({
                       <span
                         className={cn(
                           "grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-semibold",
-                          done ? "bg-emerald-500 text-white"
+                          done ? "bg-good-600 text-white"
                             : current ? "bg-brand-600 text-white ring-4 ring-brand-100"
-                            : "bg-slate-200 text-slate-500",
+                            : "bg-line-400 text-muted-500",
                         )}
                       >
                         {done ? <Check className="h-3.5 w-3.5" /> : i + 1}
                       </span>
                       <div className="mr-4">
-                        <p className={cn("text-xs font-medium", current ? "text-brand-800" : "text-slate-700")}>
+                        <p className={cn("text-xs font-medium", current ? "text-brand-800" : "text-navy-600")}>
                           {step.label}
                         </p>
-                        <p className="text-[11px] text-slate-400">{step.who}</p>
+                        <p className="text-[11px] text-muted-400">{step.who}</p>
                       </div>
                     </div>
                     {i < CHAIN.length - 1 && (
-                      <span className={cn("mr-4 hidden h-0.5 w-8 sm:block", done ? "bg-emerald-400" : "bg-slate-200")} />
+                      <span className={cn("mr-4 hidden h-0.5 w-8 sm:block", done ? "bg-good-600" : "bg-line-400")} />
                     )}
                   </li>
                 );
@@ -233,13 +233,13 @@ export function IndentDetail({
                 ["For", indent.purpose ?? "—"],
               ].map(([label, value]) => (
                 <div key={label}>
-                  <dt className="text-xs text-slate-500">{label}</dt>
-                  <dd className="mt-0.5 text-sm text-slate-800">{value}</dd>
+                  <dt className="text-xs text-muted-500">{label}</dt>
+                  <dd className="mt-0.5 text-sm text-navy-900">{value}</dd>
                 </div>
               ))}
             </dl>
             {indent.remarks && (
-              <p className="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-600">{indent.remarks}</p>
+              <p className="mt-3 border-t border-line-200 pt-3 text-sm text-muted-600">{indent.remarks}</p>
             )}
           </CardBody>
         </Card>
@@ -248,10 +248,10 @@ export function IndentDetail({
           <CardHeader><CardTitle>Value &amp; actions</CardTitle></CardHeader>
           <CardBody className="space-y-3">
             <div>
-              <p className="text-xs text-slate-500">Estimated value</p>
-              <p className="num text-2xl font-semibold text-slate-900">{money(indent.estimatedValue)}</p>
+              <p className="text-xs text-muted-500">Estimated value</p>
+              <p className="num text-2xl font-semibold text-navy-950">{money(indent.estimatedValue)}</p>
               {approvalCeiling > 0 && (
-                <p className="mt-1 text-[11px] text-slate-500">
+                <p className="mt-1 text-[11px] text-muted-500">
                   Your approval ceiling is {money(approvalCeiling)}.
                   {indent.estimatedValue <= approvalCeiling
                     ? " This is within it, so approving here completes the chain."
@@ -260,7 +260,7 @@ export function IndentDetail({
               )}
             </div>
 
-            <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
+            <div className="flex flex-col gap-2 border-t border-line-200 pt-3">
               {isOwnDraft && can.submit && (
                 <Button size="sm" loading={busy} onClick={() => run(() => submitIndentAction(indent.id), "Submitted for approval.")}>
                   <Send className="h-3.5 w-3.5" />
@@ -314,12 +314,12 @@ export function IndentDetail({
               )}
 
               {awaitingPm && !can.approvePm && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-500">
                   Waiting on Project Manager approval. You do not hold that permission.
                 </p>
               )}
               {awaitingAdmin && !can.approveAdmin && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-500">
                   Waiting on Owner / Admin approval. You do not hold that permission.
                 </p>
               )}
@@ -345,33 +345,33 @@ export function IndentDetail({
         <Card>
           <CardHeader>
             <CardTitle>Approval trail</CardTitle>
-            <span className="text-xs text-slate-500">Who approved, when, and what they changed.</span>
+            <span className="text-xs text-muted-500">Who approved, when, and what they changed.</span>
           </CardHeader>
           <CardBody className="p-0">
             {approvals.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-slate-500">
+              <p className="px-4 py-8 text-center text-sm text-muted-500">
                 No approval steps recorded yet.
               </p>
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-line-200">
                 {approvals.map((a) => (
                   <li key={a.id} className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={a.decision === "APPROVED" ? "green" : "red"}>
+                      <Badge tone={a.decision === "APPROVED" ? "good" : "bad"}>
                         {a.decision}
                       </Badge>
                       <Badge tone="brand">{a.level} level</Badge>
-                      <span className="text-sm text-slate-800">{a.approverName}</span>
-                      <span className="text-xs text-slate-400">{formatDateTime(a.approvedAt)}</span>
+                      <span className="text-sm text-navy-900">{a.approverName}</span>
+                      <span className="text-xs text-muted-400">{formatDateTime(a.approvedAt)}</span>
                     </div>
-                    {a.remarks && <p className="mt-1 text-sm text-slate-600">{a.remarks}</p>}
+                    {a.remarks && <p className="mt-1 text-sm text-muted-600">{a.remarks}</p>}
                     {a.changes && Object.keys(a.changes).length > 0 && (
-                      <ul className="mt-1.5 space-y-0.5 border-l-2 border-amber-300 pl-2">
+                      <ul className="mt-1.5 space-y-0.5 border-l-2 border-warn-700 pl-2">
                         {Object.entries(a.changes).map(([key, v]) => (
-                          <li key={key} className="text-xs text-slate-600">
+                          <li key={key} className="text-xs text-muted-600">
                             Quantity revised from{" "}
-                            <span className="font-medium text-red-600">{String(v.from)}</span> to{" "}
-                            <span className="font-medium text-emerald-700">{String(v.to)}</span>
+                            <span className="font-medium text-bad-600">{String(v.from)}</span> to{" "}
+                            <span className="font-medium text-good-700">{String(v.to)}</span>
                           </li>
                         ))}
                       </ul>
@@ -468,10 +468,10 @@ function ApproveModal({
 
         <div className="space-y-2">
           {items.map((i) => (
-            <div key={i.id} className="flex items-center gap-3 rounded-md border border-slate-200 p-2.5">
+            <div key={i.id} className="flex items-center gap-3 rounded-md border border-line-400 p-2.5">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-slate-800">{i.name}</p>
-                <p className="text-xs text-slate-500">
+                <p className="truncate text-sm text-navy-900">{i.name}</p>
+                <p className="text-xs text-muted-500">
                   Requested {qty(i.requestedQty, 3)} {i.uom} · {money(i.estimatedRate)}/{i.uom}
                 </p>
               </div>

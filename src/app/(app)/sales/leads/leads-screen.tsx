@@ -14,9 +14,9 @@ import { assignLeadAction, changeLeadStageAction, createLeadAction, logFollowUpA
 const STAGES = ["NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED", "LOST"] as const;
 type Stage = (typeof STAGES)[number];
 
-const STAGE_TONE: Record<string, "slate" | "sky" | "amber" | "violet" | "green" | "red"> = {
-  NEW: "slate", CONTACTED: "sky", SITE_VISIT_SCHEDULED: "amber",
-  VISIT_DONE: "violet", NEGOTIATION: "amber", BOOKED: "green", LOST: "red",
+const STAGE_TONE: Record<string, "slate" | "brand" | "warn" | "navy" | "good" | "bad"> = {
+  NEW: "slate", CONTACTED: "brand", SITE_VISIT_SCHEDULED: "warn",
+  VISIT_DONE: "navy", NEGOTIATION: "warn", BOOKED: "good", LOST: "bad",
 };
 
 interface Lead {
@@ -85,14 +85,14 @@ export function LeadsScreen({
       render: (l) => (
         <div>
           <div className="flex items-center gap-1.5">
-            <span className="text-sm font-medium text-slate-900">{l.name}</span>
+            <span className="text-sm font-medium text-navy-950">{l.name}</span>
             {l.isDuplicate && (
               <span title="Possible duplicate of an existing lead">
-                <Copy className="h-3 w-3 text-amber-500" />
+                <Copy className="h-3 w-3 text-warn-700" />
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-500">
             <code>{l.leadNo}</code> · {l.source}
             {l.projectCode && ` · ${l.projectCode}`}
           </p>
@@ -104,11 +104,11 @@ export function LeadsScreen({
       header: "Contact",
       render: (l) => (
         <div className="text-xs">
-          <p className={can.viewContact ? "text-slate-700" : "text-slate-400"}>
+          <p className={can.viewContact ? "text-navy-600" : "text-muted-400"}>
             {can.viewContact ? l.phone : maskPhone(l.phone)}
           </p>
           {l.email && (
-            <p className="text-slate-400">{can.viewContact ? l.email : "•••@•••"}</p>
+            <p className="text-muted-400">{can.viewContact ? l.email : "•••@•••"}</p>
           )}
         </div>
       ),
@@ -120,23 +120,23 @@ export function LeadsScreen({
       className: "num",
       render: (l) =>
         l.budgetMin || l.budgetMax ? (
-          <span className="text-xs text-slate-600">
+          <span className="text-xs text-muted-600">
             {money(l.budgetMin ?? 0)} – {money(l.budgetMax ?? 0)}
           </span>
         ) : (
-          <span className="text-slate-400">—</span>
+          <span className="text-muted-400">—</span>
         ),
     },
-    { key: "owner", header: "Owner", render: (l) => <span className="text-xs text-slate-600">{l.ownerName ?? "Unassigned"}</span> },
+    { key: "owner", header: "Owner", render: (l) => <span className="text-xs text-muted-600">{l.ownerName ?? "Unassigned"}</span> },
     {
       key: "next",
       header: "Next action",
       render: (l) => {
-        if (!l.nextActionAt) return <span className="text-xs text-slate-400">Not set</span>;
+        if (!l.nextActionAt) return <span className="text-xs text-muted-400">Not set</span>;
         // Compared on the client, so "overdue" stays true to the reader's clock.
         const overdue = new Date(l.nextActionAt).getTime() < Date.now();
         return (
-          <span className={overdue ? "text-xs font-medium text-red-600" : "text-xs text-slate-600"}>
+          <span className={overdue ? "text-xs font-medium text-bad-600" : "text-xs text-muted-600"}>
             {formatDate(l.nextActionAt)}
             {overdue && " · overdue"}
           </span>
@@ -148,7 +148,7 @@ export function LeadsScreen({
       header: "Activity",
       align: "center",
       render: (l) => (
-        <span className="num text-xs text-slate-500">
+        <span className="num text-xs text-muted-500">
           {l.followUpCount} FU · {l.visitCount} visit
         </span>
       ),
@@ -160,7 +160,7 @@ export function LeadsScreen({
       render: (l) => (
         <div>
           <Badge tone={STAGE_TONE[l.state] ?? "slate"}>{l.state.replace(/_/g, " ")}</Badge>
-          {l.lostReason && <p className="mt-0.5 text-[11px] text-slate-400">{l.lostReason}</p>}
+          {l.lostReason && <p className="mt-0.5 text-[11px] text-muted-400">{l.lostReason}</p>}
         </div>
       ),
     },
@@ -171,17 +171,17 @@ export function LeadsScreen({
       render: (l) => (
         <div className="flex items-center justify-end gap-0.5">
           {can.followUp && !["BOOKED", "LOST"].includes(l.state) && (
-            <button type="button" onClick={() => setFollowingUp(l)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600" title="Log follow-up">
+            <button type="button" onClick={() => setFollowingUp(l)} className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-600" title="Log follow-up">
               <PhoneCall className="h-3.5 w-3.5" />
             </button>
           )}
           {(can.changeStage || can.markLost) && (
-            <button type="button" onClick={() => setStaging(l)} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50">
+            <button type="button" onClick={() => setStaging(l)} className="rounded border border-line-400 bg-white px-2 py-1 text-xs text-muted-600 hover:bg-surface-hover">
               Move
             </button>
           )}
           {can.assign && (
-            <button type="button" onClick={() => setAssigning(l)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600" title="Assign">
+            <button type="button" onClick={() => setAssigning(l)} className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-600" title="Assign">
               <UserCheck className="h-3.5 w-3.5" />
             </button>
           )}
@@ -197,7 +197,7 @@ export function LeadsScreen({
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-56 flex-1 sm:max-w-sm">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-400" />
           <Input
             defaultValue={query}
             placeholder="Search name, phone or lead number…"

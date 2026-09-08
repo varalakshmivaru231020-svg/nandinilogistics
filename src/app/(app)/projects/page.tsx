@@ -11,8 +11,8 @@ import { NewProjectButton } from "./new-project-button";
 export const metadata = { title: "Projects" };
 
 const STATUS_TONE = {
-  PLANNING: "sky", ACTIVE: "green", ON_HOLD: "amber",
-  COMPLETED: "slate", CANCELLED: "red",
+  PLANNING: "brand", ACTIVE: "good", ON_HOLD: "warn",
+  COMPLETED: "slate", CANCELLED: "bad",
 } as const;
 
 export default async function ProjectsPage() {
@@ -76,8 +76,8 @@ export default async function ProjectsPage() {
                 <CardBody>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{p.name}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">
+                      <p className="truncate text-sm font-semibold text-navy-950">{p.name}</p>
+                      <p className="mt-0.5 text-xs text-muted-500">
                         <code>{p.code}</code>
                         {p.city && ` · ${p.city.name}`}
                         {p.projectType && ` · ${p.projectType.name}`}
@@ -87,37 +87,37 @@ export default async function ProjectsPage() {
                   </div>
 
                   {p.reraNumber && (
-                    <p className="mt-2 truncate text-[11px] text-slate-400" title={p.reraNumber}>
+                    <p className="mt-2 truncate text-[11px] text-muted-400" title={p.reraNumber}>
                       RERA {p.reraNumber}
                     </p>
                   )}
 
-                  <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-center">
+                  <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-line-200 pt-3 text-center">
                     <div>
-                      <dt className="text-[11px] text-slate-500">Units</dt>
-                      <dd className="num text-sm font-medium text-slate-800">{p._count.units}</dd>
+                      <dt className="text-[11px] text-muted-500">Units</dt>
+                      <dd className="num text-sm font-medium text-navy-900">{p._count.units}</dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] text-slate-500">Phases</dt>
-                      <dd className="num text-sm font-medium text-slate-800">{p._count.phases}</dd>
+                      <dt className="text-[11px] text-muted-500">Phases</dt>
+                      <dd className="num text-sm font-medium text-navy-900">{p._count.phases}</dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] text-slate-500">Team</dt>
-                      <dd className="num text-sm font-medium text-slate-800">{p._count.team}</dd>
+                      <dt className="text-[11px] text-muted-500">Team</dt>
+                      <dd className="num text-sm font-medium text-navy-900">{p._count.team}</dd>
                     </div>
                   </dl>
 
-                  <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-xs">
-                    <span className="text-slate-500">
+                  <div className="mt-3 flex items-center justify-between border-t border-line-200 pt-2 text-xs">
+                    <span className="text-muted-500">
                       {p.projectManager ? `PM: ${p.projectManager.name}` : "No PM assigned"}
                     </span>
                     {showBudget && (
-                      <span className="num font-medium text-slate-700">{moneyShort(p.budgetAmount)}</span>
+                      <span className="num font-medium text-navy-600">{moneyShort(p.budgetAmount)}</span>
                     )}
                   </div>
 
                   {p.targetDate && (
-                    <p className="mt-1 text-[11px] text-slate-400">Target {formatDate(p.targetDate)}</p>
+                    <p className="mt-1 text-[11px] text-muted-400">Target {formatDate(p.targetDate)}</p>
                   )}
                 </CardBody>
               </Card>

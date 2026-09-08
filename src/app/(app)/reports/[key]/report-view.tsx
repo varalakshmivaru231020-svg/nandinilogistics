@@ -13,7 +13,7 @@ type Row = Record<string, unknown>;
 
 function render(value: unknown, format?: string): React.ReactNode {
   if (value === null || value === undefined || value === "") {
-    return <span className="text-slate-400">—</span>;
+    return <span className="text-muted-400">—</span>;
   }
   switch (format) {
     case "money": return money(value);
@@ -24,11 +24,11 @@ function render(value: unknown, format?: string): React.ReactNode {
     case "badge": {
       const text = String(value);
       const tone =
-        /DELAYED|MISMATCH|CANCELLED|Yes|Over a week/i.test(text) ? "red"
-          : /COMPLETED|PAID|RECEIVED|REGISTERED|Under 4/i.test(text) ? "green"
-          : /PROGRESS|PARTIAL|4–7/i.test(text) ? "amber"
+        /DELAYED|MISMATCH|CANCELLED|Yes|Over a week/i.test(text) ? "bad"
+          : /COMPLETED|PAID|RECEIVED|REGISTERED|Under 4/i.test(text) ? "good"
+          : /PROGRESS|PARTIAL|4–7/i.test(text) ? "warn"
           : "slate";
-      return <Badge tone={tone as "red" | "green" | "amber" | "slate"}>{text}</Badge>;
+      return <Badge tone={tone as "bad" | "good" | "warn" | "slate"}>{text}</Badge>;
     }
     default: return String(value);
   }
@@ -84,10 +84,10 @@ export function ReportView({
   }));
 
   const toneClass: Record<string, string> = {
-    good: "text-emerald-700",
-    warn: "text-amber-700",
-    bad: "text-red-600",
-    default: "text-slate-900",
+    good: "text-good-700",
+    warn: "text-warn-700",
+    bad: "text-bad-600",
+    default: "text-navy-950",
   };
 
   return (
@@ -97,7 +97,7 @@ export function ReportView({
           {summary.map((s) => (
             <Card key={s.label}>
               <CardBody className="py-3">
-                <p className="text-xs text-slate-500">{s.label}</p>
+                <p className="text-xs text-muted-500">{s.label}</p>
                 <p className={cn("num mt-0.5 text-xl font-semibold", toneClass[s.tone ?? "default"])}>
                   {s.value}
                 </p>
@@ -109,7 +109,7 @@ export function ReportView({
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-56 flex-1 sm:max-w-sm">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-400" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter rows…" className="pl-8" />
         </div>
         <Badge tone="slate">{filtered.length} row(s)</Badge>

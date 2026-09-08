@@ -70,13 +70,13 @@ export function UsersScreen({
       render: (u) => (
         <div>
           <div className="flex items-center gap-2">
-            <Link href={`/admin/users/${u.id}`} className="font-medium text-slate-900 hover:text-brand-600">
+            <Link href={`/admin/users/${u.id}`} className="font-medium text-navy-950 hover:text-brand-600">
               {u.name}
             </Link>
-            {u.isSuperAdmin && <Badge tone="violet">Super admin</Badge>}
+            {u.isSuperAdmin && <Badge tone="navy">Super admin</Badge>}
             {u.id === currentUserId && <Badge tone="brand">You</Badge>}
           </div>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <p className="mt-0.5 text-xs text-muted-500">
             {u.employeeCode} · {u.email}
           </p>
         </div>
@@ -87,7 +87,7 @@ export function UsersScreen({
       header: "Roles",
       render: (u) =>
         u.roles.length === 0 ? (
-          <span className="text-xs text-amber-600">No role assigned</span>
+          <span className="text-xs text-warn-700">No role assigned</span>
         ) : (
           <div className="flex flex-wrap gap-1">
             {u.roles.map((r) => (
@@ -101,8 +101,8 @@ export function UsersScreen({
       header: "Department",
       render: (u) => (
         <div className="text-xs">
-          <p className="text-slate-700">{u.designation ?? "—"}</p>
-          <p className="text-slate-400">{u.department ?? "—"}</p>
+          <p className="text-navy-600">{u.designation ?? "—"}</p>
+          <p className="text-muted-400">{u.department ?? "—"}</p>
         </div>
       ),
     },
@@ -111,23 +111,23 @@ export function UsersScreen({
       header: "Access",
       align: "center",
       render: (u) => (
-        <div className="num text-xs text-slate-600">
+        <div className="num text-xs text-muted-600">
           <p>{u.projectCount} project(s)</p>
-          {u.overrideCount > 0 && <p className="text-amber-600">{u.overrideCount} override(s)</p>}
+          {u.overrideCount > 0 && <p className="text-warn-700">{u.overrideCount} override(s)</p>}
         </div>
       ),
     },
     {
       key: "lastLogin",
       header: "Last sign-in",
-      render: (u) => <span className="text-xs text-slate-500">{formatDateTime(u.lastLoginAt)}</span>,
+      render: (u) => <span className="text-xs text-muted-500">{formatDateTime(u.lastLoginAt)}</span>,
     },
     {
       key: "status",
       header: "Status",
       align: "center",
       render: (u) =>
-        u.status === "ACTIVE" ? <Badge tone="green">Active</Badge> : <Badge tone="slate">{u.status}</Badge>,
+        u.status === "ACTIVE" ? <Badge tone="good">Active</Badge> : <Badge tone="slate">{u.status}</Badge>,
     },
     {
       key: "actions",
@@ -135,21 +135,21 @@ export function UsersScreen({
       align: "right",
       render: (u) => (
         <div className="flex items-center justify-end gap-0.5">
-          <Link href={`/admin/users/${u.id}`} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600" title="Roles, permissions & projects">
+          <Link href={`/admin/users/${u.id}`} className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-600" title="Roles, permissions & projects">
             <ShieldCheck className="h-3.5 w-3.5" />
           </Link>
           {can.update && (
-            <button type="button" onClick={() => setEditing(u)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600" title="Edit">
+            <button type="button" onClick={() => setEditing(u)} className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-600" title="Edit">
               <Pencil className="h-3.5 w-3.5" />
             </button>
           )}
           {can.resetPassword && (
-            <button type="button" onClick={() => setResetting(u)} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-amber-600" title="Reset password">
+            <button type="button" onClick={() => setResetting(u)} className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-warn-700" title="Reset password">
               <KeyRound className="h-3.5 w-3.5" />
             </button>
           )}
           {can.toggleStatus && u.id !== currentUserId && (
-            <button type="button" onClick={() => onToggle(u)} disabled={busy} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600" title="Activate / deactivate">
+            <button type="button" onClick={() => onToggle(u)} disabled={busy} className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-bad-600" title="Activate / deactivate">
               <Power className="h-3.5 w-3.5" />
             </button>
           )}
@@ -165,7 +165,7 @@ export function UsersScreen({
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-56 flex-1 sm:max-w-sm">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-400" />
           <Input
             defaultValue={query}
             placeholder="Search by name, email or employee code…"

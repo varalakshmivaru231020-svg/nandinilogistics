@@ -15,10 +15,10 @@ export const metadata = { title: "Indents" };
 
 const PAGE_SIZE = 30;
 
-const STATUS_TONE: Record<string, "slate" | "amber" | "sky" | "green" | "red" | "violet"> = {
-  DRAFT: "slate", SUBMITTED: "amber", PM_APPROVED: "sky", ADMIN_APPROVED: "green",
-  PARTIALLY_ORDERED: "violet", ORDERED: "violet", CLOSED: "slate",
-  REJECTED: "red", CANCELLED: "slate",
+const STATUS_TONE: Record<string, "slate" | "warn" | "brand" | "good" | "bad" | "navy"> = {
+  DRAFT: "slate", SUBMITTED: "warn", PM_APPROVED: "brand", ADMIN_APPROVED: "good",
+  PARTIALLY_ORDERED: "navy", ORDERED: "navy", CLOSED: "slate",
+  REJECTED: "bad", CANCELLED: "slate",
 };
 
 type IndentRow = {
@@ -79,10 +79,10 @@ export default async function IndentsPage({
       header: "Indent",
       render: (i) => (
         <div>
-          <Link href={`/material/indents/${i.id}`} className="text-sm font-medium text-slate-900 hover:text-brand-600">
+          <Link href={`/material/indents/${i.id}`} className="text-sm font-medium text-navy-950 hover:text-brand-600">
             {i.indentNo}
           </Link>
-          <p className="text-xs text-slate-500">{i.project.code} · {i._count.items} line(s)</p>
+          <p className="text-xs text-muted-500">{i.project.code} · {i._count.items} line(s)</p>
         </div>
       ),
     },
@@ -90,16 +90,16 @@ export default async function IndentsPage({
     {
       key: "purpose",
       header: "For",
-      render: (i) => <span className="text-xs text-slate-600">{i.purpose ?? "—"}</span>,
+      render: (i) => <span className="text-xs text-muted-600">{i.purpose ?? "—"}</span>,
     },
-    { key: "raised", header: "Raised", render: (i) => <span className="text-xs text-slate-500">{formatDate(i.raisedAt)}</span> },
+    { key: "raised", header: "Raised", render: (i) => <span className="text-xs text-muted-500">{formatDate(i.raisedAt)}</span> },
     {
       key: "required",
       header: "Required by",
       render: (i) => {
         const overdue = new Date(i.requiredByDate) < new Date();
         return (
-          <span className={overdue ? "text-xs font-medium text-red-600" : "text-xs text-slate-500"}>
+          <span className={overdue ? "text-xs font-medium text-bad-600" : "text-xs text-muted-500"}>
             {formatDate(i.requiredByDate)}
           </span>
         );
@@ -111,10 +111,10 @@ export default async function IndentsPage({
       align: "right",
       visible: showAgeing,
       render: (i) => {
-        if (!["SUBMITTED", "PM_APPROVED"].includes(i.status)) return <span className="text-slate-400">—</span>;
+        if (!["SUBMITTED", "PM_APPROVED"].includes(i.status)) return <span className="text-muted-400">—</span>;
         const days = daysBetween(i.raisedAt);
         return (
-          <span className={`num text-xs font-medium ${days > 3 ? "text-red-600" : days > 1 ? "text-amber-600" : "text-slate-500"}`}>
+          <span className={`num text-xs font-medium ${days > 3 ? "text-bad-600" : days > 1 ? "text-warn-700" : "text-muted-500"}`}>
             {days}d
           </span>
         );
@@ -142,7 +142,7 @@ export default async function IndentsPage({
         description="Nothing is purchased without an approved indent. The approval trail builds itself as it moves."
         actions={
           <div className="flex items-center gap-2">
-            {pendingCount > 0 && <Badge tone="amber">{pendingCount} awaiting approval</Badge>}
+            {pendingCount > 0 && <Badge tone="warn">{pendingCount} awaiting approval</Badge>}
             {ctx.has(PERM.material.indent.create) && (
               <Link href="/material/indents/new">
                 <Button size="sm">

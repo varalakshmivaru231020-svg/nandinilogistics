@@ -43,8 +43,8 @@ export function CustomersScreen({
       header: "Customer",
       render: (c) => (
         <div>
-          <p className="text-sm font-medium text-slate-900">{c.name}</p>
-          <p className="text-xs text-slate-500">{c.customerNo}</p>
+          <p className="text-sm font-medium text-navy-950">{c.name}</p>
+          <p className="text-xs text-muted-500">{c.customerNo}</p>
         </div>
       ),
     },
@@ -53,8 +53,8 @@ export function CustomersScreen({
       header: "Contact",
       render: (c) => (
         <div className="text-xs">
-          <p className="text-slate-700">{can.viewKyc ? c.phone : "••••••"}</p>
-          {c.email && <p className="text-slate-400">{c.email}</p>}
+          <p className="text-navy-600">{can.viewKyc ? c.phone : "••••••"}</p>
+          {c.email && <p className="text-muted-400">{c.email}</p>}
         </div>
       ),
     },
@@ -62,19 +62,19 @@ export function CustomersScreen({
       key: "pan",
       header: "PAN",
       visible: can.viewKyc,
-      render: (c) => <span className="text-xs text-slate-600">{c.panNumber ?? "—"}</span>,
+      render: (c) => <span className="text-xs text-muted-600">{c.panNumber ?? "—"}</span>,
     },
     {
       key: "bookings",
       header: "Units",
       render: (c) =>
         c.bookings.length === 0 ? (
-          <span className="text-xs text-slate-400">No booking</span>
+          <span className="text-xs text-muted-400">No booking</span>
         ) : (
           <div className="flex flex-wrap gap-1">
             {c.bookings.map((b) => (
               <Link key={b.id} href={`/sales/bookings/${b.id}`}>
-                <Badge tone={b.status === "CANCELLED" ? "red" : "brand"}>{b.unitNumber}</Badge>
+                <Badge tone={b.status === "CANCELLED" ? "bad" : "brand"}>{b.unitNumber}</Badge>
               </Link>
             ))}
           </div>
@@ -89,7 +89,7 @@ export function CustomersScreen({
         const total = c.bookings
           .filter((b) => b.status !== "CANCELLED")
           .reduce((s, b) => s + b.totalAmount, 0);
-        return total > 0 ? money(total) : <span className="text-slate-400">—</span>;
+        return total > 0 ? money(total) : <span className="text-muted-400">—</span>;
       },
     },
     {
@@ -98,9 +98,9 @@ export function CustomersScreen({
       align: "center",
       render: (c) =>
         c.kycVerified ? (
-          <Badge tone="green" title={formatDate(c.kycVerifiedAt)}>Verified</Badge>
+          <Badge tone="good" title={formatDate(c.kycVerifiedAt)}>Verified</Badge>
         ) : (
-          <Badge tone="amber">Pending</Badge>
+          <Badge tone="warn">Pending</Badge>
         ),
     },
     {

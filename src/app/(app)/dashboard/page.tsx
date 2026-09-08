@@ -8,38 +8,45 @@ import { requireAuth } from "@/lib/rbac/guard";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { Badge, Card, CardBody, CardHeader, CardTitle, PageHeader } from "@/components/ui/primitives";
-import { moneyShort } from "@/lib/utils";
+import {
+  Badge, Card, CardBody, CardHeader, CardTitle, PageHeader, StatLabel, StatValue,
+} from "@/components/ui/primitives";
+import { cn, moneyShort } from "@/lib/utils";
 
 export const metadata = { title: "Dashboard" };
 
-/** A tile is only computed and rendered when the user may see that number. */
+/**
+ * KPI tile, matching the card in design/NN Infra Admin.dc.html:
+ * uppercase micro-label, Sora display figure, tinted icon square.
+ */
 function Tile({
-  label, value, sub, icon, href, tone = "slate",
+  label, value, sub, icon, href, tone = "brand",
 }: {
   label: string;
   value: string;
   sub?: string;
   icon: React.ReactNode;
   href?: string;
-  tone?: "slate" | "brand" | "green" | "amber" | "red";
+  tone?: "brand" | "good" | "warn" | "bad" | "navy";
 }) {
-  const tones = {
-    slate: "bg-slate-100 text-slate-600",
-    brand: "bg-brand-50 text-brand-600",
-    green: "bg-emerald-50 text-emerald-600",
-    amber: "bg-amber-50 text-amber-600",
-    red: "bg-red-50 text-red-600",
-  };
+  const iconTone = {
+    brand: "bg-brand-100 text-brand-500",
+    good: "bg-good-050 text-good-600",
+    warn: "bg-warn-050 text-warn-700",
+    bad: "bg-bad-050 text-bad-600",
+    navy: "bg-surface-field text-navy-950",
+  }[tone];
 
   const body = (
-    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow">
-      <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${tones[tone]}`}>{icon}</div>
-      <div className="min-w-0">
-        <p className="text-xs font-medium text-slate-500">{label}</p>
-        <p className="num mt-0.5 text-xl font-semibold tracking-tight text-slate-900">{value}</p>
-        {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
+    <div className="flex h-full flex-col gap-[9px] rounded-[13px] border border-line-400 bg-white px-[18px] py-[17px] transition-colors hover:border-brand-300">
+      <div className="flex items-center justify-between gap-2">
+        <StatLabel>{label}</StatLabel>
+        <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-[8px]", iconTone)}>
+          {icon}
+        </span>
       </div>
+      <StatValue>{value}</StatValue>
+      {sub && <p className="text-[11.5px] font-medium text-muted-400">{sub}</p>}
     </div>
   );
 
@@ -81,7 +88,7 @@ export default async function DashboardPage() {
       where: { ...scope, status: { in: ["SUBMITTED", "PM_APPROVED"] } },
     });
     tiles.push(
-      <Tile key="indents" label="Indents awaiting approval" value={String(pending)} icon={<ClipboardList className="h-4.5 w-4.5" />} tone={pending > 0 ? "amber" : "slate"} href="/material/indents" />,
+      <Tile key="indents" label="Indents awaiting approval" value={String(pending)} icon={<ClipboardList className="h-4.5 w-4.5" />} tone={pending > 0 ? "warn" : "navy"} href="/material/indents" />,
     );
   }
 
@@ -111,7 +118,7 @@ export default async function DashboardPage() {
     `;
     const count = Number(rows[0]?.count ?? 0);
     tiles.push(
-      <Tile key="reorder" label="Items below reorder level" value={String(count)} icon={<AlertTriangle className="h-4.5 w-4.5" />} tone={count > 0 ? "red" : "green"} href="/material/reorder" />,
+      <Tile key="reorder" label="Items below reorder level" value={String(count)} icon={<AlertTriangle className="h-4.5 w-4.5" />} tone={count > 0 ? "bad" : "good"} href="/material/reorder" />,
     );
   }
 
@@ -124,7 +131,7 @@ export default async function DashboardPage() {
     ]);
     tiles.push(
       <Tile key="leads" label="Open leads" value={String(openLeads)} icon={<UserPlus className="h-4.5 w-4.5" />} tone="brand" href="/sales/leads" />,
-      <Tile key="fu" label="Follow-ups due" value={String(dueFollowUps)} icon={<TrendingUp className="h-4.5 w-4.5" />} tone={dueFollowUps > 0 ? "amber" : "slate"} href="/sales/follow-ups" />,
+      <Tile key="fu" label="Follow-ups due" value={String(dueFollowUps)} icon={<TrendingUp className="h-4.5 w-4.5" />} tone={dueFollowUps > 0 ? "warn" : "navy"} href="/sales/follow-ups" />,
     );
   }
 
@@ -134,7 +141,7 @@ export default async function DashboardPage() {
       prisma.unit.count({ where: scope }),
     ]);
     tiles.push(
-      <Tile key="units" label="Units available" value={`${available} / ${total}`} icon={<Building2 className="h-4.5 w-4.5" />} tone="green" sub="Live inventory" href="/units/board" />,
+      <Tile key="units" label="Units available" value={`${available} / ${total}`} icon={<Building2 className="h-4.5 w-4.5" />} tone="good" sub="Live inventory" href="/units/board" />,
     );
   }
 
@@ -161,7 +168,7 @@ export default async function DashboardPage() {
       {tiles.length === 0 ? (
         <Card>
           <CardBody>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-muted-600">
               There is nothing on your dashboard yet, because your role does not yet include view
               access to any module. An administrator can grant permissions from Administration →
               Roles.
@@ -181,19 +188,19 @@ export default async function DashboardPage() {
             </Link>
           </CardHeader>
           <CardBody className="p-0">
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line-200">
               {recentAudit.map((log) => (
                 <li key={log.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate text-sm text-slate-700">{log.summary}</p>
-                    <p className="text-xs text-slate-400">
+                    <p className="truncate text-sm text-navy-600">{log.summary}</p>
+                    <p className="text-xs text-muted-400">
                       {log.user?.name ?? "System"} ·{" "}
                       {new Date(log.createdAt).toLocaleString("en-IN", {
                         day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
                       })}
                     </p>
                   </div>
-                  <Badge tone={log.action === "DELETE" ? "red" : log.action === "CREATE" ? "green" : "slate"}>
+                  <Badge tone={log.action === "DELETE" ? "bad" : log.action === "CREATE" ? "good" : "slate"}>
                     {log.action}
                   </Badge>
                 </li>

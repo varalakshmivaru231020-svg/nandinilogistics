@@ -20,12 +20,12 @@ interface PermRow {
   kind: string;
 }
 
-const KIND_TONE: Record<string, "slate" | "brand" | "green" | "amber" | "violet" | "sky"> = {
+const KIND_TONE: Record<string, "slate" | "brand" | "good" | "warn" | "navy" | "brand"> = {
   PAGE: "brand",
-  TAB: "sky",
-  BUTTON: "green",
-  ACTION: "violet",
-  FIELD: "amber",
+  TAB: "brand",
+  BUTTON: "good",
+  ACTION: "navy",
+  FIELD: "warn",
   REPORT: "slate",
 };
 
@@ -150,7 +150,7 @@ export function PermissionMatrix({
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-56 flex-1 sm:max-w-md">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-400" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -167,10 +167,10 @@ export function PermissionMatrix({
 
         {dirty && (
           <>
-            <span className="text-xs text-slate-500">
-              {added.length > 0 && <span className="text-emerald-600">+{added.length}</span>}
+            <span className="text-xs text-muted-500">
+              {added.length > 0 && <span className="text-good-600">+{added.length}</span>}
               {added.length > 0 && removed.length > 0 && " / "}
-              {removed.length > 0 && <span className="text-red-600">−{removed.length}</span>}
+              {removed.length > 0 && <span className="text-bad-600">−{removed.length}</span>}
               {" pending"}
             </span>
             <Button
@@ -212,26 +212,26 @@ export function PermissionMatrix({
                 })
               }>
                 <div className="flex min-w-0 items-center gap-2">
-                  <ChevronDown className={cn("h-4 w-4 shrink-0 text-slate-400 transition-transform", !isOpen && "-rotate-90")} />
+                  <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-400 transition-transform", !isOpen && "-rotate-90")} />
                   <CardTitle className="truncate">{group}</CardTitle>
                   {isPending && (
-                    <Badge tone="amber" className="shrink-0">
+                    <Badge tone="warn" className="shrink-0">
                       <AlertTriangle className="mr-1 h-3 w-3" />
                       Pending verification
                     </Badge>
                   )}
-                  <span className="shrink-0 text-xs text-slate-400">{moduleLabel.get(module)}</span>
+                  <span className="shrink-0 text-xs text-muted-400">{moduleLabel.get(module)}</span>
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className={cn("num text-xs", allOn ? "text-emerald-600" : on > 0 ? "text-amber-600" : "text-slate-400")}>
+                  <span className={cn("num text-xs", allOn ? "text-good-600" : on > 0 ? "text-warn-700" : "text-muted-400")}>
                     {on} / {codes.length}
                   </span>
                   {!readOnly && (
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setMany(codes, !allOn); }}
-                      className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50"
+                      className="rounded border border-line-400 bg-white px-2 py-0.5 text-xs text-muted-600 hover:bg-surface-hover"
                     >
                       {allOn ? "Clear all" : "Select all"}
                     </button>
@@ -241,7 +241,7 @@ export function PermissionMatrix({
 
               {isOpen && (
                 <CardBody className="p-0">
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-line-200">
                     {perms.map((p) => {
                       const isOn = selected.has(p.code);
                       const changed = isOn !== initial.has(p.code);
@@ -250,8 +250,8 @@ export function PermissionMatrix({
                           key={p.code}
                           className={cn(
                             "flex items-start gap-3 px-4 py-2.5",
-                            changed && (isOn ? "bg-emerald-50/60" : "bg-red-50/60"),
-                            !readOnly && "cursor-pointer hover:bg-slate-50",
+                            changed && (isOn ? "bg-good-050" : "bg-bad-050"),
+                            !readOnly && "cursor-pointer hover:bg-surface-hover",
                           )}
                           onClick={() => toggle(p.code)}
                         >
@@ -261,19 +261,19 @@ export function PermissionMatrix({
                             disabled={readOnly}
                             onChange={() => toggle(p.code)}
                             onClick={(e) => e.stopPropagation()}
-                            className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:opacity-50"
+                            className="mt-0.5 h-4 w-4 shrink-0 rounded border-line-400 text-brand-600 focus:ring-brand-500 disabled:opacity-50"
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-sm text-slate-800">{p.label}</span>
+                              <span className="text-sm text-navy-900">{p.label}</span>
                               <Badge tone={KIND_TONE[p.kind] ?? "slate"}>{p.kind}</Badge>
                             </div>
                             {p.description && (
-                              <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{p.description}</p>
+                              <p className="mt-0.5 text-xs leading-relaxed text-muted-500">{p.description}</p>
                             )}
-                            <code className="mt-0.5 block text-[11px] text-slate-400">{p.code}</code>
+                            <code className="mt-0.5 block text-[11px] text-muted-400">{p.code}</code>
                           </div>
-                          {readOnly && <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-300" />}
+                          {readOnly && <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-line-500" />}
                         </li>
                       );
                     })}
@@ -287,7 +287,7 @@ export function PermissionMatrix({
         {groups.length === 0 && (
           <Card>
             <CardBody>
-              <p className="text-sm text-slate-500">No permissions match &ldquo;{search}&rdquo;.</p>
+              <p className="text-sm text-muted-500">No permissions match &ldquo;{search}&rdquo;.</p>
             </CardBody>
           </Card>
         )}
@@ -300,14 +300,14 @@ export function PermissionMatrix({
             <CardTitle>Users holding this role ({users.length})</CardTitle>
           </CardHeader>
           <CardBody className="p-0">
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line-200">
               {users.map((u) => (
                 <li key={u.id} className="flex items-center justify-between px-4 py-2.5">
                   <div>
-                    <p className="text-sm text-slate-800">{u.name}</p>
-                    <p className="text-xs text-slate-500">{u.email}</p>
+                    <p className="text-sm text-navy-900">{u.name}</p>
+                    <p className="text-xs text-muted-500">{u.email}</p>
                   </div>
-                  <Badge tone={u.status === "ACTIVE" ? "green" : "slate"}>{u.status}</Badge>
+                  <Badge tone={u.status === "ACTIVE" ? "good" : "slate"}>{u.status}</Badge>
                 </li>
               ))}
             </ul>

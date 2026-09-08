@@ -45,7 +45,7 @@ export default async function RoleDetailPage({ params }: { params: Promise<{ id:
         actions={
           <div className="flex items-center gap-2">
             {role.isSystem && <Badge tone="brand">System role</Badge>}
-            <Badge tone={role.status === "ACTIVE" ? "green" : "slate"}>
+            <Badge tone={role.status === "ACTIVE" ? "good" : "slate"}>
               {role.status === "ACTIVE" ? "Active" : "Inactive"}
             </Badge>
             <Badge tone="slate">{role.users.length} user(s)</Badge>

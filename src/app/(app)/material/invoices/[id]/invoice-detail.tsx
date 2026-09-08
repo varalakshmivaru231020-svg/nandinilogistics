@@ -74,8 +74,8 @@ export function InvoiceDetail({
       header: "Item",
       render: (l) => (
         <div>
-          <p className="text-sm text-slate-800">{l.name}</p>
-          <p className="text-xs text-slate-500"><code>{l.code}</code></p>
+          <p className="text-sm text-navy-900">{l.name}</p>
+          <p className="text-xs text-muted-500"><code>{l.code}</code></p>
         </div>
       ),
     },
@@ -91,12 +91,12 @@ export function InvoiceDetail({
       {notice && !error && <Alert tone="success">{notice}</Alert>}
 
       {/* The match verdict is the headline on this screen. */}
-      <Card className={mismatched ? "border-red-300" : match?.matched ? "border-emerald-300" : undefined}>
+      <Card className={mismatched ? "border-bad-600" : match?.matched ? "border-good-600" : undefined}>
         <CardHeader>
           <CardTitle>Three-way match</CardTitle>
           <div className="flex items-center gap-2">
             {match && (
-              <Badge tone={match.matched ? "green" : "red"}>
+              <Badge tone={match.matched ? "good" : "bad"}>
                 {match.matched ? "Passed" : "Failed"}
               </Badge>
             )}
@@ -110,27 +110,27 @@ export function InvoiceDetail({
         </CardHeader>
         <CardBody>
           {!match ? (
-            <p className="text-sm text-slate-500">No comparison stored for this invoice.</p>
+            <p className="text-sm text-muted-500">No comparison stored for this invoice.</p>
           ) : match.matched ? (
-            <p className="flex items-center gap-2 text-sm text-emerald-800">
+            <p className="flex items-center gap-2 text-sm text-good-700">
               <Check className="h-4 w-4" />
               Purchase order, goods receipt and invoice agree on every line.
             </p>
           ) : (
             <div className="space-y-2">
-              <p className="flex items-center gap-2 text-sm font-medium text-red-800">
+              <p className="flex items-center gap-2 text-sm font-medium text-bad-600">
                 <TriangleAlert className="h-4 w-4" />
                 {match.issues.length} variance(s) blocking payment
               </p>
               <ul className="space-y-1">
                 {match.issues.map((issue, i) => (
-                  <li key={i} className="flex gap-2 text-xs text-red-700">
-                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-red-400" />
+                  <li key={i} className="flex gap-2 text-xs text-bad-600">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-bad-600" />
                     {issue}
                   </li>
                 ))}
               </ul>
-              <p className="pt-1 text-xs text-slate-500">
+              <p className="pt-1 text-xs text-muted-500">
                 Resolve the variance — usually by posting the outstanding goods receipt — or approve
                 it as an explicit override, which is recorded against your name.
               </p>
@@ -153,8 +153,8 @@ export function InvoiceDetail({
                 ["Received on", formatDate(invoice.receivedDate)],
               ].map(([label, value]) => (
                 <div key={label}>
-                  <dt className="text-xs text-slate-500">{label}</dt>
-                  <dd className="mt-0.5 text-sm text-slate-800">
+                  <dt className="text-xs text-muted-500">{label}</dt>
+                  <dd className="mt-0.5 text-sm text-navy-900">
                     {label === "Purchase order" ? (
                       <Link href={`/material/purchase-orders/${invoice.poId}`} className="text-brand-600 hover:underline">
                         {value}
@@ -165,7 +165,7 @@ export function InvoiceDetail({
               ))}
             </dl>
             {invoice.remarks && (
-              <p className="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-600">{invoice.remarks}</p>
+              <p className="mt-3 border-t border-line-200 pt-3 text-sm text-muted-600">{invoice.remarks}</p>
             )}
           </CardBody>
         </Card>
@@ -175,28 +175,28 @@ export function InvoiceDetail({
           <CardBody className="space-y-3">
             <div className="space-y-1 text-xs">
               <div className="flex justify-between">
-                <span className="text-slate-500">Sub-total</span>
-                <span className="num text-slate-700">{money(invoice.subTotal)}</span>
+                <span className="text-muted-500">Sub-total</span>
+                <span className="num text-navy-600">{money(invoice.subTotal)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">GST</span>
-                <span className="num text-slate-700">{money(invoice.taxAmount)}</span>
+                <span className="text-muted-500">GST</span>
+                <span className="num text-navy-600">{money(invoice.taxAmount)}</span>
               </div>
-              <div className="flex items-baseline justify-between border-t border-slate-100 pt-1.5">
-                <span className="text-sm text-slate-600">Total</span>
-                <span className="num text-xl font-semibold text-slate-900">{money(invoice.totalAmount)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Paid</span>
-                <span className="num text-emerald-700">{money(invoice.paidAmount)}</span>
+              <div className="flex items-baseline justify-between border-t border-line-200 pt-1.5">
+                <span className="text-sm text-muted-600">Total</span>
+                <span className="num text-xl font-semibold text-navy-950">{money(invoice.totalAmount)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Outstanding</span>
-                <span className="num font-medium text-slate-800">{money(outstanding)}</span>
+                <span className="text-muted-500">Paid</span>
+                <span className="num text-good-700">{money(invoice.paidAmount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-500">Outstanding</span>
+                <span className="num font-medium text-navy-900">{money(outstanding)}</span>
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
+            <div className="flex flex-col gap-2 border-t border-line-200 pt-3">
               {approvable && can.approve && (
                 <Button
                   size="sm"
@@ -210,7 +210,7 @@ export function InvoiceDetail({
               )}
 
               {mismatched && can.approve && !can.override && (
-                <p className="text-xs text-amber-700">
+                <p className="text-xs text-warn-700">
                   This invoice is blocked by the match. Clearing it needs the override permission,
                   which you do not hold.
                 </p>
@@ -245,17 +245,17 @@ export function InvoiceDetail({
         <Card>
           <CardHeader><CardTitle>Payments ({payments.length})</CardTitle></CardHeader>
           <CardBody className="p-0">
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line-200">
               {payments.map((p) => (
                 <li key={p.id} className="flex items-center justify-between px-4 py-2.5">
                   <div>
-                    <p className="text-sm text-slate-800">{p.paymentNo}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-sm text-navy-900">{p.paymentNo}</p>
+                    <p className="text-xs text-muted-500">
                       {formatDate(p.paymentDate)} · {p.mode}
                       {p.referenceNo && ` · ${p.referenceNo}`}
                     </p>
                   </div>
-                  <span className="num text-sm font-medium text-slate-900">{money(p.amount)}</span>
+                  <span className="num text-sm font-medium text-navy-950">{money(p.amount)}</span>
                 </li>
               ))}
             </ul>

@@ -23,8 +23,8 @@ interface StockRow {
   itemId: string; storeId: string; code: string; name: string; uom: string; available: number;
 }
 
-const STATUS_TONE: Record<string, "slate" | "amber" | "green" | "red"> = {
-  DRAFT: "slate", IN_TRANSIT: "amber", RECEIVED: "green", CANCELLED: "red",
+const STATUS_TONE: Record<string, "slate" | "warn" | "good" | "bad"> = {
+  DRAFT: "slate", IN_TRANSIT: "warn", RECEIVED: "good", CANCELLED: "bad",
 };
 
 export function TransfersScreen({
@@ -81,10 +81,10 @@ export function TransfersScreen({
                 <div className="flex flex-wrap items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-slate-900">{t.transferNo}</span>
+                      <span className="text-sm font-medium text-navy-950">{t.transferNo}</span>
                       <Badge tone={STATUS_TONE[t.status] ?? "slate"}>{t.status.replace(/_/g, " ")}</Badge>
                     </div>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-muted-500">
                       {t.fromStoreName} → {t.toStoreName} · {formatDate(t.transferDate)} · {t.items.length} line(s)
                     </p>
                   </div>
@@ -105,16 +105,16 @@ export function TransfersScreen({
                   </div>
                 </div>
 
-                <ul className="divide-y divide-slate-100 border-t border-slate-100">
+                <ul className="divide-y divide-line-200 border-t border-line-200">
                   {t.items.map((l) => {
                     const short = t.status === "RECEIVED" && l.receivedQty < l.quantity;
                     return (
                       <li key={l.id} className="flex items-center justify-between px-4 py-1.5">
-                        <span className="text-sm text-slate-700">{l.name}</span>
-                        <span className="num text-xs text-slate-600">
+                        <span className="text-sm text-navy-600">{l.name}</span>
+                        <span className="num text-xs text-muted-600">
                           {qty(l.quantity, 3)} {l.uom} sent
                           {t.status === "RECEIVED" && (
-                            <span className={short ? "ml-2 font-medium text-red-600" : "ml-2 text-emerald-700"}>
+                            <span className={short ? "ml-2 font-medium text-bad-600" : "ml-2 text-good-700"}>
                               {qty(l.receivedQty, 3)} received{short && ` · ${qty(l.quantity - l.receivedQty, 3)} short`}
                             </span>
                           )}
@@ -229,12 +229,12 @@ function CreateModal({
         ) : (
           <div className="space-y-2">
             {rows.map(({ l, s, over }, idx) => (
-              <div key={l.key} className={`rounded-md border p-3 ${over ? "border-red-300 bg-red-50/40" : "border-slate-200"}`}>
+              <div key={l.key} className={`rounded-md border p-3 ${over ? "border-bad-600 bg-bad-050" : "border-line-400"}`}>
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-medium text-slate-500">Line {idx + 1}</span>
+                  <span className="text-xs font-medium text-muted-500">Line {idx + 1}</span>
                   {lines.length > 1 && (
                     <button type="button" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}
-                      className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600">
+                      className="rounded p-1 text-muted-400 hover:bg-bad-050 hover:text-bad-600">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   )}
@@ -256,7 +256,7 @@ function CreateModal({
                       onChange={(e) => setLines((ls) => ls.map((x) => x.key === l.key ? { ...x, quantity: e.target.value } : x))} />
                   </Field>
                 </div>
-                {over && s && <p className="mt-2 text-xs text-red-600">Only {qty(s.available, 3)} available.</p>}
+                {over && s && <p className="mt-2 text-xs text-bad-600">Only {qty(s.available, 3)} available.</p>}
               </div>
             ))}
             <Button variant="secondary" size="sm"
@@ -317,9 +317,9 @@ function ReceiveModal({
         {invalid && <Alert tone="error">You cannot receive more than what was sent.</Alert>}
 
         {transfer.items.map((l) => (
-          <div key={l.id} className="rounded-md border border-slate-200 p-3">
-            <p className="text-sm text-slate-800">{l.name}</p>
-            <p className="mb-2 text-xs text-slate-500">Sent {qty(l.quantity, 3)} {l.uom}</p>
+          <div key={l.id} className="rounded-md border border-line-400 p-3">
+            <p className="text-sm text-navy-900">{l.name}</p>
+            <p className="mb-2 text-xs text-muted-500">Sent {qty(l.quantity, 3)} {l.uom}</p>
             <Field label="Received">
               <Input type="number" step="any" min={0} className="num text-right"
                 value={state[l.id]}

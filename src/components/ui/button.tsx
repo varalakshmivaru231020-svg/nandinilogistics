@@ -6,25 +6,36 @@ import { Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * Button styles taken from design/NN Infra Admin.dc.html.
+ *
+ * The design uses cyan for the primary call to action, green only for
+ * approvals, and an outlined white button carrying brand-coloured text for
+ * secondary actions.
+ */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-sans font-bold transition-colors " +
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-offset-1 " +
+    "disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        primary: "bg-brand-600 text-white hover:bg-brand-700 shadow-sm",
-        secondary: "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 shadow-sm",
-        ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-        danger: "bg-red-600 text-white hover:bg-red-700 shadow-sm",
-        success: "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm",
-        warning: "bg-accent-500 text-white hover:bg-accent-600 shadow-sm",
-        link: "text-brand-600 hover:text-brand-800 underline-offset-4 hover:underline",
+        primary: "bg-brand-500 text-white hover:bg-brand-600",
+        secondary: "border border-line-400 bg-white text-brand-700 hover:bg-surface-hover hover:border-brand-300",
+        ghost: "border border-line-400 bg-white text-muted-600 hover:bg-surface-hover hover:text-navy-900",
+        plain: "bg-transparent text-muted-600 hover:bg-surface-hover hover:text-navy-950",
+        success: "bg-good-600 text-white hover:bg-good-700",
+        danger: "bg-bad-600 text-white hover:brightness-95",
+        warning: "bg-warn-700 text-white hover:brightness-95",
+        dark: "bg-navy-950 text-brand-300 hover:bg-navy-700",
+        link: "text-brand-500 hover:text-navy-800 underline-offset-4 hover:underline",
       },
       size: {
-        xs: "h-7 px-2 text-xs",
-        sm: "h-8 px-3 text-sm",
-        md: "h-9 px-4 text-sm",
-        lg: "h-10 px-5 text-sm",
-        icon: "h-8 w-8",
+        xs: "h-7 rounded-[8px] px-2.5 text-[11px]",
+        sm: "h-8 rounded-[8px] px-3.5 text-[11.5px]",
+        md: "h-9 rounded-[9px] px-4 text-[12.5px]",
+        lg: "h-10 rounded-[9px] px-[18px] text-[12.5px]",
+        icon: "h-9 w-9 rounded-[9px]",
       },
     },
     defaultVariants: { variant: "primary", size: "md" },

@@ -40,8 +40,8 @@ export function SessionsScreen({
       header: "User",
       render: (s) => (
         <div>
-          <p className="text-sm text-slate-800">{s.userName}</p>
-          <p className="text-xs text-slate-500">{s.userEmail}</p>
+          <p className="text-sm text-navy-900">{s.userName}</p>
+          <p className="text-xs text-muted-500">{s.userEmail}</p>
         </div>
       ),
     },
@@ -49,21 +49,21 @@ export function SessionsScreen({
       key: "device",
       header: "Device",
       render: (s) => (
-        <p className="max-w-md truncate text-xs text-slate-500" title={s.userAgent ?? ""}>
+        <p className="max-w-md truncate text-xs text-muted-500" title={s.userAgent ?? ""}>
           {s.userAgent ?? "Unknown"}
         </p>
       ),
     },
-    { key: "ip", header: "IP", render: (s) => <span className="text-xs text-slate-500">{s.ipAddress ?? "—"}</span> },
-    { key: "since", header: "Signed in", render: (s) => <span className="text-xs text-slate-500">{formatDateTime(s.createdAt)}</span> },
-    { key: "until", header: "Expires", render: (s) => <span className="text-xs text-slate-500">{formatDateTime(s.expiresAt)}</span> },
+    { key: "ip", header: "IP", render: (s) => <span className="text-xs text-muted-500">{s.ipAddress ?? "—"}</span> },
+    { key: "since", header: "Signed in", render: (s) => <span className="text-xs text-muted-500">{formatDateTime(s.createdAt)}</span> },
+    { key: "until", header: "Expires", render: (s) => <span className="text-xs text-muted-500">{formatDateTime(s.expiresAt)}</span> },
     {
       key: "actions",
       header: "",
       align: "right",
       visible: canRevoke,
       render: (s) => (
-        <button type="button" onClick={() => revoke(s.id)} disabled={busy} className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-red-50 hover:text-red-600">
+        <button type="button" onClick={() => revoke(s.id)} disabled={busy} className="inline-flex items-center gap-1 rounded border border-line-400 bg-white px-2 py-1 text-xs text-muted-600 hover:bg-bad-050 hover:text-bad-600">
           <LogOut className="h-3 w-3" />
           Revoke
         </button>

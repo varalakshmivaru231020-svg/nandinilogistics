@@ -12,9 +12,9 @@ import { formatDate, money } from "@/lib/utils";
 
 export const metadata = { title: "Vendor Invoices" };
 
-const STATUS_TONE: Record<string, "slate" | "green" | "red" | "amber" | "sky" | "violet"> = {
-  DRAFT: "slate", MATCHED: "sky", MISMATCH: "red", APPROVED: "green",
-  PARTIALLY_PAID: "amber", PAID: "violet", CANCELLED: "slate",
+const STATUS_TONE: Record<string, "slate" | "good" | "bad" | "warn" | "brand" | "navy"> = {
+  DRAFT: "slate", MATCHED: "brand", MISMATCH: "bad", APPROVED: "good",
+  PARTIALLY_PAID: "warn", PAID: "navy", CANCELLED: "slate",
 };
 
 type Row = {
@@ -47,10 +47,10 @@ export default async function InvoicesPage() {
       header: "Invoice",
       render: (i) => (
         <div>
-          <Link href={`/material/invoices/${i.id}`} className="text-sm font-medium text-slate-900 hover:text-brand-600">
+          <Link href={`/material/invoices/${i.id}`} className="text-sm font-medium text-navy-950 hover:text-brand-600">
             {i.invoiceNo}
           </Link>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-500">
             against{" "}
             <Link href={`/material/purchase-orders/${i.purchaseOrder.id}`} className="hover:text-brand-600">
               {i.purchaseOrder.poNo}
@@ -60,15 +60,15 @@ export default async function InvoicesPage() {
       ),
     },
     { key: "vendor", header: "Vendor", render: (i) => <span className="text-sm">{i.vendor.name}</span> },
-    { key: "date", header: "Invoice date", render: (i) => <span className="text-xs text-slate-500">{formatDate(i.invoiceDate)}</span> },
+    { key: "date", header: "Invoice date", render: (i) => <span className="text-xs text-muted-500">{formatDate(i.invoiceDate)}</span> },
     { key: "amount", header: "Amount", align: "right", className: "num", render: (i) => money(i.totalAmount) },
     {
       key: "paid", header: "Paid", align: "right", className: "num",
       render: (i) => {
         const paid = Number(i.paidAmount);
         return paid > 0
-          ? <span className="text-emerald-700">{money(paid)}</span>
-          : <span className="text-slate-400">—</span>;
+          ? <span className="text-good-700">{money(paid)}</span>
+          : <span className="text-muted-400">—</span>;
       },
     },
     {
@@ -76,8 +76,8 @@ export default async function InvoicesPage() {
       render: (i) => {
         const out = Number(i.totalAmount) - Number(i.paidAmount);
         return out > 0.01
-          ? <span className="font-medium text-slate-800">{money(out)}</span>
-          : <span className="text-slate-400">—</span>;
+          ? <span className="font-medium text-navy-900">{money(out)}</span>
+          : <span className="text-muted-400">—</span>;
       },
     },
     {
@@ -93,7 +93,7 @@ export default async function InvoicesPage() {
         description="Purchase Order ↔ GRN ↔ Invoice. A mismatch is blocked or flagged, never quietly paid."
         actions={
           <div className="flex items-center gap-2">
-            {mismatched > 0 && <Badge tone="red">{mismatched} mismatched</Badge>}
+            {mismatched > 0 && <Badge tone="bad">{mismatched} mismatched</Badge>}
             <Badge tone="slate">{money(outstanding)} outstanding</Badge>
             {ctx.has(PERM.material.vendorInvoice.create) && (
               <Link href="/material/invoices/new">

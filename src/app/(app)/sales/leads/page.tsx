@@ -73,8 +73,8 @@ export default async function LeadsPage({
         <CardBody className="flex flex-wrap gap-x-8 gap-y-3 py-3">
           {STAGES.map((s) => (
             <div key={s}>
-              <p className="text-[11px] uppercase tracking-wide text-slate-400">{s.replace(/_/g, " ")}</p>
-              <p className="num text-lg font-semibold text-slate-900">{counts[s] ?? 0}</p>
+              <p className="text-[11px] uppercase tracking-wide text-muted-400">{s.replace(/_/g, " ")}</p>
+              <p className="num text-lg font-semibold text-navy-950">{counts[s] ?? 0}</p>
             </div>
           ))}
         </CardBody>

@@ -48,7 +48,7 @@ export default async function FollowUpsPage() {
         description="Next-action dates, oldest first. Overdue follow-ups escalate to the sales head."
         actions={
           <div className="flex items-center gap-2">
-            {overdue.length > 0 && <Badge tone="red">{overdue.length} overdue</Badge>}
+            {overdue.length > 0 && <Badge tone="bad">{overdue.length} overdue</Badge>}
             <Badge tone="slate">{upcoming.length} upcoming</Badge>
           </div>
         }
@@ -65,7 +65,7 @@ export default async function FollowUpsPage() {
       ) : (
         <div className="space-y-4">
           {[
-            { label: "Overdue", rows: overdue, tone: "red" as const },
+            { label: "Overdue", rows: overdue, tone: "bad" as const },
             { label: "Upcoming", rows: upcoming, tone: "slate" as const },
           ].map(({ label, rows, tone }) =>
             rows.length === 0 ? null : (
@@ -74,28 +74,28 @@ export default async function FollowUpsPage() {
                   <CardTitle>{label} ({rows.length})</CardTitle>
                 </CardHeader>
                 <CardBody className="p-0">
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-line-200">
                     {rows.map((l) => (
-                      <li key={l.id} className={`flex flex-wrap items-center gap-3 px-4 py-2.5 ${tone === "red" ? "bg-red-50/40" : ""}`}>
+                      <li key={l.id} className={`flex flex-wrap items-center gap-3 px-4 py-2.5 ${tone === "bad" ? "bg-bad-050" : ""}`}>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <Link href={`/sales/leads?q=${encodeURIComponent(l.leadNo)}`} className="text-sm font-medium text-slate-900 hover:text-brand-600">
+                            <Link href={`/sales/leads?q=${encodeURIComponent(l.leadNo)}`} className="text-sm font-medium text-navy-950 hover:text-brand-600">
                               {l.name}
                             </Link>
                             <Badge tone="slate">{l.state.replace(/_/g, " ")}</Badge>
                           </div>
-                          <p className="text-xs text-slate-500">
+                          <p className="text-xs text-muted-500">
                             {l.leadNo} · {l.source.name}
                             {showContact && ` · ${l.phone}`}
                             {l.owner && ` · ${l.owner.name}`}
                           </p>
                           {l.followUps[0] && (
-                            <p className="mt-0.5 truncate text-xs text-slate-400">
+                            <p className="mt-0.5 truncate text-xs text-muted-400">
                               Last: {l.followUps[0].notes}
                             </p>
                           )}
                         </div>
-                        <span className={`shrink-0 text-xs ${tone === "red" ? "font-medium text-red-600" : "text-slate-600"}`}>
+                        <span className={`shrink-0 text-xs ${tone === "bad" ? "font-medium text-bad-600" : "text-muted-600"}`}>
                           {formatDate(l.nextActionAt)}
                         </span>
                       </li>
@@ -112,17 +112,17 @@ export default async function FollowUpsPage() {
         <Card className="mt-4">
           <CardHeader><CardTitle>Recently logged</CardTitle></CardHeader>
           <CardBody className="p-0">
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line-200">
               {recent.map((f) => (
                 <li key={f.id} className="px-4 py-2.5">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-slate-800">{f.lead.name}</span>
-                    <span className="text-xs text-slate-400">{formatDateTime(f.completedAt)}</span>
+                    <span className="text-sm text-navy-900">{f.lead.name}</span>
+                    <span className="text-xs text-muted-400">{formatDateTime(f.completedAt)}</span>
                   </div>
-                  <p className="mt-0.5 text-xs text-slate-600">
+                  <p className="mt-0.5 text-xs text-muted-600">
                     <Badge tone="slate">{f.channel}</Badge> {f.notes}
                   </p>
-                  <p className="text-[11px] text-slate-400">by {f.user.name}</p>
+                  <p className="text-[11px] text-muted-400">by {f.user.name}</p>
                 </li>
               ))}
             </ul>

@@ -51,7 +51,7 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
             <span>{booking.bookingNo}</span>
           </span>
         }
-        actions={<Badge tone={booking.status === "CANCELLED" ? "red" : "green"}>{booking.status}</Badge>}
+        actions={<Badge tone={booking.status === "CANCELLED" ? "bad" : "good"}>{booking.status}</Badge>}
       />
 
       <BookingDetail

@@ -15,9 +15,9 @@ export const metadata = { title: "Purchase Orders" };
 
 const PAGE_SIZE = 30;
 
-const STATUS_TONE: Record<string, "slate" | "amber" | "green" | "sky" | "violet" | "red"> = {
-  DRAFT: "slate", PENDING_APPROVAL: "amber", APPROVED: "green",
-  PARTIALLY_RECEIVED: "sky", RECEIVED: "violet", CLOSED: "slate", CANCELLED: "red",
+const STATUS_TONE: Record<string, "slate" | "warn" | "good" | "brand" | "navy" | "bad"> = {
+  DRAFT: "slate", PENDING_APPROVAL: "warn", APPROVED: "good",
+  PARTIALLY_RECEIVED: "brand", RECEIVED: "navy", CLOSED: "slate", CANCELLED: "bad",
 };
 
 type PoRow = {
@@ -70,25 +70,25 @@ export default async function PurchaseOrdersPage({
       header: "Purchase order",
       render: (p) => (
         <div>
-          <Link href={`/material/purchase-orders/${p.id}`} className="text-sm font-medium text-slate-900 hover:text-brand-600">
+          <Link href={`/material/purchase-orders/${p.id}`} className="text-sm font-medium text-navy-950 hover:text-brand-600">
             {p.poNo}
           </Link>
-          <p className="text-xs text-slate-500">{p.project.code} · {p._count.items} line(s)</p>
+          <p className="text-xs text-muted-500">{p.project.code} · {p._count.items} line(s)</p>
         </div>
       ),
     },
     { key: "vendor", header: "Vendor", render: (p) => <span className="text-sm">{p.vendor.name}</span> },
-    { key: "date", header: "Raised", render: (p) => <span className="text-xs text-slate-500">{formatDate(p.poDate)}</span> },
+    { key: "date", header: "Raised", render: (p) => <span className="text-xs text-muted-500">{formatDate(p.poDate)}</span> },
     {
       key: "expected",
       header: "Expected",
       render: (p) => {
-        if (!p.expectedDate) return <span className="text-xs text-slate-400">—</span>;
+        if (!p.expectedDate) return <span className="text-xs text-muted-400">—</span>;
         const overdue =
           new Date(p.expectedDate) < new Date() &&
           !["RECEIVED", "CLOSED", "CANCELLED"].includes(p.status);
         return (
-          <span className={overdue ? "text-xs font-medium text-red-600" : "text-xs text-slate-500"}>
+          <span className={overdue ? "text-xs font-medium text-bad-600" : "text-xs text-muted-500"}>
             {formatDate(p.expectedDate)}
             {overdue && " · overdue"}
           </span>
@@ -105,7 +105,7 @@ export default async function PurchaseOrdersPage({
         const received = p.items.reduce((s, i) => s + Number(i.receivedQty), 0);
         const pct = ordered > 0 ? Math.round((received / ordered) * 100) : 0;
         return (
-          <span className={pct === 100 ? "text-xs text-emerald-700" : "text-xs text-slate-600"}>
+          <span className={pct === 100 ? "text-xs text-good-700" : "text-xs text-muted-600"}>
             {pct}%
           </span>
         );
@@ -134,7 +134,7 @@ export default async function PurchaseOrdersPage({
         description="Ordered vs received vs pending, with overdue deliveries surfaced rather than discovered."
         actions={
           <div className="flex items-center gap-2">
-            {pendingApproval > 0 && <Badge tone="amber">{pendingApproval} awaiting approval</Badge>}
+            {pendingApproval > 0 && <Badge tone="warn">{pendingApproval} awaiting approval</Badge>}
             {ctx.has(PERM.material.purchaseOrder.create) && (
               <Link href="/material/purchase-orders/new">
                 <Button size="sm">

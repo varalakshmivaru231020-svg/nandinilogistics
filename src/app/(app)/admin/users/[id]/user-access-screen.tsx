@@ -61,7 +61,7 @@ export function UserAccessScreen(props: Props) {
         </Alert>
       )}
 
-      <div className="flex gap-1 border-b border-slate-200">
+      <div className="flex gap-1 border-b border-line-400">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -71,7 +71,7 @@ export function UserAccessScreen(props: Props) {
               "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
               tab === t.key
                 ? "border-brand-600 text-brand-700"
-                : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700",
+                : "border-transparent text-muted-500 hover:border-line-500 hover:text-navy-600",
             )}
           >
             {t.label}
@@ -126,13 +126,13 @@ function RolesTab({ userId, roles, assignedRoleIds, can, fromRoles }: Props) {
           </div>
         </CardHeader>
         <CardBody className="p-0">
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-line-200">
             {roles.map((r) => {
               const on = selected.has(r.id);
               return (
                 <li
                   key={r.id}
-                  className={cn("flex items-center gap-3 px-4 py-2.5", can.assignRoles && "cursor-pointer hover:bg-slate-50")}
+                  className={cn("flex items-center gap-3 px-4 py-2.5", can.assignRoles && "cursor-pointer hover:bg-surface-hover")}
                   onClick={() => {
                     if (!can.assignRoles) return;
                     setSelected((s) => {
@@ -147,17 +147,17 @@ function RolesTab({ userId, roles, assignedRoleIds, can, fromRoles }: Props) {
                     checked={on}
                     disabled={!can.assignRoles}
                     onChange={() => {}}
-                    className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    className="h-4 w-4 rounded border-line-400 text-brand-600 focus:ring-brand-500"
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
-                      <span className="text-sm font-medium text-slate-800">{r.name}</span>
+                      <ShieldCheck className="h-3.5 w-3.5 text-muted-400" />
+                      <span className="text-sm font-medium text-navy-900">{r.name}</span>
                       {r.status !== "ACTIVE" && <Badge tone="slate">Inactive</Badge>}
                     </div>
-                    <code className="text-xs text-slate-400">{r.code}</code>
+                    <code className="text-xs text-muted-400">{r.code}</code>
                   </div>
-                  <span className="num text-xs text-slate-500">{r.permissionCount} permissions</span>
+                  <span className="num text-xs text-muted-500">{r.permissionCount} permissions</span>
                 </li>
               );
             })}
@@ -233,11 +233,11 @@ function PermissionsTab({ userId, permissions, overrides, fromRoles, effective, 
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-56 flex-1 sm:max-w-md">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-400" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search all 468 permissions…" className="pl-8" />
         </div>
-        <label className="flex items-center gap-1.5 text-xs text-slate-600">
-          <input type="checkbox" checked={onlySet} onChange={(e) => setOnlySet(e.target.checked)} className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600" />
+        <label className="flex items-center gap-1.5 text-xs text-muted-600">
+          <input type="checkbox" checked={onlySet} onChange={(e) => setOnlySet(e.target.checked)} className="h-3.5 w-3.5 rounded border-line-400 text-brand-600" />
           Show only overrides
         </label>
         <div className="flex-1" />
@@ -253,11 +253,11 @@ function PermissionsTab({ userId, permissions, overrides, fromRoles, effective, 
       <Card>
         <CardBody className="p-0">
           {filtered.length === 0 ? (
-            <p className="px-4 py-10 text-center text-sm text-slate-500">
+            <p className="px-4 py-10 text-center text-sm text-muted-500">
               {onlySet && !search ? "No direct overrides on this user." : "No permissions match your search."}
             </p>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line-200">
               {filtered.slice(0, 300).map((p) => {
                 const override = state.get(p.code);
                 const viaRole = roleSet.has(p.code);
@@ -267,16 +267,16 @@ function PermissionsTab({ userId, permissions, overrides, fromRoles, effective, 
                   <li key={p.code} className="flex items-center gap-3 px-4 py-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-sm text-slate-800">{p.label}</span>
+                        <span className="text-sm text-navy-900">{p.label}</span>
                         <Badge tone="slate">{p.kind}</Badge>
                         {viaRole && <Badge tone="brand">via role</Badge>}
                         {isEffective ? (
-                          <Badge tone="green">effective</Badge>
+                          <Badge tone="good">effective</Badge>
                         ) : (
                           <Badge tone="slate">not granted</Badge>
                         )}
                       </div>
-                      <code className="text-[11px] text-slate-400">{p.code}</code>
+                      <code className="text-[11px] text-muted-400">{p.code}</code>
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1">
@@ -287,8 +287,8 @@ function PermissionsTab({ userId, permissions, overrides, fromRoles, effective, 
                         className={cn(
                           "flex items-center gap-1 rounded border px-2 py-1 text-xs disabled:opacity-50",
                           override === "ALLOW"
-                            ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                            : "border-slate-300 bg-white text-slate-500 hover:bg-slate-50",
+                            ? "border-good-600 bg-good-050 text-good-700"
+                            : "border-line-400 bg-white text-muted-500 hover:bg-surface-hover",
                         )}
                       >
                         <Check className="h-3 w-3" />
@@ -301,8 +301,8 @@ function PermissionsTab({ userId, permissions, overrides, fromRoles, effective, 
                         className={cn(
                           "flex items-center gap-1 rounded border px-2 py-1 text-xs disabled:opacity-50",
                           override === "DENY"
-                            ? "border-red-300 bg-red-50 text-red-700"
-                            : "border-slate-300 bg-white text-slate-500 hover:bg-slate-50",
+                            ? "border-bad-600 bg-bad-050 text-bad-600"
+                            : "border-line-400 bg-white text-muted-500 hover:bg-surface-hover",
                         )}
                       >
                         <Ban className="h-3 w-3" />
@@ -315,7 +315,7 @@ function PermissionsTab({ userId, permissions, overrides, fromRoles, effective, 
             </ul>
           )}
           {filtered.length > 300 && (
-            <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
+            <p className="border-t border-line-200 px-4 py-2 text-xs text-muted-500">
               Showing the first 300 of {filtered.length} matches — narrow the search to see the rest.
             </p>
           )}
@@ -369,11 +369,11 @@ function ProjectsTab({ userId, projects, assignedProjectIds, can, effective }: P
           )}
         </CardHeader>
         <CardBody className="p-0">
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-line-200">
             {projects.map((p) => (
               <li
                 key={p.id}
-                className={cn("flex items-center gap-3 px-4 py-2.5", can.assignProjects && "cursor-pointer hover:bg-slate-50")}
+                className={cn("flex items-center gap-3 px-4 py-2.5", can.assignProjects && "cursor-pointer hover:bg-surface-hover")}
                 onClick={() => {
                   if (!can.assignProjects) return;
                   setSelected((s) => {
@@ -388,17 +388,17 @@ function ProjectsTab({ userId, projects, assignedProjectIds, can, effective }: P
                   checked={selected.has(p.id)}
                   disabled={!can.assignProjects}
                   onChange={() => {}}
-                  className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                  className="h-4 w-4 rounded border-line-400 text-brand-600 focus:ring-brand-500"
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-slate-800">{p.name}</p>
-                  <code className="text-xs text-slate-400">{p.code}</code>
+                  <p className="text-sm text-navy-900">{p.name}</p>
+                  <code className="text-xs text-muted-400">{p.code}</code>
                 </div>
-                <Badge tone={p.status === "ACTIVE" ? "green" : "slate"}>{p.status}</Badge>
+                <Badge tone={p.status === "ACTIVE" ? "good" : "slate"}>{p.status}</Badge>
               </li>
             ))}
             {projects.length === 0 && (
-              <li className="px-4 py-10 text-center text-sm text-slate-500">No projects created yet.</li>
+              <li className="px-4 py-10 text-center text-sm text-muted-500">No projects created yet.</li>
             )}
           </ul>
         </CardBody>
@@ -417,18 +417,18 @@ function ActivityTab({ activity }: Props) {
       </CardHeader>
       <CardBody className="p-0">
         {activity.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-slate-500">No recorded activity yet.</p>
+          <p className="px-4 py-10 text-center text-sm text-muted-500">No recorded activity yet.</p>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-line-200">
             {activity.map((a) => (
               <li key={a.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate text-sm text-slate-700">{a.summary}</p>
-                  <p className="text-xs text-slate-400">
+                  <p className="truncate text-sm text-navy-600">{a.summary}</p>
+                  <p className="text-xs text-muted-400">
                     {a.entity} · {formatDateTime(a.createdAt)}
                   </p>
                 </div>
-                <Badge tone={a.action === "DELETE" ? "red" : a.action === "CREATE" ? "green" : "slate"}>
+                <Badge tone={a.action === "DELETE" ? "bad" : a.action === "CREATE" ? "good" : "slate"}>
                   {a.action}
                 </Badge>
               </li>

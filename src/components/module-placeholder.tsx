@@ -28,18 +28,18 @@ export function ModulePlaceholder({
       <PageHeader
         title={title}
         description={description}
-        actions={<Badge tone="amber">{phase}</Badge>}
+        actions={<Badge tone="warn">{phase}</Badge>}
       />
 
       <Card>
         <CardBody className="space-y-5">
           <div className="flex items-start gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-50 text-amber-600">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-warn-050 text-warn-700">
               <Construction className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-900">Screen scheduled for {phase}</p>
-              <p className="mt-1 text-sm leading-relaxed text-slate-600">
+              <p className="text-sm font-medium text-navy-950">Screen scheduled for {phase}</p>
+              <p className="mt-1 text-sm leading-relaxed text-muted-600">
                 The database tables, the permission codes and the server-side guards for this screen
                 are already in place — only the interface is still to be built. Your role already
                 carries the permission that let you open this page.
@@ -48,23 +48,23 @@ export function ModulePlaceholder({
           </div>
 
           {recordCount !== undefined && (
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-xs text-slate-500">Currently in the database</p>
-              <p className="num text-lg font-semibold text-slate-900">
+            <div className="rounded-md border border-line-400 bg-surface-sunken px-3 py-2">
+              <p className="text-xs text-muted-500">Currently in the database</p>
+              <p className="num text-lg font-semibold text-navy-950">
                 {recordCount.toLocaleString("en-IN")}{" "}
-                <span className="text-sm font-normal text-slate-500">{recordLabel}</span>
+                <span className="text-sm font-normal text-muted-500">{recordLabel}</span>
               </p>
             </div>
           )}
 
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-500">
               What this screen will do
             </p>
             <ul className="space-y-1.5">
               {capabilities.map((c) => (
-                <li key={c} className="flex gap-2 text-sm text-slate-600">
-                  <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-slate-400" />
+                <li key={c} className="flex gap-2 text-sm text-muted-600">
+                  <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-400" />
                   {c}
                 </li>
               ))}

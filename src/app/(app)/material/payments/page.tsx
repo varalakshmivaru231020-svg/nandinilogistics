@@ -37,8 +37,8 @@ export default async function PaymentsPage() {
       header: "Payment",
       render: (p) => (
         <div>
-          <p className="text-sm font-medium text-slate-900">{p.paymentNo}</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-sm font-medium text-navy-950">{p.paymentNo}</p>
+          <p className="text-xs text-muted-500">
             against{" "}
             <Link href={`/material/invoices/${p.invoice.id}`} className="hover:text-brand-600">
               {p.invoice.invoiceNo}
@@ -48,12 +48,12 @@ export default async function PaymentsPage() {
       ),
     },
     { key: "vendor", header: "Vendor", render: (p) => <span className="text-sm">{p.invoice.vendor.name}</span> },
-    { key: "date", header: "Paid on", render: (p) => <span className="text-xs text-slate-500">{formatDate(p.paymentDate)}</span> },
+    { key: "date", header: "Paid on", render: (p) => <span className="text-xs text-muted-500">{formatDate(p.paymentDate)}</span> },
     { key: "mode", header: "Mode", align: "center", render: (p) => <Badge tone="slate">{p.mode}</Badge> },
-    { key: "ref", header: "Reference", render: (p) => <span className="text-xs text-slate-600">{p.referenceNo ?? "—"}</span> },
+    { key: "ref", header: "Reference", render: (p) => <span className="text-xs text-muted-600">{p.referenceNo ?? "—"}</span> },
     {
       key: "amount", header: "Amount", align: "right", className: "num",
-      render: (p) => <span className="font-medium text-slate-900">{money(p.amount)}</span>,
+      render: (p) => <span className="font-medium text-navy-950">{money(p.amount)}</span>,
     },
   ];
 

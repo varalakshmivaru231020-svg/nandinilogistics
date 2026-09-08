@@ -19,8 +19,8 @@ interface Activity {
   delayReason: string | null; delayNotes: string | null; workPackage: string | null;
 }
 
-const STATUS_TONE: Record<string, "slate" | "sky" | "green" | "red"> = {
-  NOT_STARTED: "slate", IN_PROGRESS: "sky", COMPLETED: "green", DELAYED: "red",
+const STATUS_TONE: Record<string, "slate" | "brand" | "good" | "bad"> = {
+  NOT_STARTED: "slate", IN_PROGRESS: "brand", COMPLETED: "good", DELAYED: "bad",
 };
 
 const DAY = 86_400_000;
@@ -93,13 +93,13 @@ export function ScheduleScreen({
           </Select>
         )}
         {delayed.length > 0 && (
-          <Badge tone="red">
+          <Badge tone="bad">
             <AlertTriangle className="mr-1 h-3 w-3" />
             {delayed.length} delayed
           </Badge>
         )}
         {can.viewCriticalPath && critical.length > 0 && (
-          <Badge tone="amber">{critical.length} on the critical path</Badge>
+          <Badge tone="warn">{critical.length} on the critical path</Badge>
         )}
         <div className="flex-1" />
         {can.create && (
@@ -121,29 +121,29 @@ export function ScheduleScreen({
         <Card>
           <CardHeader>
             <CardTitle>Gantt</CardTitle>
-            <div className="flex items-center gap-3 text-[11px] text-slate-500">
+            <div className="flex items-center gap-3 text-[11px] text-muted-500">
               {can.viewBaseline && (
                 <span className="flex items-center gap-1">
-                  <span className="h-2 w-4 rounded-sm bg-slate-300" /> Baseline
+                  <span className="h-2 w-4 rounded-sm bg-line-500" /> Baseline
                 </span>
               )}
               <span className="flex items-center gap-1">
                 <span className="h-2 w-4 rounded-sm bg-brand-500" /> Planned
               </span>
               <span className="flex items-center gap-1">
-                <span className="h-2 w-4 rounded-sm bg-emerald-500" /> Actual
+                <span className="h-2 w-4 rounded-sm bg-good-600" /> Actual
               </span>
             </div>
           </CardHeader>
           <CardBody className="p-0">
             {bounds && (
-              <div className="flex justify-between border-b border-slate-100 px-4 py-1.5 text-[11px] text-slate-400">
+              <div className="flex justify-between border-b border-line-200 px-4 py-1.5 text-[11px] text-muted-400">
                 <span>{formatDate(new Date(bounds.min).toISOString())}</span>
                 <span>{formatDate(new Date(bounds.max).toISOString())}</span>
               </div>
             )}
 
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line-200">
               {activities.map((a) => {
                 const baseline = can.viewBaseline ? bar(a.baselineStart, a.baselineEnd) : null;
                 const planned = bar(a.plannedStart, a.plannedEnd);
@@ -152,37 +152,37 @@ export function ScheduleScreen({
                   a.baselineEnd && a.plannedEnd && new Date(a.plannedEnd) > new Date(a.baselineEnd);
 
                 return (
-                  <li key={a.id} className={cn("px-4 py-2.5", a.status === "DELAYED" && "bg-red-50/40")}>
+                  <li key={a.id} className={cn("px-4 py-2.5", a.status === "DELAYED" && "bg-bad-050")}>
                     <div className="flex flex-wrap items-start gap-3">
                       <div className="w-64 shrink-0">
                         <div className="flex items-center gap-1.5">
-                          {a.isMilestone && <Diamond className="h-3 w-3 fill-amber-400 text-amber-500" />}
-                          <span className="text-sm font-medium text-slate-800">{a.name}</span>
+                          {a.isMilestone && <Diamond className="h-3 w-3 fill-warn-700 text-warn-700" />}
+                          <span className="text-sm font-medium text-navy-900">{a.name}</span>
                           {a.isCriticalPath && can.viewCriticalPath && (
-                            <Zap className="h-3 w-3 fill-amber-400 text-amber-500" />
+                            <Zap className="h-3 w-3 fill-warn-700 text-warn-700" />
                           )}
                         </div>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-muted-500">
                           <code>{a.code}</code>
                           {a.workPackage && ` · ${a.workPackage}`}
                         </p>
                         {a.delayReason && (
-                          <p className="mt-0.5 text-[11px] text-red-600">Delay: {a.delayReason}</p>
+                          <p className="mt-0.5 text-[11px] text-bad-600">Delay: {a.delayReason}</p>
                         )}
                       </div>
 
                       <div className="relative min-w-48 flex-1 self-center">
                         <div className="relative h-8">
                           {baseline && (
-                            <div className="absolute top-0 h-2 rounded-sm bg-slate-300"
+                            <div className="absolute top-0 h-2 rounded-sm bg-line-500"
                               style={baseline} title="Baseline" />
                           )}
                           {planned && (
-                            <div className={cn("absolute h-2.5 rounded-sm", slipped ? "bg-amber-500" : "bg-brand-500")}
+                            <div className={cn("absolute h-2.5 rounded-sm", slipped ? "bg-warn-700" : "bg-brand-500")}
                               style={{ ...planned, top: baseline ? "10px" : "0px" }} title="Planned" />
                           )}
                           {actual && a.actualStart && (
-                            <div className="absolute h-2 rounded-sm bg-emerald-500"
+                            <div className="absolute h-2 rounded-sm bg-good-600"
                               style={{ ...actual, top: baseline ? "22px" : "14px" }} title="Actual" />
                           )}
                         </div>
@@ -190,10 +190,10 @@ export function ScheduleScreen({
 
                       <div className="w-40 shrink-0 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <span className="num text-xs font-medium text-slate-700">{a.progressPct}%</span>
+                          <span className="num text-xs font-medium text-navy-600">{a.progressPct}%</span>
                           <Badge tone={STATUS_TONE[a.status] ?? "slate"}>{a.status.replace(/_/g, " ")}</Badge>
                         </div>
-                        <p className="mt-0.5 text-[11px] text-slate-400">
+                        <p className="mt-0.5 text-[11px] text-muted-400">
                           {formatDate(a.plannedStart)} – {formatDate(a.plannedEnd)}
                         </p>
                         <div className="mt-1 flex justify-end gap-1">
@@ -205,7 +205,7 @@ export function ScheduleScreen({
                           {can.manageDependencies && (
                             <Button size="xs" variant="ghost" loading={busy === a.id}
                               onClick={() => toggleCritical(a)}>
-                              <Zap className={cn("h-3 w-3", a.isCriticalPath && "fill-amber-400 text-amber-500")} />
+                              <Zap className={cn("h-3 w-3", a.isCriticalPath && "fill-warn-700 text-warn-700")} />
                             </Button>
                           )}
                         </div>
@@ -293,8 +293,8 @@ function ActivityModal({
           <Field label="Planned start" required><Input name="plannedStart" type="date" required /></Field>
           <Field label="Planned finish" required><Input name="plannedEnd" type="date" required /></Field>
           <Field label="" className="sm:col-span-2">
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" name="isMilestone" className="h-4 w-4 rounded border-slate-300 text-brand-600" />
+            <label className="flex items-center gap-2 text-sm text-navy-600">
+              <input type="checkbox" name="isMilestone" className="h-4 w-4 rounded border-line-400 text-brand-600" />
               This is a milestone
             </label>
           </Field>

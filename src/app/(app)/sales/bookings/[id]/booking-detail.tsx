@@ -32,8 +32,8 @@ interface Receipt {
   mode: string; referenceNo: string | null; bankName: string | null; demandId: string | null;
 }
 
-const DEMAND_TONE: Record<string, "slate" | "amber" | "green" | "red" | "sky"> = {
-  PENDING: "slate", RAISED: "amber", PARTIALLY_PAID: "sky", PAID: "green", CANCELLED: "red",
+const DEMAND_TONE: Record<string, "slate" | "warn" | "good" | "bad" | "brand"> = {
+  PENDING: "slate", RAISED: "warn", PARTIALLY_PAID: "brand", PAID: "good", CANCELLED: "bad",
 };
 
 export function BookingDetail({
@@ -94,14 +94,14 @@ export function BookingDetail({
                 ["Registered", formatDate(booking.registrationDate)],
               ].map(([label, value]) => (
                 <div key={label}>
-                  <dt className="text-xs text-slate-500">{label}</dt>
-                  <dd className="mt-0.5 text-sm text-slate-800">{value}</dd>
+                  <dt className="text-xs text-muted-500">{label}</dt>
+                  <dd className="mt-0.5 text-sm text-navy-900">{value}</dd>
                 </div>
               ))}
             </dl>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-              <Badge tone={booking.kycVerified ? "green" : "amber"}>
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line-200 pt-3">
+              <Badge tone={booking.kycVerified ? "good" : "warn"}>
                 {booking.kycVerified ? "KYC verified" : "KYC pending"}
               </Badge>
               {booking.costSheetNo && (
@@ -117,27 +117,27 @@ export function BookingDetail({
           <CardHeader><CardTitle>Collections</CardTitle></CardHeader>
           <CardBody className="space-y-3">
             <div>
-              <p className="text-xs text-slate-500">Total consideration</p>
-              <p className="num text-xl font-semibold text-slate-900">{money(booking.totalAmount)}</p>
+              <p className="text-xs text-muted-500">Total consideration</p>
+              <p className="num text-xl font-semibold text-navy-950">{money(booking.totalAmount)}</p>
             </div>
 
             <div>
               <div className="mb-1 flex justify-between text-xs">
-                <span className="text-slate-500">Collected</span>
-                <span className="num font-medium text-emerald-700">{money(booking.receivedAmount)}</span>
+                <span className="text-muted-500">Collected</span>
+                <span className="num font-medium text-good-700">{money(booking.receivedAmount)}</span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
-                <div className={cn("h-full rounded-full", pct === 100 ? "bg-emerald-500" : "bg-brand-500")}
+              <div className="h-1.5 overflow-hidden rounded-full bg-line-400">
+                <div className={cn("h-full rounded-full", pct === 100 ? "bg-good-600" : "bg-brand-500")}
                   style={{ width: `${pct}%` }} />
               </div>
               <p className="mt-1 flex justify-between text-xs">
-                <span className="text-slate-500">Outstanding</span>
-                <span className="num font-medium text-slate-800">{money(outstanding)}</span>
+                <span className="text-muted-500">Outstanding</span>
+                <span className="num font-medium text-navy-900">{money(outstanding)}</span>
               </p>
             </div>
 
             {!cancelled && (
-              <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
+              <div className="flex flex-col gap-2 border-t border-line-200 pt-3">
                 {booking.status === "CONFIRMED" && can.agreement && (
                   <Button size="sm" variant="secondary" loading={busy === "agreement"}
                     onClick={() => run("agreement", () => advanceBookingAction(booking.id, "AGREEMENT"), "Agreement recorded.")}>
@@ -170,28 +170,28 @@ export function BookingDetail({
         <Card>
           <CardHeader>
             <CardTitle>Payment schedule ({demands.length})</CardTitle>
-            <span className="text-xs text-slate-500">Construction-linked milestones</span>
+            <span className="text-xs text-muted-500">Construction-linked milestones</span>
           </CardHeader>
           <CardBody className="p-0">
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-line-200">
               {demands.map((d) => {
                 const due = new Date(d.dueDate).getTime();
                 const overdue = ["RAISED", "PARTIALLY_PAID"].includes(d.status) && due < nowMs;
                 const pending = d.totalAmount - d.receivedAmount;
                 return (
-                  <li key={d.id} className={cn("flex flex-wrap items-center gap-3 px-4 py-2.5", overdue && "bg-red-50/50")}>
+                  <li key={d.id} className={cn("flex flex-wrap items-center gap-3 px-4 py-2.5", overdue && "bg-bad-050")}>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-slate-800">{d.milestone}</p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-sm text-navy-900">{d.milestone}</p>
+                      <p className="text-xs text-muted-500">
                         {d.demandNo} · due {formatDate(d.dueDate)}
-                        {overdue && <span className="font-medium text-red-600"> · overdue</span>}
+                        {overdue && <span className="font-medium text-bad-600"> · overdue</span>}
                       </p>
                     </div>
 
                     <div className="num shrink-0 text-right text-xs">
-                      <p className="font-medium text-slate-800">{money(d.totalAmount)}</p>
+                      <p className="font-medium text-navy-900">{money(d.totalAmount)}</p>
                       {d.receivedAmount > 0 && (
-                        <p className="text-emerald-700">{money(d.receivedAmount)} received</p>
+                        <p className="text-good-700">{money(d.receivedAmount)} received</p>
                       )}
                     </div>
 
@@ -225,20 +225,20 @@ export function BookingDetail({
           <CardHeader><CardTitle>Receipts ({receipts.length})</CardTitle></CardHeader>
           <CardBody className="p-0">
             {receipts.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-slate-500">Nothing collected yet.</p>
+              <p className="px-4 py-8 text-center text-sm text-muted-500">Nothing collected yet.</p>
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-line-200">
                 {receipts.map((r) => (
                   <li key={r.id} className="flex items-center justify-between px-4 py-2.5">
                     <div>
-                      <p className="text-sm text-slate-800">{r.receiptNo}</p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-sm text-navy-900">{r.receiptNo}</p>
+                      <p className="text-xs text-muted-500">
                         {formatDate(r.receiptDate)} · {r.mode}
                         {r.referenceNo && ` · ${r.referenceNo}`}
                         {r.bankName && ` · ${r.bankName}`}
                       </p>
                     </div>
-                    <span className="num text-sm font-medium text-emerald-700">{money(r.amount)}</span>
+                    <span className="num text-sm font-medium text-good-700">{money(r.amount)}</span>
                   </li>
                 ))}
               </ul>

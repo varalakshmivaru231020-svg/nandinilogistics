@@ -78,24 +78,24 @@ export default async function NewGrnPage({
           <Card>
             <CardHeader>
               <CardTitle>Which purchase order arrived?</CardTitle>
-              <span className="text-xs text-slate-500">{openPos.length} awaiting delivery</span>
+              <span className="text-xs text-muted-500">{openPos.length} awaiting delivery</span>
             </CardHeader>
             <CardBody className="p-0">
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-line-200">
                 {openPos.map((p) => (
                   <li key={p.id}>
                     <Link
                       href={`/material/grn/new?po=${p.id}`}
-                      className="flex items-center justify-between px-4 py-3 hover:bg-slate-50"
+                      className="flex items-center justify-between px-4 py-3 hover:bg-surface-hover"
                     >
                       <div>
-                        <p className="text-sm font-medium text-slate-800">{p.poNo}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm font-medium text-navy-900">{p.poNo}</p>
+                        <p className="text-xs text-muted-500">
                           {p.project.code} · {p.vendor.name} · {p._count.items} line(s)
                           {p.expectedDate && ` · expected ${formatDate(p.expectedDate)}`}
                         </p>
                       </div>
-                      <span className="num text-sm text-slate-600">{money(p.totalAmount)}</span>
+                      <span className="num text-sm text-muted-600">{money(p.totalAmount)}</span>
                     </Link>
                   </li>
                 ))}

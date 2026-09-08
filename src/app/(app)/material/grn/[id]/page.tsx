@@ -58,7 +58,7 @@ export default async function GrnDetailPage({ params }: { params: Promise<{ id: 
           </span>
         }
         actions={
-          <Badge tone={grn.status === "POSTED" ? "green" : grn.status === "CANCELLED" ? "red" : "amber"}>
+          <Badge tone={grn.status === "POSTED" ? "good" : grn.status === "CANCELLED" ? "bad" : "warn"}>
             {grn.status}
           </Badge>
         }

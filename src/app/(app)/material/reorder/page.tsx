@@ -60,8 +60,8 @@ export default async function ReorderPage() {
       header: "Item",
       render: (r) => (
         <div>
-          <p className="text-sm text-slate-800">{r.name}</p>
-          <p className="text-xs text-slate-500"><code>{r.code}</code> · {r.category}</p>
+          <p className="text-sm text-navy-900">{r.name}</p>
+          <p className="text-xs text-muted-500"><code>{r.code}</code> · {r.category}</p>
         </div>
       ),
     },
@@ -70,7 +70,7 @@ export default async function ReorderPage() {
       header: "On hand",
       align: "right",
       className: "num",
-      render: (r) => <span className="font-semibold text-red-600">{qty(r.onHand, 3)} {r.uom}</span>,
+      render: (r) => <span className="font-semibold text-bad-600">{qty(r.onHand, 3)} {r.uom}</span>,
     },
     {
       key: "level",
@@ -84,7 +84,7 @@ export default async function ReorderPage() {
       header: "Shortfall",
       align: "right",
       className: "num",
-      render: (r) => <span className="font-medium text-slate-800">{qty(Math.max(0, r.reorderLevel - r.onHand), 3)}</span>,
+      render: (r) => <span className="font-medium text-navy-900">{qty(Math.max(0, r.reorderLevel - r.onHand), 3)}</span>,
     },
     {
       key: "cost",
@@ -101,7 +101,7 @@ export default async function ReorderPage() {
       <PageHeader
         title="Reorder Alerts"
         description="Items at or below their reorder level, most urgent first — surfaced rather than discovered."
-        actions={items.length > 0 ? <Badge tone="red">{items.length} item(s)</Badge> : <Badge tone="green">All stocked</Badge>}
+        actions={items.length > 0 ? <Badge tone="bad">{items.length} item(s)</Badge> : <Badge tone="good">All stocked</Badge>}
       />
 
       {items.length === 0 ? (

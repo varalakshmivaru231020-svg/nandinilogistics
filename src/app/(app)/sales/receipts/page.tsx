@@ -48,8 +48,8 @@ export default async function ReceiptsPage() {
       header: "Receipt",
       render: (r) => (
         <div>
-          <p className="text-sm font-medium text-slate-900">{r.receiptNo}</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-sm font-medium text-navy-950">{r.receiptNo}</p>
+          <p className="text-xs text-muted-500">
             {r.booking.project.code} · unit {r.booking.unit.unitNumber}
           </p>
         </div>
@@ -64,25 +64,25 @@ export default async function ReceiptsPage() {
           <Link href={`/sales/bookings/${r.booking.id}`} className="text-brand-600 hover:underline">
             {r.booking.bookingNo}
           </Link>
-          {r.demand && <p className="text-slate-500">{r.demand.milestone}</p>}
+          {r.demand && <p className="text-muted-500">{r.demand.milestone}</p>}
         </div>
       ),
     },
-    { key: "date", header: "Received", render: (r) => <span className="text-xs text-slate-500">{formatDate(r.receiptDate)}</span> },
+    { key: "date", header: "Received", render: (r) => <span className="text-xs text-muted-500">{formatDate(r.receiptDate)}</span> },
     { key: "mode", header: "Mode", align: "center", render: (r) => <Badge tone="slate">{r.mode}</Badge> },
     {
       key: "ref",
       header: "Reference",
       render: (r) => (
-        <div className="text-xs text-slate-600">
+        <div className="text-xs text-muted-600">
           {r.referenceNo ?? "—"}
-          {r.bank && <p className="text-slate-400">{r.bank.name}</p>}
+          {r.bank && <p className="text-muted-400">{r.bank.name}</p>}
         </div>
       ),
     },
     {
       key: "amount", header: "Amount", align: "right", className: "num",
-      render: (r) => <span className="font-medium text-emerald-700">{money(r.amount)}</span>,
+      render: (r) => <span className="font-medium text-good-700">{money(r.amount)}</span>,
     },
   ];
 
@@ -91,7 +91,7 @@ export default async function ReceiptsPage() {
       <PageHeader
         title="Collection Receipts"
         description="Money received against a booking milestone, keeping the collection position current."
-        actions={<Badge tone="green">{moneyShort(total)} collected</Badge>}
+        actions={<Badge tone="good">{moneyShort(total)} collected</Badge>}
       />
 
       {receipts.length === 0 ? (

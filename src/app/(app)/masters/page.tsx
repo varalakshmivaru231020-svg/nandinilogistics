@@ -50,7 +50,7 @@ export default async function MastersIndexPage() {
         <div className="space-y-6">
           {groups.map((group) => (
             <section key={group.group}>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-500">
                 {group.group}
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -63,7 +63,7 @@ export default async function MastersIndexPage() {
                     <Link
                       key={m.key}
                       href={`/masters/${m.key}`}
-                      className="group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand-300 hover:shadow"
+                      className="group rounded-lg border border-line-400 bg-white p-4 shadow-sm transition hover:border-brand-300 hover:shadow"
                     >
                       <div className="flex items-start gap-3">
                         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-600 group-hover:bg-brand-100">
@@ -71,12 +71,12 @@ export default async function MastersIndexPage() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline justify-between gap-2">
-                            <p className="truncate text-sm font-medium text-slate-900">{m.label}</p>
-                            <span className="num shrink-0 text-xs text-slate-400">
+                            <p className="truncate text-sm font-medium text-navy-950">{m.label}</p>
+                            <span className="num shrink-0 text-xs text-muted-400">
                               {counts.get(m.key) ?? 0}
                             </span>
                           </div>
-                          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-slate-500">
+                          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-500">
                             {m.description}
                           </p>
                         </div>

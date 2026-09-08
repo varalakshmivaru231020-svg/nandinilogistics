@@ -77,7 +77,7 @@ export function ProgressScreen({
         <div className="space-y-4">
           {[...byDate.entries()].map(([date, dayLogs]) => (
             <div key={date}>
-              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-500">
                 {formatDate(date)}
               </p>
               <div className="space-y-2">
@@ -87,11 +87,11 @@ export function ProgressScreen({
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-medium text-slate-900">{l.title}</span>
+                            <span className="text-sm font-medium text-navy-950">{l.title}</span>
                             <Badge tone="slate">{l.projectCode}</Badge>
                           </div>
-                          {l.notes && <p className="mt-1 text-sm text-slate-600">{l.notes}</p>}
-                          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-400">
+                          {l.notes && <p className="mt-1 text-sm text-muted-600">{l.notes}</p>}
+                          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-400">
                             <span>by {l.loggedByName}</span>
                             {l.manpowerCount > 0 && (
                               <span className="flex items-center gap-1">
@@ -115,7 +115,7 @@ export function ProgressScreen({
 
                         {can.delete && (
                           <button type="button" disabled={busy === l.id} onClick={() => remove(l.id)}
-                            className="shrink-0 rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600">
+                            className="shrink-0 rounded p-1.5 text-muted-400 hover:bg-bad-050 hover:text-bad-600">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         )}
@@ -218,7 +218,7 @@ function LogModal({
           <input type="hidden" name="latitude" value={coords?.lat ?? ""} />
           <input type="hidden" name="longitude" value={coords?.lng ?? ""} />
           {coords && (
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-muted-500">
               {Number(coords.lat).toFixed(5)}, {Number(coords.lng).toFixed(5)}
             </p>
           )}

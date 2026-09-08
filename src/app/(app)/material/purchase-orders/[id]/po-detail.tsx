@@ -74,8 +74,8 @@ export function PoDetail({
       header: "Item",
       render: (l) => (
         <div>
-          <p className="text-sm text-slate-800">{l.name}</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-sm text-navy-900">{l.name}</p>
+          <p className="text-xs text-muted-500">
             <code>{l.code}</code>
             {l.specification && ` · ${l.specification}`}
             {l.indentNo && (
@@ -99,7 +99,7 @@ export function PoDetail({
       render: (l) => {
         const full = l.receivedQty >= l.orderedQty;
         return (
-          <span className={full ? "font-medium text-emerald-700" : l.receivedQty > 0 ? "text-amber-700" : "text-slate-400"}>
+          <span className={full ? "font-medium text-good-700" : l.receivedQty > 0 ? "text-warn-700" : "text-muted-400"}>
             {qty(l.receivedQty, 3)}
           </span>
         );
@@ -112,7 +112,7 @@ export function PoDetail({
       className: "num",
       render: (l) => {
         const pending = Math.max(0, l.orderedQty - l.receivedQty);
-        return pending > 0 ? <span className="text-slate-800">{qty(pending, 3)}</span> : <span className="text-slate-400">—</span>;
+        return pending > 0 ? <span className="text-navy-900">{qty(pending, 3)}</span> : <span className="text-muted-400">—</span>;
       },
     },
     { key: "rate", header: "Rate", align: "right", className: "num", visible: can.viewRate, render: (l) => money(l.rate, true) },
@@ -142,22 +142,22 @@ export function PoDetail({
                 ["Approved on", formatDate(po.approvedAt)],
               ].map(([label, value]) => (
                 <div key={label}>
-                  <dt className="text-xs text-slate-500">{label}</dt>
-                  <dd className="mt-0.5 text-sm text-slate-800">{value}</dd>
+                  <dt className="text-xs text-muted-500">{label}</dt>
+                  <dd className="mt-0.5 text-sm text-navy-900">{value}</dd>
                 </div>
               ))}
             </dl>
 
             {po.deliveryAddress && (
-              <div className="mt-3 border-t border-slate-100 pt-3">
-                <p className="text-xs text-slate-500">Delivery address</p>
-                <p className="mt-0.5 text-sm text-slate-700">{po.deliveryAddress}</p>
+              <div className="mt-3 border-t border-line-200 pt-3">
+                <p className="text-xs text-muted-500">Delivery address</p>
+                <p className="mt-0.5 text-sm text-navy-600">{po.deliveryAddress}</p>
               </div>
             )}
             {po.terms && (
-              <div className="mt-3 border-t border-slate-100 pt-3">
-                <p className="text-xs text-slate-500">Terms</p>
-                <p className="mt-0.5 text-sm text-slate-700">{po.terms}</p>
+              <div className="mt-3 border-t border-line-200 pt-3">
+                <p className="text-xs text-muted-500">Terms</p>
+                <p className="mt-0.5 text-sm text-navy-600">{po.terms}</p>
               </div>
             )}
           </CardBody>
@@ -169,40 +169,40 @@ export function PoDetail({
             {can.viewRate && (
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Sub-total</span>
-                  <span className="num text-slate-700">{money(po.subTotal)}</span>
+                  <span className="text-muted-500">Sub-total</span>
+                  <span className="num text-navy-600">{money(po.subTotal)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">GST</span>
-                  <span className="num text-slate-700">{money(po.taxAmount)}</span>
+                  <span className="text-muted-500">GST</span>
+                  <span className="num text-navy-600">{money(po.taxAmount)}</span>
                 </div>
                 {po.otherCharges > 0 && (
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-500">Other charges</span>
-                    <span className="num text-slate-700">{money(po.otherCharges)}</span>
+                    <span className="text-muted-500">Other charges</span>
+                    <span className="num text-navy-600">{money(po.otherCharges)}</span>
                   </div>
                 )}
-                <div className="flex items-baseline justify-between border-t border-slate-100 pt-1.5">
-                  <span className="text-sm text-slate-600">Total</span>
-                  <span className="num text-xl font-semibold text-slate-900">{money(po.totalAmount)}</span>
+                <div className="flex items-baseline justify-between border-t border-line-200 pt-1.5">
+                  <span className="text-sm text-muted-600">Total</span>
+                  <span className="num text-xl font-semibold text-navy-950">{money(po.totalAmount)}</span>
                 </div>
               </div>
             )}
 
             <div>
               <div className="mb-1 flex justify-between text-xs">
-                <span className="text-slate-500">Received</span>
-                <span className="num font-medium text-slate-700">{pct}%</span>
+                <span className="text-muted-500">Received</span>
+                <span className="num font-medium text-navy-600">{pct}%</span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+              <div className="h-1.5 overflow-hidden rounded-full bg-line-400">
                 <div
-                  className={cn("h-full rounded-full", pct === 100 ? "bg-emerald-500" : "bg-brand-500")}
+                  className={cn("h-full rounded-full", pct === 100 ? "bg-good-600" : "bg-brand-500")}
                   style={{ width: `${pct}%` }}
                 />
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 border-t border-slate-100 pt-3">
+            <div className="flex flex-col gap-2 border-t border-line-200 pt-3">
               {awaitingApproval && can.approve && (
                 <>
                   <Button size="sm" variant="success" onClick={() => setApproving(true)} disabled={aboveCeiling}>
@@ -210,7 +210,7 @@ export function PoDetail({
                     Approve purchase order
                   </Button>
                   {aboveCeiling && (
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-warn-700">
                       {money(po.totalAmount)} is above your ceiling of {money(approvalCeiling)} — this
                       must be approved at a higher level.
                     </p>
@@ -251,7 +251,7 @@ export function PoDetail({
               )}
 
               {awaitingApproval && !can.approve && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-500">
                   Waiting for approval. You do not hold the PO approval permission.
                 </p>
               )}
@@ -276,22 +276,22 @@ export function PoDetail({
           </CardHeader>
           <CardBody className="p-0">
             {receipts.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-slate-500">
+              <p className="px-4 py-8 text-center text-sm text-muted-500">
                 Nothing received against this PO yet.
               </p>
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-line-200">
                 {receipts.map((g) => (
                   <li key={g.id} className="flex items-center justify-between px-4 py-2.5">
                     <div>
-                      <Link href={`/material/grn/${g.id}`} className="text-sm font-medium text-slate-800 hover:text-brand-600">
+                      <Link href={`/material/grn/${g.id}`} className="text-sm font-medium text-navy-900 hover:text-brand-600">
                         {g.grnNo}
                       </Link>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-muted-500">
                         {g.storeName} · {g.lineCount} line(s) · {formatDate(g.grnDate)}
                       </p>
                     </div>
-                    <Badge tone={g.status === "POSTED" ? "green" : g.status === "CANCELLED" ? "red" : "amber"}>
+                    <Badge tone={g.status === "POSTED" ? "good" : g.status === "CANCELLED" ? "bad" : "warn"}>
                       {g.status}
                     </Badge>
                   </li>
@@ -307,22 +307,22 @@ export function PoDetail({
           <CardHeader><CardTitle>Vendor invoices ({invoices.length})</CardTitle></CardHeader>
           <CardBody className="p-0">
             {invoices.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-slate-500">
+              <p className="px-4 py-8 text-center text-sm text-muted-500">
                 No invoice recorded against this PO yet.
               </p>
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-line-200">
                 {invoices.map((i) => (
                   <li key={i.id} className="flex items-center justify-between px-4 py-2.5">
                     <div>
-                      <Link href={`/material/invoices/${i.id}`} className="text-sm font-medium text-slate-800 hover:text-brand-600">
+                      <Link href={`/material/invoices/${i.id}`} className="text-sm font-medium text-navy-900 hover:text-brand-600">
                         {i.invoiceNo}
                       </Link>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-muted-500">
                         {formatDate(i.invoiceDate)} · {money(i.paidAmount)} of {money(i.totalAmount)} paid
                       </p>
                     </div>
-                    <Badge tone={i.status === "PAID" ? "green" : i.status === "MISMATCH" ? "red" : "slate"}>
+                    <Badge tone={i.status === "PAID" ? "good" : i.status === "MISMATCH" ? "bad" : "slate"}>
                       {i.status.replace(/_/g, " ")}
                     </Badge>
                   </li>

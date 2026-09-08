@@ -67,8 +67,8 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         }
         actions={
           <div className="flex items-center gap-2">
-            {user.isSuperAdmin && <Badge tone="violet">Super admin</Badge>}
-            <Badge tone={user.status === "ACTIVE" ? "green" : "slate"}>{user.status}</Badge>
+            {user.isSuperAdmin && <Badge tone="navy">Super admin</Badge>}
+            <Badge tone={user.status === "ACTIVE" ? "good" : "slate"}>{user.status}</Badge>
           </div>
         }
       />

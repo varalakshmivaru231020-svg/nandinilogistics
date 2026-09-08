@@ -2,38 +2,64 @@
 
 /* ---------------------------------------------------------------------------
    NN Infra ERP — design tokens
-   Steel-blue brand on a neutral slate ground: dense, calm, and readable for
-   people who live in these screens all day.
+   Taken from the Claude Design source: design/NN Infra Admin.dc.html
+   Navy + cyan on a cool off-white ground. Sora for display, Public Sans for UI.
 --------------------------------------------------------------------------- */
 
 @theme {
-  --color-brand-50: #eef4fb;
-  --color-brand-100: #d8e6f6;
-  --color-brand-200: #b4cdec;
-  --color-brand-300: #83abdd;
-  --color-brand-400: #5185cb;
-  --color-brand-500: #3167b3;
-  --color-brand-600: #245095;
-  --color-brand-700: #1e4179;
-  --color-brand-800: #1c3763;
-  --color-brand-900: #1b3054;
-  --color-brand-950: #121f38;
+  /* Navy — headings, sidebar marks, primary surfaces on dark */
+  --color-navy-950: #191A5C;
+  --color-navy-900: #22264A;
+  --color-navy-800: #2F308C;
+  --color-navy-700: #23246E;
+  --color-navy-600: #3A3F5C;
+  --color-navy-500: #5A6080;
 
-  --color-accent-400: #f5b544;
-  --color-accent-500: #e59c1c;
-  --color-accent-600: #c67b11;
+  /* Cyan — the accent that carries actions and links */
+  --color-brand-700: #0672A6;
+  --color-brand-600: #0678AE;
+  --color-brand-500: #0089C9;
+  --color-brand-300: #5BC8F2;
+  --color-brand-100: #E3F2FC;
 
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-}
+  /* Muted text, lightest to darkest */
+  --color-muted-300: #A8AEC8;
+  --color-muted-400: #9BA1C2;
+  --color-muted-500: #8A90B3;
+  --color-muted-600: #7A80A3;
 
-:root {
-  --surface: #f4f6f9;
-  --panel: #ffffff;
-  --border: #e2e8f0;
-  --text: #0f172a;
-  --muted: #64748b;
+  /* Lines */
+  --color-line-100: #F2F5FB;
+  --color-line-200: #EEF1F8;
+  --color-line-300: #E9EDF6;
+  --color-line-400: #E3E7F2;
+  --color-line-500: #D4DAEA;
+
+  /* Surfaces */
+  --color-surface-page: #F4F6FB;
+  --color-surface-card: #FFFFFF;
+  --color-surface-sunken: #FAFBFE;
+  --color-surface-field: #F1F4FB;
+  --color-surface-hover: #EFF3FB;
+  --color-surface-tint: #F7F9FD;
+
+  /* Status */
+  --color-good-600: #1F9D66;
+  --color-good-700: #178555;
+  --color-good-050: #E8F6EF;
+  --color-warn-700: #B4530A;
+  --color-warn-800: #8A5A12;
+  --color-warn-050: #FDF3E7;
+  --color-bad-600: #D8494A;
+  --color-bad-050: #FDECEC;
+
+  --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-sora), var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 13px;
+  --radius-panel: 12px;
+  --radius-control: 9px;
+  --radius-button: 8px;
 }
 
 html,
@@ -42,26 +68,74 @@ body {
 }
 
 body {
-  background: var(--surface);
-  color: var(--text);
+  margin: 0;
+  padding: 0;
+  background: var(--color-surface-page);
+  color: var(--color-navy-900);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Tabular figures everywhere money and quantities appear. */
+a {
+  color: var(--color-brand-500);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--color-navy-800);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* The design's own scrollbar treatment. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line-500);
+  border-radius: 8px;
+  border: 2px solid var(--color-surface-page);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Money and quantities line up column-wise. */
 .num {
   font-variant-numeric: tabular-nums;
 }
 
-/* Thin, unobtrusive scrollbars inside data panes. */
-.scroll-thin::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* Motion, lifted from the design source. */
+@keyframes fadeUp {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
-.scroll-thin::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 9999px;
+@keyframes slideIn {
+  0% { opacity: 0; transform: translateX(60px); }
+  100% { opacity: 1; transform: translateX(0); }
 }
-.scroll-thin::-webkit-scrollbar-track {
-  background: transparent;
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}
+
+.animate-fade-up { animation: fadeUp .35s ease both; }
+.animate-slide-in { animation: slideIn .22s ease both; }
+.animate-pulse-dot { animation: pulse 2.4s ease infinite; }
+
+/* Wide tables scroll inside their own panel rather than the page. */
+.scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: var(--color-line-500); border-radius: 9999px; }
+.scroll-thin::-webkit-scrollbar-track { background: transparent; }
+
+@media print {
+  body * { visibility: hidden !important; }
+  [data-print], [data-print] * { visibility: visible !important; }
+  [data-print] { position: absolute !important; inset: 0 auto auto 0 !important; width: 100% !important; }
+  [data-noprint] { display: none !important; }
+  @page { size: A4; margin: 14mm; }
 }

@@ -28,12 +28,12 @@ interface Block { id: string; name: string; units: Unit[] }
 
 /** One status, one colour, everywhere. */
 const STATUS_STYLE: Record<string, { cell: string; dot: string; label: string }> = {
-  AVAILABLE:  { cell: "bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100", dot: "bg-emerald-500", label: "Available" },
-  HELD:       { cell: "bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100",         dot: "bg-amber-500",   label: "Held" },
-  BOOKED:     { cell: "bg-sky-50 border-sky-200 text-sky-900 hover:bg-sky-100",                 dot: "bg-sky-500",     label: "Booked" },
-  AGREEMENT:  { cell: "bg-violet-50 border-violet-200 text-violet-900 hover:bg-violet-100",     dot: "bg-violet-500",  label: "Agreement" },
-  REGISTERED: { cell: "bg-slate-200 border-slate-300 text-slate-700 hover:bg-slate-300",        dot: "bg-slate-500",   label: "Registered" },
-  BLOCKED:    { cell: "bg-red-50 border-red-200 text-red-900 hover:bg-red-100",                 dot: "bg-red-500",     label: "Blocked" },
+  AVAILABLE:  { cell: "border-good-050 bg-good-050 text-good-700 hover:border-good-600",    dot: "bg-good-600",  label: "Available" },
+  HELD:       { cell: "border-warn-050 bg-warn-050 text-warn-700 hover:border-warn-700",    dot: "bg-warn-700",  label: "Held" },
+  BOOKED:     { cell: "border-brand-100 bg-brand-100 text-brand-700 hover:border-brand-500", dot: "bg-brand-500", label: "Booked" },
+  AGREEMENT:  { cell: "border-line-400 bg-surface-field text-navy-800 hover:border-navy-800", dot: "bg-navy-800",  label: "Agreement" },
+  REGISTERED: { cell: "border-line-500 bg-line-400 text-navy-600 hover:border-navy-600",     dot: "bg-navy-500",  label: "Registered" },
+  BLOCKED:    { cell: "border-bad-050 bg-bad-050 text-bad-600 hover:border-bad-600",         dot: "bg-bad-600",   label: "Blocked" },
 };
 
 export function BoardGrid({
@@ -67,9 +67,9 @@ export function BoardGrid({
             return (
               <div key={status} className="flex items-center gap-2">
                 <span className={cn("h-2.5 w-2.5 rounded-full", style.dot)} />
-                <span className="text-xs text-slate-600">{style.label}</span>
-                <span className="num text-xs font-semibold text-slate-900">{count}</span>
-                <span className="text-[11px] text-slate-400">({pct}%)</span>
+                <span className="text-xs text-muted-600">{style.label}</span>
+                <span className="num text-xs font-semibold text-navy-950">{count}</span>
+                <span className="text-[11px] text-muted-400">({pct}%)</span>
               </div>
             );
           })}
@@ -84,8 +84,8 @@ export function BoardGrid({
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </Select>
             )}
-            <span className="text-xs text-slate-500">
-              <span className="num font-semibold text-slate-900">{total}</span> units
+            <span className="text-xs text-muted-500">
+              <span className="num font-semibold text-navy-950">{total}</span> units
             </span>
           </div>
         </CardBody>
@@ -102,7 +102,7 @@ export function BoardGrid({
               <CardTitle>{block.name}</CardTitle>
               <div className="flex items-center gap-2">
                 <Badge tone="slate">{block.units.length} units</Badge>
-                <Badge tone="green">
+                <Badge tone="good">
                   {block.units.filter((u) => u.status === "AVAILABLE").length} available
                 </Badge>
               </div>
@@ -111,7 +111,7 @@ export function BoardGrid({
               <div className="min-w-max space-y-1.5">
                 {sorted.map(([floor, units]) => (
                   <div key={floor} className="flex items-center gap-2">
-                    <div className="w-16 shrink-0 text-right text-xs font-medium text-slate-400">
+                    <div className="w-16 shrink-0 text-right text-xs font-medium text-muted-400">
                       Floor {floor}
                     </div>
                     <div className="flex gap-1.5">
@@ -208,13 +208,13 @@ function UnitPanel({
             ["Parking", String(unit.parkingSlots)],
           ].map(([label, value]) => (
             <div key={label}>
-              <dt className="text-xs text-slate-500">{label}</dt>
-              <dd className="text-slate-800">{value}</dd>
+              <dt className="text-xs text-muted-500">{label}</dt>
+              <dd className="text-navy-900">{value}</dd>
             </div>
           ))}
         </dl>
 
-        {unit.plcTag && <Badge tone="amber">{unit.plcTag}</Badge>}
+        {unit.plcTag && <Badge tone="warn">{unit.plcTag}</Badge>}
 
         {unit.hold && (
           <Alert tone={holdExpired ? "warn" : "info"} title={holdExpired ? "Hold has expired" : "On hold"}>
@@ -226,7 +226,7 @@ function UnitPanel({
         )}
 
         {unit.status === "AVAILABLE" && can.hold && (
-          <div className="space-y-3 border-t border-slate-100 pt-3">
+          <div className="space-y-3 border-t border-line-200 pt-3">
             <Field label="Hold for lead">
               <Select value={leadId} onChange={(e) => setLeadId(e.target.value)}>
                 <option value="">— Not linked —</option>
@@ -252,7 +252,7 @@ function UnitPanel({
         )}
 
         {unit.hold && (
-          <div className="space-y-3 border-t border-slate-100 pt-3">
+          <div className="space-y-3 border-t border-line-200 pt-3">
             {can.extend && (
               <Button
                 size="sm"
@@ -293,7 +293,7 @@ function UnitPanel({
         )}
 
         {["AVAILABLE", "HELD"].includes(unit.status) && can.quote && (
-          <div className="border-t border-slate-100 pt-3">
+          <div className="border-t border-line-200 pt-3">
             <Link href={`/sales/cost-sheets/new?unit=${unit.id}${leadId ? `&lead=${leadId}` : ""}`}>
               <Button size="sm" variant="secondary" className="w-full">
                 <Calculator className="h-3.5 w-3.5" />

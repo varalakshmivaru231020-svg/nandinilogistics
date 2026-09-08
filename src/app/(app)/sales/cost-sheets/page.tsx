@@ -45,25 +45,25 @@ export default async function CostSheetsPage() {
       header: "Cost sheet",
       render: (s) => (
         <div>
-          <Link href={`/sales/cost-sheets/${s.id}`} className="text-sm font-medium text-slate-900 hover:text-brand-600">
+          <Link href={`/sales/cost-sheets/${s.id}`} className="text-sm font-medium text-navy-950 hover:text-brand-600">
             {s.costSheetNo}
           </Link>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-500">
             {s.unit.project.code} · unit {s.unit.unitNumber}
           </p>
         </div>
       ),
     },
     { key: "lead", header: "For", render: (s) => <span className="text-sm">{s.lead?.name ?? "—"}</span> },
-    { key: "created", header: "Generated", render: (s) => <span className="text-xs text-slate-500">{formatDate(s.createdAt)}</span> },
+    { key: "created", header: "Generated", render: (s) => <span className="text-xs text-muted-500">{formatDate(s.createdAt)}</span> },
     {
       key: "valid",
       header: "Valid until",
       render: (s) => {
-        if (!s.validUntil) return <span className="text-xs text-slate-400">—</span>;
+        if (!s.validUntil) return <span className="text-xs text-muted-400">—</span>;
         const expired = new Date(s.validUntil) < new Date();
         return (
-          <span className={expired ? "text-xs text-red-600" : "text-xs text-slate-500"}>
+          <span className={expired ? "text-xs text-bad-600" : "text-xs text-muted-500"}>
             {formatDate(s.validUntil)}{expired && " · expired"}
           </span>
         );
@@ -76,9 +76,9 @@ export default async function CostSheetsPage() {
       className: "num",
       render: (s) => {
         const d = Number(s.discountAmount);
-        if (d <= 0) return <span className="text-slate-400">—</span>;
+        if (d <= 0) return <span className="text-muted-400">—</span>;
         return (
-          <span className={s.discountApprovedAt ? "text-emerald-700" : "text-amber-700"}>
+          <span className={s.discountApprovedAt ? "text-good-700" : "text-warn-700"}>
             {money(d)}
             <span className="ml-1 text-[10px]">{s.discountApprovedAt ? "approved" : "pending"}</span>
           </span>
@@ -87,11 +87,11 @@ export default async function CostSheetsPage() {
     },
     {
       key: "total", header: "Total", align: "right", className: "num",
-      render: (s) => <span className="font-medium text-slate-900">{money(s.totalAmount)}</span>,
+      render: (s) => <span className="font-medium text-navy-950">{money(s.totalAmount)}</span>,
     },
     {
       key: "status", header: "", align: "center",
-      render: (s) => (s._count.bookings > 0 ? <Badge tone="green">Booked</Badge> : <Badge tone="slate">Quoted</Badge>),
+      render: (s) => (s._count.bookings > 0 ? <Badge tone="good">Booked</Badge> : <Badge tone="slate">Quoted</Badge>),
     },
   ];
 
@@ -102,7 +102,7 @@ export default async function CostSheetsPage() {
         description="Base price, floor rise, PLC, parking, amenities, GST and registration — generated from the active price list, not typed."
         actions={
           <div className="flex items-center gap-2">
-            {awaitingDiscount > 0 && <Badge tone="amber">{awaitingDiscount} discount(s) pending approval</Badge>}
+            {awaitingDiscount > 0 && <Badge tone="warn">{awaitingDiscount} discount(s) pending approval</Badge>}
             {ctx.has(PERM.sales.costSheet.create) && (
               <Link href="/sales/cost-sheets/new">
                 <Button size="sm">

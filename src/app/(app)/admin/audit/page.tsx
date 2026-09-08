@@ -53,15 +53,15 @@ export default async function AuditPage({
     {
       key: "when",
       header: "When",
-      render: (l) => <span className="whitespace-nowrap text-xs text-slate-500">{formatDateTime(l.createdAt)}</span>,
+      render: (l) => <span className="whitespace-nowrap text-xs text-muted-500">{formatDateTime(l.createdAt)}</span>,
     },
     {
       key: "who",
       header: "Who",
       render: (l) => (
         <div className="text-xs">
-          <p className="text-slate-800">{l.user?.name ?? "System"}</p>
-          {l.ipAddress && <p className="text-slate-400">{l.ipAddress}</p>}
+          <p className="text-navy-900">{l.user?.name ?? "System"}</p>
+          {l.ipAddress && <p className="text-muted-400">{l.ipAddress}</p>}
         </div>
       ),
     },
@@ -70,12 +70,12 @@ export default async function AuditPage({
       header: "Action",
       align: "center",
       render: (l) => (
-        <Badge tone={l.action === "DELETE" ? "red" : l.action === "CREATE" ? "green" : l.action.startsWith("LOGIN") ? "sky" : "slate"}>
+        <Badge tone={l.action === "DELETE" ? "bad" : l.action === "CREATE" ? "good" : l.action.startsWith("LOGIN") ? "brand" : "slate"}>
           {l.action}
         </Badge>
       ),
     },
-    { key: "entity", header: "Entity", render: (l) => <span className="text-xs text-slate-600">{l.entity}</span> },
+    { key: "entity", header: "Entity", render: (l) => <span className="text-xs text-muted-600">{l.entity}</span> },
     {
       key: "summary",
       header: "What happened",
@@ -83,18 +83,18 @@ export default async function AuditPage({
         const changes = l.changes as Record<string, { from: unknown; to: unknown }> | null;
         return (
           <div>
-            <p className="text-sm text-slate-700">{l.summary}</p>
+            <p className="text-sm text-navy-600">{l.summary}</p>
             {changes && Object.keys(changes).length > 0 && (
               <details className="mt-1">
                 <summary className="cursor-pointer text-xs text-brand-600">
                   {Object.keys(changes).length} field(s) changed
                 </summary>
-                <ul className="mt-1 space-y-0.5 border-l-2 border-slate-200 pl-2">
+                <ul className="mt-1 space-y-0.5 border-l-2 border-line-400 pl-2">
                   {Object.entries(changes).slice(0, 12).map(([field, v]) => (
-                    <li key={field} className="text-xs text-slate-500">
-                      <span className="font-medium text-slate-700">{field}</span>:{" "}
-                      <span className="text-red-600 line-through">{String(v.from ?? "—")}</span>{" "}
-                      → <span className="text-emerald-700">{String(v.to ?? "—")}</span>
+                    <li key={field} className="text-xs text-muted-500">
+                      <span className="font-medium text-navy-600">{field}</span>:{" "}
+                      <span className="text-bad-600 line-through">{String(v.from ?? "—")}</span>{" "}
+                      → <span className="text-good-700">{String(v.to ?? "—")}</span>
                     </li>
                   ))}
                 </ul>
@@ -126,7 +126,7 @@ export default async function AuditPage({
         {logs.length === 0 ? (
           <Card>
             <CardBody>
-              <p className="py-8 text-center text-sm text-slate-500">No audit entries match these filters.</p>
+              <p className="py-8 text-center text-sm text-muted-500">No audit entries match these filters.</p>
             </CardBody>
           </Card>
         ) : (

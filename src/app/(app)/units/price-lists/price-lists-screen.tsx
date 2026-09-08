@@ -76,17 +76,17 @@ export function PriceListsScreen({
                 <Badge tone="slate">{versions.length} version(s)</Badge>
               </CardHeader>
               <CardBody className="p-0">
-                <ul className="divide-y divide-slate-100">
+                <ul className="divide-y divide-line-200">
                   {versions.map((l) => (
                     <li key={l.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-slate-900">
+                          <span className="text-sm font-medium text-navy-950">
                             v{l.version} · {l.name}
                           </span>
-                          {l.isActive ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Superseded</Badge>}
+                          {l.isActive ? <Badge tone="good">Active</Badge> : <Badge tone="slate">Superseded</Badge>}
                         </div>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-muted-500">
                           Effective {formatDate(l.effectiveFrom)}
                           {l.effectiveTo ? ` – ${formatDate(l.effectiveTo)}` : " onwards"}
                         </p>
@@ -94,16 +94,16 @@ export function PriceListsScreen({
 
                       <dl className="flex shrink-0 gap-4 text-xs">
                         <div>
-                          <dt className="text-slate-400">Base</dt>
-                          <dd className="num font-medium text-slate-800">{money(l.baseRate)}/sq.ft</dd>
+                          <dt className="text-muted-400">Base</dt>
+                          <dd className="num font-medium text-navy-900">{money(l.baseRate)}/sq.ft</dd>
                         </div>
                         <div>
-                          <dt className="text-slate-400">Floor rise</dt>
-                          <dd className="num text-slate-700">{money(l.floorRise)}</dd>
+                          <dt className="text-muted-400">Floor rise</dt>
+                          <dd className="num text-navy-600">{money(l.floorRise)}</dd>
                         </div>
                         <div>
-                          <dt className="text-slate-400">PLC</dt>
-                          <dd className="num text-slate-700">{money(l.plcAmount)}</dd>
+                          <dt className="text-muted-400">PLC</dt>
+                          <dd className="num text-navy-600">{money(l.plcAmount)}</dd>
                         </div>
                       </dl>
 
