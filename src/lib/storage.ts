@@ -11,7 +11,22 @@ import { dirname, extname, join, normalize, resolve, sep } from "path";
  * path, so a crafted filename cannot escape the storage root.
  */
 
-const ROOT = resolve(process.env.STORAGE_DIR ?? join(process.cwd(), "storage"));
+/**
+ * Resolved lazily rather than at module scope: a dynamic `resolve()` evaluated
+ * during import makes Next's static analysis trace the whole project into the
+ * server bundle.
+ */
+let cachedRoot: string | null = null;
+
+function root(): string {
+  if (cachedRoot === null) {
+    // turbopackIgnore: the storage root is configured at runtime and in
+    // production lives outside the project (/var/www/nninfra/storage), so
+    // there is nothing here for the bundler to trace.
+    cachedRoot = resolve(/* turbopackIgnore: true */ process.env.STORAGE_DIR ?? join(process.cwd(), "storage"));
+  }
+  return cachedRoot;
+}
 
 /** 25 MB — enough for a drawing set, small enough to keep a request honest. */
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
@@ -55,8 +70,9 @@ export interface StoredFile {
 
 /** Resolves a key to an absolute path, refusing anything outside the root. */
 function pathFor(key: string): string {
-  const full = resolve(ROOT, normalize(key));
-  if (full !== ROOT && !full.startsWith(ROOT + sep)) {
+  const base = root();
+  const full = resolve(base, normalize(key));
+  if (full !== base && !full.startsWith(base + sep)) {
     throw new Error("Refusing to touch a path outside the storage root.");
   }
   return full;
@@ -90,7 +106,8 @@ export async function put(
 }
 
 export async function get(key: string): Promise<Buffer> {
-  return readFile(pathFor(key));
+  // Reads a runtime-generated key under the storage root, never a build asset.
+  return readFile(/* turbopackIgnore: true */ pathFor(key));
 }
 
 export async function remove(key: string): Promise<void> {
@@ -98,5 +115,5 @@ export async function remove(key: string): Promise<void> {
 }
 
 export function storageRoot(): string {
-  return ROOT;
+  return root();
 }

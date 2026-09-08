@@ -30,6 +30,10 @@ ssh root@168.231.103.114
 sudo /var/www/nninfra/deploy.sh
 ```
 
+The server pulls over a **read-only deploy key** (`/var/www/nninfra/.ssh/deploy_ed25519`,
+registered on the repository as "nninfra production server"). No personal access
+token is stored anywhere on the box, so rotating a PAT does not break deploys.
+
 That fetches `main`, installs, migrates, syncs the permission catalogue,
 rebuilds, restarts pm2 and health-checks. **If the app does not come back
 healthy it rolls back to the previous commit automatically.**
@@ -66,18 +70,32 @@ The E2E suite runs against the deployed instance and asserts the access-control
 model end to end — 62 tests covering route guards per role, button-level gating,
 row-level scoping and immediate session revocation.
 
+## Account passwords
+
+The six seeded accounts were rotated after deployment; the seed default
+(`Nninfra@2026`) no longer works. To rotate again:
+
+```bash
+cd /var/www/nninfra/app
+sudo -u nninfra HOME=/var/www/nninfra pnpm admin:rotate-passwords            # all
+sudo -u nninfra HOME=/var/www/nninfra pnpm admin:rotate-passwords a@b.com    # some
+```
+
+Passwords are printed once, only the bcrypt hash is stored, and every active
+session is revoked so anyone signed in is turned out immediately.
+
+Before real users arrive, delete the five demo accounts and create staff from
+Administration → Users, which enforces the password policy.
+
 ## Known hardening still to do
 
-1. **Demo accounts are live.** Six seeded users share the password
-   `Nninfra@2026`. Change them, or delete the five non-owner accounts, before
-   real users are on the system.
-2. **pm2 runs as root**, matching the four apps already on this box. Running the
+1. **pm2 runs as root**, matching the four apps already on this box. Running the
    process as the `nninfra` user (which exists and owns the files) would be
    better, but diverges from the host's convention — worth doing deliberately
    rather than as a side effect of a deploy.
-3. **No automated database backup** is configured for `nn_infra_erp`.
+2. **No automated database backup** is configured for `nn_infra_erp`.
    The scope document commits to a daily backup; add one before go-live.
-4. **The `*.zapeat.in` certificate expires 17 Sep 2026.** It is shared with the
+3. **The `*.zapeat.in` certificate expires 17 Sep 2026.** It is shared with the
    other subdomains, so renewal is presumably already handled — confirm.
 
 ## Neighbouring site note
