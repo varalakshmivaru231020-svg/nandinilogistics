@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: nninfra
+          POSTGRES_PASSWORD: nninfra
+          POSTGRES_DB: nn_infra_erp_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://nninfra:nninfra@localhost:5432/nn_infra_erp_test?schema=public
+      AUTH_SECRET: ci-only-secret-not-used-anywhere-real
+      STORAGE_DIR: ./storage
+      NEXT_PUBLIC_APP_NAME: NN Infra ERP
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations
+        run: pnpm prisma migrate deploy
+
+      - name: Seed permissions, roles and masters
+        run: pnpm db:seed
+
+      - name: Seed demo transactions
+        run: pnpm db:demo
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit and integration tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Start the app for the end-to-end suite
+        run: pnpm start &
+
+      - name: Wait for the app
+        run: npx wait-on http://localhost:3000/login --timeout 60000
+
+      - name: Access-control tests over HTTP
+        run: pnpm test:e2e
+
+  permissions-in-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # The generated permission codes must match the registry. If this fails,
+      # someone edited the registry without running `pnpm perms:codegen`.
+      - name: Regenerate permission codes
+        run: pnpm perms:codegen
+      - name: Fail if the generated codes are stale
+        run: git diff --exit-code src/lib/permissions/codes.ts

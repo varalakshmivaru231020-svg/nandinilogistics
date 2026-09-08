@@ -1,0 +1,1749 @@
+// NN Infrastructure Developers — Construction ERP & Sales CRM
+// Enterprise schema: RBAC, Masters, Projects, Schedule, Material & Inventory, Sales CRM, Units.
+// NOTE: Task Management & Checklist Management are intentionally NOT modelled here —
+// they are pending client verification. See docs/PENDING_MODULES.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// ENUMS
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PermissionEffect {
+  ALLOW
+  DENY
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  SUBMIT
+  CANCEL
+  LOGIN
+  LOGOUT
+  LOGIN_FAILED
+  EXPORT
+  VIEW
+  ASSIGN
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum UnitStatus {
+  AVAILABLE
+  HELD
+  BOOKED
+  AGREEMENT
+  REGISTERED
+  BLOCKED
+}
+
+enum IndentStatus {
+  DRAFT
+  SUBMITTED
+  PM_APPROVED
+  ADMIN_APPROVED
+  PARTIALLY_ORDERED
+  ORDERED
+  CLOSED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+  RETURNED
+}
+
+enum ApprovalLevel {
+  PM
+  ADMIN
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CLOSED
+  CANCELLED
+}
+
+enum GrnStatus {
+  DRAFT
+  INSPECTED
+  POSTED
+  CANCELLED
+}
+
+enum VendorInvoiceStatus {
+  DRAFT
+  MATCHED
+  MISMATCH
+  APPROVED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum StockTxnType {
+  GRN_IN
+  ISSUE_OUT
+  RETURN_IN
+  TRANSFER_OUT
+  TRANSFER_IN
+  ADJUSTMENT
+  SCRAP
+}
+
+enum LeadState {
+  NEW
+  CONTACTED
+  SITE_VISIT_SCHEDULED
+  VISIT_DONE
+  NEGOTIATION
+  BOOKED
+  LOST
+}
+
+enum BookingStatus {
+  DRAFT
+  CONFIRMED
+  AGREEMENT
+  REGISTERED
+  CANCELLED
+}
+
+enum ScheduleActivityStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+}
+
+// ---------------------------------------------------------------------------
+// IDENTITY & RBAC
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String     @id @default(cuid())
+  employeeCode  String     @unique
+  name          String
+  email         String     @unique
+  phone         String?
+  passwordHash  String
+  status        UserStatus @default(ACTIVE)
+  /// Bypasses every permission check. Reserved for the platform owner account.
+  isSuperAdmin  Boolean    @default(false)
+  mustChangePassword Boolean @default(false)
+  designationId String?
+  departmentId  String?
+  lastLoginAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  createdById   String?
+
+  designation   Designation? @relation(fields: [designationId], references: [id])
+  department    Department?  @relation(fields: [departmentId], references: [id])
+  createdBy     User?        @relation("UserCreatedBy", fields: [createdById], references: [id])
+  createdUsers  User[]       @relation("UserCreatedBy")
+
+  roles            UserRole[]
+  permissions      UserPermission[]
+  projectAccess    UserProject[]
+  approvalLimits   ApprovalLimit[]
+  sessions         Session[]
+  auditLogs        AuditLog[]
+
+  indentsRaised    Indent[]         @relation("IndentRaisedBy")
+  indentApprovals  IndentApproval[]
+  purchaseOrders   PurchaseOrder[]
+  goodsReceipts    Grn[]
+  materialIssues   MaterialIssue[]
+  leadsOwned       Lead[]           @relation("LeadOwner")
+  followUps        LeadFollowUp[]
+  siteVisits       SiteVisit[]
+  bookings         Booking[]
+  unitHolds        UnitHold[]
+  progressLogs     SiteProgressLog[]
+  managedProjects  Project[]        @relation("ProjectManager")
+
+  @@index([status])
+  @@index([departmentId])
+  @@map("users")
+}
+
+model Role {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  description String?
+  /// System roles cannot be deleted or have their code changed.
+  isSystem    Boolean      @default(false)
+  /// Lower number = higher authority. Used for approval routing and role-guarding.
+  level       Int          @default(100)
+  status      RecordStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  permissions    RolePermission[]
+  users          UserRole[]
+  approvalLimits ApprovalLimit[]
+
+  @@index([status])
+  @@map("roles")
+}
+
+/// The permission catalogue. Every guarded action, tab, list, button, column,
+/// export and approval in the platform has exactly one row here.
+/// Rows are synced from src/lib/permissions/registry.ts — never hand-edited.
+model Permission {
+  id          String   @id @default(cuid())
+  /// Canonical three-part code: module.resource.action — e.g. "masters.item.create"
+  code        String   @unique
+  /// Top-level module bucket, e.g. "masters", "material", "sales"
+  module      String
+  /// Resource within the module, e.g. "item", "indent"
+  resource    String
+  /// Verb, e.g. "view", "create", "update", "delete", "approve", "export"
+  action      String
+  label       String
+  description String?
+  /// UI grouping label for the role-permission matrix screen.
+  group       String
+  /// Classifies what the permission guards: PAGE | TAB | ACTION | BUTTON | FIELD | REPORT
+  kind        String   @default("ACTION")
+  isSystem    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roles RolePermission[]
+  users UserPermission[]
+
+  @@index([module, resource])
+  @@index([group])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+/// Per-user override on top of the roles they hold.
+/// DENY always beats ALLOW, and both beat the role grant.
+model UserPermission {
+  id           String           @id @default(cuid())
+  userId       String
+  permissionId String
+  effect       PermissionEffect @default(ALLOW)
+  reason       String?
+  createdAt    DateTime         @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
+  @@index([permissionId])
+  @@map("user_permissions")
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+/// Project-scoped data access. A user only ever sees projects mapped here
+/// (super admins and users holding the "project.access.all" permission excepted).
+model UserProject {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+  @@index([projectId])
+  @@map("user_projects")
+}
+
+/// Configurable approval value ceilings, per role or per individual user.
+/// Drives the value-based routing in the indent / PO approval chain.
+model ApprovalLimit {
+  id        String   @id @default(cuid())
+  /// Which approval chain this applies to, e.g. "material.indent", "material.po"
+  scope     String
+  roleId    String?
+  userId    String?
+  maxValue  Decimal  @db.Decimal(14, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  role Role? @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([scope, roleId, userId])
+  @@map("approval_limits")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  tokenId      String   @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+/// Full audit trail on every create, edit, approve and delete.
+model AuditLog {
+  id         String      @id @default(cuid())
+  userId     String?
+  action     AuditAction
+  /// Logical entity name, e.g. "Item", "Indent"
+  entity     String
+  entityId   String?
+  /// Human-readable summary shown in the audit viewer.
+  summary    String
+  /// Field-level before/after diff.
+  changes    Json?
+  ipAddress  String?
+  userAgent  String?
+  projectId  String?
+  createdAt  DateTime    @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// MASTERS
+// ---------------------------------------------------------------------------
+
+model Company {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  legalName   String?
+  gstin       String?
+  pan         String?
+  cin         String?
+  addressLine String?
+  cityId      String?
+  pincode     String?
+  phone       String?
+  email       String?
+  website     String?
+  logoUrl     String?
+  status      RecordStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  city     City?     @relation(fields: [cityId], references: [id])
+  projects Project[]
+
+  @@map("m_companies")
+}
+
+model State {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  gstCode   String?
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  cities City[]
+
+  @@map("m_states")
+}
+
+model City {
+  id        String       @id @default(cuid())
+  name      String
+  stateId   String
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  state     State     @relation(fields: [stateId], references: [id])
+  companies Company[]
+  projects  Project[]
+  vendors   Vendor[]
+
+  @@unique([name, stateId])
+  @@index([stateId])
+  @@map("m_cities")
+}
+
+model Department {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  description String?
+  status      RecordStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  users        User[]
+  designations Designation[]
+
+  @@map("m_departments")
+}
+
+model Designation {
+  id           String       @id @default(cuid())
+  code         String       @unique
+  name         String
+  departmentId String?
+  status       RecordStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  department Department? @relation(fields: [departmentId], references: [id])
+  users      User[]
+
+  @@map("m_designations")
+}
+
+model ProjectType {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  projects Project[]
+
+  @@map("m_project_types")
+}
+
+model UnitType {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  bedrooms    Int?
+  bathrooms   Int?
+  description String?
+  status      RecordStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  units Unit[]
+
+  @@map("m_unit_types")
+}
+
+model Uom {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  /// Decimal places allowed when transacting in this unit.
+  precision Int          @default(2)
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  items Item[]
+
+  @@map("m_uoms")
+}
+
+model ItemCategory {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  parentId  String?
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  parent   ItemCategory?  @relation("ItemCategoryTree", fields: [parentId], references: [id])
+  children ItemCategory[] @relation("ItemCategoryTree")
+  items    Item[]
+
+  @@map("m_item_categories")
+}
+
+model Item {
+  id            String       @id @default(cuid())
+  code          String       @unique
+  name          String
+  description   String?
+  categoryId    String
+  uomId         String
+  hsnCode       String?
+  taxRateId     String?
+  /// Alert threshold — drives the store reorder list.
+  reorderLevel  Decimal      @default(0) @db.Decimal(14, 3)
+  /// Indicative purchase rate used for indent valuation before a PO exists.
+  standardRate  Decimal      @default(0) @db.Decimal(14, 2)
+  isAsset       Boolean      @default(false)
+  status        RecordStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  category ItemCategory @relation(fields: [categoryId], references: [id])
+  uom      Uom          @relation(fields: [uomId], references: [id])
+  taxRate  TaxRate?     @relation(fields: [taxRateId], references: [id])
+
+  indentItems   IndentItem[]
+  poItems       PurchaseOrderItem[]
+  grnItems      GrnItem[]
+  invoiceItems  VendorInvoiceItem[]
+  transferItems StockTransferItem[]
+  issueItems    MaterialIssueItem[]
+  stockBalances StockBalance[]
+  stockLedger   StockLedger[]
+
+  @@index([categoryId])
+  @@index([status])
+  @@map("m_items")
+}
+
+model TaxRate {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  /// Total GST percentage, e.g. 18.00
+  percentage Decimal     @db.Decimal(5, 2)
+  cgst      Decimal      @db.Decimal(5, 2)
+  sgst      Decimal      @db.Decimal(5, 2)
+  igst      Decimal      @db.Decimal(5, 2)
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  items       Item[]
+  chargeHeads ChargeHead[]
+
+  @@map("m_tax_rates")
+}
+
+model Vendor {
+  id            String       @id @default(cuid())
+  code          String       @unique
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  addressLine   String?
+  cityId        String?
+  pincode       String?
+  gstin         String?
+  pan           String?
+  bankName      String?
+  accountNumber String?
+  ifsc          String?
+  paymentTermId String?
+  /// 1-5 internal quality/reliability rating.
+  rating        Int?
+  status        RecordStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  city        City?        @relation(fields: [cityId], references: [id])
+  paymentTerm PaymentTerm? @relation(fields: [paymentTermId], references: [id])
+
+  purchaseOrders PurchaseOrder[]
+  invoices       VendorInvoice[]
+  grns           Grn[]
+
+  @@index([status])
+  @@map("m_vendors")
+}
+
+model PaymentTerm {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  days      Int          @default(0)
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  vendors        Vendor[]
+  purchaseOrders PurchaseOrder[]
+
+  @@map("m_payment_terms")
+}
+
+model Store {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  projectId   String?
+  addressLine String?
+  inchargeId  String?
+  status      RecordStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  project Project? @relation(fields: [projectId], references: [id])
+
+  stockBalances StockBalance[]
+  stockLedger   StockLedger[]
+  grns          Grn[]
+  issues        MaterialIssue[]
+  transfersFrom StockTransfer[] @relation("TransferFrom")
+  transfersTo   StockTransfer[] @relation("TransferTo")
+
+  @@index([projectId])
+  @@map("m_stores")
+}
+
+model LeadSource {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  /// Marks portal/website sources that feed the inbound integration.
+  isDigital Boolean      @default(false)
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  leads Lead[]
+
+  @@map("m_lead_sources")
+}
+
+model LostReason {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  leads Lead[]
+
+  @@map("m_lost_reasons")
+}
+
+model DelayReason {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  activities ScheduleActivity[]
+
+  @@map("m_delay_reasons")
+}
+
+model Amenity {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  iconKey   String?
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  projects ProjectAmenity[]
+
+  @@map("m_amenities")
+}
+
+/// Cost-sheet line definitions: base price, floor rise, PLC, parking, GST, registration.
+model ChargeHead {
+  id           String       @id @default(cuid())
+  code         String       @unique
+  name         String
+  /// How the amount is derived: FIXED | PER_SQFT | PERCENT_OF_BASE
+  calcType     String       @default("FIXED")
+  defaultValue Decimal      @default(0) @db.Decimal(14, 2)
+  taxRateId    String?
+  /// Ordering on the generated cost sheet.
+  sortOrder    Int          @default(0)
+  isMandatory  Boolean      @default(false)
+  status       RecordStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  taxRate        TaxRate?        @relation(fields: [taxRateId], references: [id])
+  costSheetLines CostSheetLine[]
+
+  @@map("m_charge_heads")
+}
+
+model DocumentType {
+  id           String       @id @default(cuid())
+  code         String       @unique
+  name         String
+  /// Which module the document type belongs to, e.g. "project", "sales"
+  scope        String       @default("project")
+  requiresExpiry Boolean    @default(false)
+  status       RecordStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  documents ProjectDocument[]
+
+  @@map("m_document_types")
+}
+
+/// Per-project, per-document numbering series — "INDENT/NNS/2026/0001".
+model NumberingSeries {
+  id         String       @id @default(cuid())
+  /// Document key: INDENT | PO | GRN | INVOICE | ISSUE | BOOKING | RECEIPT
+  documentKey String
+  projectId  String?
+  prefix     String
+  /// Optional financial-year token inserted into the generated number.
+  fiscalYear String?
+  padding    Int          @default(4)
+  nextNumber Int          @default(1)
+  status     RecordStatus @default(ACTIVE)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  project Project? @relation(fields: [projectId], references: [id])
+
+  @@unique([documentKey, projectId, fiscalYear])
+  @@map("m_numbering_series")
+}
+
+model Bank {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  branch    String?
+  accountNumber String?
+  ifsc      String?
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  receipts Receipt[]
+
+  @@map("m_banks")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 01 — PROJECT MANAGEMENT
+// ---------------------------------------------------------------------------
+
+model Project {
+  id             String        @id @default(cuid())
+  code           String        @unique
+  name           String
+  companyId      String?
+  projectTypeId  String
+  cityId         String?
+  addressLine    String?
+  reraNumber     String?
+  landArea       Decimal?      @db.Decimal(14, 2)
+  totalTowers    Int           @default(0)
+  totalFloors    Int           @default(0)
+  totalUnits     Int           @default(0)
+  budgetAmount   Decimal       @default(0) @db.Decimal(16, 2)
+  startDate      DateTime?
+  targetDate     DateTime?
+  actualEndDate  DateTime?
+  projectManagerId String?
+  description    String?
+  status         ProjectStatus @default(PLANNING)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  company        Company?     @relation(fields: [companyId], references: [id])
+  projectType    ProjectType  @relation(fields: [projectTypeId], references: [id])
+  city           City?        @relation(fields: [cityId], references: [id])
+  projectManager User?        @relation("ProjectManager", fields: [projectManagerId], references: [id])
+
+  phases        ProjectPhase[]
+  blocks        Block[]
+  units         Unit[]
+  team          UserProject[]
+  documents     ProjectDocument[]
+  amenities     ProjectAmenity[]
+  progressLogs  SiteProgressLog[]
+  activities    ScheduleActivity[]
+  indents       Indent[]
+  purchaseOrders PurchaseOrder[]
+  issues        MaterialIssue[]
+  stores        Store[]
+  stockBalances StockBalance[]
+  stockLedger   StockLedger[]
+  leads         Lead[]
+  bookings      Booking[]
+  priceLists    PriceList[]
+  numbering     NumberingSeries[]
+
+  @@index([status])
+  @@index([projectManagerId])
+  @@map("projects")
+}
+
+model ProjectPhase {
+  id          String       @id @default(cuid())
+  projectId   String
+  code        String
+  name        String
+  sequence    Int          @default(0)
+  startDate   DateTime?
+  endDate     DateTime?
+  status      RecordStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workPackages WorkPackage[]
+
+  @@unique([projectId, code])
+  @@index([projectId])
+  @@map("project_phases")
+}
+
+model WorkPackage {
+  id          String       @id @default(cuid())
+  phaseId     String
+  code        String
+  name        String
+  description String?
+  sequence    Int          @default(0)
+  startDate   DateTime?
+  endDate     DateTime?
+  budgetAmount Decimal     @default(0) @db.Decimal(16, 2)
+  status      RecordStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  phase      ProjectPhase       @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  activities ScheduleActivity[]
+  indents    Indent[]
+  issues     MaterialIssue[]
+
+  @@unique([phaseId, code])
+  @@index([phaseId])
+  @@map("work_packages")
+}
+
+model Block {
+  id         String       @id @default(cuid())
+  projectId  String
+  code       String
+  name       String
+  totalFloors Int         @default(0)
+  status     RecordStatus @default(ACTIVE)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  units   Unit[]
+
+  @@unique([projectId, code])
+  @@index([projectId])
+  @@map("blocks")
+}
+
+model ProjectAmenity {
+  id        String @id @default(cuid())
+  projectId String
+  amenityId String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  amenity Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, amenityId])
+  @@map("project_amenities")
+}
+
+model ProjectDocument {
+  id             String   @id @default(cuid())
+  projectId      String
+  documentTypeId String
+  title          String
+  /// Opaque storage key — never a user-supplied path.
+  storageKey     String
+  fileName       String
+  fileSize       Int      @default(0)
+  mimeType       String?
+  /// SHA-256 of the stored bytes, so tampering is detectable.
+  checksum       String?
+  /// Documents are versioned rather than overwritten.
+  version        Int      @default(1)
+  supersedesId   String?
+  expiryDate     DateTime?
+  uploadedById   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  documentType DocumentType      @relation(fields: [documentTypeId], references: [id])
+  supersedes   ProjectDocument?  @relation("DocumentVersion", fields: [supersedesId], references: [id])
+  versions     ProjectDocument[] @relation("DocumentVersion")
+
+  @@index([projectId])
+  @@map("project_documents")
+}
+
+/// Geo-tagged, date-stamped daily site record captured from the mobile app.
+model SiteProgressLog {
+  id          String   @id @default(cuid())
+  projectId   String
+  logDate     DateTime
+  title       String
+  notes       String?
+  latitude    Decimal? @db.Decimal(10, 7)
+  longitude   Decimal? @db.Decimal(10, 7)
+  /// Array of uploaded photo URLs.
+  photoUrls   Json     @default("[]")
+  manpowerCount Int    @default(0)
+  weather     String?
+  loggedById  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  loggedBy User?   @relation(fields: [loggedById], references: [id])
+
+  @@index([projectId, logDate])
+  @@map("site_progress_logs")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 04 — PROJECT SCHEDULE
+// ---------------------------------------------------------------------------
+
+model ScheduleActivity {
+  id             String                 @id @default(cuid())
+  projectId      String
+  workPackageId  String?
+  code           String
+  name           String
+  sequence       Int                    @default(0)
+  /// Baseline is captured once and never edited, so slippage stays measurable.
+  baselineStart  DateTime?
+  baselineEnd    DateTime?
+  plannedStart   DateTime?
+  plannedEnd     DateTime?
+  actualStart    DateTime?
+  actualEnd      DateTime?
+  progressPct    Int                    @default(0)
+  isMilestone    Boolean                @default(false)
+  isCriticalPath Boolean                @default(false)
+  delayReasonId  String?
+  delayNotes     String?
+  status         ScheduleActivityStatus @default(NOT_STARTED)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workPackage  WorkPackage? @relation(fields: [workPackageId], references: [id])
+  delayReason  DelayReason? @relation(fields: [delayReasonId], references: [id])
+
+  predecessors ScheduleDependency[] @relation("SuccessorActivity")
+  successors   ScheduleDependency[] @relation("PredecessorActivity")
+
+  @@unique([projectId, code])
+  @@index([projectId])
+  @@map("schedule_activities")
+}
+
+model ScheduleDependency {
+  id            String   @id @default(cuid())
+  predecessorId String
+  successorId   String
+  /// FS | SS | FF | SF — finish-to-start is the default.
+  type          String   @default("FS")
+  lagDays       Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  predecessor ScheduleActivity @relation("PredecessorActivity", fields: [predecessorId], references: [id], onDelete: Cascade)
+  successor   ScheduleActivity @relation("SuccessorActivity", fields: [successorId], references: [id], onDelete: Cascade)
+
+  @@unique([predecessorId, successorId])
+  @@map("schedule_dependencies")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 07 — AVAILABLE FLATS / UNIT INVENTORY
+// ---------------------------------------------------------------------------
+
+model Unit {
+  id           String     @id @default(cuid())
+  projectId    String
+  blockId      String?
+  unitTypeId   String?
+  unitNumber   String
+  floorNumber  Int        @default(0)
+  carpetArea   Decimal    @default(0) @db.Decimal(10, 2)
+  builtUpArea  Decimal    @default(0) @db.Decimal(10, 2)
+  superBuiltUpArea Decimal @default(0) @db.Decimal(10, 2)
+  facing       String?
+  /// Preferential location charge tag, e.g. "CORNER", "PARK_FACING".
+  plcTag       String?
+  parkingSlots Int        @default(0)
+  status       UnitStatus @default(AVAILABLE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  block    Block?    @relation(fields: [blockId], references: [id])
+  unitType UnitType? @relation(fields: [unitTypeId], references: [id])
+
+  holds      UnitHold[]
+  bookings   Booking[]
+  costSheets CostSheet[]
+  priceItems PriceListItem[]
+
+  @@unique([projectId, unitNumber])
+  @@index([projectId, status])
+  @@map("units")
+}
+
+/// A sales executive can block a unit for a set period; it releases itself
+/// unless an extension is approved.
+model UnitHold {
+  id          String    @id @default(cuid())
+  unitId      String
+  leadId      String?
+  heldById    String
+  heldAt      DateTime  @default(now())
+  expiresAt   DateTime
+  releasedAt  DateTime?
+  releaseNote String?
+  extensionCount Int    @default(0)
+  isActive    Boolean   @default(true)
+
+  unit Unit  @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  lead Lead? @relation(fields: [leadId], references: [id])
+  heldBy User @relation(fields: [heldById], references: [id])
+
+  @@index([unitId, isActive])
+  @@map("unit_holds")
+}
+
+/// Rate revisions carry an effective date, so a past booking keeps its rate.
+model PriceList {
+  id            String       @id @default(cuid())
+  projectId     String
+  name          String
+  version       Int          @default(1)
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  isActive      Boolean      @default(true)
+  status        RecordStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items   PriceListItem[]
+
+  @@index([projectId, isActive])
+  @@map("price_lists")
+}
+
+model PriceListItem {
+  id          String  @id @default(cuid())
+  priceListId String
+  unitId      String?
+  unitTypeId  String?
+  /// Rate per sq.ft on super built-up area.
+  baseRate    Decimal @db.Decimal(12, 2)
+  floorRise   Decimal @default(0) @db.Decimal(12, 2)
+  plcAmount   Decimal @default(0) @db.Decimal(12, 2)
+
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  unit      Unit?     @relation(fields: [unitId], references: [id])
+
+  @@index([priceListId])
+  @@map("price_list_items")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 05 — MATERIAL & INVENTORY
+// Indent -> PM approval -> Admin approval -> stock check -> PO -> GRN ->
+// invoice (3-way match) -> payment -> issue.
+// ---------------------------------------------------------------------------
+
+model Indent {
+  id             String       @id @default(cuid())
+  indentNo       String       @unique
+  projectId      String
+  workPackageId  String?
+  raisedById     String
+  raisedAt       DateTime     @default(now())
+  requiredByDate DateTime
+  /// Free-text activity the material is for, captured on site.
+  purpose        String?
+  estimatedValue Decimal      @default(0) @db.Decimal(16, 2)
+  status         IndentStatus @default(DRAFT)
+  remarks        String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  project     Project      @relation(fields: [projectId], references: [id])
+  workPackage WorkPackage? @relation(fields: [workPackageId], references: [id])
+  raisedBy    User         @relation("IndentRaisedBy", fields: [raisedById], references: [id])
+
+  items     IndentItem[]
+  approvals IndentApproval[]
+  poItems   PurchaseOrderItem[]
+
+  @@index([projectId, status])
+  @@index([status, raisedAt])
+  @@map("indents")
+}
+
+model IndentItem {
+  id              String  @id @default(cuid())
+  indentId        String
+  itemId          String
+  requestedQty    Decimal @db.Decimal(14, 3)
+  /// Quantity after approver revision — the 60-to-50 change stays on record.
+  approvedQty     Decimal? @db.Decimal(14, 3)
+  /// Portion satisfied from existing store stock instead of purchase.
+  issueFromStockQty Decimal @default(0) @db.Decimal(14, 3)
+  /// Shortfall that actually becomes a PO.
+  toPurchaseQty   Decimal @default(0) @db.Decimal(14, 3)
+  orderedQty      Decimal @default(0) @db.Decimal(14, 3)
+  estimatedRate   Decimal @default(0) @db.Decimal(14, 2)
+  specification   String?
+  remarks         String?
+
+  indent Indent @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  @@index([indentId])
+  @@map("indent_items")
+}
+
+/// One row per approval step — who approved, when, and what they changed.
+model IndentApproval {
+  id           String           @id @default(cuid())
+  indentId     String
+  level        ApprovalLevel
+  decision     ApprovalDecision
+  approvedById String
+  approvedAt   DateTime         @default(now())
+  remarks      String?
+  /// Snapshot of quantity revisions made at this step.
+  changes      Json?
+
+  indent     Indent @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  approvedBy User   @relation(fields: [approvedById], references: [id])
+
+  @@index([indentId])
+  @@map("indent_approvals")
+}
+
+model PurchaseOrder {
+  id            String              @id @default(cuid())
+  poNo          String              @unique
+  projectId     String
+  vendorId      String
+  poDate        DateTime            @default(now())
+  expectedDate  DateTime?
+  paymentTermId String?
+  createdById   String
+  subTotal      Decimal             @default(0) @db.Decimal(16, 2)
+  taxAmount     Decimal             @default(0) @db.Decimal(16, 2)
+  otherCharges  Decimal             @default(0) @db.Decimal(16, 2)
+  totalAmount   Decimal             @default(0) @db.Decimal(16, 2)
+  deliveryAddress String?
+  terms         String?
+  status        PurchaseOrderStatus @default(DRAFT)
+  approvedById  String?
+  approvedAt    DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  project     Project      @relation(fields: [projectId], references: [id])
+  vendor      Vendor       @relation(fields: [vendorId], references: [id])
+  paymentTerm PaymentTerm? @relation(fields: [paymentTermId], references: [id])
+  createdBy   User         @relation(fields: [createdById], references: [id])
+
+  items    PurchaseOrderItem[]
+  grns     Grn[]
+  invoices VendorInvoice[]
+
+  @@index([projectId, status])
+  @@index([vendorId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id           String  @id @default(cuid())
+  poId         String
+  itemId       String
+  indentId     String?
+  orderedQty   Decimal @db.Decimal(14, 3)
+  receivedQty  Decimal @default(0) @db.Decimal(14, 3)
+  rate         Decimal @db.Decimal(14, 2)
+  discountPct  Decimal @default(0) @db.Decimal(5, 2)
+  taxPct       Decimal @default(0) @db.Decimal(5, 2)
+  amount       Decimal @default(0) @db.Decimal(16, 2)
+  specification String?
+
+  purchaseOrder PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  item          Item          @relation(fields: [itemId], references: [id])
+  indent        Indent?       @relation(fields: [indentId], references: [id])
+
+  grnItems GrnItem[]
+
+  @@index([poId])
+  @@map("purchase_order_items")
+}
+
+model Grn {
+  id           String    @id @default(cuid())
+  grnNo        String    @unique
+  poId         String
+  vendorId     String
+  storeId      String
+  grnDate      DateTime  @default(now())
+  challanNo    String?
+  challanDate  DateTime?
+  challanPhotoUrl String?
+  vehicleNo    String?
+  receivedById String
+  inspectedById String?
+  inspectedAt  DateTime?
+  status       GrnStatus @default(DRAFT)
+  remarks      String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  purchaseOrder PurchaseOrder @relation(fields: [poId], references: [id])
+  vendor        Vendor        @relation(fields: [vendorId], references: [id])
+  store         Store         @relation(fields: [storeId], references: [id])
+  receivedBy    User          @relation(fields: [receivedById], references: [id])
+
+  items       GrnItem[]
+  stockLedger StockLedger[]
+
+  @@index([poId])
+  @@index([status])
+  @@map("grns")
+}
+
+model GrnItem {
+  id          String  @id @default(cuid())
+  grnId       String
+  poItemId    String
+  itemId      String
+  receivedQty Decimal @db.Decimal(14, 3)
+  /// Only accepted stock enters the ledger.
+  acceptedQty Decimal @db.Decimal(14, 3)
+  rejectedQty Decimal @default(0) @db.Decimal(14, 3)
+  shortQty    Decimal @default(0) @db.Decimal(14, 3)
+  rate        Decimal @db.Decimal(14, 2)
+  rejectionReason String?
+
+  grn    Grn               @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  poItem PurchaseOrderItem @relation(fields: [poItemId], references: [id])
+  item   Item              @relation(fields: [itemId], references: [id])
+
+  @@index([grnId])
+  @@map("grn_items")
+}
+
+/// Three-way match: PO <-> GRN <-> Invoice. A mismatch is flagged, never quietly paid.
+model VendorInvoice {
+  id            String              @id @default(cuid())
+  invoiceNo     String
+  poId          String
+  vendorId      String
+  invoiceDate   DateTime
+  receivedDate  DateTime            @default(now())
+  subTotal      Decimal             @default(0) @db.Decimal(16, 2)
+  taxAmount     Decimal             @default(0) @db.Decimal(16, 2)
+  totalAmount   Decimal             @default(0) @db.Decimal(16, 2)
+  paidAmount    Decimal             @default(0) @db.Decimal(16, 2)
+  /// Result of the automated three-way match.
+  matchResult   Json?
+  status        VendorInvoiceStatus @default(DRAFT)
+  fileUrl       String?
+  remarks       String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  purchaseOrder PurchaseOrder @relation(fields: [poId], references: [id])
+  vendor        Vendor        @relation(fields: [vendorId], references: [id])
+
+  items    VendorInvoiceItem[]
+  payments VendorPayment[]
+
+  @@unique([vendorId, invoiceNo])
+  @@index([status])
+  @@map("vendor_invoices")
+}
+
+model VendorInvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  itemId      String
+  invoicedQty Decimal @db.Decimal(14, 3)
+  rate        Decimal @db.Decimal(14, 2)
+  taxPct      Decimal @default(0) @db.Decimal(5, 2)
+  amount      Decimal @default(0) @db.Decimal(16, 2)
+
+  invoice VendorInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  item    Item          @relation(fields: [itemId], references: [id])
+
+  @@index([invoiceId])
+  @@map("vendor_invoice_items")
+}
+
+model VendorPayment {
+  id          String   @id @default(cuid())
+  paymentNo   String   @unique
+  invoiceId   String
+  paymentDate DateTime @default(now())
+  amount      Decimal  @db.Decimal(16, 2)
+  /// NEFT | RTGS | CHEQUE | UPI | CASH
+  mode        String   @default("NEFT")
+  referenceNo String?
+  remarks     String?
+  createdAt   DateTime @default(now())
+
+  invoice VendorInvoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@map("vendor_payments")
+}
+
+/// Running item-wise position per store with weighted-average valuation.
+model StockBalance {
+  id           String   @id @default(cuid())
+  itemId       String
+  storeId      String
+  projectId    String?
+  quantity     Decimal  @default(0) @db.Decimal(14, 3)
+  /// Weighted average rate, recalculated on every inward movement.
+  avgRate      Decimal  @default(0) @db.Decimal(14, 2)
+  value        Decimal  @default(0) @db.Decimal(16, 2)
+  updatedAt    DateTime @updatedAt
+
+  item    Item     @relation(fields: [itemId], references: [id])
+  store   Store    @relation(fields: [storeId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
+
+  @@unique([itemId, storeId])
+  @@index([storeId])
+  @@map("stock_balances")
+}
+
+/// Immutable movement log — every inward and outward transaction.
+model StockLedger {
+  id         String       @id @default(cuid())
+  itemId     String
+  storeId    String
+  projectId  String?
+  txnType    StockTxnType
+  txnDate    DateTime     @default(now())
+  /// Signed quantity: positive inward, negative outward.
+  quantity   Decimal      @db.Decimal(14, 3)
+  rate       Decimal      @default(0) @db.Decimal(14, 2)
+  value      Decimal      @default(0) @db.Decimal(16, 2)
+  balanceQty Decimal      @default(0) @db.Decimal(14, 3)
+  /// Source document type and id for traceability.
+  refType    String
+  refId      String
+  refNo      String?
+  grnId      String?
+  issueId    String?
+  remarks    String?
+  createdById String?
+  createdAt  DateTime     @default(now())
+
+  item    Item           @relation(fields: [itemId], references: [id])
+  store   Store          @relation(fields: [storeId], references: [id])
+  project Project?       @relation(fields: [projectId], references: [id])
+  grn     Grn?           @relation(fields: [grnId], references: [id])
+  issue   MaterialIssue? @relation(fields: [issueId], references: [id])
+
+  @@index([itemId, storeId, txnDate])
+  @@index([refType, refId])
+  @@map("stock_ledger")
+}
+
+model MaterialIssue {
+  id            String   @id @default(cuid())
+  issueNo       String   @unique
+  projectId     String
+  storeId       String
+  workPackageId String?
+  issuedToId    String
+  issuedById    String
+  issueDate     DateTime @default(now())
+  purpose       String?
+  /// Issue slips are acknowledged on mobile by the receiving supervisor.
+  acknowledgedAt DateTime?
+  acknowledgedById String?
+  totalValue    Decimal  @default(0) @db.Decimal(16, 2)
+  remarks       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project     Project      @relation(fields: [projectId], references: [id])
+  store       Store        @relation(fields: [storeId], references: [id])
+  workPackage WorkPackage? @relation(fields: [workPackageId], references: [id])
+  issuedBy    User         @relation(fields: [issuedById], references: [id])
+
+  items       MaterialIssueItem[]
+  stockLedger StockLedger[]
+
+  @@index([projectId])
+  @@map("material_issues")
+}
+
+model MaterialIssueItem {
+  id        String  @id @default(cuid())
+  issueId   String
+  itemId    String
+  issuedQty Decimal @db.Decimal(14, 3)
+  returnedQty Decimal @default(0) @db.Decimal(14, 3)
+  rate      Decimal @default(0) @db.Decimal(14, 2)
+  value     Decimal @default(0) @db.Decimal(16, 2)
+  remarks   String?
+
+  issue MaterialIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  item  Item          @relation(fields: [itemId], references: [id])
+
+  @@index([issueId])
+  @@map("material_issue_items")
+}
+
+model StockTransfer {
+  id           String   @id @default(cuid())
+  transferNo   String   @unique
+  fromStoreId  String
+  toStoreId    String
+  transferDate DateTime @default(now())
+  /// DRAFT | IN_TRANSIT | RECEIVED | CANCELLED
+  status       String   @default("DRAFT")
+  approvedById String?
+  approvedAt   DateTime?
+  remarks      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  fromStore Store @relation("TransferFrom", fields: [fromStoreId], references: [id])
+  toStore   Store @relation("TransferTo", fields: [toStoreId], references: [id])
+
+  items StockTransferItem[]
+
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id          String  @id @default(cuid())
+  transferId  String
+  itemId      String
+  quantity    Decimal @db.Decimal(14, 3)
+  /// Received at the destination — may be short of what was sent.
+  receivedQty Decimal @default(0) @db.Decimal(14, 3)
+  rate        Decimal @default(0) @db.Decimal(14, 2)
+
+  transfer StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  item     Item          @relation(fields: [itemId], references: [id])
+
+  @@index([transferId])
+  @@map("stock_transfer_items")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE 06 — LEAD MANAGEMENT & SALES CRM
+// ---------------------------------------------------------------------------
+
+model Lead {
+  id             String    @id @default(cuid())
+  leadNo         String    @unique
+  name           String
+  phone          String
+  altPhone       String?
+  email          String?
+  sourceId       String
+  projectId      String?
+  ownerId        String?
+  state          LeadState @default(NEW)
+  budgetMin      Decimal?  @db.Decimal(14, 2)
+  budgetMax      Decimal?  @db.Decimal(14, 2)
+  requirement    String?
+  /// Set when duplicate detection matches an existing phone/email.
+  duplicateOfId  String?
+  assignedAt     DateTime?
+  /// First response time in minutes — measured, not assumed.
+  firstResponseMins Int?
+  nextActionAt   DateTime?
+  lostReasonId   String?
+  lostNotes      String?
+  score          Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  source      LeadSource  @relation(fields: [sourceId], references: [id])
+  project     Project?    @relation(fields: [projectId], references: [id])
+  owner       User?       @relation("LeadOwner", fields: [ownerId], references: [id])
+  lostReason  LostReason? @relation(fields: [lostReasonId], references: [id])
+  duplicateOf Lead?       @relation("LeadDuplicate", fields: [duplicateOfId], references: [id])
+  duplicates  Lead[]      @relation("LeadDuplicate")
+
+  followUps  LeadFollowUp[]
+  siteVisits SiteVisit[]
+  holds      UnitHold[]
+  bookings   Booking[]
+  costSheets CostSheet[]
+
+  @@index([state, ownerId])
+  @@index([phone])
+  @@index([nextActionAt])
+  @@map("leads")
+}
+
+model LeadFollowUp {
+  id          String    @id @default(cuid())
+  leadId      String
+  userId      String
+  /// CALL | WHATSAPP | EMAIL | MEETING | SITE_VISIT
+  channel     String    @default("CALL")
+  notes       String
+  outcome     String?
+  nextActionAt DateTime?
+  completedAt DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([leadId])
+  @@map("lead_follow_ups")
+}
+
+model SiteVisit {
+  id          String    @id @default(cuid())
+  leadId      String
+  projectId   String?
+  scheduledAt DateTime
+  visitedAt   DateTime?
+  conductedById String
+  feedback    String?
+  rating      Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  lead        Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  conductedBy User @relation(fields: [conductedById], references: [id])
+
+  @@index([leadId])
+  @@map("site_visits")
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  customerNo  String   @unique
+  name        String
+  phone       String
+  email       String?
+  addressLine String?
+  panNumber   String?
+  aadhaarNumber String?
+  /// KYC document URLs.
+  kycDocuments Json    @default("[]")
+  kycVerifiedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  bookings Booking[]
+
+  @@index([phone])
+  @@map("customers")
+}
+
+/// Generated, not typed: base price, floor rise, PLC, parking, amenities,
+/// GST and registration.
+model CostSheet {
+  id            String   @id @default(cuid())
+  costSheetNo   String   @unique
+  unitId        String
+  leadId        String?
+  /// Rate snapshot so a past booking keeps the rate it was sold at.
+  baseRate      Decimal  @db.Decimal(12, 2)
+  subTotal      Decimal  @default(0) @db.Decimal(16, 2)
+  discountAmount Decimal @default(0) @db.Decimal(16, 2)
+  discountApprovedById String?
+  discountApprovedAt DateTime?
+  taxAmount     Decimal  @default(0) @db.Decimal(16, 2)
+  totalAmount   Decimal  @default(0) @db.Decimal(16, 2)
+  validUntil    DateTime?
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  unit  Unit  @relation(fields: [unitId], references: [id])
+  lead  Lead? @relation(fields: [leadId], references: [id])
+
+  lines    CostSheetLine[]
+  bookings Booking[]
+
+  @@index([unitId])
+  @@map("cost_sheets")
+}
+
+model CostSheetLine {
+  id           String  @id @default(cuid())
+  costSheetId  String
+  chargeHeadId String
+  label        String
+  quantity     Decimal @default(1) @db.Decimal(12, 2)
+  rate         Decimal @default(0) @db.Decimal(14, 2)
+  amount       Decimal @default(0) @db.Decimal(16, 2)
+  taxPct       Decimal @default(0) @db.Decimal(5, 2)
+  taxAmount    Decimal @default(0) @db.Decimal(16, 2)
+  sortOrder    Int     @default(0)
+
+  costSheet  CostSheet  @relation(fields: [costSheetId], references: [id], onDelete: Cascade)
+  chargeHead ChargeHead @relation(fields: [chargeHeadId], references: [id])
+
+  @@index([costSheetId])
+  @@map("cost_sheet_lines")
+}
+
+model Booking {
+  id          String        @id @default(cuid())
+  bookingNo   String        @unique
+  projectId   String
+  unitId      String
+  customerId  String
+  leadId      String?
+  costSheetId String?
+  bookingDate DateTime      @default(now())
+  totalAmount Decimal       @default(0) @db.Decimal(16, 2)
+  receivedAmount Decimal    @default(0) @db.Decimal(16, 2)
+  agreementDate DateTime?
+  registrationDate DateTime?
+  soldById    String?
+  status      BookingStatus @default(DRAFT)
+  remarks     String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  project   Project    @relation(fields: [projectId], references: [id])
+  unit      Unit       @relation(fields: [unitId], references: [id])
+  customer  Customer   @relation(fields: [customerId], references: [id])
+  lead      Lead?      @relation(fields: [leadId], references: [id])
+  costSheet CostSheet? @relation(fields: [costSheetId], references: [id])
+  soldBy    User?      @relation(fields: [soldById], references: [id])
+
+  demands  PaymentDemand[]
+  receipts Receipt[]
+
+  @@index([projectId, status])
+  @@map("bookings")
+}
+
+/// Construction-linked payment milestones raised against a booking.
+model PaymentDemand {
+  id          String    @id @default(cuid())
+  demandNo    String    @unique
+  bookingId   String
+  milestone   String
+  dueDate     DateTime
+  amount      Decimal   @db.Decimal(16, 2)
+  taxAmount   Decimal   @default(0) @db.Decimal(16, 2)
+  totalAmount Decimal   @db.Decimal(16, 2)
+  receivedAmount Decimal @default(0) @db.Decimal(16, 2)
+  raisedAt    DateTime?
+  /// PENDING | RAISED | PARTIALLY_PAID | PAID | OVERDUE
+  status      String    @default("PENDING")
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  booking  Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  receipts Receipt[]
+
+  @@index([bookingId])
+  @@map("payment_demands")
+}
+
+model Receipt {
+  id          String   @id @default(cuid())
+  receiptNo   String   @unique
+  bookingId   String
+  demandId    String?
+  receiptDate DateTime @default(now())
+  amount      Decimal  @db.Decimal(16, 2)
+  /// NEFT | RTGS | CHEQUE | UPI | CASH | DD
+  mode        String   @default("NEFT")
+  referenceNo String?
+  bankId      String?
+  clearedAt   DateTime?
+  remarks     String?
+  createdAt   DateTime @default(now())
+
+  booking Booking        @relation(fields: [bookingId], references: [id])
+  demand  PaymentDemand? @relation(fields: [demandId], references: [id])
+  bank    Bank?          @relation(fields: [bankId], references: [id])
+
+  @@index([bookingId])
+  @@map("receipts")
+}
