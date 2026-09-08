@@ -24,7 +24,8 @@
     "test:all": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage tests/unit tests/integration",
-    "check": "pnpm typecheck && pnpm lint && pnpm test"
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "admin:rotate-passwords": "tsx scripts/rotate-passwords.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
