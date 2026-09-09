@@ -11,10 +11,12 @@ const STAGES = ["NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOT
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; state?: string }>;
+  searchParams: Promise<{ q?: string; state?: string; source?: string; fu?: string; view?: string }>;
 }) {
   const ctx = await requirePermission(PERM.sales.lead.view);
-  const { q = "", state = "all" } = await searchParams;
+  const { q = "", state = "all", source = "all", fu = "all", view = "board" } = await searchParams;
+  const now = new Date();
+  const soon = new Date(now.getTime() + 7 * 86_400_000);
 
   // Without viewAll a sales executive sees only their own pipeline.
   const ownership = ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id };
@@ -31,13 +33,26 @@ export default async function LeadsPage({
         }
       : {}),
     ...(state !== "all" ? { state: state as never } : {}),
+    ...(source !== "all" ? { sourceId: source } : {}),
+    // Follow-up filter, as in the design: overdue / today / this week / none set.
+    ...(fu === "overdue" ? { nextActionAt: { lt: now } } : {}),
+    ...(fu === "today"
+      ? {
+          nextActionAt: {
+            gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+            lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1),
+          },
+        }
+      : {}),
+    ...(fu === "week" ? { nextActionAt: { gte: now, lte: soon } } : {}),
+    ...(fu === "none" ? { nextActionAt: null } : {}),
   };
 
   const [leads, stageCounts, sources, lostReasons, projects, owners] = await Promise.all([
     prisma.lead.findMany({
       where,
       orderBy: [{ nextActionAt: "asc" }, { createdAt: "desc" }],
-      take: 100,
+      take: 300,
       include: {
         source: { select: { name: true } },
         owner: { select: { id: true, name: true } },
@@ -83,6 +98,10 @@ export default async function LeadsPage({
       <LeadsScreen
         query={q}
         stateFilter={state}
+        sourceFilter={source}
+        followUpFilter={fu}
+        view={view === "list" ? "list" : "board"}
+        nowMs={now.getTime()}
         leads={leads.map((l) => ({
           id: l.id,
           leadNo: l.leadNo,
@@ -98,6 +117,7 @@ export default async function LeadsPage({
           budgetMin: l.budgetMin === null ? null : Number(l.budgetMin),
           budgetMax: l.budgetMax === null ? null : Number(l.budgetMax),
           nextActionAt: l.nextActionAt ? l.nextActionAt.toISOString() : null,
+          sourceId: l.sourceId,
           lostReason: l.lostReason?.name ?? null,
           followUpCount: l._count.followUps,
           visitCount: l._count.siteVisits,

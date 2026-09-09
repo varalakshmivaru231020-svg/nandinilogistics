@@ -2,26 +2,37 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Copy, Download, PhoneCall, Plus, Search, UserCheck } from "lucide-react";
+import { Copy, Download, PhoneCall, Plus, Upload, UserCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal } from "@/components/ui/modal";
-import { Alert, Badge, Field, Input, Select, Textarea } from "@/components/ui/primitives";
-import { formatDate, money } from "@/lib/utils";
+import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { cn, formatDate, money } from "@/lib/utils";
 import { assignLeadAction, changeLeadStageAction, createLeadAction, logFollowUpAction } from "./actions";
 
-const STAGES = ["NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED", "LOST"] as const;
+const STAGES = [
+  "NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED", "LOST",
+] as const;
 type Stage = (typeof STAGES)[number];
 
-const STAGE_TONE: Record<string, "slate" | "brand" | "warn" | "navy" | "good" | "bad"> = {
-  NEW: "slate", CONTACTED: "brand", SITE_VISIT_SCHEDULED: "warn",
+/** Board columns exclude LOST — the design keeps the pipeline to live stages. */
+const BOARD_STAGES: Stage[] = [
+  "NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED",
+];
+
+const STAGE_LABEL: Record<string, string> = {
+  NEW: "New", CONTACTED: "Contacted", SITE_VISIT_SCHEDULED: "Visit scheduled",
+  VISIT_DONE: "Visit done", NEGOTIATION: "Negotiation", BOOKED: "Booked", LOST: "Lost",
+};
+
+const STAGE_TONE: Record<string, "muted" | "brand" | "warn" | "navy" | "good" | "bad"> = {
+  NEW: "muted", CONTACTED: "brand", SITE_VISIT_SCHEDULED: "warn",
   VISIT_DONE: "navy", NEGOTIATION: "warn", BOOKED: "good", LOST: "bad",
 };
 
 interface Lead {
   id: string; leadNo: string; name: string; phone: string; email: string | null;
-  state: string; source: string; ownerId: string | null; ownerName: string | null;
+  state: string; source: string; sourceId: string; ownerId: string | null; ownerName: string | null;
   projectCode: string | null; requirement: string | null;
   budgetMin: number | null; budgetMax: number | null;
   nextActionAt: string | null; lostReason: string | null;
@@ -30,13 +41,24 @@ interface Lead {
 
 type Lookup = Array<{ id: string; name: string; code?: string }>;
 
-/** Masks a phone number when the user lacks the contact FIELD permission. */
 function maskPhone(phone: string) {
   return phone.length > 4 ? `${"•".repeat(phone.length - 4)}${phone.slice(-4)}` : "••••";
 }
 
+/** The follow-up chip the design shows on every card and row. */
+function followUp(nextActionAt: string | null, nowMs: number) {
+  if (!nextActionAt) return null;
+  const due = new Date(nextActionAt).getTime();
+  const days = Math.round((due - nowMs) / 86_400_000);
+  if (days < 0) return { text: formatDate(nextActionAt), badge: `${Math.abs(days)}d overdue`, tone: "bad" as const };
+  if (days === 0) return { text: formatDate(nextActionAt), badge: "today", tone: "warn" as const };
+  if (days <= 7) return { text: formatDate(nextActionAt), badge: `in ${days}d`, tone: "brand" as const };
+  return { text: formatDate(nextActionAt), badge: "scheduled", tone: "muted" as const };
+}
+
 export function LeadsScreen({
-  leads, sources, lostReasons, projects, owners, can, query, stateFilter,
+  leads, sources, lostReasons, projects, owners, can,
+  query, stateFilter, sourceFilter, followUpFilter, view, nowMs,
 }: {
   leads: Lead[];
   sources: Lookup;
@@ -46,6 +68,10 @@ export function LeadsScreen({
   can: Record<string, boolean>;
   query: string;
   stateFilter: string;
+  sourceFilter: string;
+  followUpFilter: string;
+  view: "board" | "list";
+  nowMs: number;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -53,23 +79,47 @@ export function LeadsScreen({
   const [staging, setStaging] = React.useState<Lead | null>(null);
   const [followingUp, setFollowingUp] = React.useState<Lead | null>(null);
   const [assigning, setAssigning] = React.useState<Lead | null>(null);
+  const [dragging, setDragging] = React.useState<string | null>(null);
+  const [dropTarget, setDropTarget] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
 
-  function setParam(key: string, value: string) {
+  function setParam(next: Record<string, string | undefined>) {
     const sp = new URLSearchParams(params.toString());
-    if (!value || value === "all") sp.delete(key);
-    else sp.set(key, value);
+    for (const [k, v] of Object.entries(next)) {
+      if (!v || v === "all") sp.delete(k);
+      else sp.set(k, v);
+    }
     router.push(`?${sp.toString()}`);
   }
 
+  /** Dropping a card onto a column moves the lead through the guarded action. */
+  async function moveTo(leadId: string, stage: Stage) {
+    setDragging(null);
+    setDropTarget(null);
+    if (stage === "LOST") {
+      const lead = leads.find((l) => l.id === leadId);
+      if (lead) setStaging(lead);
+      return;
+    }
+    setError(null);
+    const res = await changeLeadStageAction(leadId, stage);
+    if (!res.ok) setError(res.error);
+    else {
+      setNotice(`Moved to ${STAGE_LABEL[stage]}.`);
+      router.refresh();
+    }
+  }
+
   function exportCsv() {
-    const header = ["Lead No", "Name", "Phone", "Source", "Stage", "Owner", "Next action"];
+    const header = ["Lead No", "Name", "Phone", "Source", "Stage", "Owner", "Requirement", "Next action"];
     const rows = leads.map((l) => [
       l.leadNo, l.name, can.viewContact ? l.phone : maskPhone(l.phone),
-      l.source, l.state, l.ownerName ?? "", l.nextActionAt ?? "",
+      l.source, l.state, l.ownerName ?? "", l.requirement ?? "", l.nextActionAt ?? "",
     ]);
-    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const csv = [header, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
     const a = document.createElement("a");
     a.href = url;
@@ -78,193 +128,328 @@ export function LeadsScreen({
     URL.revokeObjectURL(url);
   }
 
-  const columns: Column<Lead>[] = [
-    {
-      key: "lead",
-      header: "Lead",
-      render: (l) => (
-        <div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm font-medium text-navy-950">{l.name}</span>
-            {l.isDuplicate && (
-              <span title="Possible duplicate of an existing lead">
-                <Copy className="h-3 w-3 text-warn-700" />
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-muted-500">
-            <code>{l.leadNo}</code> · {l.source}
-            {l.projectCode && ` · ${l.projectCode}`}
-          </p>
-        </div>
-      ),
-    },
-    {
-      key: "contact",
-      header: "Contact",
-      render: (l) => (
-        <div className="text-xs">
-          <p className={can.viewContact ? "text-navy-600" : "text-muted-400"}>
-            {can.viewContact ? l.phone : maskPhone(l.phone)}
-          </p>
-          {l.email && (
-            <p className="text-muted-400">{can.viewContact ? l.email : "•••@•••"}</p>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "budget",
-      header: "Budget",
-      align: "right",
-      className: "num",
-      render: (l) =>
-        l.budgetMin || l.budgetMax ? (
-          <span className="text-xs text-muted-600">
-            {money(l.budgetMin ?? 0)} – {money(l.budgetMax ?? 0)}
-          </span>
-        ) : (
-          <span className="text-muted-400">—</span>
-        ),
-    },
-    { key: "owner", header: "Owner", render: (l) => <span className="text-xs text-muted-600">{l.ownerName ?? "Unassigned"}</span> },
-    {
-      key: "next",
-      header: "Next action",
-      render: (l) => {
-        if (!l.nextActionAt) return <span className="text-xs text-muted-400">Not set</span>;
-        // Compared on the client, so "overdue" stays true to the reader's clock.
-        const overdue = new Date(l.nextActionAt).getTime() < Date.now();
-        return (
-          <span className={overdue ? "text-xs font-medium text-bad-600" : "text-xs text-muted-600"}>
-            {formatDate(l.nextActionAt)}
-            {overdue && " · overdue"}
-          </span>
-        );
-      },
-    },
-    {
-      key: "activity",
-      header: "Activity",
-      align: "center",
-      render: (l) => (
-        <span className="num text-xs text-muted-500">
-          {l.followUpCount} FU · {l.visitCount} visit
-        </span>
-      ),
-    },
-    {
-      key: "stage",
-      header: "Stage",
-      align: "center",
-      render: (l) => (
-        <div>
-          <Badge tone={STAGE_TONE[l.state] ?? "slate"}>{l.state.replace(/_/g, " ")}</Badge>
-          {l.lostReason && <p className="mt-0.5 text-[11px] text-muted-400">{l.lostReason}</p>}
-        </div>
-      ),
-    },
-    {
-      key: "actions",
-      header: "",
-      align: "right",
-      render: (l) => (
-        <div className="flex items-center justify-end gap-0.5">
-          {can.followUp && !["BOOKED", "LOST"].includes(l.state) && (
-            <button type="button" onClick={() => setFollowingUp(l)} className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-600" title="Log follow-up">
-              <PhoneCall className="h-3.5 w-3.5" />
-            </button>
-          )}
-          {(can.changeStage || can.markLost) && (
-            <button type="button" onClick={() => setStaging(l)} className="rounded border border-line-400 bg-white px-2 py-1 text-xs text-muted-600 hover:bg-surface-hover">
-              Move
-            </button>
-          )}
-          {can.assign && (
-            <button type="button" onClick={() => setAssigning(l)} className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-600" title="Assign">
-              <UserCheck className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      ),
-    },
-  ];
+  const byStage = new Map<string, Lead[]>();
+  for (const l of leads) byStage.set(l.state, [...(byStage.get(l.state) ?? []), l]);
+
+  const filtersActive =
+    Boolean(query) || stateFilter !== "all" || sourceFilter !== "all" || followUpFilter !== "all";
 
   return (
-    <div className="space-y-3">
-      {error && <Alert tone="error">{error}</Alert>}
-      {notice && !error && <Alert tone="success">{notice}</Alert>}
+    <div className="animate-fade-up">
+      {error && <div className="mb-3"><Alert tone="error">{error}</Alert></div>}
+      {notice && !error && <div className="mb-3"><Alert tone="success">{notice}</Alert></div>}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-56 flex-1 sm:max-w-sm">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-400" />
-          <Input
-            defaultValue={query}
-            placeholder="Search name, phone or lead number…"
-            className="pl-8"
-            onKeyDown={(e) => { if (e.key === "Enter") setParam("q", (e.target as HTMLInputElement).value); }}
-          />
+      {/* Header line, as in the design */}
+      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[13px] font-medium text-muted-600">
+          {leads.length} lead{leads.length === 1 ? "" : "s"} in view
+          {view === "board" && " · drag a card to move it · click to open"}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1.5">
+            {(["board", "list"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setParam({ view: v === "board" ? undefined : v })}
+                className={cn(
+                  "rounded-[9px] border px-3.5 py-2 text-[12px] font-bold capitalize transition-colors",
+                  view === v
+                    ? "border-brand-500 bg-brand-100 text-brand-700"
+                    : "border-line-400 bg-white text-muted-600 hover:border-brand-300",
+                )}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          <Button variant="ghost" size="md" onClick={() => setNotice("Bulk import arrives with the portal integration.")}>
+            <Upload className="h-3.5 w-3.5" />
+            Import
+          </Button>
+          {can.export && (
+            <Button variant="ghost" size="md" onClick={exportCsv}>
+              <Download className="h-3.5 w-3.5" />
+              Export
+            </Button>
+          )}
+          {can.create && (
+            <Button size="md" onClick={() => setCreating(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              New lead
+            </Button>
+          )}
         </div>
-        <Select value={stateFilter} onChange={(e) => setParam("state", e.target.value)} className="w-52">
+      </div>
+
+      {/* Filter bar */}
+      <div className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-[12px] border border-line-400 bg-white px-3.5 py-3">
+        <Input
+          defaultValue={query}
+          placeholder="Search name, mobile, requirement…"
+          className="w-[250px] bg-white"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") setParam({ q: (e.target as HTMLInputElement).value });
+          }}
+        />
+        <span className="text-[11px] font-semibold text-muted-400">Stage</span>
+        <Select value={stateFilter} onChange={(e) => setParam({ state: e.target.value })} className="w-auto min-w-[140px] bg-white">
           <option value="all">All stages</option>
-          {STAGES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+          {STAGES.map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
+        </Select>
+        <span className="text-[11px] font-semibold text-muted-400">Source</span>
+        <Select value={sourceFilter} onChange={(e) => setParam({ source: e.target.value })} className="w-auto min-w-[140px] bg-white">
+          <option value="all">All sources</option>
+          {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </Select>
+        <span className="text-[11px] font-semibold text-muted-400">Follow-up</span>
+        <Select value={followUpFilter} onChange={(e) => setParam({ fu: e.target.value })} className="w-auto min-w-[140px] bg-white">
+          <option value="all">Any</option>
+          <option value="overdue">Overdue</option>
+          <option value="today">Due today</option>
+          <option value="week">Next 7 days</option>
+          <option value="none">Not set</option>
         </Select>
         <div className="flex-1" />
-        {can.export && (
-          <Button variant="secondary" size="sm" onClick={exportCsv}>
-            <Download className="h-3.5 w-3.5" />
-            Export
-          </Button>
-        )}
-        {can.create && (
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus className="h-3.5 w-3.5" />
-            New lead
-          </Button>
+        <span className="text-[11.5px] font-semibold text-muted-600">{leads.length} shown</span>
+        {filtersActive && (
+          <button
+            type="button"
+            onClick={() => setParam({ q: undefined, state: undefined, source: undefined, fu: undefined })}
+            className="rounded-[8px] border border-bad-050 bg-bad-050 px-3 py-1.5 text-[11.5px] font-semibold text-bad-600 hover:brightness-95"
+          >
+            Clear filters
+          </button>
         )}
       </div>
 
-      <DataTable columns={columns} rows={leads} rowKey={(l) => l.id} dense />
+      {/* ------------------------------- Board -------------------------------- */}
+      {view === "board" && (
+        <div className="scroll-thin flex items-start gap-3 overflow-x-auto pb-2">
+          {BOARD_STAGES.map((stage) => {
+            const cards = byStage.get(stage) ?? [];
+            return (
+              <div
+                key={stage}
+                onDragOver={(e) => {
+                  if (!can.changeStage) return;
+                  e.preventDefault();
+                  setDropTarget(stage);
+                }}
+                onDragLeave={() => setDropTarget((t) => (t === stage ? null : t))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragging && can.changeStage) moveTo(dragging, stage);
+                }}
+                className={cn(
+                  "min-w-[210px] flex-1 rounded-[13px] p-2.5 transition-colors",
+                  dropTarget === stage ? "bg-brand-100 ring-2 ring-brand-500" : "bg-line-200",
+                )}
+              >
+                <div className="flex items-center justify-between px-1.5 pb-2.5 pt-1">
+                  <span className="text-[11.5px] font-bold uppercase tracking-[.04em] text-navy-600">
+                    {STAGE_LABEL[stage]}
+                  </span>
+                  <span className="num rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-navy-600">
+                    {cards.length}
+                  </span>
+                </div>
+
+                <div className="flex min-h-[60px] flex-col gap-2">
+                  {cards.map((c) => {
+                    const fu = followUp(c.nextActionAt, nowMs);
+                    return (
+                      <div
+                        key={c.id}
+                        draggable={can.changeStage}
+                        onDragStart={() => setDragging(c.id)}
+                        onDragEnd={() => setDragging(null)}
+                        onClick={() => setFollowingUp(c)}
+                        className={cn(
+                          "rounded-[11px] border border-line-400 bg-white px-3 py-3 transition-shadow",
+                          can.changeStage ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+                          dragging === c.id && "opacity-40",
+                          "hover:shadow-[0_6px_18px_rgba(25,26,92,.08)]",
+                        )}
+                      >
+                        <div className="mb-1.5 flex items-center justify-between gap-1.5">
+                          <span className="truncate text-[12.5px] font-bold text-navy-950">{c.name}</span>
+                          <span className="shrink-0 rounded-full bg-surface-field px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[.04em] text-muted-600">
+                            {c.source}
+                          </span>
+                        </div>
+                        {c.requirement && (
+                          <p className="line-clamp-2 text-[11.5px] font-medium text-navy-500">{c.requirement}</p>
+                        )}
+                        <div className="mt-1.5 text-[11.5px] font-semibold text-brand-700">
+                          📞 {can.viewContact ? c.phone : maskPhone(c.phone)}
+                        </div>
+                        {fu && (
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-line-100 pt-2">
+                            <Badge tone={fu.tone}>{fu.badge}</Badge>
+                            <span className="text-[10.5px] font-medium text-muted-400">{fu.text}</span>
+                          </div>
+                        )}
+                        {c.isDuplicate && (
+                          <div className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-warn-700">
+                            <Copy className="h-3 w-3" /> possible duplicate
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {cards.length === 0 && (
+                    <p className="px-1.5 py-3 text-[11px] font-medium text-muted-400">Nothing here</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* -------------------------------- List -------------------------------- */}
+      {view === "list" && (
+        <Card className="overflow-x-auto">
+          <table className="w-full min-w-[760px] border-collapse">
+            <thead>
+              <tr className="bg-surface-sunken">
+                {["Lead", "Requirement", "Stage", "Follow-up", "Owner", ""].map((h) => (
+                  <th key={h || "act"} className="border-b border-line-300 px-4 py-3 text-left text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {leads.map((r) => {
+                const fu = followUp(r.nextActionAt, nowMs);
+                return (
+                  <tr key={r.id} className="border-b border-[#F0F3FA] last:border-0 hover:bg-surface-tint">
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[13px] font-bold text-navy-950">{r.name}</span>
+                        <span className="rounded-full bg-surface-field px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[.04em] text-muted-600">
+                          {r.source}
+                        </span>
+                        {r.isDuplicate && <Copy className="h-3 w-3 text-warn-700" />}
+                      </div>
+                      <div className="mt-1 text-[12px] font-semibold text-brand-700">
+                        📞 {can.viewContact ? r.phone : maskPhone(r.phone)}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 text-[12.5px] font-medium text-navy-500">
+                      {r.requirement ?? "—"}
+                      {(r.budgetMin || r.budgetMax) && (
+                        <div className="num text-[11px] text-muted-400">
+                          {money(r.budgetMin ?? 0)} – {money(r.budgetMax ?? 0)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <Badge tone={STAGE_TONE[r.state] ?? "muted"}>{STAGE_LABEL[r.state]}</Badge>
+                      {r.lostReason && (
+                        <div className="mt-1 text-[10.5px] font-medium text-muted-400">{r.lostReason}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {fu ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone={fu.tone}>{fu.badge}</Badge>
+                          <span className="text-[11px] font-medium text-muted-500">{fu.text}</span>
+                        </div>
+                      ) : (
+                        <span className="text-[11.5px] font-medium text-muted-400">Not set</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5 text-[11.5px] font-medium text-muted-600">
+                      {r.ownerName ?? "Unassigned"}
+                      <div className="text-[10.5px] text-muted-400">
+                        {r.followUpCount} FU · {r.visitCount} visit
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center justify-end gap-1">
+                        {can.followUp && !["BOOKED", "LOST"].includes(r.state) && (
+                          <button
+                            type="button"
+                            onClick={() => setFollowingUp(r)}
+                            className="rounded-[8px] p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-500"
+                            title="Log follow-up"
+                          >
+                            <PhoneCall className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {(can.changeStage || can.markLost) && (
+                          <Button size="xs" variant="secondary" onClick={() => setStaging(r)}>
+                            Move
+                          </Button>
+                        )}
+                        {can.assign && (
+                          <button
+                            type="button"
+                            onClick={() => setAssigning(r)}
+                            className="rounded-[8px] p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-500"
+                            title="Assign"
+                          >
+                            <UserCheck className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {leads.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center text-[12.5px] font-medium text-muted-400">
+                    No leads match these filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </Card>
+      )}
 
       {creating && (
         <NewLeadModal
           sources={sources}
           projects={projects}
           onClose={() => setCreating(false)}
-          onSaved={(msg) => { setCreating(false); setNotice(msg); router.refresh(); }}
+          onSaved={(m) => { setCreating(false); setNotice(m); router.refresh(); }}
         />
       )}
-
       {staging && (
         <StageModal
           lead={staging}
           lostReasons={lostReasons}
           canMarkLost={can.markLost}
           onClose={() => setStaging(null)}
-          onSaved={(msg) => { setStaging(null); setNotice(msg); router.refresh(); }}
+          onSaved={(m) => { setStaging(null); setNotice(m); router.refresh(); }}
           onError={setError}
         />
       )}
-
       {followingUp && (
         <FollowUpModal
           lead={followingUp}
           onClose={() => setFollowingUp(null)}
-          onSaved={(msg) => { setFollowingUp(null); setNotice(msg); router.refresh(); }}
+          onSaved={(m) => { setFollowingUp(null); setNotice(m); router.refresh(); }}
         />
       )}
-
       {assigning && (
         <AssignModal
           lead={assigning}
           owners={owners}
           onClose={() => setAssigning(null)}
-          onSaved={(msg) => { setAssigning(null); setNotice(msg); router.refresh(); }}
+          onSaved={(m) => { setAssigning(null); setNotice(m); router.refresh(); }}
         />
       )}
     </div>
   );
 }
+
+/* ------------------------------- Modals ---------------------------------- */
 
 function NewLeadModal({
   sources, projects, onClose, onSaved,
@@ -284,9 +469,7 @@ function NewLeadModal({
 
   return (
     <Modal
-      open
-      onClose={onClose}
-      title="New lead"
+      open onClose={onClose} title="New lead"
       description="Duplicate detection runs on the phone number as you save."
       footer={
         <>
@@ -346,14 +529,12 @@ function StageModal({
     const res = await changeLeadStageAction(lead.id, state, lostReasonId || undefined, notes);
     setBusy(false);
     if (!res.ok) { setError(res.error); onError(res.error); }
-    else onSaved(`${lead.name} moved to ${state.replace(/_/g, " ")}.`);
+    else onSaved(`${lead.name} moved to ${STAGE_LABEL[state]}.`);
   }
 
   return (
     <Modal
-      open
-      onClose={onClose}
-      title={`Move ${lead.name}`}
+      open onClose={onClose} title={`Move ${lead.name}`}
       description="A mandatory reason is captured when a lead is marked lost."
       size="sm"
       footer={
@@ -368,11 +549,10 @@ function StageModal({
         <Field label="Stage" required>
           <Select value={state} onChange={(e) => setState(e.target.value as Stage)}>
             {STAGES.filter((s) => s !== "LOST" || canMarkLost).map((s) => (
-              <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+              <option key={s} value={s}>{STAGE_LABEL[s]}</option>
             ))}
           </Select>
         </Field>
-
         {state === "LOST" && (
           <>
             <Field label="Lost reason" required>
@@ -381,9 +561,7 @@ function StageModal({
                 {lostReasons.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </Select>
             </Field>
-            <Field label="Notes">
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
-            </Field>
+            <Field label="Notes"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} /></Field>
           </>
         )}
       </div>
@@ -412,13 +590,15 @@ function FollowUpModal({
 
   return (
     <Modal
-      open
-      onClose={onClose}
-      title={`Log a follow-up — ${lead.name}`}
+      open onClose={onClose}
+      title={`${lead.name} · ${lead.leadNo}`}
+      description={[lead.requirement, lead.ownerName ? `owned by ${lead.ownerName}` : null]
+        .filter(Boolean)
+        .join(" · ")}
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="secondary" type="button" onClick={onClose}>Close</Button>
           <Button onClick={submit} loading={busy} disabled={!notes.trim()}>Save follow-up</Button>
         </>
       }
@@ -464,10 +644,7 @@ function AssignModal({
 
   return (
     <Modal
-      open
-      onClose={onClose}
-      title={`Assign ${lead.name}`}
-      size="sm"
+      open onClose={onClose} title={`Assign ${lead.name}`} size="sm"
       footer={
         <>
           <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
