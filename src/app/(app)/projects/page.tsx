@@ -4,16 +4,20 @@ import { Building2 } from "lucide-react";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { Badge, Card, CardBody, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { formatDate, moneyShort } from "@/lib/utils";
+import { Badge, Card, EmptyState } from "@/components/ui/primitives";
+import { cn, formatDate, moneyShort, qty } from "@/lib/utils";
 import { NewProjectButton } from "./new-project-button";
 
 export const metadata = { title: "Projects" };
 
 const STATUS_TONE = {
   PLANNING: "brand", ACTIVE: "good", ON_HOLD: "warn",
-  COMPLETED: "slate", CANCELLED: "bad",
+  COMPLETED: "navy", CANCELLED: "bad",
 } as const;
+
+function initials(name: string) {
+  return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+}
 
 export default async function ProjectsPage() {
   const ctx = await requirePermission(PERM.project.project.view);
@@ -29,6 +33,7 @@ export default async function ProjectsPage() {
         projectType: { select: { name: true } },
         city: { select: { name: true } },
         projectManager: { select: { name: true } },
+        activities: { select: { progressPct: true } },
         _count: { select: { units: true, phases: true, team: true } },
       },
     }),
@@ -39,22 +44,22 @@ export default async function ProjectsPage() {
   ]);
 
   const showBudget = ctx.has(PERM.project.project.viewBudget);
+  const activeCount = projects.filter((p) => p.status === "ACTIVE").length;
+  const totalUnits = projects.reduce((s, p) => s + p._count.units, 0);
 
   return (
-    <div className="mx-auto max-w-7xl">
-      <PageHeader
-        title="Projects"
-        description={
-          ctx.canAccessAllProjects
-            ? "Every project on the platform."
-            : "The projects you are mapped to. Everything else in the system is scoped to these."
-        }
-        actions={
-          ctx.has(PERM.project.project.create) ? (
-            <NewProjectButton types={types} companies={companies} cities={cities} managers={managers} />
-          ) : null
-        }
-      />
+    <div className="animate-fade-up mx-auto max-w-[1400px]">
+      {/* Summary line, as in the design */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[13px] font-medium text-muted-600">
+          {projects.length} project{projects.length === 1 ? "" : "s"} · {activeCount} active ·{" "}
+          {totalUnits.toLocaleString("en-IN")} units
+          {!ctx.canAccessAllProjects && " · scoped to your mapping"}
+        </p>
+        {ctx.has(PERM.project.project.create) && (
+          <NewProjectButton types={types} companies={companies} cities={cities} managers={managers} />
+        )}
+      </div>
 
       {projects.length === 0 ? (
         <Card>
@@ -69,61 +74,106 @@ export default async function ProjectsPage() {
           />
         </Card>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {projects.map((p) => (
-            <Link key={p.id} href={`/projects/${p.id}`}>
-              <Card className="h-full transition hover:border-brand-300 hover:shadow">
-                <CardBody>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-navy-950">{p.name}</p>
-                      <p className="mt-0.5 text-xs text-muted-500">
-                        <code>{p.code}</code>
-                        {p.city && ` · ${p.city.name}`}
-                        {p.projectType && ` · ${p.projectType.name}`}
-                      </p>
-                    </div>
-                    <Badge tone={STATUS_TONE[p.status]}>{p.status.replace("_", " ")}</Badge>
-                  </div>
-
-                  {p.reraNumber && (
-                    <p className="mt-2 truncate text-[11px] text-muted-400" title={p.reraNumber}>
-                      RERA {p.reraNumber}
-                    </p>
-                  )}
-
-                  <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-line-200 pt-3 text-center">
-                    <div>
-                      <dt className="text-[11px] text-muted-500">Units</dt>
-                      <dd className="num text-sm font-medium text-navy-900">{p._count.units}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-[11px] text-muted-500">Phases</dt>
-                      <dd className="num text-sm font-medium text-navy-900">{p._count.phases}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-[11px] text-muted-500">Team</dt>
-                      <dd className="num text-sm font-medium text-navy-900">{p._count.team}</dd>
-                    </div>
-                  </dl>
-
-                  <div className="mt-3 flex items-center justify-between border-t border-line-200 pt-2 text-xs">
-                    <span className="text-muted-500">
-                      {p.projectManager ? `PM: ${p.projectManager.name}` : "No PM assigned"}
-                    </span>
-                    {showBudget && (
-                      <span className="num font-medium text-navy-600">{moneyShort(p.budgetAmount)}</span>
+        <Card className="overflow-x-auto">
+          <table className="w-full min-w-[860px] border-collapse">
+            <thead>
+              <tr className="bg-surface-sunken">
+                {["Project", "Type", "Scale", "Project manager", "Progress", ...(showBudget ? ["Budget"] : []), "Status"].map((h) => (
+                  <th
+                    key={h}
+                    className={cn(
+                      "border-b border-line-300 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
+                      h === "Budget" ? "text-right" : "text-left",
                     )}
-                  </div>
-
-                  {p.targetDate && (
-                    <p className="mt-1 text-[11px] text-muted-400">Target {formatDate(p.targetDate)}</p>
-                  )}
-                </CardBody>
-              </Card>
-            </Link>
-          ))}
-        </div>
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {projects.map((p) => {
+                const pct = p.activities.length
+                  ? Math.round(p.activities.reduce((s, a) => s + a.progressPct, 0) / p.activities.length)
+                  : 0;
+                return (
+                  <tr key={p.id} className="border-b border-[#F0F3FA] last:border-0 hover:bg-surface-tint">
+                    <td className="px-4 py-3.5">
+                      <Link href={`/projects/${p.id}`} className="text-[13.5px] font-bold text-navy-950 hover:text-brand-500">
+                        {p.name}
+                      </Link>
+                      <div className="mt-0.5 text-[11.5px] font-medium text-muted-400">
+                        {p.code}
+                        {p.city && ` · ${p.city.name}`}
+                        {p.targetDate && ` · target ${formatDate(p.targetDate)}`}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="text-[12.5px] font-semibold text-navy-600">
+                        {p.projectType?.name ?? "—"}
+                      </div>
+                      <div className="mt-0.5 truncate text-[11px] font-medium text-muted-400" title={p.reraNumber ?? ""}>
+                        {p.reraNumber ? `RERA ${p.reraNumber.slice(-12)}` : "RERA not recorded"}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 text-[12.5px] font-semibold text-navy-600">
+                      {p.totalTowers > 0 ? `${p.totalTowers} tower${p.totalTowers === 1 ? "" : "s"} · ` : ""}
+                      {p._count.units} units
+                      <div className="text-[11px] font-medium text-muted-400">
+                        {p.landArea ? `${qty(p.landArea, 0)} sq.ft` : `${p._count.phases} phases`}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {p.projectManager ? (
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[10px] font-bold text-white"
+                            style={{ background: "linear-gradient(140deg,#0089C9,#2F308C)" }}
+                          >
+                            {initials(p.projectManager.name)}
+                          </span>
+                          <span className="text-[12.5px] font-semibold text-navy-600">
+                            {p.projectManager.name}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[12px] font-medium text-warn-700">Unassigned</span>
+                      )}
+                      <div className="mt-0.5 text-[11px] font-medium text-muted-400">
+                        {p._count.team} on the team
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-[7px] flex-1 overflow-hidden rounded-full bg-[#EDF0F8]">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.max(2, pct)}%`,
+                              background: "linear-gradient(90deg,#0089C9,#2F308C)",
+                            }}
+                          />
+                        </div>
+                        <span className="num w-[34px] text-[12px] font-bold text-brand-500">{pct}%</span>
+                      </div>
+                      <div className="mt-1 text-[11px] font-medium text-muted-400">
+                        {p.activities.length} scheduled activit{p.activities.length === 1 ? "y" : "ies"}
+                      </div>
+                    </td>
+                    {showBudget && (
+                      <td className="num px-4 py-3.5 text-right text-[12.5px] font-bold text-navy-950">
+                        {moneyShort(p.budgetAmount)}
+                      </td>
+                    )}
+                    <td className="px-4 py-3.5">
+                      <Badge tone={STATUS_TONE[p.status]}>{p.status.replace("_", " ")}</Badge>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
       )}
     </div>
   );

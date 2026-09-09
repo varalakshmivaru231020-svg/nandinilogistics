@@ -59,6 +59,10 @@ suite("access control, end to end", () => {
       ["/reports/stockValuation", ["owner", "store"], ["sales"]],
       ["/reports/salesFunnel", ["owner", "sales"], ["store", "supervisor"]],
       ["/schedule", ["owner", "pm", "supervisor"], ["sales"]],
+      // Held pending client verification: the screens are previews, but the
+      // permission behind them is real and only the Owner holds it.
+      ["/tasks", ["owner"], ["sales", "store", "supervisor", "pm"]],
+      ["/checklists", ["owner"], ["sales", "store", "supervisor", "pm"]],
     ];
 
     for (const [route, allowed, denied] of matrix) {
@@ -104,19 +108,30 @@ suite("access control, end to end", () => {
     });
 
     it("hides lead assignment from a sales executive", async () => {
-      const { html } = await visit("/sales/leads", tokens.sales);
+      const { html } = await visit("/sales/leads?view=list", tokens.sales);
       expect(html).not.toContain('title="Assign"');
     });
 
     it("offers lead assignment to the sales head", async () => {
-      const { html } = await visit("/sales/leads", tokens.saleshead);
+      const { html } = await visit("/sales/leads?view=list", tokens.saleshead);
       expect(html).toContain('title="Assign"');
     });
   });
 
+  describe("the pending modules stay pending", () => {
+    for (const route of ["/tasks", "/checklists"]) {
+      it(`tells the Owner that ${route} is a preview, and offers nothing to act on`, async () => {
+        const { html } = await visit(route, tokens.owner);
+        expect(html).toContain("pending client verification");
+        expect(html).toContain("nothing here saves");
+        expect(html).not.toContain("<form");
+      });
+    }
+  });
+
   describe("row-level scoping", () => {
     it("shows a sales executive only their own leads", async () => {
-      const { html } = await visit("/sales/leads", tokens.sales);
+      const { html } = await visit("/sales/leads?view=list", tokens.sales);
       const own = await prisma.lead.count({
         where: { owner: { email: "sales@nninfra.example" } },
       });
@@ -125,7 +140,7 @@ suite("access control, end to end", () => {
     });
 
     it("shows the owner every lead", async () => {
-      const { html } = await visit("/sales/leads", tokens.owner);
+      const { html } = await visit("/sales/leads?view=list", tokens.owner);
       const total = await prisma.lead.count();
       const shown = new Set(html.match(/LD\/\d{5}/g) ?? []);
       expect(shown.size).toBe(total);

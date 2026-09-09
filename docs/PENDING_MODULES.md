@@ -14,7 +14,7 @@ verification** and are deliberately not built:
 | Role matrix | ✅ Assignable — Owner / Admin holds them today |
 | Database tables | ❌ Not modelled |
 | Server actions | ❌ Not written |
-| Screens | ❌ Not built |
+| Screens | ⚠️ Preview only — the design's layout, inert |
 | Navigation entries | ❌ Not shown |
 
 The permissions are registered ahead of the build on purpose. It means roles can
@@ -24,6 +24,13 @@ already correct — nobody has to revisit every role.
 They appear in the role permission matrix under a dashed card marked
 **Pending verification**, so an administrator granting them knows the screens do
 not exist yet.
+
+`/tasks` and `/checklists` render the approved design's layout so the client can
+see and sign off on the two screens, behind their `*.view` permission and absent
+from the navigation. Every control on them is `disabled`: there is no table
+behind them, no server action, and nothing to save. Treat them as a picture of
+the design, not a partial build — the moment either module is verified, replace
+the page wholesale rather than growing it.
 
 ## The registered codes
 
@@ -57,8 +64,9 @@ with score, photos and sign-off.
    `TaskAttachment`, `ChecklistCategory`, `ChecklistTemplate`, `Checkpoint`,
    `ChecklistInstance`, `CheckpointResponse`).
 2. `pnpm db:migrate`
-3. Build the screens under `src/app/(app)/tasks/` and
-   `src/app/(app)/checklists/`, guarding with the codes already registered.
+3. Replace the preview pages at `src/app/(app)/tasks/page.tsx` and
+   `src/app/(app)/checklists/page.tsx` with the real screens, guarding with the
+   codes already registered, and drop `<PendingModuleBanner>`.
 4. Remove `pending: true` from those two entries in `MODULES`
    (`src/lib/permissions/registry.ts`).
 5. Add the navigation entries in `src/lib/navigation.ts`.
