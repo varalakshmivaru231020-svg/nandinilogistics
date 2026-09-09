@@ -196,6 +196,8 @@ model User {
   unitHolds        UnitHold[]
   progressLogs     SiteProgressLog[]
   managedProjects  Project[]        @relation("ProjectManager")
+  extensionsAsked  ScheduleExtension[] @relation("ExtensionRequestedBy")
+  extensionsDecided ScheduleExtension[] @relation("ExtensionDecidedBy")
 
   @@index([status])
   @@index([departmentId])
@@ -1000,10 +1002,40 @@ model ScheduleActivity {
 
   predecessors ScheduleDependency[] @relation("SuccessorActivity")
   successors   ScheduleDependency[] @relation("PredecessorActivity")
+  extensions   ScheduleExtension[]
 
   @@unique([projectId, code])
   @@index([projectId])
   @@map("schedule_activities")
+}
+
+/// A request to move an activity's approved finish date.
+///
+/// The site asks, the Project Manager decides. The baseline never moves — only
+/// the planned date does, and every request stays on the record with its reason,
+/// which is what makes the variance report defensible.
+model ScheduleExtension {
+  id             String    @id @default(cuid())
+  activityId     String
+  requestedDays  Int
+  reason         String
+  /// The finish date being asked for, derived at request time.
+  requestedDate  DateTime
+  /// PENDING | APPROVED | REJECTED
+  status         String    @default("PENDING")
+  requestedById  String
+  requestedAt    DateTime  @default(now())
+  decidedById    String?
+  decidedAt      DateTime?
+  decisionNote   String?
+
+  activity    ScheduleActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  requestedBy User             @relation("ExtensionRequestedBy", fields: [requestedById], references: [id])
+  decidedBy   User?            @relation("ExtensionDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([activityId])
+  @@index([status])
+  @@map("schedule_extensions")
 }
 
 model ScheduleDependency {

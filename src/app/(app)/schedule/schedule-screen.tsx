@@ -2,13 +2,14 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Diamond, Plus, Zap } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, Diamond, Plus, X, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { Alert, Badge, Card, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { cn, formatDate } from "@/lib/utils";
 import { createActivityAction, setCriticalPathAction, updateActivityProgressAction } from "./actions";
+import { decideExtensionAction, requestExtensionAction } from "./extension-actions";
 
 interface Activity {
   id: string; code: string; name: string; sequence: number; status: string;
@@ -16,57 +17,75 @@ interface Activity {
   baselineStart: string | null; baselineEnd: string | null;
   plannedStart: string | null; plannedEnd: string | null;
   actualStart: string | null; actualEnd: string | null;
-  delayReason: string | null; delayNotes: string | null; workPackage: string | null;
+  delayReason: string | null; delayNotes: string | null;
+  groupId: string; groupName: string; phaseName: string | null;
+  pendingExtension: boolean;
 }
 
-const STATUS_TONE: Record<string, "slate" | "brand" | "good" | "bad"> = {
-  NOT_STARTED: "slate", IN_PROGRESS: "brand", COMPLETED: "good", DELAYED: "bad",
+interface Extension {
+  id: string; activityCode: string; activityName: string;
+  currentDate: string | null; requestedDays: number; requestedDate: string;
+  reason: string; status: string; requestedBy: string; requestedAt: string;
+  decidedBy: string | null; decidedAt: string | null; decisionNote: string | null;
+}
+
+const STATUS_TONE: Record<string, "muted" | "brand" | "good" | "bad"> = {
+  NOT_STARTED: "muted", IN_PROGRESS: "brand", COMPLETED: "good", DELAYED: "bad",
 };
 
 const DAY = 86_400_000;
 
 export function ScheduleScreen({
-  projects, activeProjectId, activities, workPackages, delayReasons, can,
+  projects, activeProjectId, projectManager, tab, activities, extensions,
+  workPackages, delayReasons, can, nowMs,
 }: {
   projects: Array<{ id: string; name: string; code: string }>;
   activeProjectId: string;
+  projectManager: string | null;
+  tab: "plan" | "extensions";
   activities: Activity[];
-  workPackages: Array<{ id: string; code: string; name: string }>;
+  extensions: Extension[];
+  workPackages: Array<{ id: string; code: string; name: string; phase: string }>;
   delayReasons: Array<{ id: string; name: string }>;
   can: Record<string, boolean>;
+  nowMs: number;
 }) {
   const router = useRouter();
-  const [creating, setCreating] = React.useState(false);
+  const [adding, setAdding] = React.useState(false);
   const [updating, setUpdating] = React.useState<Activity | null>(null);
+  const [extending, setExtending] = React.useState<Activity | null>(null);
+  const [deciding, setDeciding] = React.useState<Extension | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
 
-  // The window the Gantt spans, from the earliest start to the latest finish.
-  const bounds = React.useMemo(() => {
-    const dates = activities.flatMap((a) =>
-      [a.baselineStart, a.baselineEnd, a.plannedStart, a.plannedEnd, a.actualStart, a.actualEnd]
-        .filter(Boolean)
-        .map((d) => new Date(d!).getTime()),
-    );
-    if (dates.length === 0) return null;
-    const min = Math.min(...dates);
-    const max = Math.max(...dates);
-    return { min, max, span: Math.max(DAY, max - min) };
-  }, [activities]);
-
-  function bar(start: string | null, end: string | null) {
-    if (!bounds || !start || !end) return null;
-    const s = new Date(start).getTime();
-    const e = new Date(end).getTime();
-    return {
-      left: `${((s - bounds.min) / bounds.span) * 100}%`,
-      width: `${Math.max(0.6, ((e - s) / bounds.span) * 100)}%`,
-    };
-  }
-
   const delayed = activities.filter((a) => a.status === "DELAYED");
+  const done = activities.filter((a) => a.status === "COMPLETED");
   const critical = activities.filter((a) => a.isCriticalPath);
+  const pendingExt = extensions.filter((e) => e.status === "PENDING");
+
+  const stats = [
+    { v: String(activities.length), l: "Activities in plan" },
+    { v: String(done.length), l: "Completed" },
+    { v: String(delayed.length), l: "Delayed" },
+    {
+      v: activities.length
+        ? `${Math.round(activities.reduce((s, a) => s + a.progressPct, 0) / activities.length)}%`
+        : "—",
+      l: "Average progress",
+    },
+    ...(can.viewCriticalPath
+      ? [{ v: String(critical.length), l: "On the critical path" }]
+      : []),
+  ];
+
+  // Group into the design's main-category tree.
+  const groups = new Map<string, { name: string; phase: string | null; items: Activity[] }>();
+  for (const a of activities) {
+    const g = groups.get(a.groupId) ?? { name: a.groupName, phase: a.phaseName, items: [] };
+    g.items.push(a);
+    groups.set(a.groupId, g);
+  }
 
   async function toggleCritical(a: Activity) {
     setBusy(a.id);
@@ -77,174 +96,299 @@ export function ScheduleScreen({
     else router.refresh();
   }
 
-  return (
-    <div className="space-y-4">
-      {error && <Alert tone="error">{error}</Alert>}
-      {notice && !error && <Alert tone="success">{notice}</Alert>}
+  function slipDays(a: Activity): number {
+    if (!a.baselineEnd) return 0;
+    const compare = a.actualEnd ?? a.plannedEnd;
+    if (!compare) return 0;
+    return Math.round((new Date(compare).getTime() - new Date(a.baselineEnd).getTime()) / DAY);
+  }
 
-      <div className="flex flex-wrap items-center gap-2">
-        {projects.length > 1 && (
-          <Select
-            value={activeProjectId}
-            onChange={(e) => router.push(`/schedule?project=${e.target.value}`)}
-            className="w-56"
-          >
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </Select>
-        )}
-        {delayed.length > 0 && (
-          <Badge tone="bad">
-            <AlertTriangle className="mr-1 h-3 w-3" />
-            {delayed.length} delayed
-          </Badge>
-        )}
-        {can.viewCriticalPath && critical.length > 0 && (
-          <Badge tone="warn">{critical.length} on the critical path</Badge>
-        )}
+  return (
+    <div className="animate-fade-up mx-auto max-w-[1400px]">
+      {error && <div className="mb-3"><Alert tone="error">{error}</Alert></div>}
+      {notice && !error && <div className="mb-3"><Alert tone="success">{notice}</Alert></div>}
+
+      {/* Project + tabs */}
+      <div className="mb-3.5 flex flex-wrap items-center gap-2.5">
+        <Select
+          value={activeProjectId}
+          onChange={(e) => router.push(`/schedule?project=${e.target.value}&tab=${tab}`)}
+          className="w-auto min-w-[220px] bg-white font-bold"
+        >
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+        </Select>
+
+        <div className="flex flex-wrap gap-1.5">
+          {([["plan", "Plan"], ["extensions", "Extensions"]] as const)
+            .filter(([k]) => k !== "extensions" || can.viewExtensions)
+            .map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => router.push(`/schedule?project=${activeProjectId}&tab=${key}`)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-[9px] border px-3.5 py-2 text-[12px] font-bold transition-colors",
+                  tab === key
+                    ? "border-brand-500 bg-brand-100 text-brand-700"
+                    : "border-line-400 bg-white text-muted-600 hover:border-brand-300",
+                )}
+              >
+                {label}
+                {key === "extensions" && pendingExt.length > 0 && (
+                  <span className="num rounded-full bg-warn-700 px-1.5 text-[10px] font-bold text-white">
+                    {pendingExt.length}
+                  </span>
+                )}
+              </button>
+            ))}
+        </div>
+
         <div className="flex-1" />
-        {can.create && (
-          <Button size="sm" onClick={() => setCreating(true)}>
+        {tab === "plan" && can.create && (
+          <Button size="lg" onClick={() => setAdding(true)}>
             <Plus className="h-3.5 w-3.5" />
-            New activity
+            Add activity
           </Button>
         )}
       </div>
 
-      {activities.length === 0 ? (
-        <Card>
-          <EmptyState
-            title="No schedule activities yet"
-            description="Add activities to build the plan. The baseline is captured at creation and never edited, so slippage stays measurable."
-          />
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Gantt</CardTitle>
-            <div className="flex items-center gap-3 text-[11px] text-muted-500">
-              {can.viewBaseline && (
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-4 rounded-sm bg-line-500" /> Baseline
-                </span>
-              )}
-              <span className="flex items-center gap-1">
-                <span className="h-2 w-4 rounded-sm bg-brand-500" /> Planned
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-2 w-4 rounded-sm bg-good-600" /> Actual
-              </span>
-            </div>
-          </CardHeader>
-          <CardBody className="p-0">
-            {bounds && (
-              <div className="flex justify-between border-b border-line-200 px-4 py-1.5 text-[11px] text-muted-400">
-                <span>{formatDate(new Date(bounds.min).toISOString())}</span>
-                <span>{formatDate(new Date(bounds.max).toISOString())}</span>
+      {/* --------------------------------- Plan -------------------------------- */}
+      {tab === "plan" && (
+        <>
+          <div className="mb-3.5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+            {stats.map((k) => (
+              <div key={k.l} className="rounded-[12px] border border-line-400 bg-white px-4 py-3.5">
+                <div className="num font-display text-[19px] font-extrabold text-navy-950">{k.v}</div>
+                <div className="mt-0.5 text-[11.5px] font-semibold text-muted-600">{k.l}</div>
               </div>
-            )}
+            ))}
+          </div>
 
-            <ul className="divide-y divide-line-200">
-              {activities.map((a) => {
-                const baseline = can.viewBaseline ? bar(a.baselineStart, a.baselineEnd) : null;
-                const planned = bar(a.plannedStart, a.plannedEnd);
-                const actual = bar(a.actualStart, a.actualEnd ?? new Date().toISOString());
-                const slipped =
-                  a.baselineEnd && a.plannedEnd && new Date(a.plannedEnd) > new Date(a.baselineEnd);
-
-                return (
-                  <li key={a.id} className={cn("px-4 py-2.5", a.status === "DELAYED" && "bg-bad-050")}>
-                    <div className="flex flex-wrap items-start gap-3">
-                      <div className="w-64 shrink-0">
-                        <div className="flex items-center gap-1.5">
-                          {a.isMilestone && <Diamond className="h-3 w-3 fill-warn-700 text-warn-700" />}
-                          <span className="text-sm font-medium text-navy-900">{a.name}</span>
-                          {a.isCriticalPath && can.viewCriticalPath && (
-                            <Zap className="h-3 w-3 fill-warn-700 text-warn-700" />
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-500">
-                          <code>{a.code}</code>
-                          {a.workPackage && ` · ${a.workPackage}`}
-                        </p>
-                        {a.delayReason && (
-                          <p className="mt-0.5 text-[11px] text-bad-600">Delay: {a.delayReason}</p>
-                        )}
-                      </div>
-
-                      <div className="relative min-w-48 flex-1 self-center">
-                        <div className="relative h-8">
-                          {baseline && (
-                            <div className="absolute top-0 h-2 rounded-sm bg-line-500"
-                              style={baseline} title="Baseline" />
-                          )}
-                          {planned && (
-                            <div className={cn("absolute h-2.5 rounded-sm", slipped ? "bg-warn-700" : "bg-brand-500")}
-                              style={{ ...planned, top: baseline ? "10px" : "0px" }} title="Planned" />
-                          )}
-                          {actual && a.actualStart && (
-                            <div className="absolute h-2 rounded-sm bg-good-600"
-                              style={{ ...actual, top: baseline ? "22px" : "14px" }} title="Actual" />
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="w-40 shrink-0 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <span className="num text-xs font-medium text-navy-600">{a.progressPct}%</span>
-                          <Badge tone={STATUS_TONE[a.status] ?? "slate"}>{a.status.replace(/_/g, " ")}</Badge>
-                        </div>
-                        <p className="mt-0.5 text-[11px] text-muted-400">
-                          {formatDate(a.plannedStart)} – {formatDate(a.plannedEnd)}
-                        </p>
-                        <div className="mt-1 flex justify-end gap-1">
-                          {can.updateProgress && (
-                            <Button size="xs" variant="secondary" onClick={() => setUpdating(a)}>
-                              Progress
-                            </Button>
-                          )}
-                          {can.manageDependencies && (
-                            <Button size="xs" variant="ghost" loading={busy === a.id}
-                              onClick={() => toggleCritical(a)}>
-                              <Zap className={cn("h-3 w-3", a.isCriticalPath && "fill-warn-700 text-warn-700")} />
-                            </Button>
-                          )}
-                        </div>
+          {activities.length === 0 ? (
+            <Card>
+              <EmptyState
+                title="No schedule activities yet"
+                description="Add activities to build the plan. The baseline is captured at creation and never edited, so slippage stays measurable."
+              />
+            </Card>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {[...groups.entries()].map(([id, g]) => (
+                <Card key={id} className="overflow-hidden">
+                  <div className="flex flex-wrap items-center gap-x-[18px] gap-y-3 border-b border-line-300 bg-surface-sunken px-5 py-3.5">
+                    <div className="min-w-0 flex-[1_1_210px]">
+                      <div className="font-display text-[15px] font-bold text-navy-950">{g.name}</div>
+                      <div className="mt-0.5 text-[11px] font-medium text-muted-400">
+                        {g.phase ? `${g.phase} · ` : ""}PM {projectManager ?? "unassigned"}
                       </div>
                     </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </CardBody>
-        </Card>
+                    <div className="min-w-[130px]">
+                      <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">ACTIVITIES</div>
+                      <div className="num text-[12.5px] font-semibold text-navy-600">{g.items.length}</div>
+                    </div>
+                    <div className="min-w-[130px]">
+                      <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">PROGRESS</div>
+                      <div className="num text-[12.5px] font-semibold text-navy-600">
+                        {Math.round(g.items.reduce((s, a) => s + a.progressPct, 0) / g.items.length)}%
+                      </div>
+                    </div>
+                  </div>
+
+                  <ul className="divide-y divide-line-100">
+                    {g.items.map((a) => {
+                      const slip = slipDays(a);
+                      return (
+                        <li key={a.id} className={cn("px-5 py-3", a.status === "DELAYED" && "bg-bad-050/40")}>
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                            <div className="min-w-0 flex-[1_1_240px]">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {a.isMilestone && <Diamond className="h-3 w-3 fill-warn-700 text-warn-700" />}
+                                <span className="text-[13px] font-semibold text-navy-900">{a.name}</span>
+                                {a.isCriticalPath && can.viewCriticalPath && (
+                                  <Zap className="h-3 w-3 fill-warn-700 text-warn-700" />
+                                )}
+                                {a.pendingExtension && <Badge tone="warn">extension pending</Badge>}
+                              </div>
+                              <div className="mt-0.5 text-[11px] font-medium text-muted-400">
+                                {a.code}
+                                {a.delayReason && ` · delay: ${a.delayReason}`}
+                              </div>
+                            </div>
+
+                            {can.viewBaseline && (
+                              <div className="min-w-[132px]">
+                                <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">BASELINE</div>
+                                <div className="text-[11.5px] font-medium text-navy-500">
+                                  {formatDate(a.baselineStart)} – {formatDate(a.baselineEnd)}
+                                </div>
+                              </div>
+                            )}
+                            <div className="min-w-[132px]">
+                              <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">PLANNED</div>
+                              <div className={cn("text-[11.5px] font-medium", slip > 0 ? "text-warn-700" : "text-navy-500")}>
+                                {formatDate(a.plannedStart)} – {formatDate(a.plannedEnd)}
+                                {slip > 0 && <span className="ml-1 font-bold">+{slip}d</span>}
+                              </div>
+                            </div>
+                            <div className="min-w-[132px]">
+                              <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">ACTUAL</div>
+                              <div className="text-[11.5px] font-medium text-navy-500">
+                                {a.actualStart ? `${formatDate(a.actualStart)} – ${formatDate(a.actualEnd)}` : "not started"}
+                              </div>
+                            </div>
+
+                            <div className="w-[132px]">
+                              <div className="mb-1 flex justify-between">
+                                <span className="num text-[11.5px] font-bold text-navy-600">{a.progressPct}%</span>
+                                <Badge tone={STATUS_TONE[a.status] ?? "muted"}>{a.status.replace(/_/g, " ")}</Badge>
+                              </div>
+                              <div className="h-[6px] overflow-hidden rounded-full bg-[#EDF0F8]">
+                                <div
+                                  className={cn("h-full rounded-full", a.status === "DELAYED" ? "bg-bad-600" : "bg-brand-500")}
+                                  style={{ width: `${Math.max(2, a.progressPct)}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex shrink-0 gap-1">
+                              {can.updateProgress && (
+                                <Button size="xs" variant="secondary" onClick={() => setUpdating(a)}>Progress</Button>
+                              )}
+                              {can.requestExtension && !a.pendingExtension && a.status !== "COMPLETED" && (
+                                <Button size="xs" variant="ghost" onClick={() => setExtending(a)}>
+                                  <CalendarClock className="h-3 w-3" />
+                                </Button>
+                              )}
+                              {can.manageDependencies && (
+                                <Button size="xs" variant="plain" loading={busy === a.id} onClick={() => toggleCritical(a)}>
+                                  <Zap className={cn("h-3 w-3", a.isCriticalPath && "fill-warn-700 text-warn-700")} />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </Card>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      {creating && (
+      {/* ------------------------------ Extensions ----------------------------- */}
+      {tab === "extensions" && can.viewExtensions && (
+        <>
+          <Alert tone="info" title="How an extension works">
+            The site asks for more days and gives a reason; the Project Manager decides. Approving
+            moves the <strong>planned</strong> finish only — the baseline never moves, which is what
+            keeps the variance report honest.
+          </Alert>
+
+          <div className="mt-3.5 flex flex-col gap-2.5">
+            {extensions.length === 0 && (
+              <Card><EmptyState title="No extension requests" description="Requests raised from the plan appear here." /></Card>
+            )}
+            {extensions.map((e) => (
+              <Card key={e.id} className={cn("px-5 py-4", e.status === "PENDING" && "border-warn-050 bg-warn-050/40")}>
+                <div className="flex flex-wrap items-start gap-x-5 gap-y-3">
+                  <div className="min-w-0 flex-[1_1_260px]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-display text-[14px] font-bold text-navy-950">
+                        {e.activityName}
+                      </span>
+                      <Badge tone={e.status === "PENDING" ? "warn" : e.status === "APPROVED" ? "good" : "bad"}>
+                        {e.status}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-[11.5px] font-medium text-muted-500">
+                      {e.activityCode} · asked by {e.requestedBy} on {formatDate(e.requestedAt)}
+                    </p>
+                    <p className="mt-1.5 text-[12.5px] font-medium text-navy-600">{e.reason}</p>
+                    {e.decidedBy && (
+                      <p className="mt-1.5 text-[11.5px] font-medium text-muted-500">
+                        {e.status === "APPROVED" ? "Approved" : "Refused"} by {e.decidedBy} on{" "}
+                        {formatDate(e.decidedAt)}
+                        {e.decisionNote && ` — ${e.decisionNote}`}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">CURRENT TARGET</div>
+                    <div className="text-[12.5px] font-semibold text-navy-600">{formatDate(e.currentDate)}</div>
+                  </div>
+                  <div className="min-w-[150px]">
+                    <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">REQUESTED</div>
+                    <div className="text-[12.5px] font-bold text-warn-700">
+                      {formatDate(e.requestedDate)}
+                      <span className="ml-1 text-[11px]">(+{e.requestedDays}d)</span>
+                    </div>
+                  </div>
+
+                  {e.status === "PENDING" && can.approveExtension && (
+                    <div className="flex shrink-0 gap-1.5">
+                      <Button size="sm" variant="success" onClick={() => setDeciding(e)}>
+                        <Check className="h-3.5 w-3.5" />
+                        Decide
+                      </Button>
+                    </div>
+                  )}
+                  {e.status === "PENDING" && !can.approveExtension && (
+                    <span className="text-[11.5px] font-medium text-muted-500">
+                      Waiting on the Project Manager
+                    </span>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+
+      {adding && (
         <ActivityModal
           projectId={activeProjectId}
           workPackages={workPackages}
-          onClose={() => setCreating(false)}
-          onDone={(m) => { setCreating(false); setNotice(m); router.refresh(); }}
+          onClose={() => setAdding(false)}
+          onDone={(m) => { setAdding(false); setNotice(m); router.refresh(); }}
         />
       )}
-
       {updating && (
         <ProgressModal
           activity={updating}
           delayReasons={delayReasons}
+          nowMs={nowMs}
           onClose={() => setUpdating(null)}
           onDone={(m) => { setUpdating(null); setNotice(m); router.refresh(); }}
+        />
+      )}
+      {extending && (
+        <ExtensionModal
+          activity={extending}
+          onClose={() => setExtending(null)}
+          onDone={(m) => { setExtending(null); setNotice(m); router.refresh(); }}
+        />
+      )}
+      {deciding && (
+        <DecideModal
+          request={deciding}
+          onClose={() => setDeciding(null)}
+          onDone={(m) => { setDeciding(null); setNotice(m); router.refresh(); }}
         />
       )}
     </div>
   );
 }
 
+/* -------------------------------- Modals ---------------------------------- */
+
 function ActivityModal({
   projectId, workPackages, onClose, onDone,
 }: {
   projectId: string;
-  workPackages: Array<{ id: string; code: string; name: string }>;
+  workPackages: Array<{ id: string; code: string; name: string; phase: string }>;
   onClose: () => void; onDone: (m: string) => void;
 }) {
   const [error, setError] = React.useState<string | null>(null);
@@ -264,10 +408,8 @@ function ActivityModal({
 
   return (
     <Modal
-      open
-      onClose={onClose}
-      title="New schedule activity"
-      description="The dates you enter become the baseline. It is never edited afterwards."
+      open onClose={onClose} title="Add schedule activity"
+      description="The dates you enter become the baseline. It is never edited afterwards — only the planned date can move, and only through an approved extension."
       size="sm"
       footer={
         <>
@@ -284,17 +426,19 @@ function ActivityModal({
           <Field label="Activity name" required className="sm:col-span-2">
             <Input name="name" required placeholder="Slab casting — 7th floor" />
           </Field>
-          <Field label="Work package" className="sm:col-span-2">
+          <Field label="Main category" className="sm:col-span-2" hint="Groups the activity in the plan.">
             <Select name="workPackageId" defaultValue="">
-              <option value="">— Not linked —</option>
-              {workPackages.map((w) => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
+              <option value="">— Unassigned —</option>
+              {workPackages.map((w) => (
+                <option key={w.id} value={w.id}>{w.phase} · {w.code} — {w.name}</option>
+              ))}
             </Select>
           </Field>
           <Field label="Planned start" required><Input name="plannedStart" type="date" required /></Field>
           <Field label="Planned finish" required><Input name="plannedEnd" type="date" required /></Field>
           <Field label="" className="sm:col-span-2">
-            <label className="flex items-center gap-2 text-sm text-navy-600">
-              <input type="checkbox" name="isMilestone" className="h-4 w-4 rounded border-line-400 text-brand-600" />
+            <label className="flex items-center gap-2 text-[12.5px] font-medium text-navy-600">
+              <input type="checkbox" name="isMilestone" className="h-4 w-4 rounded border-line-400 text-brand-500" />
               This is a milestone
             </label>
           </Field>
@@ -305,10 +449,11 @@ function ActivityModal({
 }
 
 function ProgressModal({
-  activity, delayReasons, onClose, onDone,
+  activity, delayReasons, nowMs, onClose, onDone,
 }: {
   activity: Activity;
   delayReasons: Array<{ id: string; name: string }>;
+  nowMs: number;
   onClose: () => void; onDone: (m: string) => void;
 }) {
   const [progress, setProgress] = React.useState(String(activity.progressPct));
@@ -319,13 +464,12 @@ function ProgressModal({
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
-  // Mirrors the server rule, so the requirement is visible before saving.
-  const plannedEnd = activity.plannedEnd ? new Date(activity.plannedEnd) : null;
+  const plannedEnd = activity.plannedEnd ? new Date(activity.plannedEnd).getTime() : null;
   const pct = Number(progress) || 0;
-  const finishing = actualEnd ? new Date(actualEnd) : pct >= 100 ? new Date() : null;
+  const finishing = actualEnd ? new Date(actualEnd).getTime() : pct >= 100 ? nowMs : null;
   const late =
     plannedEnd !== null &&
-    ((finishing !== null && finishing > plannedEnd) || (finishing === null && pct < 100 && new Date() > plannedEnd));
+    ((finishing !== null && finishing > plannedEnd) || (finishing === null && pct < 100 && nowMs > plannedEnd));
   const needsReason = late && !activity.delayReason && !delayReasonId;
 
   async function submit() {
@@ -341,9 +485,7 @@ function ProgressModal({
 
   return (
     <Modal
-      open
-      onClose={onClose}
-      title={`Progress — ${activity.name}`}
+      open onClose={onClose} title={`Progress — ${activity.name}`}
       description={`Planned ${formatDate(activity.plannedStart)} – ${formatDate(activity.plannedEnd)}`}
       size="sm"
       footer={
@@ -355,14 +497,12 @@ function ProgressModal({
     >
       <div className="space-y-4">
         {error && <Alert tone="error">{error}</Alert>}
-
         {late && (
           <Alert tone="warn" title="This activity has slipped">
             A delay reason is required before the update can be saved — that is what makes the
             variance report meaningful.
           </Alert>
         )}
-
         <Field label="Progress (%)" required>
           <Input type="number" min={0} max={100} value={progress} onChange={(e) => setProgress(e.target.value)} className="num text-right" />
         </Field>
@@ -370,7 +510,6 @@ function ProgressModal({
           <Field label="Actual start"><Input type="date" value={actualStart} onChange={(e) => setActualStart(e.target.value)} /></Field>
           <Field label="Actual finish"><Input type="date" value={actualEnd} onChange={(e) => setActualEnd(e.target.value)} /></Field>
         </div>
-
         {(late || activity.delayReason) && (
           <>
             <Field label="Delay reason" required={needsReason}>
@@ -384,6 +523,116 @@ function ProgressModal({
             </Field>
           </>
         )}
+      </div>
+    </Modal>
+  );
+}
+
+function ExtensionModal({
+  activity, onClose, onDone,
+}: { activity: Activity; onClose: () => void; onDone: (m: string) => void }) {
+  const [days, setDays] = React.useState("7");
+  const [reason, setReason] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  const base = activity.plannedEnd ?? activity.baselineEnd;
+  const projected = base
+    ? new Date(new Date(base).getTime() + (Number(days) || 0) * DAY).toISOString()
+    : null;
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    const res = await requestExtensionAction(activity.id, Number(days), reason);
+    setBusy(false);
+    if (!res.ok) setError(res.error);
+    else onDone("Extension requested — it now sits with the Project Manager.");
+  }
+
+  return (
+    <Modal
+      open onClose={onClose}
+      title={`Request extension · ${activity.name}`}
+      description={`Current target ${formatDate(base)} — the request goes to the Project Manager. The baseline does not move.`}
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="warning" onClick={submit} loading={busy} disabled={!reason.trim() || !(Number(days) > 0)}>
+            Send request
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && <Alert tone="error">{error}</Alert>}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Extension days" required>
+            <Input type="number" min={1} value={days} onChange={(e) => setDays(e.target.value)} className="num text-right" />
+          </Field>
+          <Field label="Requested new date">
+            <div className="num flex h-[38px] items-center rounded-[9px] bg-warn-050 px-3 font-display text-[14px] font-extrabold text-warn-800">
+              {formatDate(projected)}
+            </div>
+          </Field>
+        </div>
+        <Field label="Reason" required hint="This is what the variance report shows against the slip.">
+          <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} autoFocus
+            placeholder="Three weeks lost to unseasonal rain in the casting window" />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
+function DecideModal({
+  request, onClose, onDone,
+}: { request: Extension; onClose: () => void; onDone: (m: string) => void }) {
+  const [note, setNote] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState<"approve" | "reject" | null>(null);
+
+  async function decide(approve: boolean) {
+    setBusy(approve ? "approve" : "reject");
+    setError(null);
+    const res = await decideExtensionAction(request.id, approve, note);
+    setBusy(null);
+    if (!res.ok) setError(res.error);
+    else onDone(approve ? "Extension approved — planned finish moved." : "Extension refused.");
+  }
+
+  return (
+    <Modal
+      open onClose={onClose}
+      title={`Decide · ${request.activityName}`}
+      description={`${request.requestedBy} asked for ${request.requestedDays} more day(s), moving ${formatDate(request.currentDate)} to ${formatDate(request.requestedDate)}.`}
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" type="button" onClick={onClose}>Back</Button>
+          <Button variant="danger" onClick={() => decide(false)} loading={busy === "reject"} disabled={!note.trim()}>
+            <X className="h-3.5 w-3.5" />
+            Refuse
+          </Button>
+          <Button variant="success" onClick={() => decide(true)} loading={busy === "approve"}>
+            <Check className="h-3.5 w-3.5" />
+            Approve
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && <Alert tone="error">{error}</Alert>}
+        <div className="rounded-[10px] bg-surface-sunken px-3.5 py-3">
+          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[.06em] text-muted-500">
+            <AlertTriangle className="h-3 w-3" /> Reason given
+          </p>
+          <p className="mt-1 text-[12.5px] font-medium text-navy-600">{request.reason}</p>
+        </div>
+        <Field label="Decision note" hint="Required when refusing.">
+          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
+        </Field>
       </div>
     </Modal>
   );

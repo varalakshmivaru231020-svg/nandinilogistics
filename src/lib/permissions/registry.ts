@@ -211,6 +211,9 @@ perm("schedule", "baseline", "view", "See baseline vs actual", G_SCHED, "TAB");
 perm("schedule", "baseline", "set", "Freeze the baseline plan", G_SCHED, "BUTTON", "Once frozen the baseline is never edited, so slippage stays measurable.");
 perm("schedule", "dependency", "manage", "Manage activity dependencies", G_SCHED, "BUTTON");
 perm("schedule", "criticalPath", "view", "See the critical path", G_SCHED, "TAB");
+perm("schedule", "extension", "view", "See extension requests", G_SCHED, "TAB");
+perm("schedule", "extension", "request", "Request a date extension", G_SCHED, "BUTTON", "The site asks; the Project Manager decides. The baseline never moves.");
+perm("schedule", "extension", "approve", "Approve or reject an extension request", G_SCHED, "BUTTON");
 perm("schedule", "template", "apply", "Start a schedule from a template", G_SCHED, "BUTTON");
 perm("schedule", "template", "save", "Save a schedule as a template", G_SCHED, "BUTTON");
 

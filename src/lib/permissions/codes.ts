@@ -3,7 +3,7 @@
  * Source: src/lib/permissions/registry.ts
  * Regenerate: pnpm perms:codegen
  *
- * 468 permission codes.
+ * 471 permission codes.
  */
 
 export const PERM = {
@@ -110,6 +110,11 @@ export const PERM = {
     },
     "criticalPath": {
       "view": "schedule.criticalPath.view",
+    },
+    "extension": {
+      "view": "schedule.extension.view",
+      "request": "schedule.extension.request",
+      "approve": "schedule.extension.approve",
     },
     "template": {
       "apply": "schedule.template.apply",

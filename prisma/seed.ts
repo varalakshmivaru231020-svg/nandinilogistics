@@ -131,6 +131,8 @@ const ROLES: RoleSeed[] = [
       "schedule.activity.view",
       "schedule.activity.updateProgress",
       "schedule.gantt.view",
+      "schedule.extension.view",
+      "schedule.extension.request",
       "material.indent.view",
       "material.indent.create",
       "material.indent.update",
