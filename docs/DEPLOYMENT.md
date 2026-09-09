@@ -26,9 +26,13 @@ This box already hosts many sites. Two consequences worth remembering:
 ## Redeploying
 
 ```bash
-ssh root@168.231.103.114
+ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password root@168.231.103.114
 sudo /var/www/nninfra/deploy.sh
 ```
+
+Force password authentication as shown. The box has a public key on record that
+it *accepts* but then stalls signing, so a plain `ssh root@...` hangs after
+"Server accepts key" rather than failing. Skipping publickey auth avoids it.
 
 The server pulls over a **read-only deploy key** (`/var/www/nninfra/.ssh/deploy_ed25519`,
 registered on the repository as "nninfra production server"). No personal access
@@ -66,9 +70,11 @@ pm2 logs nninfra --lines 50
 cd /var/www/nninfra/app && E2E_BASE_URL=http://127.0.0.1:3021 pnpm test:e2e
 ```
 
-The E2E suite runs against the deployed instance and asserts the access-control
-model end to end — 62 tests covering route guards per role, button-level gating,
-row-level scoping and immediate session revocation.
+The E2E suite runs against the deployed instance — **81 tests in two files**:
+`access-control.test.ts` (74: route guards per role, button-level gating,
+row-level scoping, immediate session revocation, the pending modules staying
+inert) and `route-smoke.test.ts` (7: every page in the app opened as every
+seeded role, each either rendering or refused with a `/forbidden` redirect).
 
 ## Account passwords
 
@@ -93,10 +99,21 @@ Administration → Users, which enforces the password policy.
    process as the `nninfra` user (which exists and owns the files) would be
    better, but diverges from the host's convention — worth doing deliberately
    rather than as a side effect of a deploy.
-2. **No automated database backup** is configured for `nn_infra_erp`.
-   The scope document commits to a daily backup; add one before go-live.
-3. **The `*.zapeat.in` certificate expires 17 Sep 2026.** It is shared with the
-   other subdomains, so renewal is presumably already handled — confirm.
+2. **No automated database backup** is configured for `nn_infra_erp`. The
+   scope document commits to a daily backup; add one before go-live. Deploys
+   currently rely on a manual dump taken first:
+
+   ```bash
+   sudo -u postgres pg_dump -Fc nn_infra_erp \
+     > /var/backups/nninfra/nn_infra_erp-$(date +%Y%m%d-%H%M%S).dump
+   ```
+
+   Note the deploy script's automatic rollback reverts **code only** — an
+   applied migration stays applied. Migrations so far are additive, so a
+   rollback still runs, but that does not hold for a destructive one.
+3. **The `*.zapeat.in` certificate expires 17 Sep 2026 — act on this.** It is
+   shared with every other subdomain on the box, so an expiry takes them all
+   down with it. Confirm the renewal is actually automated rather than assumed.
 
 ## Neighbouring site note
 
