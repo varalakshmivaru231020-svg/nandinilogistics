@@ -55,10 +55,24 @@ export const NAVIGATION: NavSection[] = [
     ],
   },
   {
-    label: "Material & Inventory",
+    label: "Procurement",
     icon: "PackageSearch",
     items: [
-      { label: "Indents", href: "/material/indents", icon: "ClipboardList", permission: PERM.material.indent.view, badge: "indentPending" },
+      // The design presents the whole chain as one screen with tabs.
+      {
+        label: "Procurement",
+        href: "/material",
+        icon: "PackageSearch",
+        anyPermission: [
+          PERM.material.indent.view,
+          PERM.material.purchaseOrder.view,
+          PERM.material.grn.view,
+          PERM.masters.vendor.view,
+          PERM.masters.item.view,
+        ],
+        badge: "indentPending",
+      },
+      { label: "Indents", href: "/material/indents", icon: "ClipboardList", permission: PERM.material.indent.view },
       { label: "Purchase Orders", href: "/material/purchase-orders", icon: "FileText", permission: PERM.material.purchaseOrder.view },
       { label: "Goods Receipt", href: "/material/grn", icon: "PackageCheck", permission: PERM.material.grn.view },
       { label: "Vendor Invoices", href: "/material/invoices", icon: "ReceiptText", permission: PERM.material.vendorInvoice.view },

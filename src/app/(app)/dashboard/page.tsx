@@ -1,69 +1,49 @@
 import Link from "next/link";
 import {
-  AlertTriangle, Boxes, Building2, ClipboardList, IndianRupee,
-  PackageCheck, TrendingUp, UserPlus,
+  Boxes, Building2, ClipboardList, PackageCheck, TrendingUp, UserPlus,
 } from "lucide-react";
 
 import { requireAuth } from "@/lib/rbac/guard";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import {
-  Badge, Card, CardBody, CardHeader, CardTitle, PageHeader, StatLabel, StatValue,
-} from "@/components/ui/primitives";
-import { cn, moneyShort } from "@/lib/utils";
+import { Card, CardBody, CardHeader, CardSubtitle, CardTitle, Panel, PanelHeader, StatLabel, StatValue } from "@/components/ui/primitives";
+import { Button } from "@/components/ui/button";
+import { cn, formatDate, money, moneyShort, qty } from "@/lib/utils";
+import { ApprovalQueue, type QueueRow } from "./approval-queue";
 
 export const metadata = { title: "Dashboard" };
 
-/**
- * KPI tile, matching the card in design/NN Infra Admin.dc.html:
- * uppercase micro-label, Sora display figure, tinted icon square.
- */
-function Tile({
-  label, value, sub, icon, href, tone = "brand",
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  icon: React.ReactNode;
-  href?: string;
-  tone?: "brand" | "good" | "warn" | "bad" | "navy";
-}) {
-  const iconTone = {
-    brand: "bg-brand-100 text-brand-500",
-    good: "bg-good-050 text-good-600",
-    warn: "bg-warn-050 text-warn-700",
-    bad: "bg-bad-050 text-bad-600",
-    navy: "bg-surface-field text-navy-950",
-  }[tone];
+const DAY = 86_400_000;
 
-  const body = (
-    <div className="flex h-full flex-col gap-[9px] rounded-[13px] border border-line-400 bg-white px-[18px] py-[17px] transition-colors hover:border-brand-300">
-      <div className="flex items-center justify-between gap-2">
-        <StatLabel>{label}</StatLabel>
-        <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-[8px]", iconTone)}>
-          {icon}
-        </span>
-      </div>
-      <StatValue>{value}</StatValue>
-      {sub && <p className="text-[11.5px] font-medium text-muted-400">{sub}</p>}
-    </div>
-  );
-
-  return href ? <Link href={href}>{body}</Link> : body;
+function ageLabel(from: Date, now: number): { text: string; days: number } {
+  const days = Math.floor((now - from.getTime()) / DAY);
+  if (days <= 0) return { text: "today", days: 0 };
+  if (days === 1) return { text: "1 day", days: 1 };
+  return { text: `${days} days`, days };
 }
 
 export default async function DashboardPage() {
   const ctx = await requireAuth();
   const scope = projectScopeFilter(ctx);
   const showMoney = ctx.has(PERM.dashboard.widget.viewFinancials);
+  const nowMs = new Date().getTime();
+  const today = new Date();
+  const hour = today.getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const tiles: React.ReactNode[] = [];
+  /* ------------------------------ KPI strip ------------------------------- */
 
-  /* --------------------------------- Projects -------------------------------- */
+  const kpis: Array<{
+    label: string; value: string; sub?: string;
+    icon: React.ReactNode; href?: string; tone: "brand" | "good" | "warn" | "bad" | "navy";
+  }> = [];
+
   if (ctx.has(PERM.project.project.view)) {
-    const [active, totalBudget] = await Promise.all([
-      prisma.project.count({ where: { status: "ACTIVE", ...(ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } }) } }),
+    const [active, budget] = await Promise.all([
+      prisma.project.count({
+        where: { status: "ACTIVE", ...(ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } }) },
+      }),
       showMoney
         ? prisma.project.aggregate({
             _sum: { budgetAmount: true },
@@ -71,68 +51,57 @@ export default async function DashboardPage() {
           })
         : Promise.resolve(null),
     ]);
-
-    tiles.push(
-      <Tile key="projects" label="Active projects" value={String(active)} icon={<Building2 className="h-4.5 w-4.5" />} tone="brand" href="/projects" />,
-    );
-    if (showMoney && totalBudget) {
-      tiles.push(
-        <Tile key="budget" label="Sanctioned budget" value={moneyShort(totalBudget._sum.budgetAmount)} icon={<IndianRupee className="h-4.5 w-4.5" />} sub="Across your projects" />,
-      );
-    }
+    kpis.push({
+      label: "Active projects", value: String(active),
+      sub: budget ? `${moneyShort(budget._sum.budgetAmount)} sanctioned` : undefined,
+      icon: <Building2 className="h-3.5 w-3.5" />, href: "/projects", tone: "brand",
+    });
   }
 
-  /* --------------------------------- Material -------------------------------- */
   if (ctx.has(PERM.material.indent.view)) {
     const pending = await prisma.indent.count({
       where: { ...scope, status: { in: ["SUBMITTED", "PM_APPROVED"] } },
     });
-    tiles.push(
-      <Tile key="indents" label="Indents awaiting approval" value={String(pending)} icon={<ClipboardList className="h-4.5 w-4.5" />} tone={pending > 0 ? "warn" : "navy"} href="/material/indents" />,
-    );
+    kpis.push({
+      label: "Indents awaiting", value: String(pending),
+      sub: pending > 0 ? "sitting in the approval chain" : "queue is clear",
+      icon: <ClipboardList className="h-3.5 w-3.5" />, href: "/material/indents",
+      tone: pending > 0 ? "warn" : "good",
+    });
   }
 
   if (ctx.has(PERM.material.purchaseOrder.view)) {
     const openPo = await prisma.purchaseOrder.count({
       where: { ...scope, status: { in: ["APPROVED", "PARTIALLY_RECEIVED"] } },
     });
-    tiles.push(
-      <Tile key="po" label="Open purchase orders" value={String(openPo)} icon={<PackageCheck className="h-4.5 w-4.5" />} href="/material/purchase-orders" />,
-    );
+    kpis.push({
+      label: "Open purchase orders", value: String(openPo), sub: "awaiting delivery",
+      icon: <PackageCheck className="h-3.5 w-3.5" />, href: "/material/purchase-orders", tone: "navy",
+    });
   }
 
   if (ctx.has(PERM.material.stock.view) && ctx.has(PERM.material.stock.viewValuation)) {
     const value = await prisma.stockBalance.aggregate({ _sum: { value: true } });
-    tiles.push(
-      <Tile key="stockval" label="Stock on hand" value={moneyShort(value._sum.value)} icon={<Boxes className="h-4.5 w-4.5" />} sub="Weighted-average valuation" href="/material/stock" />,
-    );
+    kpis.push({
+      label: "Stock on hand", value: moneyShort(value._sum.value), sub: "weighted-average valuation",
+      icon: <Boxes className="h-3.5 w-3.5" />, href: "/material/stock", tone: "brand",
+    });
   }
 
-  if (ctx.has(PERM.material.reorder.view)) {
-    const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(*)::bigint AS count
-      FROM "m_items" i
-      LEFT JOIN (SELECT "itemId", SUM(quantity) AS qty FROM "stock_balances" GROUP BY "itemId") sb
-        ON sb."itemId" = i.id
-      WHERE i.status = 'ACTIVE' AND i."reorderLevel" > 0 AND COALESCE(sb.qty, 0) <= i."reorderLevel"
-    `;
-    const count = Number(rows[0]?.count ?? 0);
-    tiles.push(
-      <Tile key="reorder" label="Items below reorder level" value={String(count)} icon={<AlertTriangle className="h-4.5 w-4.5" />} tone={count > 0 ? "bad" : "good"} href="/material/reorder" />,
-    );
-  }
-
-  /* ----------------------------------- Sales --------------------------------- */
   if (ctx.has(PERM.sales.lead.view)) {
     const own = ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id };
-    const [openLeads, dueFollowUps] = await Promise.all([
+    const [openLeads, due] = await Promise.all([
       prisma.lead.count({ where: { ...own, state: { notIn: ["BOOKED", "LOST"] } } }),
-      prisma.lead.count({ where: { ...own, nextActionAt: { lte: new Date() }, state: { notIn: ["BOOKED", "LOST"] } } }),
+      prisma.lead.count({
+        where: { ...own, nextActionAt: { lte: today }, state: { notIn: ["BOOKED", "LOST"] } },
+      }),
     ]);
-    tiles.push(
-      <Tile key="leads" label="Open leads" value={String(openLeads)} icon={<UserPlus className="h-4.5 w-4.5" />} tone="brand" href="/sales/leads" />,
-      <Tile key="fu" label="Follow-ups due" value={String(dueFollowUps)} icon={<TrendingUp className="h-4.5 w-4.5" />} tone={dueFollowUps > 0 ? "warn" : "navy"} href="/sales/follow-ups" />,
-    );
+    kpis.push({
+      label: "Open leads", value: String(openLeads),
+      sub: due > 0 ? `${due} follow-up${due === 1 ? "" : "s"} due` : "no follow-ups due",
+      icon: <UserPlus className="h-3.5 w-3.5" />, href: "/sales/leads",
+      tone: due > 0 ? "warn" : "brand",
+    });
   }
 
   if (ctx.has(PERM.unit.unit.view)) {
@@ -140,72 +109,480 @@ export default async function DashboardPage() {
       prisma.unit.count({ where: { ...scope, status: "AVAILABLE" } }),
       prisma.unit.count({ where: scope }),
     ]);
-    tiles.push(
-      <Tile key="units" label="Units available" value={`${available} / ${total}`} icon={<Building2 className="h-4.5 w-4.5" />} tone="good" sub="Live inventory" href="/units/board" />,
-    );
+    kpis.push({
+      label: "Units available", value: `${available} / ${total}`, sub: "live inventory",
+      icon: <TrendingUp className="h-3.5 w-3.5" />, href: "/units/board", tone: "good",
+    });
   }
 
-  /* ------------------------------ Recent activity ---------------------------- */
-  const recentAudit = ctx.has(PERM.admin.audit.view)
-    ? await prisma.auditLog.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 8,
-        include: { user: { select: { name: true } } },
+  /* -------------------- Today on site · schedule alerts -------------------- */
+
+  const canSchedule = ctx.has(PERM.schedule.activity.view);
+  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const endOfDay = new Date(startOfDay.getTime() + DAY);
+
+  const [startingToday, dueToday, overdue] = canSchedule
+    ? await Promise.all([
+        prisma.scheduleActivity.findMany({
+          where: { ...scope, plannedStart: { gte: startOfDay, lt: endOfDay } },
+          include: { project: { select: { code: true } } },
+          take: 4,
+        }),
+        prisma.scheduleActivity.findMany({
+          where: { ...scope, plannedEnd: { gte: startOfDay, lt: endOfDay }, status: { not: "COMPLETED" } },
+          include: { project: { select: { code: true } } },
+          take: 4,
+        }),
+        prisma.scheduleActivity.findMany({
+          where: { ...scope, plannedEnd: { lt: startOfDay }, status: { not: "COMPLETED" } },
+          include: { project: { select: { code: true } }, delayReason: { select: { name: true } } },
+          orderBy: { plannedEnd: "asc" },
+          take: 4,
+        }),
+      ])
+    : [[], [], []];
+
+  const schAlertCards = [
+    {
+      label: "Starting today",
+      count: startingToday.length,
+      items: startingToday.map((a) => ({
+        txt: a.name,
+        meta: `${a.project.code} · ${a.code}`,
+      })),
+    },
+    {
+      label: "Due today",
+      count: dueToday.length,
+      items: dueToday.map((a) => ({
+        txt: a.name,
+        meta: `${a.project.code} · ${a.progressPct}% done`,
+      })),
+    },
+    {
+      label: "Past approved date",
+      count: overdue.length,
+      items: overdue.map((a) => ({
+        txt: a.name,
+        meta: `${a.project.code} · ${a.delayReason?.name ?? "no reason captured"}`,
+      })),
+    },
+  ];
+
+  /* --------------------------- Pending approvals --------------------------- */
+
+  const queue: QueueRow[] = [];
+  let queueValue = 0;
+
+  if (ctx.has(PERM.material.indent.view)) {
+    const indents = await prisma.indent.findMany({
+      where: { ...scope, status: { in: ["SUBMITTED", "PM_APPROVED"] } },
+      orderBy: { raisedAt: "asc" },
+      take: 6,
+      include: { project: { select: { code: true } }, raisedBy: { select: { name: true } } },
+    });
+    for (const i of indents) {
+      const age = ageLabel(i.raisedAt, nowMs);
+      const level = i.status === "SUBMITTED" ? ("PM" as const) : ("ADMIN" as const);
+      queueValue += Number(i.estimatedValue);
+      queue.push({
+        id: i.id, kind: "INDENT", type: "Indent",
+        title: i.purpose ?? `Material indent ${i.indentNo}`,
+        ref: i.indentNo, project: i.project.code, by: i.raisedBy.name,
+        value: showMoney ? money(i.estimatedValue) : "—",
+        age: `${age.text} waiting`, ageDays: age.days,
+        href: `/material/indents/${i.id}`, level,
+        canApprove: ctx.has(
+          level === "PM" ? PERM.material.indent.approvePm : PERM.material.indent.approveAdmin,
+        ),
+        canReject: ctx.has(PERM.material.indent.reject),
+      });
+    }
+  }
+
+  if (ctx.has(PERM.material.purchaseOrder.view)) {
+    const pos = await prisma.purchaseOrder.findMany({
+      where: { ...scope, status: "PENDING_APPROVAL" },
+      orderBy: { poDate: "asc" },
+      take: 4,
+      include: {
+        project: { select: { code: true } },
+        vendor: { select: { name: true } },
+        createdBy: { select: { name: true } },
+      },
+    });
+    for (const p of pos) {
+      const age = ageLabel(p.poDate, nowMs);
+      queueValue += Number(p.totalAmount);
+      queue.push({
+        id: p.id, kind: "PO", type: "Purchase order",
+        title: `${p.vendor.name} — ${p.poNo}`,
+        ref: p.poNo, project: p.project.code, by: p.createdBy.name,
+        value: showMoney ? money(p.totalAmount) : "—",
+        age: `${age.text} waiting`, ageDays: age.days,
+        href: `/material/purchase-orders/${p.id}`, level: null,
+        canApprove: ctx.has(PERM.material.purchaseOrder.approve),
+        canReject: false,
+      });
+    }
+  }
+
+  queue.sort((a, b) => b.ageDays - a.ageDays);
+
+  /* ---------------------------- Portfolio progress ------------------------- */
+
+  const canProjects = ctx.has(PERM.project.project.view);
+  const progressProjects = canProjects
+    ? await prisma.project.findMany({
+        where: { status: "ACTIVE", ...(ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } }) },
+        take: 4,
+        select: {
+          id: true, name: true, code: true, targetDate: true,
+          _count: { select: { units: true } },
+          activities: { select: { progressPct: true, status: true } },
+        },
       })
     : [];
 
-  return (
-    <div className="mx-auto max-w-7xl">
-      <PageHeader
-        title={`Good to see you, ${ctx.name.split(" ")[0]}`}
-        description={
-          ctx.roles.length
-            ? `Signed in as ${ctx.roles.map((r) => r.name).join(", ")} — this dashboard shows only what your role covers.`
-            : "You have no role assigned yet. Ask an administrator to assign one."
-        }
-      />
+  const progress = progressProjects.map((p) => {
+    const acts = p.activities;
+    const pct = acts.length
+      ? Math.round(acts.reduce((s, a) => s + a.progressPct, 0) / acts.length)
+      : 0;
+    const done = acts.filter((a) => a.status === "COMPLETED").length;
+    return {
+      name: p.name,
+      pct,
+      meta: `${done} of ${acts.length} activities complete${p.targetDate ? ` · target ${formatDate(p.targetDate)}` : ""}`,
+    };
+  });
 
-      {tiles.length === 0 ? (
-        <Card>
-          <CardBody>
-            <p className="text-sm text-muted-600">
-              There is nothing on your dashboard yet, because your role does not yet include view
-              access to any module. An administrator can grant permissions from Administration →
-              Roles.
-            </p>
-          </CardBody>
-        </Card>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{tiles}</div>
+  /* ------------------------------ Reorder alerts --------------------------- */
+
+  const canReorder = ctx.has(PERM.material.reorder.view);
+  const stockAlerts = canReorder
+    ? await prisma.$queryRaw<Array<{ item: string; store: string; onhand: string; level: string; uom: string }>>`
+        SELECT i.name AS item,
+               COALESCE(s.name, 'No store') AS store,
+               COALESCE(sb.qty, 0)::text AS onhand,
+               i."reorderLevel"::text AS level,
+               u.code AS uom
+        FROM "m_items" i
+        JOIN "m_uoms" u ON u.id = i."uomId"
+        LEFT JOIN (
+          SELECT "itemId", SUM(quantity) AS qty, MIN("storeId") AS store_id
+          FROM "stock_balances" GROUP BY "itemId"
+        ) sb ON sb."itemId" = i.id
+        LEFT JOIN "m_stores" s ON s.id = sb.store_id
+        WHERE i.status = 'ACTIVE' AND i."reorderLevel" > 0
+          AND COALESCE(sb.qty, 0) <= i."reorderLevel"
+        ORDER BY (COALESCE(sb.qty, 0) / NULLIF(i."reorderLevel", 0)) ASC
+        LIMIT 5
+      `
+    : [];
+
+  /* -------------------------------- Funnel -------------------------------- */
+
+  const canFunnel = ctx.has(PERM.sales.lead.view);
+  const funnelOrder = ["NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED"] as const;
+  const funnelLabels: Record<string, string> = {
+    NEW: "New", CONTACTED: "Contacted", SITE_VISIT_SCHEDULED: "Visit set",
+    VISIT_DONE: "Visited", NEGOTIATION: "Negotiation", BOOKED: "Booked",
+  };
+
+  const grouped = canFunnel
+    ? await prisma.lead.groupBy({
+        by: ["state"],
+        where: ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id },
+        _count: true,
+      })
+    : [];
+  const counts = new Map<string, number>(grouped.map((g) => [g.state as string, g._count]));
+  const funnelMax = Math.max(1, ...funnelOrder.map((s) => counts.get(s) ?? 0));
+  const funnelTotal = grouped.reduce((s, g) => s + g._count, 0);
+  const booked = counts.get("BOOKED") ?? 0;
+
+  const collections =
+    canFunnel && showMoney
+      ? await prisma.receipt.aggregate({
+          _sum: { amount: true },
+          where: { receiptDate: { gte: new Date(today.getFullYear(), today.getMonth(), 1) } },
+        })
+      : null;
+
+  /* --------------------------- Execution health ---------------------------- */
+
+  const health: Array<{ value: string; label: string; tone: string }> = [];
+  if (canSchedule) {
+    const [delayed, onTrack] = await Promise.all([
+      prisma.scheduleActivity.count({ where: { ...scope, status: "DELAYED" } }),
+      prisma.scheduleActivity.count({ where: { ...scope, status: { in: ["IN_PROGRESS", "COMPLETED"] } } }),
+    ]);
+    health.push(
+      { value: String(delayed), label: "Activities delayed", tone: delayed > 0 ? "bad" : "good" },
+      { value: String(onTrack), label: "On track or done", tone: "good" },
+    );
+  }
+  if (ctx.has(PERM.material.grn.view)) {
+    const [posted, mismatched] = await Promise.all([
+      prisma.grn.count({ where: { status: "POSTED" } }),
+      ctx.has(PERM.material.vendorInvoice.view)
+        ? prisma.vendorInvoice.count({ where: { status: "MISMATCH" } })
+        : Promise.resolve(0),
+    ]);
+    health.push(
+      { value: String(posted), label: "Receipts posted", tone: "brand" },
+      { value: String(mismatched), label: "Invoices blocked", tone: mismatched > 0 ? "bad" : "good" },
+    );
+  }
+
+  const healthTone: Record<string, string> = {
+    good: "bg-good-050 text-good-700",
+    bad: "bg-bad-050 text-bad-600",
+    warn: "bg-warn-050 text-warn-700",
+    brand: "bg-brand-100 text-brand-700",
+  };
+
+  const showApprovals = queue.length > 0 || ctx.has(PERM.material.indent.view);
+
+  return (
+    <div className="animate-fade-up mx-auto max-w-[1400px]">
+      {/* Greeting line */}
+      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+        <div className="text-[13px] font-medium text-muted-600">
+          {greeting}, {ctx.name.split(" ")[0]} ·{" "}
+          {today.toLocaleDateString("en-IN", {
+            weekday: "long", day: "numeric", month: "long", year: "numeric",
+          })}
+        </div>
+        <div className="text-[11.5px] font-semibold uppercase tracking-[.05em] text-brand-500">
+          {ctx.roles.map((r) => r.name).join(", ") || "No role"}
+        </div>
+      </div>
+
+      {/* KPI strip */}
+      {kpis.length > 0 && (
+        <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
+          {kpis.map((k) => {
+            const tile = (
+              <div className="flex h-full flex-col gap-[9px] rounded-[13px] border border-line-400 bg-white px-[18px] py-[17px] transition-colors hover:border-brand-300">
+                <div className="flex items-center justify-between gap-2">
+                  <StatLabel>{k.label}</StatLabel>
+                  <span
+                    className={cn(
+                      "grid h-7 w-7 shrink-0 place-items-center rounded-[8px]",
+                      healthTone[k.tone] ?? "bg-brand-100 text-brand-500",
+                    )}
+                  >
+                    {k.icon}
+                  </span>
+                </div>
+                <StatValue>{k.value}</StatValue>
+                {k.sub && <p className="text-[11.5px] font-medium text-muted-400">{k.sub}</p>}
+              </div>
+            );
+            return k.href ? <Link key={k.label} href={k.href}>{tile}</Link> : <div key={k.label}>{tile}</div>;
+          })}
+        </div>
       )}
 
-      {recentAudit.length > 0 && (
-        <Card className="mt-5">
+      {/* Today on site · schedule */}
+      {canSchedule && (
+        <Card className="mt-3.5 overflow-hidden">
           <CardHeader>
-            <CardTitle>Recent activity</CardTitle>
-            <Link href="/admin/audit" className="text-xs text-brand-600 hover:underline">
-              View audit trail
+            <div>
+              <CardTitle>Today on site · schedule</CardTitle>
+              <CardSubtitle>
+                Works that should start, are due, or have run past their approved date
+              </CardSubtitle>
+            </div>
+            <Link href="/schedule">
+              <Button size="sm" variant="secondary">Open schedule</Button>
             </Link>
           </CardHeader>
-          <CardBody className="p-0">
-            <ul className="divide-y divide-line-200">
-              {recentAudit.map((log) => (
-                <li key={log.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm text-navy-600">{log.summary}</p>
-                    <p className="text-xs text-muted-400">
-                      {log.user?.name ?? "System"} ·{" "}
-                      {new Date(log.createdAt).toLocaleString("en-IN", {
-                        day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
-                      })}
-                    </p>
+          <div className="grid gap-3 px-[18px] py-[15px] [grid-template-columns:repeat(auto-fit,minmax(250px,1fr))]">
+            {schAlertCards.map((a) => (
+              <Panel key={a.label}>
+                <PanelHeader>
+                  <span className="text-[12px] font-bold text-navy-600">{a.label}</span>
+                  <span className="num font-display text-[15px] font-extrabold text-navy-950">
+                    {a.count}
+                  </span>
+                </PanelHeader>
+                <div className="px-[13px] pb-[11px] pt-1">
+                  {a.items.map((i, n) => (
+                    <div key={n} className="border-b border-line-100 py-2 last:border-0">
+                      <div className="text-[12px] font-semibold text-navy-900">{i.txt}</div>
+                      <div className="mt-0.5 text-[10.5px] font-medium text-muted-400">{i.meta}</div>
+                    </div>
+                  ))}
+                  {a.items.length === 0 && (
+                    <div className="py-3.5 text-[11.5px] font-medium text-muted-300">
+                      Nothing here today
+                    </div>
+                  )}
+                </div>
+              </Panel>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Approvals + right rail */}
+      <div className="mt-3.5 grid items-start gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(430px,1fr))]">
+        {showApprovals && (
+          <Card className="overflow-hidden">
+            <CardHeader>
+              <CardTitle>Pending approvals</CardTitle>
+              {queue.length > 0 && (
+                <span className="rounded-full bg-warn-050 px-[10px] py-1 text-[11px] font-bold text-warn-700">
+                  {queue.length} waiting{showMoney && ` · ${moneyShort(queueValue)}`}
+                </span>
+              )}
+            </CardHeader>
+            <ApprovalQueue rows={queue} />
+          </Card>
+        )}
+
+        <div className="flex flex-col gap-3.5">
+          {canProjects && progress.length > 0 && (
+            <Card className="px-[18px] py-4">
+              <div className="mb-3 font-display text-[14px] font-bold text-navy-950">
+                Portfolio progress
+              </div>
+              {progress.map((p) => (
+                <div key={p.name} className="mb-3.5 last:mb-0">
+                  <div className="mb-1.5 flex justify-between">
+                    <span className="text-[12.5px] font-semibold text-navy-900">{p.name}</span>
+                    <span className="num text-[12.5px] font-bold text-brand-500">{p.pct}%</span>
                   </div>
-                  <Badge tone={log.action === "DELETE" ? "bad" : log.action === "CREATE" ? "good" : "slate"}>
-                    {log.action}
-                  </Badge>
-                </li>
+                  <div className="h-[7px] overflow-hidden rounded-full bg-[#EDF0F8]">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.max(2, p.pct)}%`,
+                        background: "linear-gradient(90deg,#0089C9,#2F308C)",
+                      }}
+                    />
+                  </div>
+                  <div className="mt-1.5 text-[11px] font-medium text-muted-400">{p.meta}</div>
+                </div>
               ))}
-            </ul>
+            </Card>
+          )}
+
+          {canReorder && (
+            <Card className="px-[18px] py-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="font-display text-[14px] font-bold text-navy-950">Reorder alerts</div>
+                <span
+                  className={cn(
+                    "rounded-full px-[9px] py-[3px] text-[10.5px] font-bold",
+                    stockAlerts.length > 0 ? "bg-bad-050 text-bad-600" : "bg-good-050 text-good-700",
+                  )}
+                >
+                  {stockAlerts.length > 0 ? `${stockAlerts.length} below level` : "all stocked"}
+                </span>
+              </div>
+              {stockAlerts.map((s, n) => (
+                <div
+                  key={n}
+                  className="flex items-center gap-2.5 border-b border-line-100 py-2 last:border-0"
+                >
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-bad-600" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[12.5px] font-semibold text-navy-900">{s.item}</div>
+                    <div className="text-[11px] font-medium text-muted-400">{s.store}</div>
+                  </div>
+                  <div className="num text-[12px] font-bold text-bad-600">
+                    {qty(s.onhand, 2)} / {qty(s.level, 2)} {s.uom}
+                  </div>
+                </div>
+              ))}
+              {stockAlerts.length === 0 && (
+                <p className="py-3 text-[11.5px] font-medium text-muted-300">
+                  Every item with a reorder level is above it.
+                </p>
+              )}
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Funnel + execution health */}
+      <div className="mt-3.5 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))]">
+        {canFunnel && (
+          <Card className="px-[18px] py-4">
+            <div className="mb-3.5 font-display text-[14px] font-bold text-navy-950">
+              Sales funnel · current pipeline
+            </div>
+            <div className="flex h-[120px] items-end gap-2.5">
+              {funnelOrder.map((stage) => {
+                const count = counts.get(stage) ?? 0;
+                const heightPct = Math.max(6, Math.round((count / funnelMax) * 100));
+                return (
+                  <div key={stage} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
+                    <div className="num text-[13px] font-bold text-navy-950">{count}</div>
+                    <div
+                      className="w-full rounded-t-[6px]"
+                      style={{
+                        height: `${heightPct}%`,
+                        background:
+                          stage === "BOOKED"
+                            ? "linear-gradient(180deg,#1F9D66,#178555)"
+                            : "linear-gradient(180deg,#0089C9,#2F308C)",
+                      }}
+                    />
+                    <div className="text-center text-[10px] font-semibold uppercase tracking-[.03em] text-muted-500">
+                      {funnelLabels[stage]}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-3.5 flex flex-wrap justify-between gap-2 border-t border-[#F0F3FA] pt-3 text-[12px] font-semibold text-muted-600">
+              <span>
+                Conversion{" "}
+                <span className="text-navy-950">
+                  {funnelTotal > 0 ? `${Math.round((booked / funnelTotal) * 100)}%` : "—"}
+                </span>
+              </span>
+              {collections && (
+                <span>Collections {moneyShort(collections._sum.amount)} this month</span>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {health.length > 0 && (
+          <Card className="px-[18px] py-4">
+            <div className="mb-3.5 font-display text-[14px] font-bold text-navy-950">
+              Execution health
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              {health.map((h) => (
+                <div
+                  key={h.label}
+                  className={cn("rounded-[11px] px-3.5 py-3", healthTone[h.tone])}
+                >
+                  <div className="num font-display text-[21px] font-extrabold tracking-[-.02em]">
+                    {h.value}
+                  </div>
+                  <div className="mt-0.5 text-[11px] font-semibold opacity-75">{h.label}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+      </div>
+
+      {kpis.length === 0 && queue.length === 0 && (
+        <Card>
+          <CardBody>
+            <p className="text-[12.5px] font-medium text-muted-600">
+              There is nothing on your dashboard yet, because your role does not include view access
+              to any module. An administrator can grant permissions from Administration → Roles.
+            </p>
           </CardBody>
         </Card>
       )}

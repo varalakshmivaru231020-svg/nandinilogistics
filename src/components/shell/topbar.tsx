@@ -96,7 +96,7 @@ export function Topbar({
       <Link
         href="/dashboard"
         className="relative grid h-9 w-9 place-items-center rounded-[9px] border border-line-400 bg-surface-field text-navy-600 hover:bg-surface-hover"
-        aria-label="Pending approvals"
+        aria-label="Notifications"
       >
         <Bell className="h-4 w-4" />
         {pendingCount > 0 && (
