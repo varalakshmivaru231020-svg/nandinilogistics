@@ -77,6 +77,20 @@ component body. Compute "now" once during data fetching and pass it down as a
 prop (see `nowMs` in the booking, board and site-visit screens); that also keeps
 server and client agreeing about what is overdue.
 
+## No `loading.tsx` above a guarded page
+
+Pages guard with `requirePermission()`, which `redirect()`s. A `loading.tsx`
+puts a Suspense boundary above the page, so the response starts streaming
+before the guard runs and the redirect is delivered as a **streamed 200**
+instead of a **307**. Every route guard silently stops being an HTTP redirect.
+
+`tests/e2e/access-control.test.ts` catches it — 34 tests fail the moment a
+`loading.tsx` lands in `src/app/(app)/`. The design's loading splash therefore
+lives at `src/app/(auth)/loading.tsx`, which sits below no guard.
+
+To stream part of a guarded page, put `<Suspense>` *inside* the page, after
+`requirePermission()` has already returned.
+
 ## Verifying a change
 
 ```bash

@@ -139,3 +139,38 @@ a:hover {
   [data-noprint] { display: none !important; }
   @page { size: A4; margin: 14mm; }
 }
+
+/* The design's loading splash and the two animations it needs, plus growW for
+   bars that grow into place. Kept to the design's own timings. */
+@keyframes ldbar {
+  0%, 100% { transform: scaleY(.42); }
+  50%      { transform: scaleY(1); }
+}
+@keyframes ldfade {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes ldline {
+  from { width: 0; }
+  to   { width: 100%; }
+}
+@keyframes growW {
+  from { width: 0; }
+}
+
+.animate-ld-fade { animation: ldfade .6s ease both; }
+.animate-ld-line { animation: ldline 1.8s ease both; }
+.animate-grow-w  { animation: growW .5s ease both; }
+.animate-ld-bar  { animation: ldbar 1.2s ease-in-out infinite; transform-origin: bottom; }
+
+/* Respect a reduced-motion preference: the splash still reads, it just stops
+   moving. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-ld-bar,
+  .animate-ld-line,
+  .animate-ld-fade,
+  .animate-fade-up,
+  .animate-slide-in,
+  .animate-pulse-dot,
+  .animate-grow-w { animation: none !important; }
+}
