@@ -61,6 +61,10 @@ suite("access control, end to end", () => {
       ["/schedule", ["owner", "pm", "supervisor"], ["sales"]],
       // Held pending client verification: the screens are previews, but the
       // permission behind them is real and only the Owner holds it.
+      // Workforce and the knowledge base, per the design's own access map:
+      // the supervisor holds both; sales sees only the knowledge base.
+      ["/hr", ["owner", "pm", "supervisor"], ["sales"]],
+      ["/kb", ["owner", "pm", "supervisor", "store", "sales"], []],
       ["/tasks", ["owner"], ["sales", "store", "supervisor", "pm"]],
       ["/checklists", ["owner"], ["sales", "store", "supervisor", "pm"]],
     ];

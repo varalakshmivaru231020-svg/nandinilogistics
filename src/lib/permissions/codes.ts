@@ -3,7 +3,7 @@
  * Source: src/lib/permissions/registry.ts
  * Regenerate: pnpm perms:codegen
  *
- * 482 permission codes.
+ * 506 permission codes.
  */
 
 export const PERM = {
@@ -685,6 +685,42 @@ export const PERM = {
       "update": "checklist.category.update",
       "delete": "checklist.category.delete",
       "export": "checklist.category.export",
+    },
+  },
+  "hr": {
+    "employee": {
+      "view": "hr.employee.view",
+      "create": "hr.employee.create",
+      "update": "hr.employee.update",
+      "delete": "hr.employee.delete",
+      "export": "hr.employee.export",
+      "viewIdentity": "hr.employee.viewIdentity",
+      "uploadDocument": "hr.employee.uploadDocument",
+      "tabStaff": "hr.employee.tabStaff",
+    },
+    "employmentType": {
+      "view": "hr.employmentType.view",
+      "create": "hr.employmentType.create",
+      "update": "hr.employmentType.update",
+      "delete": "hr.employmentType.delete",
+    },
+    "attendance": {
+      "view": "hr.attendance.view",
+      "mark": "hr.attendance.mark",
+      "markAll": "hr.attendance.markAll",
+      "tabReport": "hr.attendance.tabReport",
+      "export": "hr.attendance.export",
+    },
+  },
+  "kb": {
+    "article": {
+      "view": "kb.article.view",
+      "create": "kb.article.create",
+      "update": "kb.article.update",
+      "delete": "kb.article.delete",
+      "export": "kb.article.export",
+      "publish": "kb.article.publish",
+      "attach": "kb.article.attach",
     },
   },
 } as const;

@@ -15,6 +15,9 @@ const eslintConfig = defineConfig([
     // Generated output — not ours to lint.
     "coverage/**",
     "src/generated/**",
+    // The imported design and its logic script are a reference artifact, kept
+    // verbatim so it can be diffed against. Not our code to lint.
+    "design/**",
   ]),
 ]);
 

@@ -28,6 +28,8 @@ export const MODULES: ModuleDef[] = [
   { key: "material", label: "Material & Inventory", sortOrder: 60 },
   { key: "sales", label: "Lead Management & Sales CRM", sortOrder: 70 },
   { key: "unit", label: "Available Flats", sortOrder: 80 },
+  { key: "hr", label: "Workforce — Users & Attendance", sortOrder: 85 },
+  { key: "kb", label: "Knowledge Base", sortOrder: 88 },
   { key: "masters", label: "Masters", sortOrder: 90 },
   { key: "admin", label: "Administration", sortOrder: 100 },
   { key: "reports", label: "Reports", sortOrder: 110 },
@@ -654,6 +656,48 @@ crud({ module: "checklist", resource: "category", entity: "checklist category", 
 export const PERMISSIONS: readonly PermissionDef[] = registry;
 
 /** Codes only — handy for typing and for set operations. */
+/* ------------------------- Workforce · Knowledge base ---------------------- */
+
+const G_HR = "Workforce · Users & Attendance";
+const G_KB = "Knowledge Base";
+
+crud({
+  module: "hr",
+  resource: "employee",
+  entity: "employee",
+  group: G_HR,
+  extra: [
+    ["viewIdentity", "See Aadhaar and PAN", "FIELD", "Identity numbers are masked without it."],
+    ["uploadDocument", "Attach an employee document", "BUTTON"],
+    ["tabStaff", "Workforce tab — Employees", "TAB"],
+  ],
+});
+
+crud({
+  module: "hr",
+  resource: "employmentType",
+  entity: "employment type",
+  group: G_HR,
+  exportable: false,
+});
+
+perm("hr", "attendance", "view", "See attendance", G_HR, "TAB");
+perm("hr", "attendance", "mark", "Mark attendance for a day", G_HR, "BUTTON", "Re-marking a day corrects it; it never stacks a second row.");
+perm("hr", "attendance", "markAll", "Mark everyone present at once", G_HR, "BUTTON");
+perm("hr", "attendance", "tabReport", "Workforce tab — Attendance report", G_HR, "TAB");
+perm("hr", "attendance", "export", "Export the attendance report", G_HR, "BUTTON");
+
+crud({
+  module: "kb",
+  resource: "article",
+  entity: "knowledge base article",
+  group: G_KB,
+  extra: [
+    ["publish", "Publish or unpublish an article", "BUTTON"],
+    ["attach", "Attach a file to an article", "BUTTON"],
+  ],
+});
+
 export const PERMISSION_CODES = registry.map((p) => p.code);
 
 export type PermissionCode = (typeof PERMISSION_CODES)[number];

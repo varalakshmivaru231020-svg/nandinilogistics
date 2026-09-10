@@ -200,6 +200,10 @@ model User {
   extensionsDecided ScheduleExtension[] @relation("ExtensionDecidedBy")
   leadNotes         LeadNote[]
   leadDocuments     LeadDocument[]
+  employeeDocuments EmployeeDocument[]
+  attendanceEntries AttendanceEntry[]
+  kbArticles        KbArticle[]
+  kbAttachments     KbAttachment[]
 
   @@index([status])
   @@index([departmentId])
@@ -467,6 +471,7 @@ model Designation {
 
   department Department? @relation(fields: [departmentId], references: [id])
   users      User[]
+  employees  Employee[]
 
   @@map("m_designations")
 }
@@ -820,24 +825,25 @@ model Project {
   city           City?       @relation(fields: [cityId], references: [id])
   projectManager User?       @relation("ProjectManager", fields: [projectManagerId], references: [id])
 
-  phases         ProjectPhase[]
-  blocks         Block[]
-  units          Unit[]
-  team           UserProject[]
-  documents      ProjectDocument[]
-  amenities      ProjectAmenity[]
-  progressLogs   SiteProgressLog[]
-  activities     ScheduleActivity[]
-  indents        Indent[]
-  purchaseOrders PurchaseOrder[]
-  issues         MaterialIssue[]
-  stores         Store[]
-  stockBalances  StockBalance[]
-  stockLedger    StockLedger[]
-  leads          Lead[]
-  bookings       Booking[]
-  priceLists     PriceList[]
-  numbering      NumberingSeries[]
+  phases            ProjectPhase[]
+  blocks            Block[]
+  units             Unit[]
+  team              UserProject[]
+  documents         ProjectDocument[]
+  amenities         ProjectAmenity[]
+  progressLogs      SiteProgressLog[]
+  activities        ScheduleActivity[]
+  indents           Indent[]
+  purchaseOrders    PurchaseOrder[]
+  issues            MaterialIssue[]
+  stores            Store[]
+  stockBalances     StockBalance[]
+  stockLedger       StockLedger[]
+  leads             Lead[]
+  bookings          Booking[]
+  priceLists        PriceList[]
+  numbering         NumberingSeries[]
+  attendanceEntries AttendanceEntry[]
 
   @@index([status])
   @@index([projectManagerId])
@@ -1597,6 +1603,135 @@ model Lead {
 
 /// A free-text note on a lead — the Notes tab of the lead detail. Kept apart
 /// from follow-ups: a follow-up is a scheduled interaction, a note is a remark.
+/// Attendance for a day, per the design's three marks.
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+}
+
+/// How someone is engaged — "Company Staff", "Contract Role", "Direct Labour".
+/// Configurable, and refused deletion while an employee still carries it.
+model EmploymentType {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees Employee[]
+
+  @@map("employment_types")
+}
+
+/// Someone on site or in the office. Distinct from User: a User signs in, an
+/// Employee is a person whose attendance is kept. Most direct labour never
+/// gets a login.
+model Employee {
+  id               String    @id @default(cuid())
+  employeeCode     String    @unique
+  name             String
+  mobile           String
+  altContact       String?
+  /// Aadhaar is mandatory in the design's form, alongside name, mobile, photo.
+  aadhaar          String
+  pan              String?
+  address          String?
+  employmentTypeId String
+  designationId    String?
+  photoKey         String?
+  status           String    @default("ACTIVE")
+  joinedOn         DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  employmentType EmploymentType     @relation(fields: [employmentTypeId], references: [id])
+  designation    Designation?       @relation(fields: [designationId], references: [id])
+  documents      EmployeeDocument[]
+  attendance     AttendanceEntry[]
+
+  @@index([employmentTypeId])
+  @@map("employees")
+}
+
+/// The design gives an employee two document slots: Aadhaar card and PAN card.
+model EmployeeDocument {
+  id           String   @id @default(cuid())
+  employeeId   String
+  kind         String
+  storageKey   String
+  fileName     String
+  fileSize     Int      @default(0)
+  mimeType     String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  uploadedBy User?    @relation(fields: [uploadedById], references: [id])
+
+  @@unique([employeeId, kind])
+  @@map("employee_documents")
+}
+
+/// One employee, one day. The unique pair is what makes marking idempotent —
+/// re-marking a day corrects it rather than stacking a second row.
+model AttendanceEntry {
+  id            String           @id @default(cuid())
+  employeeId    String
+  attendanceOn  DateTime         @db.Date
+  status        AttendanceStatus
+  overtimeHours Decimal          @default(0) @db.Decimal(5, 2)
+  projectId     String?
+  notes         String?
+  markedById    String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  project  Project? @relation(fields: [projectId], references: [id])
+  markedBy User?    @relation(fields: [markedById], references: [id])
+
+  @@unique([employeeId, attendanceOn])
+  @@index([attendanceOn])
+  @@map("attendance_entries")
+}
+
+/// Knowledge Base — searchable articles with attachments.
+model KbArticle {
+  id          String   @id @default(cuid())
+  title       String
+  summary     String?
+  body        String
+  category    String?
+  isPublished Boolean  @default(true)
+  authorId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author      User?          @relation(fields: [authorId], references: [id])
+  attachments KbAttachment[]
+
+  @@index([category])
+  @@map("kb_articles")
+}
+
+model KbAttachment {
+  id           String   @id @default(cuid())
+  articleId    String
+  storageKey   String
+  fileName     String
+  fileSize     Int      @default(0)
+  mimeType     String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  article    KbArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  uploadedBy User?     @relation(fields: [uploadedById], references: [id])
+
+  @@map("kb_attachments")
+}
+
 model LeadNote {
   id        String   @id @default(cuid())
   leadId    String

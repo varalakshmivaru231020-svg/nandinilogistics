@@ -106,6 +106,14 @@ export const NAVIGATION: NavSection[] = [
     ],
   },
   {
+    // The design calls this group Workforce and the screen "Users & Attendance".
+    label: "Workforce",
+    icon: "Users",
+    items: [
+      { label: "Users & Attendance", href: "/hr", icon: "Users", permission: PERM.hr.employee.view },
+    ],
+  },
+  {
     label: "Reports",
     icon: "BarChart3",
     collapsed: true,
@@ -119,6 +127,13 @@ export const NAVIGATION: NavSection[] = [
     collapsed: true,
     items: [
       { label: "All Masters", href: "/masters", icon: "Database", anyPermission: MASTER_VIEW_CODES() },
+    ],
+  },
+  {
+    label: "Knowledge Base",
+    icon: "BookOpen",
+    items: [
+      { label: "Knowledge Base", href: "/kb", icon: "BookOpen", permission: PERM.kb.article.view },
     ],
   },
   {
