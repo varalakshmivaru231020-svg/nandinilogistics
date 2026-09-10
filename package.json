@@ -10,6 +10,7 @@
     "perms:codegen": "tsx scripts/generate-permission-codes.ts",
     "perms:sync": "tsx scripts/generate-permission-codes.ts && tsx scripts/sync-permissions.ts",
     "perms:grants": "tsx scripts/sync-role-grants.ts",
+    "seed:reference": "tsx scripts/seed-reference-data.ts",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",

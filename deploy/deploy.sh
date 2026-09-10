@@ -35,6 +35,11 @@ sudo -u nninfra HOME=/var/www/nninfra pnpm perms:sync | tail -4
 echo "==> Recomputing role grants"
 sudo -u nninfra HOME=/var/www/nninfra pnpm perms:grants | tail -9
 
+# Reference data Workforce and the Knowledge Base need to be usable. Idempotent,
+# and it never touches users or passwords the way the full seed would.
+echo "==> Seeding reference data"
+sudo -u nninfra HOME=/var/www/nninfra pnpm seed:reference | tail -3
+
 echo "==> Building"
 sudo -u nninfra HOME=/var/www/nninfra NODE_OPTIONS="--max-old-space-size=3072" pnpm build >/dev/null
 
