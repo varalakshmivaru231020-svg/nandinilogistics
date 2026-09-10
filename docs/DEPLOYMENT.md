@@ -38,8 +38,22 @@ The server pulls over a **read-only deploy key** (`/var/www/nninfra/.ssh/deploy_
 registered on the repository as "nninfra production server"). No personal access
 token is stored anywhere on the box, so rotating a PAT does not break deploys.
 
+The script's canonical copy is **`deploy/deploy.sh` in the repository**; the
+server runs it from `/var/www/nninfra/`, outside the checkout, so a
+`git reset --hard` cannot rewrite it while bash is still reading it. After
+changing it, install the new copy:
+
+```bash
+scp deploy/deploy.sh root@168.231.103.114:/var/www/nninfra/deploy.sh
+```
+
 That fetches `main`, installs, migrates, syncs the permission catalogue,
-rebuilds, restarts pm2 and health-checks. **If the app does not come back
+**recomputes role grants**, rebuilds, restarts pm2 and health-checks.
+
+Recomputing the grants matters: `perms:sync` writes the catalogue but never
+touches roles, so a newly registered permission exists and nobody holds it.
+`pnpm perms:grants` applies the matrix in `prisma/role-matrix.ts` and nothing
+else — unlike the full seed, which would reset user passwords. **If the app does not come back
 healthy it rolls back to the previous commit automatically.**
 
 ## Configuration
