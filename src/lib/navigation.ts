@@ -58,9 +58,18 @@ export const NAVIGATION: NavSection[] = [
     label: "Procurement",
     icon: "PackageSearch",
     items: [
-      // The design presents the whole chain as one screen with tabs.
+      // The design's Procurement group is five top-level screens, in this
+      // order and under these names. The rest of the chain — invoices,
+      // payments, issues, transfers — follows below; the scope document
+      // requires them and the design simply does not draw them.
+      { label: "Indents", href: "/material/indents", icon: "ClipboardList", permission: PERM.material.indent.view, badge: "indentPending" },
+      { label: "Purchase Orders", href: "/material/purchase-orders", icon: "FileText", permission: PERM.material.purchaseOrder.view },
+      { label: "Goods Receipt", href: "/material/grn", icon: "PackageCheck", permission: PERM.material.grn.view },
+      { label: "Item Master", href: "/material/stock", icon: "Boxes", permission: PERM.material.stock.view },
+      { label: "Vendors", href: "/masters/vendors", icon: "Store", permission: PERM.masters.vendor.view },
+
       {
-        label: "Procurement",
+        label: "Material & Inventory",
         href: "/material",
         icon: "PackageSearch",
         anyPermission: [
@@ -70,14 +79,9 @@ export const NAVIGATION: NavSection[] = [
           PERM.masters.vendor.view,
           PERM.masters.item.view,
         ],
-        badge: "indentPending",
       },
-      { label: "Indents", href: "/material/indents", icon: "ClipboardList", permission: PERM.material.indent.view },
-      { label: "Purchase Orders", href: "/material/purchase-orders", icon: "FileText", permission: PERM.material.purchaseOrder.view },
-      { label: "Goods Receipt", href: "/material/grn", icon: "PackageCheck", permission: PERM.material.grn.view },
       { label: "Vendor Invoices", href: "/material/invoices", icon: "ReceiptText", permission: PERM.material.vendorInvoice.view },
       { label: "Payments", href: "/material/payments", icon: "Banknote", permission: PERM.material.vendorPayment.view },
-      { label: "Stock", href: "/material/stock", icon: "Boxes", permission: PERM.material.stock.view },
       { label: "Reorder Alerts", href: "/material/reorder", icon: "TriangleAlert", permission: PERM.material.reorder.view, badge: "reorder" },
       { label: "Material Issues", href: "/material/issues", icon: "ArrowLeftRight", permission: PERM.material.issue.view },
       { label: "Store Transfers", href: "/material/transfers", icon: "Truck", permission: PERM.material.transfer.view },
