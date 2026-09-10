@@ -129,6 +129,46 @@ suite("access control, end to end", () => {
     }
   });
 
+  describe("the lead detail screen", () => {
+    it("shows the sales head every tab the design defines", async () => {
+      const lead = await prisma.lead.findFirst({ select: { id: true } });
+      if (!lead) return;
+      const { status, html } = await visit(`/sales/leads/${lead.id}`, tokens.saleshead);
+      expect(status).toBe(200);
+      for (const tab of ["Timeline", "Follow-ups", "Notes", "Stage history", "Files", "Flats"]) {
+        expect(html, `missing tab ${tab}`).toContain(tab);
+      }
+      expect(html).toContain("Back to leads");
+    });
+
+    it("refuses a sales executive a lead that is not theirs", async () => {
+      const other = await prisma.lead.findFirst({
+        where: { owner: { email: { not: "sales@nninfra.example" } } },
+        select: { id: true },
+      });
+      if (!other) return;
+      const res = await visit(`/sales/leads/${other.id}`, tokens.sales);
+      expect(res.status).toBe(404);
+    });
+
+    it("opens a sales executive's own lead", async () => {
+      const own = await prisma.lead.findFirst({
+        where: { owner: { email: "sales@nninfra.example" } },
+        select: { id: true },
+      });
+      if (!own) return;
+      expect((await visit(`/sales/leads/${own.id}`, tokens.sales)).status).toBe(200);
+    });
+
+    it("keeps the lead screen away from the store manager entirely", async () => {
+      const lead = await prisma.lead.findFirst({ select: { id: true } });
+      if (!lead) return;
+      const res = await visit(`/sales/leads/${lead.id}`, tokens.store);
+      expect(res.status).toBe(307);
+      expect(res.location).toContain("/forbidden");
+    });
+  });
+
   describe("row-level scoping", () => {
     it("shows a sales executive only their own leads", async () => {
       const { html } = await visit("/sales/leads?view=list", tokens.sales);

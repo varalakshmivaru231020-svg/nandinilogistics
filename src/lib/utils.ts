@@ -82,3 +82,12 @@ export function titleFromCode(code: string): string {
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+/**
+ * Masks a phone number down to its last four digits. Used wherever a viewer
+ * lacks `sales.lead.viewContact` — the number is never sent to the client in
+ * full, so hiding it is not a UI courtesy but the actual boundary.
+ */
+export function maskPhone(phone: string) {
+  return phone.length > 4 ? `${"•".repeat(phone.length - 4)}${phone.slice(-4)}` : "••••";
+}

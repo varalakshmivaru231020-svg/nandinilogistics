@@ -361,9 +361,17 @@ crud({
     ["markLost", "Mark a lead lost", "BUTTON", "A lost reason is mandatory."],
     ["merge", "Merge duplicate leads", "BUTTON"],
     ["viewContact", "See full phone number and email", "FIELD", "When not granted, contact details are masked in lists."],
+    ["tabTimeline", "Lead tab — Timeline", "TAB"],
     ["tabFollowUps", "Lead tab — Follow-ups", "TAB"],
+    ["tabNotes", "Lead tab — Notes", "TAB"],
+    ["tabStageHistory", "Lead tab — Stage history", "TAB"],
+    ["tabFiles", "Lead tab — Files", "TAB"],
+    ["tabFlats", "Lead tab — Flats", "TAB", "Blocking or releasing a unit here moves the Available Flats board."],
     ["tabVisits", "Lead tab — Site visits", "TAB"],
     ["tabCostSheets", "Lead tab — Cost sheets", "TAB"],
+    ["note", "Add a note to a lead", "BUTTON"],
+    ["uploadFile", "Attach a file to a lead", "BUTTON", "KYC documents and brochures."],
+    ["sendMail", "Send mail to a lead", "BUTTON"],
   ],
 });
 

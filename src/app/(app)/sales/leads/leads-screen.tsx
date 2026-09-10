@@ -1,13 +1,14 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Copy, Download, PhoneCall, Plus, Upload, UserCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
-import { cn, formatDate, money } from "@/lib/utils";
+import { cn, formatDate, money, maskPhone } from "@/lib/utils";
 import { assignLeadAction, changeLeadStageAction, createLeadAction, logFollowUpAction } from "./actions";
 
 const STAGES = [
@@ -40,10 +41,6 @@ interface Lead {
 }
 
 type Lookup = Array<{ id: string; name: string; code?: string }>;
-
-function maskPhone(phone: string) {
-  return phone.length > 4 ? `${"•".repeat(phone.length - 4)}${phone.slice(-4)}` : "••••";
-}
 
 /** The follow-up chip the design shows on every card and row. */
 function followUp(nextActionAt: string | null, nowMs: number) {
@@ -264,7 +261,7 @@ export function LeadsScreen({
                         draggable={can.changeStage}
                         onDragStart={() => setDragging(c.id)}
                         onDragEnd={() => setDragging(null)}
-                        onClick={() => setFollowingUp(c)}
+                        onClick={() => router.push(`/sales/leads/${c.id}`)}
                         className={cn(
                           "rounded-[11px] border border-line-400 bg-white px-3 py-3 transition-shadow",
                           can.changeStage ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
@@ -328,7 +325,12 @@ export function LeadsScreen({
                   <tr key={r.id} className="border-b border-[#F0F3FA] last:border-0 hover:bg-surface-tint">
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-bold text-navy-950">{r.name}</span>
+                        <Link
+                          href={`/sales/leads/${r.id}`}
+                          className="text-[13px] font-bold text-navy-950 transition-colors hover:text-brand-700"
+                        >
+                          {r.name}
+                        </Link>
                         <span className="rounded-full bg-surface-field px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[.04em] text-muted-600">
                           {r.source}
                         </span>

@@ -177,3 +177,93 @@ export async function logFollowUpAction(
     return null;
   });
 }
+
+/* ------------------------------ Lead detail ------------------------------ */
+
+/** Notes tab. A note is a remark; a follow-up is a scheduled interaction. */
+export async function addLeadNoteAction(leadId: string, body: string): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.sales.lead.note);
+    const text = body.trim();
+    if (!text) throw new Error("A note cannot be empty.");
+
+    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { leadNo: true, ownerId: true } });
+    if (!lead) throw new Error("Lead not found.");
+    if (!ctx.has(PERM.sales.lead.viewAll) && lead.ownerId !== ctx.id) {
+      throw new PermissionError(PERM.sales.lead.viewAll);
+    }
+
+    await prisma.leadNote.create({ data: { leadId, userId: ctx.id, body: text } });
+    await recordAudit({
+      action: "UPDATE", entity: "Lead", entityId: leadId, userId: ctx.id,
+      summary: `Noted on ${lead.leadNo}: ${text.slice(0, 80)}`,
+    });
+    revalidatePath(`/sales/leads/${leadId}`);
+    return null;
+  });
+}
+
+/**
+ * Flats tab. Blocking here is the same hold the Available Flats board uses, so
+ * the board reflects it immediately — the design says as much on the screen.
+ */
+export async function blockUnitForLeadAction(leadId: string, unitId: string): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.unit.hold.create);
+
+    await prisma.$transaction(async (tx) => {
+      const unit = await tx.unit.findUnique({ where: { id: unitId }, select: { unitNumber: true, status: true } });
+      if (!unit) throw new Error("Unit not found.");
+      if (unit.status !== "AVAILABLE") throw new Error(`Unit ${unit.unitNumber} is not available.`);
+
+      const days = 2;
+      await tx.unitHold.create({
+        data: {
+          unitId,
+          leadId,
+          heldById: ctx.id,
+          expiresAt: new Date(Date.now() + days * 86_400_000),
+          isActive: true,
+        },
+      });
+      await tx.unit.update({ where: { id: unitId }, data: { status: "HELD" } });
+      await recordAudit({
+        action: "UPDATE", entity: "Unit", entityId: unitId, userId: ctx.id,
+        summary: `Blocked unit ${unit.unitNumber} for a lead`,
+      });
+    });
+
+    revalidatePath(`/sales/leads/${leadId}`);
+    revalidatePath("/units/board");
+    return null;
+  });
+}
+
+/** Releases a hold taken from the lead screen. */
+export async function releaseUnitForLeadAction(leadId: string, holdId: string): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.unit.hold.release);
+
+    await prisma.$transaction(async (tx) => {
+      const hold = await tx.unitHold.findUnique({
+        where: { id: holdId },
+        select: { unitId: true, isActive: true, unit: { select: { unitNumber: true } } },
+      });
+      if (!hold?.isActive) throw new Error("That hold is no longer active.");
+
+      await tx.unitHold.update({
+        where: { id: holdId },
+        data: { isActive: false, releasedAt: new Date(), releaseNote: "Released from the lead screen" },
+      });
+      await tx.unit.update({ where: { id: hold.unitId }, data: { status: "AVAILABLE" } });
+      await recordAudit({
+        action: "UPDATE", entity: "Unit", entityId: hold.unitId, userId: ctx.id,
+        summary: `Released unit ${hold.unit.unitNumber}`,
+      });
+    });
+
+    revalidatePath(`/sales/leads/${leadId}`);
+    revalidatePath("/units/board");
+    return null;
+  });
+}
