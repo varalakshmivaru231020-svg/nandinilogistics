@@ -8,6 +8,8 @@ import { PERM } from "@/lib/permissions/codes";
 import { Badge, Card, CardBody, CardHeader, CardTitle, PageHeader } from "@/components/ui/primitives";
 import { cn, formatDate, money, qty } from "@/lib/utils";
 import { DocumentsTab } from "./documents/documents-tab";
+import { WbsTab } from "./wbs-tab";
+import { TeamTab } from "./team-tab";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -67,6 +69,20 @@ export default async function ProjectDetailPage({
   const tab = availableTabs.find((t) => t.key === tabParam)?.key ?? availableTabs[0]?.key;
 
   const showBudget = ctx.has(PERM.project.project.viewBudget);
+
+  // Candidates for the Team tab: active users not already mapped here.
+  const assignableUsers = ctx.has(PERM.project.team.assign)
+    ? (
+        await prisma.user.findMany({
+          where: {
+            status: "ACTIVE",
+            NOT: { projectAccess: { some: { projectId: project.id } } },
+          },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, email: true, designation: { select: { name: true } } },
+        })
+      ).map((u) => ({ id: u.id, name: u.name, email: u.email, designation: u.designation?.name ?? null }))
+    : [];
 
   const documentTypes = ctx.has(PERM.project.project.tabDocuments)
     ? await prisma.documentType.findMany({
@@ -173,77 +189,47 @@ export default async function ProjectDetailPage({
 
           {/* ------------------------------ Work breakdown --------------------------- */}
           {tab === "wbs" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Project → Phase → Work Package</CardTitle>
-                <span className="text-xs text-muted-500">
-                  The spine the schedule, tasks and indents all hang from.
-                </span>
-              </CardHeader>
-              <CardBody className="p-0">
-                {project.phases.length === 0 ? (
-                  <p className="px-4 py-10 text-center text-sm text-muted-500">
-                    No phases defined yet.
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-line-200">
-                    {project.phases.map((phase) => (
-                      <li key={phase.id} className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <Badge tone="brand">{phase.code}</Badge>
-                          <span className="text-sm font-medium text-navy-900">{phase.name}</span>
-                          <span className="text-xs text-muted-400">
-                            {phase.workPackages.length} work package(s)
-                          </span>
-                        </div>
-                        {phase.workPackages.length > 0 && (
-                          <ul className="mt-2 space-y-1 border-l-2 border-line-400 pl-4">
-                            {phase.workPackages.map((wp) => (
-                              <li key={wp.id} className="flex items-center gap-2 text-sm">
-                                <code className="text-xs text-muted-400">{wp.code}</code>
-                                <span className="text-navy-600">{wp.name}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardBody>
-            </Card>
+            <WbsTab
+              projectId={project.id}
+              phases={project.phases.map((ph) => ({
+                id: ph.id,
+                code: ph.code,
+                name: ph.name,
+                sequence: ph.sequence,
+                workPackages: ph.workPackages.map((w) => ({ id: w.id, code: w.code, name: w.name })),
+              }))}
+              can={{
+                createPhase: ctx.has(PERM.project.phase.create),
+                updatePhase: ctx.has(PERM.project.phase.update),
+                deletePhase: ctx.has(PERM.project.phase.delete),
+                createPackage: ctx.has(PERM.project.workPackage.create),
+                updatePackage: ctx.has(PERM.project.workPackage.update),
+                deletePackage: ctx.has(PERM.project.workPackage.delete),
+              }}
+            />
           )}
 
           {/* ---------------------------------- Team --------------------------------- */}
           {tab === "team" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Project team ({project.team.length})</CardTitle>
-                <span className="text-xs text-muted-500">Access follows this mapping.</span>
-              </CardHeader>
-              <CardBody className="p-0">
-                {project.team.length === 0 ? (
-                  <p className="px-4 py-10 text-center text-sm text-muted-500">Nobody mapped yet.</p>
-                ) : (
-                  <ul className="divide-y divide-line-200">
-                    {project.team.map((t) => (
-                      <li key={t.id} className="flex items-center justify-between px-4 py-2.5">
-                        <div>
-                          <p className="text-sm text-navy-900">{t.user.name}</p>
-                          <p className="text-xs text-muted-500">
-                            {t.user.designation?.name ?? "—"} · {t.user.email}
-                          </p>
-                        </div>
-                        <Badge tone={t.user.status === "ACTIVE" ? "good" : "slate"}>{t.user.status}</Badge>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardBody>
-            </Card>
+            <TeamTab
+              projectId={project.id}
+              members={project.team.map((t) => ({
+                id: t.id,
+                userId: t.user.id,
+                name: t.user.name,
+                email: t.user.email,
+                designation: t.user.designation?.name ?? null,
+                status: t.user.status,
+                isProjectManager: project.projectManagerId === t.user.id,
+              }))}
+              assignable={assignableUsers}
+              can={{
+                assign: ctx.has(PERM.project.team.assign),
+                remove: ctx.has(PERM.project.team.remove),
+              }}
+            />
           )}
 
-          {/* -------------------------------- Documents ------------------------------ */}
           {tab === "documents" && (
             <DocumentsTab
               projectId={id}

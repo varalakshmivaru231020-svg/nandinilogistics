@@ -133,3 +133,189 @@ export async function createWorkPackageAction(
     return null;
   });
 }
+
+/* ------------------------- Work breakdown, edited ------------------------- */
+
+export async function updatePhaseAction(
+  projectId: string, phaseId: string, formData: FormData,
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.project.phase.update);
+    assertProjectAccess(ctx, projectId);
+
+    const code = String(formData.get("code") ?? "").trim().toUpperCase();
+    const name = String(formData.get("name") ?? "").trim();
+    const sequence = Number(formData.get("sequence") ?? 0);
+    if (!code || !name) throw new Error("Phase code and name are required.");
+
+    const before = await prisma.projectPhase.findUnique({ where: { id: phaseId } });
+    if (!before || before.projectId !== projectId) throw new Error("Phase not found.");
+
+    await prisma.projectPhase.update({ where: { id: phaseId }, data: { code, name, sequence } });
+    await recordAudit({
+      action: "UPDATE", entity: "ProjectPhase", entityId: phaseId, userId: ctx.id, projectId,
+      summary: `Renamed phase ${before.code} to ${code} — ${name}`,
+      changes: { code: { from: before.code, to: code }, name: { from: before.name, to: name } },
+    });
+    revalidatePath(`/projects/${projectId}`);
+    return null;
+  });
+}
+
+/**
+ * Deleting a phase takes its work packages with it. Refused once anything
+ * downstream is hanging off it — a schedule activity points at a work package,
+ * and orphaning that would silently break the schedule roll-up.
+ */
+export async function deletePhaseAction(projectId: string, phaseId: string): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.project.phase.delete);
+    assertProjectAccess(ctx, projectId);
+
+    const phase = await prisma.projectPhase.findUnique({
+      where: { id: phaseId },
+      include: { workPackages: { select: { id: true } } },
+    });
+    if (!phase || phase.projectId !== projectId) throw new Error("Phase not found.");
+
+    const wpIds = phase.workPackages.map((w) => w.id);
+    if (wpIds.length) {
+      const inUse = await prisma.scheduleActivity.count({ where: { workPackageId: { in: wpIds } } });
+      if (inUse > 0) {
+        throw new Error(
+          `Phase ${phase.code} has ${inUse} schedule activit${inUse === 1 ? "y" : "ies"} against its work packages. Remove those first.`,
+        );
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.workPackage.deleteMany({ where: { phaseId } });
+      await tx.projectPhase.delete({ where: { id: phaseId } });
+    });
+    await recordAudit({
+      action: "DELETE", entity: "ProjectPhase", entityId: phaseId, userId: ctx.id, projectId,
+      summary: `Deleted phase ${phase.code} — ${phase.name}`,
+    });
+    revalidatePath(`/projects/${projectId}`);
+    return null;
+  });
+}
+
+export async function updateWorkPackageAction(
+  projectId: string, workPackageId: string, formData: FormData,
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.project.workPackage.update);
+    assertProjectAccess(ctx, projectId);
+
+    const code = String(formData.get("code") ?? "").trim().toUpperCase();
+    const name = String(formData.get("name") ?? "").trim();
+    if (!code || !name) throw new Error("Work package code and name are required.");
+
+    const before = await prisma.workPackage.findUnique({
+      where: { id: workPackageId },
+      include: { phase: { select: { projectId: true } } },
+    });
+    if (!before || before.phase.projectId !== projectId) throw new Error("Work package not found.");
+
+    await prisma.workPackage.update({ where: { id: workPackageId }, data: { code, name } });
+    await recordAudit({
+      action: "UPDATE", entity: "WorkPackage", entityId: workPackageId, userId: ctx.id, projectId,
+      summary: `Renamed work package ${before.code} to ${code} — ${name}`,
+      changes: { code: { from: before.code, to: code }, name: { from: before.name, to: name } },
+    });
+    revalidatePath(`/projects/${projectId}`);
+    return null;
+  });
+}
+
+export async function deleteWorkPackageAction(
+  projectId: string, workPackageId: string,
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.project.workPackage.delete);
+    assertProjectAccess(ctx, projectId);
+
+    const wp = await prisma.workPackage.findUnique({
+      where: { id: workPackageId },
+      include: { phase: { select: { projectId: true } } },
+    });
+    if (!wp || wp.phase.projectId !== projectId) throw new Error("Work package not found.");
+
+    const inUse = await prisma.scheduleActivity.count({ where: { workPackageId } });
+    if (inUse > 0) {
+      throw new Error(`Work package ${wp.code} carries ${inUse} schedule activit${inUse === 1 ? "y" : "ies"}.`);
+    }
+
+    await prisma.workPackage.delete({ where: { id: workPackageId } });
+    await recordAudit({
+      action: "DELETE", entity: "WorkPackage", entityId: workPackageId, userId: ctx.id, projectId,
+      summary: `Deleted work package ${wp.code} — ${wp.name}`,
+    });
+    revalidatePath(`/projects/${projectId}`);
+    return null;
+  });
+}
+
+/* ------------------------------ Team mapping ------------------------------ */
+
+/**
+ * Mapping a user to a project is what grants them the project — access follows
+ * the mapping, per the scope document. So this is an access-control write, and
+ * it is audited as one.
+ */
+export async function mapUserToProjectAction(
+  projectId: string, userId: string,
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.project.team.assign);
+    assertProjectAccess(ctx, projectId);
+
+    const [user, project] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { name: true, status: true } }),
+      prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }),
+    ]);
+    if (!user) throw new Error("User not found.");
+    if (user.status !== "ACTIVE") throw new Error(`${user.name} is not an active user.`);
+    if (!project) throw new Error("Project not found.");
+
+    const existing = await prisma.userProject.findFirst({ where: { projectId, userId } });
+    if (existing) throw new Error(`${user.name} is already mapped to this project.`);
+
+    await prisma.userProject.create({ data: { projectId, userId } });
+    await recordAudit({
+      action: "CREATE", entity: "UserProject", userId: ctx.id, projectId,
+      summary: `Mapped ${user.name} to ${project.name}`,
+    });
+    revalidatePath(`/projects/${projectId}`);
+    return null;
+  });
+}
+
+export async function removeUserFromProjectAction(
+  projectId: string, userId: string,
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.project.team.remove);
+    assertProjectAccess(ctx, projectId);
+
+    const mapping = await prisma.userProject.findFirst({
+      where: { projectId, userId },
+      include: { user: { select: { name: true } }, project: { select: { name: true, projectManagerId: true } } },
+    });
+    if (!mapping) throw new Error("That user is not mapped to this project.");
+    if (mapping.project.projectManagerId === userId) {
+      throw new Error(
+        `${mapping.user.name} is the project manager. Change the project manager before removing the mapping.`,
+      );
+    }
+
+    await prisma.userProject.delete({ where: { id: mapping.id } });
+    await recordAudit({
+      action: "DELETE", entity: "UserProject", userId: ctx.id, projectId,
+      summary: `Removed ${mapping.user.name} from ${mapping.project.name}`,
+    });
+    revalidatePath(`/projects/${projectId}`);
+    return null;
+  });
+}
