@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { PackageCheck, Plus } from "lucide-react";
+import { PackageCheck } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { grnLookups } from "./lookups";
+import { NewGrnDrawer } from "./new-grn-drawer";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatDate, qty } from "@/lib/utils";
 
@@ -24,6 +25,8 @@ type GrnRow = {
 
 export default async function GrnListPage() {
   const ctx = await requirePermission(PERM.material.grn.view);
+
+  const lookups = ctx.has(PERM.material.grn.create) ? await grnLookups(ctx) : null;
 
   const grns = await prisma.grn.findMany({
     where: { purchaseOrder: projectScopeFilter(ctx) },
@@ -110,12 +113,7 @@ export default async function GrnListPage() {
           <div className="flex items-center gap-2">
             {awaitingPost > 0 && <Badge tone="warn">{awaitingPost} inspected, not posted</Badge>}
             {ctx.has(PERM.material.grn.create) && (
-              <Link href="/material/grn/new">
-                <Button size="sm">
-                  <Plus className="h-3.5 w-3.5" />
-                  Receive material
-                </Button>
-              </Link>
+              <NewGrnDrawer openPos={lookups!.openPos} stores={lookups!.stores} />
             )}
           </div>
         }

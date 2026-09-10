@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { FileText, Plus } from "lucide-react";
+import { FileText } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { poLookups } from "./lookups";
+import { NewPoDrawer } from "./new-po-drawer";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { Button } from "@/components/ui/button";
 import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
 import { formatDate, money } from "@/lib/utils";
 import { PoFilters } from "./po-filters";
@@ -34,6 +35,8 @@ export default async function PurchaseOrdersPage({
   searchParams: Promise<{ q?: string; status?: string; page?: string }>;
 }) {
   const ctx = await requirePermission(PERM.material.purchaseOrder.view);
+
+  const lookups = ctx.has(PERM.material.purchaseOrder.create) ? await poLookups(ctx) : null;
   const { q = "", status = "all", page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam ?? 1) || 1);
 
@@ -136,12 +139,13 @@ export default async function PurchaseOrdersPage({
           <div className="flex items-center gap-2">
             {pendingApproval > 0 && <Badge tone="warn">{pendingApproval} awaiting approval</Badge>}
             {ctx.has(PERM.material.purchaseOrder.create) && (
-              <Link href="/material/purchase-orders/new">
-                <Button size="sm">
-                  <Plus className="h-3.5 w-3.5" />
-                  New purchase order
-                </Button>
-              </Link>
+              <NewPoDrawer
+                projects={lookups!.projects}
+                vendors={lookups!.vendors}
+                terms={lookups!.terms}
+                items={lookups!.items}
+                openIndents={lookups!.openIndents}
+              />
             )}
           </div>
         }

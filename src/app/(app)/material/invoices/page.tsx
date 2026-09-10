@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { Plus, ReceiptText } from "lucide-react";
+import { ReceiptText } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { invoiceLookups } from "./lookups";
+import { NewInvoiceDrawer } from "./new-invoice-drawer";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatDate, money } from "@/lib/utils";
 
@@ -25,6 +26,8 @@ type Row = {
 
 export default async function InvoicesPage() {
   const ctx = await requirePermission(PERM.material.vendorInvoice.view);
+
+  const lookups = ctx.has(PERM.material.vendorInvoice.create) ? await invoiceLookups(ctx) : null;
 
   const invoices = await prisma.vendorInvoice.findMany({
     where: { purchaseOrder: projectScopeFilter(ctx) },
@@ -96,12 +99,7 @@ export default async function InvoicesPage() {
             {mismatched > 0 && <Badge tone="bad">{mismatched} mismatched</Badge>}
             <Badge tone="slate">{money(outstanding)} outstanding</Badge>
             {ctx.has(PERM.material.vendorInvoice.create) && (
-              <Link href="/material/invoices/new">
-                <Button size="sm">
-                  <Plus className="h-3.5 w-3.5" />
-                  Record invoice
-                </Button>
-              </Link>
+              <NewInvoiceDrawer invoiceable={lookups!.invoiceable} />
             )}
           </div>
         }

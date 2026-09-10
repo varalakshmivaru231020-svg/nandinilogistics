@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Calculator, Plus } from "lucide-react";
+import { Calculator } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { costSheetLookups } from "./lookups";
+import { NewCostSheetDrawer } from "./new-cost-sheet-drawer";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatDate, money } from "@/lib/utils";
 
@@ -21,6 +22,8 @@ type Row = {
 
 export default async function CostSheetsPage() {
   const ctx = await requirePermission(PERM.sales.costSheet.view);
+
+  const lookups = ctx.has(PERM.sales.costSheet.create) ? await costSheetLookups(ctx) : null;
 
   const scope = ctx.canAccessAllProjects ? {} : { unit: { projectId: { in: ctx.projectIds } } };
 
@@ -104,12 +107,13 @@ export default async function CostSheetsPage() {
           <div className="flex items-center gap-2">
             {awaitingDiscount > 0 && <Badge tone="warn">{awaitingDiscount} discount(s) pending approval</Badge>}
             {ctx.has(PERM.sales.costSheet.create) && (
-              <Link href="/sales/cost-sheets/new">
-                <Button size="sm">
-                  <Plus className="h-3.5 w-3.5" />
-                  Generate cost sheet
-                </Button>
-              </Link>
+              <NewCostSheetDrawer
+                units={lookups!.units}
+                leads={lookups!.leads}
+                chargeHeads={lookups!.chargeHeads}
+                rates={lookups!.rates}
+                canDiscount={ctx.has(PERM.sales.costSheet.create)}
+              />
             )}
           </div>
         }
