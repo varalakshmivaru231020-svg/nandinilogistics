@@ -7,6 +7,7 @@ import { ArrowLeft, Mail, Pencil, Upload, X } from "lucide-react";
 
 import { Badge, Card, Field, Input } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { cn, formatDate, money } from "@/lib/utils";
 import { addLeadNoteAction, blockUnitForLeadAction, releaseUnitForLeadAction } from "../actions";
 import { logFollowUpAction } from "../actions";
@@ -66,8 +67,8 @@ export function LeadDetail({
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const [notice, setNotice] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const toast = useToast();
+  const setError = React.useCallback((m: string) => toast(m, "bad"), [toast]);
 
   function setParam(next: Record<string, string | undefined>) {
     const q = new URLSearchParams(params.toString());
@@ -143,9 +144,6 @@ export function LeadDetail({
           </Button>
         )}
       </div>
-
-      {notice && <div className="mb-3 rounded-[10px] border border-good-050 bg-good-050 px-3.5 py-2.5 text-[12px] font-bold text-good-700">{notice}</div>}
-      {error && <div className="mb-3 rounded-[10px] border border-bad-050 bg-bad-050 px-3.5 py-2.5 text-[12px] font-bold text-bad-600">{error}</div>}
 
       {/* ------------------------------ Stepper ------------------------------- */}
       <div className="mb-3.5 flex flex-wrap items-center gap-1.5 rounded-[13px] border border-line-400 bg-white px-4 py-3">
@@ -241,7 +239,7 @@ export function LeadDetail({
                 rows={followUps}
                 leadId={lead.id}
                 canLog={can.logFollowUp}
-                onDone={(m) => { setNotice(m); setError(null); router.refresh(); }}
+                onDone={(m) => { toast(m); router.refresh(); }}
                 onError={setError}
               />
             )}
@@ -250,7 +248,7 @@ export function LeadDetail({
                 rows={notes}
                 leadId={lead.id}
                 canAdd={can.note}
-                onDone={(m) => { setNotice(m); setError(null); router.refresh(); }}
+                onDone={(m) => { toast(m); router.refresh(); }}
                 onError={setError}
               />
             )}
@@ -266,7 +264,7 @@ export function LeadDetail({
                 projectName={projectName}
                 can={can}
                 onTower={(t) => setParam({ tower: t === "all" ? undefined : t })}
-                onDone={(m) => { setNotice(m); setError(null); router.refresh(); }}
+                onDone={(m) => { toast(m); router.refresh(); }}
                 onError={setError}
               />
             )}

@@ -6,6 +6,7 @@ import { ArrowLeft, FileText, Pencil, Plus, Search, X } from "lucide-react";
 
 import { Badge, Card, Field, Input, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { formatDate } from "@/lib/utils";
 import {
@@ -29,8 +30,8 @@ export function KbScreen({
   const [q, setQ] = React.useState(query);
   const [editing, setEditing] = React.useState<Article | "new" | null>(null);
   const [removing, setRemoving] = React.useState<Article | null>(null);
-  const [notice, setNotice] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const toast = useToast();
+  const setError = React.useCallback((m: string) => toast(m, "bad"), [toast]);
   const [busy, setBusy] = React.useState(false);
 
   function setParam(next: Record<string, string | undefined>) {
@@ -41,7 +42,7 @@ export function KbScreen({
     router.push(`${pathname}?${p.toString()}`);
   }
 
-  function flash(m: string) { setNotice(m); setError(null); router.refresh(); }
+  function flash(m: string) { toast(m); router.refresh(); }
 
   const open = openId ? articles.find((a) => a.id === openId) ?? null : null;
 
@@ -90,8 +91,6 @@ export function KbScreen({
             </Button>
           )}
         </div>
-
-        {notice && <div className="mb-3 rounded-[10px] border border-good-050 bg-good-050 px-3.5 py-2.5 text-[12px] font-bold text-good-700">{notice}</div>}
 
         <Card className="px-5 py-5">
           {open.summary && (
@@ -152,9 +151,6 @@ export function KbScreen({
           </Button>
         )}
       </div>
-
-      {notice && <div className="mb-3 rounded-[10px] border border-good-050 bg-good-050 px-3.5 py-2.5 text-[12px] font-bold text-good-700">{notice}</div>}
-      {error && <div className="mb-3 rounded-[10px] border border-bad-050 bg-bad-050 px-3.5 py-2.5 text-[12px] font-bold text-bad-600">{error}</div>}
 
       {articles.length === 0 ? (
         <Card className="px-4 py-16 text-center">

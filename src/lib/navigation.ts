@@ -126,11 +126,12 @@ export const NAVIGATION: NavSection[] = [
     ],
   },
   {
+    // The design names this screen "Masters & Users" and keeps both on it.
     label: "Masters",
     icon: "Database",
     collapsed: true,
     items: [
-      { label: "All Masters", href: "/masters", icon: "Database", anyPermission: MASTER_VIEW_CODES() },
+      { label: "Masters & Users", href: "/masters", icon: "Database", anyPermission: MASTER_VIEW_CODES() },
     ],
   },
   {

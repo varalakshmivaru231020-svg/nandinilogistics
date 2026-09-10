@@ -6,6 +6,7 @@ import { Download, Pencil, Plus, Search, X } from "lucide-react";
 
 import { Badge, Card, Field, Input, Select } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 import {
@@ -49,8 +50,8 @@ export function HrScreen({
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const [notice, setNotice] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const toast = useToast();
+  const setError = React.useCallback((m: string) => toast(m, "bad"), [toast]);
   const [editing, setEditing] = React.useState<Employee | "new" | null>(null);
   const [removing, setRemoving] = React.useState<Employee | null>(null);
   const [newType, setNewType] = React.useState("");
@@ -70,8 +71,7 @@ export function HrScreen({
   const active = visibleTabs.some((t) => t.key === tab) ? tab : (visibleTabs[0]?.key ?? "staff");
 
   function flash(message: string) {
-    setNotice(message);
-    setError(null);
+    toast(message);
     router.refresh();
   }
 
@@ -120,9 +120,6 @@ export function HrScreen({
           </button>
         ))}
       </div>
-
-      {notice && <div className="mb-3 rounded-[10px] border border-good-050 bg-good-050 px-3.5 py-2.5 text-[12px] font-bold text-good-700">{notice}</div>}
-      {error && <div className="mb-3 rounded-[10px] border border-bad-050 bg-bad-050 px-3.5 py-2.5 text-[12px] font-bold text-bad-600">{error}</div>}
 
       {active === "staff" && (
         <StaffTab
