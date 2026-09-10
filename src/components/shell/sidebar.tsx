@@ -114,10 +114,13 @@ export function Sidebar({
                           href={item.href}
                           onClick={onCloseMobile}
                           className={cn(
-                            "group flex items-center gap-2.5 rounded-[9px] px-2.5 py-[9px] text-[12.5px] transition-colors",
+                            // The design's nav item: gap 11, radius 9,
+                            // padding 9.5/10, 12.5px. Active is a cyan-to-navy
+                            // gradient with a matching glow, not a tint.
+                            "group flex items-center gap-[11px] rounded-[9px] px-2.5 py-[9.5px] text-[12.5px] transition-colors",
                             active
-                              ? "bg-brand-100 font-bold text-navy-950"
-                              : "font-medium text-muted-600 hover:bg-surface-hover hover:text-navy-950",
+                              ? "bg-[linear-gradient(140deg,#0089C9,#2F308C)] font-bold text-white shadow-[0_6px_16px_rgba(0,137,201,.28)]"
+                              : "font-semibold text-navy-500 hover:bg-surface-hover hover:text-navy-950",
                           )}
                         >
                           <span className="flex w-[17px] items-center">
@@ -125,13 +128,20 @@ export function Sidebar({
                               name={item.icon}
                               className={cn(
                                 "h-[15px] w-[15px] shrink-0",
-                                active ? "text-brand-500" : "text-muted-400 group-hover:text-navy-900",
+                                active ? "text-white" : "text-muted-400 group-hover:text-navy-900",
                               )}
                             />
                           </span>
                           <span className="flex-1 truncate text-left">{item.label}</span>
                           {count !== undefined && count > 0 && (
-                            <span className="num min-w-[18px] rounded-full bg-bad-600 px-1.5 py-px text-center text-[9.5px] font-bold text-white">
+                            <span
+                              className={cn(
+                                // Amber, not red — the design treats a nav
+                                // count as attention, not alarm.
+                                "num min-w-[18px] rounded-full px-[7px] py-[2px] text-center text-[9.5px] font-bold",
+                                active ? "bg-white/20 text-white" : "bg-warn-050 text-warn-700",
+                              )}
+                            >
                               {count > 99 ? "99+" : count}
                             </span>
                           )}

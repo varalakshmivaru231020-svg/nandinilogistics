@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Pencil, Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Drawer, DrawerStep } from "@/components/ui/drawer";
 import { Alert, Input, Select } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 import { createProjectAction, type DraftWbsRow } from "./actions";
@@ -13,9 +13,11 @@ import { createProjectAction, type DraftWbsRow } from "./actions";
 type Lookup = Array<{ id: string; name: string }>;
 
 /**
- * The design's New project dialog, field for field. The grid is three columns
- * and each field declares its span, so the shape of the form matches:
- * name+code, location+land, rera+approval, then the three counts, then dates.
+ * The design's Create project panel, field for field. The grid is TWO columns
+ * and each field declares its span; CSS grid auto-placement then produces the
+ * design's exact shape — a span-2 field cannot sit beside a span-1, so name,
+ * location and RERA each take a row of their own, code and land area sit alone
+ * beside the gap, and the last six pair up.
  */
 const FIELDS: Array<{
   name: string; label: string; placeholder: string; span: 1 | 2;
@@ -74,12 +76,11 @@ export function NewProjectButton({
       </Button>
 
       {open && (
-        <Modal
+        <Drawer
           open
           onClose={reset}
-          title="New project"
-          description="Every task, checklist, indent, purchase order and unit in the system belongs to a project created here."
-          size="lg"
+          title="Create project"
+          description="Level 1 · Project master, then Level 2 · Work breakdown"
           footer={
             <>
               <Button variant="secondary" type="button" onClick={reset}>Cancel</Button>
@@ -90,9 +91,32 @@ export function NewProjectButton({
           <form id="project-form" onSubmit={onSubmit} className="space-y-4">
             {error && <Alert tone="error">{error}</Alert>}
 
+            <DrawerStep n={1}>Project master</DrawerStep>
+
+            {/* The design's two-column field grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {FIELDS.map((f) => (
+                <label
+                  key={f.name}
+                  className={cn("block min-w-0", f.span === 2 && "col-span-2")}
+                >
+                  <span className="mb-[5px] block text-[11px] font-semibold text-muted-600">
+                    {f.label} {f.required && <span className="text-bad-600">*</span>}
+                  </span>
+                  <Input
+                    name={f.name}
+                    type={f.type ?? "text"}
+                    placeholder={f.placeholder}
+                    required={f.required}
+                    className={f.name === "code" ? "uppercase" : undefined}
+                  />
+                </label>
+              ))}
+            </div>
+
             {/* Project type — the design's pill chips, not a dropdown */}
             <div>
-              <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[.09em] text-muted-500">
+              <p className="mb-[7px] text-[11px] font-semibold text-muted-600">
                 Project type <span className="text-bad-600">*</span>
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -114,45 +138,24 @@ export function NewProjectButton({
               </div>
             </div>
 
-            {/* The design's three-column field grid */}
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-              {FIELDS.map((f) => (
-                <label
-                  key={f.name}
-                  className={cn("block min-w-0", f.span === 2 && "sm:col-span-2")}
-                >
-                  <span className="mb-1.5 block text-[10.5px] font-bold uppercase tracking-[.09em] text-muted-500">
-                    {f.label} {f.required && <span className="text-bad-600">*</span>}
-                  </span>
-                  <Input
-                    name={f.name}
-                    type={f.type ?? "text"}
-                    placeholder={f.placeholder}
-                    required={f.required}
-                    className={f.name === "code" ? "uppercase" : undefined}
-                  />
-                </label>
-              ))}
-            </div>
-
             {/* Secondary assignment the design keeps out of the grid */}
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3">
               <label className="block min-w-0">
-                <span className="mb-1.5 block text-[10.5px] font-bold uppercase tracking-[.09em] text-muted-500">Company</span>
+                <span className="mb-[5px] block text-[11px] font-semibold text-muted-600">Company</span>
                 <Select name="companyId" defaultValue="">
                   <option value="">— None —</option>
                   {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </Select>
               </label>
               <label className="block min-w-0">
-                <span className="mb-1.5 block text-[10.5px] font-bold uppercase tracking-[.09em] text-muted-500">City</span>
+                <span className="mb-[5px] block text-[11px] font-semibold text-muted-600">City</span>
                 <Select name="cityId" defaultValue="">
                   <option value="">— None —</option>
                   {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </Select>
               </label>
               <label className="block min-w-0">
-                <span className="mb-1.5 block text-[10.5px] font-bold uppercase tracking-[.09em] text-muted-500">Project manager</span>
+                <span className="col-span-2 mb-[5px] block text-[11px] font-semibold text-muted-600">Project manager</span>
                 <Select name="projectManagerId" defaultValue="">
                   <option value="">— Unassigned —</option>
                   {managers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -160,12 +163,10 @@ export function NewProjectButton({
               </label>
             </div>
 
-            {/* Inline work breakdown, exactly as the design drafts it */}
+            {/* Level 2, exactly as the design drafts it */}
+            <DrawerStep n={2} className="pt-2">Work breakdown · Phase → Work Package</DrawerStep>
             <div className="rounded-[12px] border border-line-400 bg-surface-sunken px-3.5 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[10.5px] font-bold uppercase tracking-[.09em] text-muted-500">
-                  Work breakdown
-                </span>
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <span className="flex gap-1.5">
                   <button
                     type="button"
@@ -247,7 +248,7 @@ export function NewProjectButton({
               )}
             </div>
           </form>
-        </Modal>
+        </Drawer>
       )}
     </>
   );

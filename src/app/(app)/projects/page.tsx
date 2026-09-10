@@ -8,7 +8,7 @@ import { Badge, Card, EmptyState } from "@/components/ui/primitives";
 import { cn, formatDate, moneyShort, qty } from "@/lib/utils";
 import { NewProjectButton } from "./new-project-button";
 
-export const metadata = { title: "Projects" };
+export const metadata = { title: "Project Management" };
 
 const STATUS_TONE = {
   PLANNING: "brand", ACTIVE: "good", ON_HOLD: "warn",
@@ -44,16 +44,16 @@ export default async function ProjectsPage() {
   ]);
 
   const showBudget = ctx.has(PERM.project.project.viewBudget);
-  const activeCount = projects.filter((p) => p.status === "ACTIVE").length;
   const totalUnits = projects.reduce((s, p) => s + p._count.units, 0);
+  const totalTowers = projects.reduce((s, p) => s + p.totalTowers, 0);
 
   return (
     <div className="animate-fade-up mx-auto max-w-[1400px]">
       {/* Summary line, as in the design */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] font-medium text-muted-600">
-          {projects.length} project{projects.length === 1 ? "" : "s"} · {activeCount} active ·{" "}
-          {totalUnits.toLocaleString("en-IN")} units
+          {projects.length} project{projects.length === 1 ? "" : "s"} · {totalTowers} tower
+          {totalTowers === 1 ? "" : "s"} · {totalUnits.toLocaleString("en-IN")} units under management
           {!ctx.canAccessAllProjects && " · scoped to your mapping"}
         </p>
         {ctx.has(PERM.project.project.create) && (

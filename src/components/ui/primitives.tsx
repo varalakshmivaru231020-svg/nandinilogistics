@@ -97,9 +97,16 @@ export function Badge({
 
 /* --------------------------------- Inputs -------------------------------- */
 
+/**
+ * Taken from the design's own input rule:
+ *   border:1px solid #E3E7F2; border-radius:9px; padding:10px 12px;
+ *   font:500 12.5px 'Public Sans'; color:#22264A; background:#FAFBFE;
+ *   focus -> border-color:#0089C9; background:#fff
+ * No focus ring — the design changes the border and the fill, nothing else.
+ */
 const FIELD_BASE =
-  "w-full rounded-[9px] border border-line-400 bg-surface-field px-[13px] text-[12.5px] font-medium text-navy-900 " +
-  "placeholder:text-muted-400 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500/30 " +
+  "w-full rounded-[9px] border border-line-400 bg-surface-sunken px-3 text-[12.5px] font-medium text-navy-900 " +
+  "placeholder:text-muted-400 focus:border-brand-500 focus:bg-white focus:outline-none " +
   "disabled:opacity-60";
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
@@ -134,7 +141,9 @@ export function Label({
   return (
     <label
       className={cn(
-        "block text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
+        // The design's field label: 600 11px, muted, sentence case — not the
+        // uppercase tracked caps this used to render.
+        "block text-[11px] font-semibold text-muted-600",
         className,
       )}
       {...props}
@@ -161,7 +170,7 @@ export function Field({
   className?: string;
 }) {
   return (
-    <div className={cn("space-y-1.5", className)}>
+    <div className={cn("space-y-[5px]", className)}>
       {label && <Label required={required}>{label}</Label>}
       {children}
       {hint && !error && <p className="text-[11px] font-medium text-muted-400">{hint}</p>}

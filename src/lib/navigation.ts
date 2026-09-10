@@ -46,10 +46,11 @@ export const NAVIGATION: NavSection[] = [
     ],
   },
   {
-    label: "Projects",
+    // The design calls this group Execution.
+    label: "Execution",
     icon: "Building2",
     items: [
-      { label: "All Projects", href: "/projects", icon: "Building2", permission: PERM.project.project.view },
+      { label: "Projects", href: "/projects", icon: "Building2", permission: PERM.project.project.view },
       { label: "Site Progress", href: "/projects/progress", icon: "CameraIcon", permission: PERM.project.progressLog.view },
       { label: "Schedule", href: "/schedule", icon: "GanttChartSquare", permission: PERM.schedule.activity.view },
     ],
@@ -88,10 +89,10 @@ export const NAVIGATION: NavSection[] = [
     ],
   },
   {
-    label: "Sales CRM",
+    label: "Sales",
     icon: "Handshake",
     items: [
-      { label: "Leads", href: "/sales/leads", icon: "UserPlus", permission: PERM.sales.lead.view },
+      { label: "Leads · CRM", href: "/sales/leads", icon: "UserPlus", permission: PERM.sales.lead.view },
       { label: "Follow-ups", href: "/sales/follow-ups", icon: "PhoneCall", permission: PERM.sales.followUp.view, badge: "followUpDue" },
       { label: "Site Visits", href: "/sales/site-visits", icon: "MapPin", permission: PERM.sales.siteVisit.view },
       { label: "Customers", href: "/sales/customers", icon: "Users", permission: PERM.sales.customer.view },
@@ -104,7 +105,7 @@ export const NAVIGATION: NavSection[] = [
     label: "Available Flats",
     icon: "Grid3x3",
     items: [
-      { label: "Availability Board", href: "/units/board", icon: "Grid3x3", permission: PERM.unit.board.view },
+      { label: "Available Flats", href: "/units/board", icon: "Grid3x3", permission: PERM.unit.board.view },
       { label: "Units", href: "/units", icon: "DoorOpen", permission: PERM.unit.unit.view },
       { label: "Price Lists", href: "/units/price-lists", icon: "Tags", permission: PERM.unit.priceList.view },
     ],
