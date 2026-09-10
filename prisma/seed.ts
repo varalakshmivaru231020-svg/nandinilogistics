@@ -53,10 +53,13 @@ const DESIGNATIONS: Array<[string, string, string]> = [
   ["QC_ENG", "Quality Engineer", "QC"],
 ];
 
+/** The design's four project types, in its order. Mixed Use is kept — the
+ *  design does not draw it, but it is a real type and removing it would
+ *  orphan any project already using it. */
 const PROJECT_TYPES = [
-  { code: "APT", name: "Residential Apartment" },
-  { code: "VILLA", name: "Villa Project" },
-  { code: "PLOT", name: "Plotted Development" },
+  { code: "APT", name: "Apartment" },
+  { code: "VILLA", name: "Villa" },
+  { code: "PLOT", name: "Plot" },
   { code: "COMM", name: "Commercial" },
   { code: "MIXED", name: "Mixed Use" },
 ];

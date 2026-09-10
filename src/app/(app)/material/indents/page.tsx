@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { ClipboardList, Plus } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { indentLookups } from "./lookups";
+import { NewIndentDrawer } from "./new-indent-drawer";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { Button } from "@/components/ui/button";
 import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
 import { daysBetween, formatDate, money } from "@/lib/utils";
 import { IndentFilters } from "./indent-filters";
@@ -40,6 +41,10 @@ export default async function IndentsPage({
   searchParams: Promise<{ q?: string; status?: string; page?: string }>;
 }) {
   const ctx = await requirePermission(PERM.material.indent.view);
+
+  // Only loaded for someone who can actually raise one — the drawer needs the
+  // same options the full /new page offers.
+  const lookups = ctx.has(PERM.material.indent.create) ? await indentLookups(ctx) : null;
   const { q = "", status = "all", page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam ?? 1) || 1);
 
@@ -138,18 +143,17 @@ export default async function IndentsPage({
   return (
     <div className="mx-auto max-w-7xl">
       <PageHeader
-        title="Indents"
+        title="Requirement Indents"
         description="Nothing is purchased without an approved indent. The approval trail builds itself as it moves."
         actions={
           <div className="flex items-center gap-2">
             {pendingCount > 0 && <Badge tone="warn">{pendingCount} awaiting approval</Badge>}
-            {ctx.has(PERM.material.indent.create) && (
-              <Link href="/material/indents/new">
-                <Button size="sm">
-                  <Plus className="h-3.5 w-3.5" />
-                  Raise indent
-                </Button>
-              </Link>
+            {ctx.has(PERM.material.indent.create) && lookups && (
+              <NewIndentDrawer
+                projects={lookups.projects}
+                items={lookups.items}
+                canSubmit={ctx.has(PERM.material.indent.submit)}
+              />
             )}
           </div>
         }

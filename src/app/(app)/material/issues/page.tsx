@@ -1,18 +1,20 @@
-import Link from "next/link";
-import { ArrowLeftRight, Plus } from "lucide-react";
+import { ArrowLeftRight } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { issueLookups } from "./lookups";
+import { NewIssueDrawer } from "./new-issue-drawer";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { Button } from "@/components/ui/button";
 import { IssuesScreen } from "./issues-screen";
 
 export const metadata = { title: "Material Issues" };
 
 export default async function IssuesPage() {
   const ctx = await requirePermission(PERM.material.issue.view);
+
+  const lookups = ctx.has(PERM.material.issue.create) ? await issueLookups(ctx) : null;
 
   const issues = await prisma.materialIssue.findMany({
     where: projectScopeFilter(ctx),
@@ -43,13 +45,14 @@ export default async function IssuesPage() {
         title="Material Issues"
         description="Store to supervisor, valued at the weighted-average rate and acknowledged by whoever receives it."
         actions={
-          ctx.has(PERM.material.issue.create) ? (
-            <Link href="/material/issues/new">
-              <Button size="sm">
-                <Plus className="h-3.5 w-3.5" />
-                Issue material
-              </Button>
-            </Link>
+          lookups ? (
+            <NewIssueDrawer
+              projects={lookups.projects}
+              stores={lookups.stores}
+              recipients={lookups.recipients}
+              stock={lookups.stock}
+              canViewValue={ctx.has(PERM.material.stock.viewValuation)}
+            />
           ) : null
         }
       />

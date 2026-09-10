@@ -2,38 +2,17 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
-import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { PageHeader } from "@/components/ui/primitives";
 import { IndentForm } from "./indent-form";
+import { indentLookups } from "../lookups";
 
 export const metadata = { title: "Raise Indent" };
 
 export default async function NewIndentPage() {
   const ctx = await requirePermission(PERM.material.indent.create);
 
-  const projectWhere = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
-
-  const [projects, items] = await Promise.all([
-    prisma.project.findMany({
-      where: { ...projectWhere, status: { in: ["PLANNING", "ACTIVE"] } },
-      orderBy: { name: "asc" },
-      select: {
-        id: true, name: true, code: true,
-        phases: { select: { workPackages: { select: { id: true, code: true, name: true } } } },
-      },
-    }),
-    prisma.item.findMany({
-      where: { status: "ACTIVE" },
-      orderBy: { name: "asc" },
-      select: {
-        id: true, code: true, name: true,
-        standardRate: true,
-        uom: { select: { code: true } },
-        category: { select: { name: true } },
-      },
-    }),
-  ]);
+  const { projects, items } = await indentLookups(ctx);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -50,20 +29,8 @@ export default async function NewIndentPage() {
       />
 
       <IndentForm
-        projects={projects.map((p) => ({
-          id: p.id,
-          name: p.name,
-          code: p.code,
-          workPackages: p.phases.flatMap((ph) => ph.workPackages),
-        }))}
-        items={items.map((i) => ({
-          id: i.id,
-          code: i.code,
-          name: i.name,
-          uom: i.uom.code,
-          category: i.category.name,
-          standardRate: Number(i.standardRate),
-        }))}
+        projects={projects}
+        items={items}
         canSubmit={ctx.has(PERM.material.indent.submit)}
       />
     </div>
