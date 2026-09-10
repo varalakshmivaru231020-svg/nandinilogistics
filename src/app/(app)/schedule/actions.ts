@@ -146,3 +146,65 @@ export async function setCriticalPathAction(
     return null;
   });
 }
+
+/**
+ * The design's one-click row actions. They are the same write as the progress
+ * dialog, narrowed: Start stamps the actual start, Completed stamps the actual
+ * finish at 100%. Neither touches the baseline — that only ever moves when an
+ * extension is approved, and even then only plannedEnd.
+ */
+export async function startActivityAction(id: string): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.schedule.activity.start);
+
+    const activity = await prisma.scheduleActivity.findUnique({ where: { id } });
+    if (!activity) throw new Error("Activity not found.");
+    assertProjectAccess(ctx, activity.projectId);
+    if (activity.actualStart) throw new Error(`${activity.name} is already started.`);
+    if (activity.status === "COMPLETED") throw new Error(`${activity.name} is already complete.`);
+
+    const now = new Date();
+    await prisma.scheduleActivity.update({
+      where: { id },
+      data: { actualStart: now, status: "IN_PROGRESS", progressPct: Math.max(1, activity.progressPct) },
+    });
+    await recordAudit({
+      action: "UPDATE", entity: "ScheduleActivity", entityId: id, userId: ctx.id,
+      projectId: activity.projectId,
+      summary: `Started ${activity.code} — ${activity.name}`,
+    });
+    revalidatePath("/schedule");
+    return null;
+  });
+}
+
+export async function completeActivityAction(id: string): Promise<ActionResult<{ late: boolean }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.schedule.activity.complete);
+
+    const activity = await prisma.scheduleActivity.findUnique({ where: { id } });
+    if (!activity) throw new Error("Activity not found.");
+    assertProjectAccess(ctx, activity.projectId);
+    if (activity.status === "COMPLETED") throw new Error(`${activity.name} is already complete.`);
+
+    const now = new Date();
+    const late = activity.plannedEnd !== null && now > activity.plannedEnd;
+
+    await prisma.scheduleActivity.update({
+      where: { id },
+      data: {
+        progressPct: 100,
+        actualStart: activity.actualStart ?? now,
+        actualEnd: now,
+        status: "COMPLETED",
+      },
+    });
+    await recordAudit({
+      action: "UPDATE", entity: "ScheduleActivity", entityId: id, userId: ctx.id,
+      projectId: activity.projectId,
+      summary: `Completed ${activity.code} — ${activity.name}${late ? " (behind plan)" : ""}`,
+    });
+    revalidatePath("/schedule");
+    return { late };
+  });
+}

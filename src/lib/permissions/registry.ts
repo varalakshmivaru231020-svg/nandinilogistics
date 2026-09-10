@@ -214,6 +214,10 @@ perm("schedule", "criticalPath", "view", "See the critical path", G_SCHED, "TAB"
 perm("schedule", "extension", "view", "See extension requests", G_SCHED, "TAB");
 perm("schedule", "extension", "request", "Request a date extension", G_SCHED, "BUTTON", "The site asks; the Project Manager decides. The baseline never moves.");
 perm("schedule", "extension", "approve", "Approve or reject an extension request", G_SCHED, "BUTTON");
+perm("schedule", "report", "view", "Schedule reports tab", G_SCHED, "TAB");
+perm("schedule", "activity", "start", "Mark an activity started", G_SCHED, "BUTTON", "Stamps the actual start. The one-click form of updating progress.");
+perm("schedule", "activity", "complete", "Mark an activity completed", G_SCHED, "BUTTON", "Stamps the actual finish at 100%.");
+
 perm("schedule", "template", "apply", "Start a schedule from a template", G_SCHED, "BUTTON");
 perm("schedule", "template", "save", "Save a schedule as a template", G_SCHED, "BUTTON");
 

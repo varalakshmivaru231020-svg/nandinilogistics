@@ -9,10 +9,10 @@ export const metadata = { title: "Project Schedule" };
 export default async function SchedulePage({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string; tab?: string }>;
+  searchParams: Promise<{ project?: string; tab?: string; report?: string }>;
 }) {
   const ctx = await requirePermission(PERM.schedule.activity.view);
-  const { project: projectParam, tab = "plan" } = await searchParams;
+  const { project: projectParam, tab = "plan", report = "plan" } = await searchParams;
 
   const projectWhere = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
   const projects = await prisma.project.findMany({
@@ -81,7 +81,8 @@ export default async function SchedulePage({
       projects={projects.map((p) => ({ id: p.id, name: p.name, code: p.code }))}
       activeProjectId={projectId}
       projectManager={active.projectManager?.name ?? null}
-      tab={tab === "extensions" ? "extensions" : "plan"}
+      tab={tab === "extensions" ? "extensions" : tab === "reports" ? "reports" : "plan"}
+      reportTab={report === "performance" ? "performance" : "plan"}
       nowMs={new Date().getTime()}
       workPackages={active.phases.flatMap((ph) =>
         ph.workPackages.map((w) => ({ id: w.id, code: w.code, name: w.name, phase: ph.name })),
@@ -133,6 +134,9 @@ export default async function SchedulePage({
         viewExtensions: ctx.has(PERM.schedule.extension.view),
         requestExtension: ctx.has(PERM.schedule.extension.request),
         approveExtension: ctx.has(PERM.schedule.extension.approve),
+        viewReports: ctx.has(PERM.schedule.report.view),
+        startActivity: ctx.has(PERM.schedule.activity.start),
+        completeActivity: ctx.has(PERM.schedule.activity.complete),
       }}
     />
   );

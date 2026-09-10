@@ -6,9 +6,12 @@ import { AlertTriangle, CalendarClock, Check, Diamond, Plus, X, Zap } from "luci
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Alert, Badge, Card, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { cn, formatDate } from "@/lib/utils";
-import { createActivityAction, setCriticalPathAction, updateActivityProgressAction } from "./actions";
+import {
+  completeActivityAction, createActivityAction, setCriticalPathAction,
+  startActivityAction, updateActivityProgressAction,
+} from "./actions";
 import { decideExtensionAction, requestExtensionAction } from "./extension-actions";
 
 interface Activity {
@@ -36,13 +39,14 @@ const STATUS_TONE: Record<string, "muted" | "brand" | "good" | "bad"> = {
 const DAY = 86_400_000;
 
 export function ScheduleScreen({
-  projects, activeProjectId, projectManager, tab, activities, extensions,
+  projects, activeProjectId, projectManager, tab, reportTab, activities, extensions,
   workPackages, delayReasons, can, nowMs,
 }: {
   projects: Array<{ id: string; name: string; code: string }>;
   activeProjectId: string;
   projectManager: string | null;
-  tab: "plan" | "extensions";
+  tab: "plan" | "extensions" | "reports";
+  reportTab: "plan" | "performance";
   activities: Activity[];
   extensions: Extension[];
   workPackages: Array<{ id: string; code: string; name: string; phase: string }>;
@@ -87,6 +91,26 @@ export function ScheduleScreen({
     groups.set(a.groupId, g);
   }
 
+  async function quickStart(a: Activity) {
+    setBusy(`start:${a.id}`);
+    const res = await startActivityAction(a.id);
+    setBusy(null);
+    if (!res.ok) { setError(res.error); return; }
+    setError(null);
+    setNotice(`Started ${a.name}.`);
+    router.refresh();
+  }
+
+  async function quickComplete(a: Activity) {
+    setBusy(`done:${a.id}`);
+    const res = await completeActivityAction(a.id);
+    setBusy(null);
+    if (!res.ok) { setError(res.error); return; }
+    setError(null);
+    setNotice(res.data.late ? `Completed ${a.name} — behind plan.` : `Completed ${a.name}.`);
+    router.refresh();
+  }
+
   async function toggleCritical(a: Activity) {
     setBusy(a.id);
     setError(null);
@@ -119,8 +143,9 @@ export function ScheduleScreen({
         </Select>
 
         <div className="flex flex-wrap gap-1.5">
-          {([["plan", "Plan"], ["extensions", "Extensions"]] as const)
-            .filter(([k]) => k !== "extensions" || can.viewExtensions)
+          {([["plan", "Plan"], ["extensions", "Extensions"], ["reports", "Reports"]] as const)
+            .filter(([k]) =>
+              (k !== "extensions" || can.viewExtensions) && (k !== "reports" || can.viewReports))
             .map(([key, label]) => (
               <button
                 key={key}
@@ -251,6 +276,17 @@ export function ScheduleScreen({
                             </div>
 
                             <div className="flex shrink-0 gap-1">
+                              {/* The design's one-click row actions, before the fuller dialog. */}
+                              {can.startActivity && !a.actualStart && a.status !== "COMPLETED" && (
+                                <Button size="xs" variant="secondary" loading={busy === `start:${a.id}`} onClick={() => quickStart(a)}>
+                                  ▶ Start
+                                </Button>
+                              )}
+                              {can.completeActivity && a.status !== "COMPLETED" && (
+                                <Button size="xs" variant="success" loading={busy === `done:${a.id}`} onClick={() => quickComplete(a)}>
+                                  ✓ Completed
+                                </Button>
+                              )}
                               {can.updateProgress && (
                                 <Button size="xs" variant="secondary" onClick={() => setUpdating(a)}>Progress</Button>
                               )}
@@ -345,6 +381,17 @@ export function ScheduleScreen({
             ))}
           </div>
         </>
+      )}
+
+      {/* ------------------------------- Reports ------------------------------- */}
+      {tab === "reports" && can.viewReports && (
+        <ScheduleReports
+          activities={activities}
+          extensions={extensions}
+          reportTab={reportTab}
+          projectId={activeProjectId}
+          nowMs={nowMs}
+        />
       )}
 
       {adding && (
@@ -635,5 +682,170 @@ function DecideModal({
         </Field>
       </div>
     </Modal>
+  );
+}
+
+/* ------------------------------ Schedule reports --------------------------- */
+
+/**
+ * The design's Reports tab: a plan report (baseline against actual, activity by
+ * activity) and a performance report (how the slip is distributed). Both read
+ * the activities already on screen, so what the report says and what the plan
+ * shows can never disagree.
+ */
+function ScheduleReports({
+  activities, extensions, reportTab, projectId, nowMs,
+}: {
+  activities: Activity[];
+  extensions: Extension[];
+  reportTab: "plan" | "performance";
+  projectId: string;
+  nowMs: number;
+}) {
+  const router = useRouter();
+
+  const rows = activities.map((a) => {
+    const baseline = a.baselineEnd ? new Date(a.baselineEnd).getTime() : null;
+    const finish = a.actualEnd
+      ? new Date(a.actualEnd).getTime()
+      : a.plannedEnd
+        ? new Date(a.plannedEnd).getTime()
+        : null;
+    const slipDays = baseline !== null && finish !== null ? Math.round((finish - baseline) / DAY) : null;
+    const overdue = !a.actualEnd && a.plannedEnd !== null && new Date(a.plannedEnd).getTime() < nowMs;
+    return { ...a, slipDays, overdue };
+  });
+
+  const slipped = rows.filter((r) => (r.slipDays ?? 0) > 0);
+  const onTime = rows.filter((r) => r.actualEnd && (r.slipDays ?? 0) <= 0);
+  const worst = [...slipped].sort((a, b) => (b.slipDays ?? 0) - (a.slipDays ?? 0)).slice(0, 8);
+  const totalSlip = slipped.reduce((s, r) => s + (r.slipDays ?? 0), 0);
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {([["plan", "Plan vs actual"], ["performance", "Performance"]] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => router.push(`/schedule?project=${projectId}&tab=reports&report=${key}`)}
+            className={cn(
+              "rounded-[9px] border px-3.5 py-2 text-[12px] font-bold transition-colors",
+              reportTab === key
+                ? "border-brand-500 bg-brand-100 text-brand-700"
+                : "border-line-400 bg-white text-muted-600 hover:bg-surface-hover",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {reportTab === "plan" ? (
+        <Card className="overflow-x-auto">
+          <table className="w-full min-w-[820px] border-collapse">
+            <thead>
+              <tr className="bg-surface-sunken">
+                {["Activity", "Baseline finish", "Planned finish", "Actual finish", "Progress", "Slip", "Status"].map((h, i) => (
+                  <th
+                    key={h}
+                    className={cn(
+                      "border-b border-line-300 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
+                      i >= 4 ? "text-right" : "text-left",
+                    )}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-12 text-center text-[12px] font-medium text-muted-500">
+                  No activities on this schedule yet.
+                </td></tr>
+              ) : rows.map((r) => (
+                <tr key={r.id} className="border-b border-line-200 last:border-0">
+                  <td className="px-4 py-3">
+                    <p className="text-[12.5px] font-bold text-navy-950">{r.name}</p>
+                    <p className="num text-[11px] font-medium text-muted-400">{r.code}</p>
+                  </td>
+                  <td className="px-4 py-3 text-[12px] font-medium text-muted-600">{formatDate(r.baselineEnd)}</td>
+                  <td className="px-4 py-3 text-[12px] font-medium text-muted-600">{formatDate(r.plannedEnd)}</td>
+                  <td className="px-4 py-3 text-[12px] font-medium text-muted-600">
+                    {r.actualEnd ? formatDate(r.actualEnd) : "—"}
+                  </td>
+                  <td className="num px-4 py-3 text-right text-[12px] font-bold text-navy-900">{r.progressPct}%</td>
+                  <td className={cn(
+                    "num px-4 py-3 text-right text-[12px] font-bold",
+                    (r.slipDays ?? 0) > 0 ? "text-bad-600" : (r.slipDays ?? 0) < 0 ? "text-good-700" : "text-muted-500",
+                  )}>
+                    {r.slipDays === null ? "—" : r.slipDays > 0 ? `+${r.slipDays}d` : `${r.slipDays}d`}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Badge tone={r.overdue ? "bad" : STATUS_TONE[r.status] ?? "muted"}>
+                      {r.overdue ? "OVERDUE" : r.status.replace(/_/g, " ")}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      ) : (
+        <div className="space-y-3.5">
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+            {[
+              { l: "Activities", v: String(rows.length) },
+              { l: "Finished on time", v: String(onTime.length) },
+              { l: "Slipped", v: String(slipped.length) },
+              { l: "Total slip", v: `${totalSlip}d` },
+              { l: "Extensions approved", v: String(extensions.filter((e) => e.status === "APPROVED").length) },
+            ].map((k) => (
+              <Card key={k.l} className="px-4 py-3.5">
+                <p className="text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">{k.l}</p>
+                <p className="num mt-1 font-display text-[22px] font-bold text-navy-950">{k.v}</p>
+              </Card>
+            ))}
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Where the time went</CardTitle>
+              <span className="text-xs text-muted-500">The activities carrying the slip, worst first.</span>
+            </CardHeader>
+            <CardBody className="p-0">
+              {worst.length === 0 ? (
+                <p className="px-4 py-12 text-center text-[12px] font-medium text-muted-500">
+                  Nothing has slipped against baseline.
+                </p>
+              ) : (
+                <ul className="divide-y divide-line-200">
+                  {worst.map((r) => (
+                    <li key={r.id} className="flex items-center gap-3 px-4 py-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12.5px] font-bold text-navy-950">{r.name}</p>
+                        <p className="text-[11px] font-medium text-muted-500">
+                          baseline {formatDate(r.baselineEnd)} → {r.actualEnd ? "finished" : "now planned"} {formatDate(r.actualEnd ?? r.plannedEnd)}
+                        </p>
+                      </div>
+                      <div className="h-1.5 w-[140px] shrink-0 overflow-hidden rounded-full bg-line-300">
+                        <div
+                          className="h-full rounded-full bg-bad-600"
+                          style={{ width: `${Math.min(100, ((r.slipDays ?? 0) / Math.max(1, worst[0].slipDays ?? 1)) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="num w-[52px] shrink-0 text-right text-[12px] font-bold text-bad-600">
+                        +{r.slipDays}d
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
+        </div>
+      )}
+    </div>
   );
 }

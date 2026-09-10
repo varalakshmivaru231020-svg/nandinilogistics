@@ -3,7 +3,7 @@
  * Source: src/lib/permissions/registry.ts
  * Regenerate: pnpm perms:codegen
  *
- * 479 permission codes.
+ * 482 permission codes.
  */
 
 export const PERM = {
@@ -97,6 +97,8 @@ export const PERM = {
       "import": "schedule.activity.import",
       "updateProgress": "schedule.activity.updateProgress",
       "captureDelay": "schedule.activity.captureDelay",
+      "start": "schedule.activity.start",
+      "complete": "schedule.activity.complete",
     },
     "gantt": {
       "view": "schedule.gantt.view",
@@ -115,6 +117,9 @@ export const PERM = {
       "view": "schedule.extension.view",
       "request": "schedule.extension.request",
       "approve": "schedule.extension.approve",
+    },
+    "report": {
+      "view": "schedule.report.view",
     },
     "template": {
       "apply": "schedule.template.apply",
