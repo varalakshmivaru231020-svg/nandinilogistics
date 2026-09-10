@@ -7,7 +7,7 @@ import * as Icons from "lucide-react";
 import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { visibleNavigation } from "@/lib/navigation";
+import { activeNavHref, visibleNavigation } from "@/lib/navigation";
 import { usePermissions } from "@/components/rbac/permission-provider";
 
 function Icon({ name, className }: { name?: string; className?: string }) {
@@ -31,10 +31,13 @@ export function Sidebar({
   onCloseMobile?: () => void;
 }) {
   const pathname = usePathname();
+
   const perms = usePermissions();
 
   // The menu is a projection of the permission set — nothing more.
   const sections = React.useMemo(() => visibleNavigation(perms.has), [perms]);
+
+  const activeHref = React.useMemo(() => activeNavHref(pathname, sections), [pathname, sections]);
 
   const [toggled, setToggled] = React.useState<Record<string, boolean>>({});
 
@@ -103,9 +106,11 @@ export function Sidebar({
                 {open && (
                   <div className="flex flex-col gap-0.5">
                     {section.items.map((item) => {
-                      const active =
-                        pathname === item.href ||
-                        (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
+                      // Exactly one item is ever active: the longest href that
+                      // matches. /projects/progress used to light up both
+                      // "Projects" and "Site Progress", because a prefix match
+                      // alone cannot tell a parent from its child.
+                      const active = item.href === activeHref;
                       const count = item.badge ? badges?.[item.badge] : undefined;
 
                       return (

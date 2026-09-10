@@ -62,32 +62,44 @@
   --radius-button: 8px;
 }
 
-html,
-body {
-  height: 100%;
-}
+/*
+ * Base element styles MUST stay inside @layer base.
+ *
+ * Tailwind v4 puts its utilities in @layer utilities, and unlayered CSS beats
+ * layered CSS in the cascade whatever the specificity. An unlayered `a { color }`
+ * therefore overrides text-white, text-navy-500 and every other colour utility
+ * on every link in the application — which is exactly what happened: the whole
+ * sidebar rendered brand blue, including the active item, where blue on the
+ * navy gradient is barely legible.
+ */
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
 
-body {
-  margin: 0;
-  padding: 0;
-  background: var(--color-surface-page);
-  color: var(--color-navy-900);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-}
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-surface-page);
+    color: var(--color-navy-900);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
 
-a {
-  color: var(--color-brand-500);
-  text-decoration: none;
-}
-a:hover {
-  color: var(--color-navy-800);
-}
+  a {
+    color: var(--color-brand-500);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--color-navy-800);
+  }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
 }
 
 /* The design's own scrollbar treatment. */

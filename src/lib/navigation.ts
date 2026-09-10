@@ -172,3 +172,27 @@ export function visibleNavigation(has: (code: string) => boolean): NavSection[] 
     }),
   })).filter((section) => section.items.length > 0);
 }
+
+/**
+ * Which navigation entry a URL belongs to.
+ *
+ * Longest match wins, and exactly one entry can ever be returned. A plain
+ * prefix test cannot tell a parent from its child — /projects/progress matches
+ * both "Projects" (/projects) and "Site Progress" (/projects/progress), which
+ * lit up two items in the sidebar at once.
+ */
+export function activeNavHref(
+  pathname: string,
+  sections: ReadonlyArray<{ items: ReadonlyArray<{ href: string }> }>,
+): string | null {
+  let best: string | null = null;
+  for (const section of sections) {
+    for (const item of section.items) {
+      const hit =
+        pathname === item.href ||
+        (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
+      if (hit && (best === null || item.href.length > best.length)) best = item.href;
+    }
+  }
+  return best;
+}
