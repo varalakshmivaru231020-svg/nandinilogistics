@@ -110,13 +110,19 @@ a:hover {
 }
 
 /* Motion, lifted from the design source. */
+/* The end frames deliberately declare no transform. With animation-fill-mode
+   `both` the 100% frame persists, and a transform of translateY(0) is still a
+   transform — which makes the element a containing block for `position: fixed`
+   descendants. Every page wrapper carries .animate-fade-up, so leaving one here
+   clipped every modal and overlay inside a page to that wrapper's box instead
+   of the viewport. */
 @keyframes fadeUp {
   0% { opacity: 0; transform: translateY(8px); }
-  100% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 1; }
 }
 @keyframes slideIn {
   0% { opacity: 0; transform: translateX(60px); }
-  100% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 1; }
 }
 @keyframes pulse {
   0%, 100% { opacity: 1; }

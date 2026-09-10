@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -33,11 +34,14 @@ export function Modal({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  // Portalled to <body> so no ancestor can contain it. A page wrapper with a
+  // transform (an animation, a sticky column) would otherwise become the
+  // containing block and clip a fixed overlay to its own box.
+  if (!open || typeof document === "undefined") return null;
 
   const sizes = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl", xl: "max-w-6xl" };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy-950/35 p-4 backdrop-blur-[2px] sm:p-8">
       <div
         className={cn("animate-fade-up w-full rounded-[14px] border border-line-400 bg-white shadow-[0_24px_60px_rgba(25,26,92,.18)]", sizes[size])}
@@ -66,7 +70,8 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

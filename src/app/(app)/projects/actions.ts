@@ -19,6 +19,8 @@ const ProjectSchema = z.object({
   landArea: z.coerce.number().min(0).optional(),
   totalTowers: z.coerce.number().int().min(0).optional(),
   totalFloors: z.coerce.number().int().min(0).optional(),
+  totalUnits: z.coerce.number().int().min(0).optional(),
+  approvalDetails: z.string().trim().optional(),
   budgetAmount: z.coerce.number().min(0).optional(),
   startDate: z.string().trim().optional(),
   targetDate: z.string().trim().optional(),
@@ -39,6 +41,8 @@ function toData(v: z.infer<typeof ProjectSchema>) {
     landArea: v.landArea ?? 0,
     totalTowers: v.totalTowers ?? 0,
     totalFloors: v.totalFloors ?? 0,
+    totalUnits: v.totalUnits ?? 0,
+    approvalDetails: v.approvalDetails || null,
     budgetAmount: v.budgetAmount ?? 0,
     startDate: v.startDate ? new Date(v.startDate) : null,
     targetDate: v.targetDate ? new Date(v.targetDate) : null,
@@ -48,13 +52,46 @@ function toData(v: z.infer<typeof ProjectSchema>) {
   };
 }
 
-export async function createProjectAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
+/** A phase or work package drafted inside the create dialog, before the project exists. */
+export interface DraftWbsRow {
+  kind: "PHASE" | "WP";
+  code: string;
+  name: string;
+}
+
+export async function createProjectAction(
+  formData: FormData,
+  wbs: DraftWbsRow[] = [],
+): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.project.project.create);
     const parsed = ProjectSchema.safeParse(Object.fromEntries(formData));
     if (!parsed.success) throw new Error(parsed.error.issues[0].message);
 
+    if (wbs.length && wbs[0].kind !== "PHASE") {
+      throw new Error("A work package has to sit under a phase — add a phase first.");
+    }
+
     const project = await prisma.project.create({ data: toData(parsed.data) });
+
+    // The design lets the whole breakdown be drafted in the dialog, so it is
+    // written with the project rather than left for a second trip.
+    if (wbs.length) {
+      let phaseId: string | null = null;
+      let phaseSeq = 0;
+      for (const row of wbs) {
+        if (row.kind === "PHASE") {
+          const phase = await prisma.projectPhase.create({
+            data: { projectId: project.id, code: row.code, name: row.name, sequence: phaseSeq++ },
+          });
+          phaseId = phase.id;
+        } else if (phaseId) {
+          await prisma.workPackage.create({
+            data: { phaseId, code: row.code, name: row.name },
+          });
+        }
+      }
+    }
 
     // The creator keeps access to what they just created.
     await prisma.userProject.create({ data: { userId: ctx.id, projectId: project.id } }).catch(() => undefined);

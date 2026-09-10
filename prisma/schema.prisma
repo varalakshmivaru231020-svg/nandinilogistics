@@ -806,6 +806,8 @@ model Project {
   cityId           String?
   addressLine      String?
   reraNumber       String?
+  /// Plan sanction reference — the design's "Approval details" field.
+  approvalDetails  String?
   landArea         Decimal?      @db.Decimal(14, 2)
   totalTowers      Int           @default(0)
   totalFloors      Int           @default(0)
