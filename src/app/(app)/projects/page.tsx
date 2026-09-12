@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { Building2 } from "lucide-react";
+import { Building2, ChevronRight } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { Badge, Card, EmptyState } from "@/components/ui/primitives";
-import { cn, formatDate, moneyShort, qty } from "@/lib/utils";
+import { cn, moneyShort } from "@/lib/utils";
 import { NewProjectButton } from "./new-project-button";
 
 export const metadata = { title: "Project Management" };
@@ -78,12 +78,12 @@ export default async function ProjectsPage() {
           <table className="w-full min-w-[860px] border-collapse">
             <thead>
               <tr className="bg-surface-sunken">
-                {["Project", "Type", "Scale", "Project manager", "Progress", ...(showBudget ? ["Budget"] : []), "Status"].map((h) => (
+                {["Project", "Type · RERA", "Scale", "Project manager", "Progress", "Status", "Actions"].map((h) => (
                   <th
                     key={h}
                     className={cn(
                       "border-b border-line-300 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
-                      h === "Budget" ? "text-right" : "text-left",
+                      h === "Actions" ? "text-right" : "text-left",
                     )}
                   >
                     {h}
@@ -105,7 +105,6 @@ export default async function ProjectsPage() {
                       <div className="mt-0.5 text-[11.5px] font-medium text-muted-400">
                         {p.code}
                         {p.city && ` · ${p.city.name}`}
-                        {p.targetDate && ` · target ${formatDate(p.targetDate)}`}
                       </div>
                     </td>
                     <td className="px-4 py-3.5">
@@ -113,15 +112,15 @@ export default async function ProjectsPage() {
                         {p.projectType?.name ?? "—"}
                       </div>
                       <div className="mt-0.5 truncate text-[11px] font-medium text-muted-400" title={p.reraNumber ?? ""}>
-                        {p.reraNumber ? `RERA ${p.reraNumber.slice(-12)}` : "RERA not recorded"}
+                        {p.reraNumber ?? "RERA not recorded"}
                       </div>
                     </td>
                     <td className="px-4 py-3.5 text-[12.5px] font-semibold text-navy-600">
-                      {p.totalTowers > 0 ? `${p.totalTowers} tower${p.totalTowers === 1 ? "" : "s"} · ` : ""}
-                      {p._count.units} units
-                      <div className="text-[11px] font-medium text-muted-400">
-                        {p.landArea ? `${qty(p.landArea, 0)} sq.ft` : `${p._count.phases} phases`}
-                      </div>
+                      {[
+                        p.totalTowers > 0 && `${p.totalTowers} tower${p.totalTowers === 1 ? "" : "s"}`,
+                        p.totalFloors > 0 && `${p.totalFloors} fl`,
+                        `${p._count.units} units`,
+                      ].filter(Boolean).join(" · ")}
                     </td>
                     <td className="px-4 py-3.5">
                       {p.projectManager ? (
@@ -160,13 +159,22 @@ export default async function ProjectsPage() {
                         {p.activities.length} scheduled activit{p.activities.length === 1 ? "y" : "ies"}
                       </div>
                     </td>
-                    {showBudget && (
-                      <td className="num px-4 py-3.5 text-right text-[12.5px] font-bold text-navy-950">
-                        {moneyShort(p.budgetAmount)}
-                      </td>
-                    )}
                     <td className="px-4 py-3.5">
                       <Badge tone={STATUS_TONE[p.status]}>{p.status.replace("_", " ")}</Badge>
+                      {showBudget && (
+                        <div className="num mt-1 text-[11px] font-semibold text-muted-500">
+                          {moneyShort(p.budgetAmount)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      <Link
+                        href={`/projects/${p.id}`}
+                        title="Open"
+                        className="inline-grid h-[26px] w-[26px] place-items-center rounded-[7px] text-muted-400 transition-colors hover:bg-surface-hover hover:text-navy-900"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </Link>
                     </td>
                   </tr>
                 );
