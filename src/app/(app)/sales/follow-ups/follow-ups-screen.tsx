@@ -104,21 +104,26 @@ export function FollowUpsScreen({
         </p>
         <div className="flex-1" />
         <div className="flex gap-1.5">
-          {(["grid", "list", "calendar"] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setParam({ view: v === "grid" ? undefined : v })}
-              className={cn(
-                "rounded-[9px] border px-3.5 py-2 text-[12px] font-bold capitalize transition-colors",
-                view === v
-                  ? "border-brand-500 bg-brand-100 text-brand-700"
-                  : "border-line-400 bg-white text-muted-600 hover:border-brand-300",
-              )}
-            >
-              {v}
-            </button>
-          ))}
+          {([["grid", "▦", "Grid"], ["list", "☰", "List"], ["calendar", "▤", "Calendar"]] as const).map(
+            ([v, glyph, label]) => (
+              <button
+                key={v}
+                type="button"
+                title={label}
+                aria-label={label}
+                aria-pressed={view === v}
+                onClick={() => setParam({ view: v === "grid" ? undefined : v })}
+                className={cn(
+                  "rounded-[8px] border px-3.5 py-2 text-[13px] font-bold transition-colors",
+                  view === v
+                    ? "border-brand-500 bg-brand-100 text-brand-700"
+                    : "border-line-400 bg-white text-muted-600 hover:border-brand-300",
+                )}
+              >
+                {glyph}
+              </button>
+            ),
+          )}
         </div>
         <Link href="/sales/leads">
           <Button size="md">Open leads</Button>
@@ -188,9 +193,13 @@ export function FollowUpsScreen({
                     );
                   })}
                   {cards.length > 6 && (
-                    <div className="rounded-[8px] border border-brand-100 bg-brand-100 py-2 text-center text-[11px] font-bold text-brand-700">
-                      +{cards.length - 6} more
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setParam({ view: "list" })}
+                      className="rounded-[8px] border border-brand-100 bg-brand-100 py-2 text-center text-[11px] font-bold text-brand-700 transition-colors hover:bg-brand-300/25"
+                    >
+                      + {cards.length - 6} more · switch to List view
+                    </button>
                   )}
                   {cards.length === 0 && (
                     <div className="py-5 text-center text-[12px] font-medium text-muted-300">
@@ -295,7 +304,7 @@ function CalendarView({
 }) {
   const [year, mon] = month.split("-").map(Number);
   const first = new Date(year, mon - 1, 1);
-  const startDow = (first.getDay() + 6) % 7; // Monday-first, as Indian offices read it
+  const startDow = first.getDay(); // Sunday-first, as the design lays it out
   const daysInMonth = new Date(year, mon, 0).getDate();
   const todayKey = new Date(nowMs).toDateString();
 
@@ -340,7 +349,7 @@ function CalendarView({
       </div>
 
       <div className="grid grid-cols-7 gap-1.5">
-        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <div key={d} className="pb-1 text-center text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500">
             {d}
           </div>
