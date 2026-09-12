@@ -67,7 +67,7 @@ export const NAVIGATION: NavSection[] = [
       { label: "Purchase Orders", href: "/material/purchase-orders", icon: "FileText", permission: PERM.material.purchaseOrder.view },
       { label: "Goods Receipt", href: "/material/grn", icon: "PackageCheck", permission: PERM.material.grn.view },
       { label: "Item Master", href: "/material/stock", icon: "Boxes", permission: PERM.material.stock.view },
-      { label: "Vendors", href: "/masters/vendors", icon: "Store", permission: PERM.masters.vendor.view },
+      { label: "Vendors", href: "/material/vendors", icon: "Store", permission: PERM.material.vendor.view },
 
       {
         label: "Material & Inventory",

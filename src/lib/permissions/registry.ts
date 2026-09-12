@@ -277,6 +277,10 @@ crud({
   ],
 });
 
+perm("material", "vendor", "view", "Vendor directory", G_MAT_PO, "PAGE", "The performance view; the vendor master itself stays under Masters.");
+perm("material", "vendor", "viewPerformance", "See vendor rating and on-time delivery", G_MAT_PO, "FIELD", "Both are derived from goods-receipt history.");
+perm("material", "vendor", "manageCategories", "Set what a vendor supplies", G_MAT_PO, "BUTTON");
+
 crud({
   module: "material",
   resource: "grn",

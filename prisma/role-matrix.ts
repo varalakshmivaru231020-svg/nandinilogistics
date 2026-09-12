@@ -168,6 +168,9 @@ export const ROLES: RoleSeed[] = [
     description: "Controls material and stock — PO, GRN, issue, return, transfer, vendor payments.",
     level: 30,
     grant: [
+      "material.vendor.manageCategories",
+      "material.vendor.viewPerformance",
+      "material.vendor.view",
       "kb.article.view",
       "dashboard.storeManager.view",
       "dashboard.widget.viewFinancials",

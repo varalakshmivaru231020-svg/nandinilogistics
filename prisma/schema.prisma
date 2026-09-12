@@ -535,9 +535,10 @@ model ItemCategory {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  parent   ItemCategory?  @relation("ItemCategoryTree", fields: [parentId], references: [id])
-  children ItemCategory[] @relation("ItemCategoryTree")
-  items    Item[]
+  parent           ItemCategory?    @relation("ItemCategoryTree", fields: [parentId], references: [id])
+  children         ItemCategory[]   @relation("ItemCategoryTree")
+  items            Item[]
+  vendorCategories VendorCategory[]
 
   @@map("m_item_categories")
 }
@@ -625,6 +626,7 @@ model Vendor {
   purchaseOrders PurchaseOrder[]
   invoices       VendorInvoice[]
   grns           Grn[]
+  categories     VendorCategory[]
 
   @@index([status])
   @@map("m_vendors")
@@ -1369,6 +1371,22 @@ model GrnItem {
 }
 
 /// Three-way match: PO <-> GRN <-> Invoice. A mismatch is flagged, never quietly paid.
+/// Which item categories a vendor supplies — the design's chips on the vendor
+/// card. Deliberately reuses ItemCategory rather than a parallel taxonomy, so
+/// "who can supply this item" is a question the data can answer.
+model VendorCategory {
+  id             String   @id @default(cuid())
+  vendorId       String
+  itemCategoryId String
+  createdAt      DateTime @default(now())
+
+  vendor   Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  category ItemCategory @relation(fields: [itemCategoryId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, itemCategoryId])
+  @@map("vendor_categories")
+}
+
 model VendorInvoice {
   id           String              @id @default(cuid())
   invoiceNo    String
