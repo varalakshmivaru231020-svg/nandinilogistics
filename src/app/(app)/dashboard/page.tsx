@@ -1,6 +1,9 @@
 import Link from "next/link";
 import {
-  Boxes, Building2, ClipboardList, PackageCheck, TrendingUp, UserPlus,
+  Building2,
+  Clock,
+  IndianRupee,
+  TrendingUp,
 } from "lucide-react";
 
 import { requireAuth } from "@/lib/rbac/guard";
@@ -26,6 +29,7 @@ function ageLabel(from: Date, now: number): { text: string; days: number } {
 export default async function DashboardPage() {
   const ctx = await requireAuth();
   const scope = projectScopeFilter(ctx);
+  const projectScope = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
   const showMoney = ctx.has(PERM.dashboard.widget.viewFinancials);
   const nowMs = new Date().getTime();
   const today = new Date();
@@ -34,84 +38,117 @@ export default async function DashboardPage() {
 
   /* ------------------------------ KPI strip ------------------------------- */
 
+  /**
+   * The design's four dashboard KPIs, in its order, each with a delta pill
+   * beside the value and a one-line subtitle under it:
+   *
+   *   Active projects     ▲ 1        6 towers · 1,272 units
+   *   Budget vs actual    90.1%      of ₹142.6 Cr sanctioned
+   *   Pending approvals   ₹1.82 Cr   oldest waiting 4 days
+   *   Collections · Sep   ▲ 18%      11 bookings this month
+   */
   const kpis: Array<{
-    label: string; value: string; sub?: string;
-    icon: React.ReactNode; href?: string; tone: "brand" | "good" | "warn" | "bad" | "navy";
+    label: string; value: string; delta?: string; sub?: string;
+    icon: React.ReactNode; href?: string;
+    tone: "brand" | "good" | "warn" | "bad" | "navy";
+    deltaTone: "brand" | "good" | "warn" | "bad" | "navy";
   }> = [];
 
   if (ctx.has(PERM.project.project.view)) {
-    const [active, budget] = await Promise.all([
+    const [active, lastMonth, agg] = await Promise.all([
+      prisma.project.count({ where: { status: "ACTIVE", ...projectScope } }),
       prisma.project.count({
-        where: { status: "ACTIVE", ...(ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } }) },
+        where: {
+          status: "ACTIVE",
+          ...projectScope,
+          createdAt: { lt: new Date(today.getFullYear(), today.getMonth(), 1) },
+        },
       }),
-      showMoney
-        ? prisma.project.aggregate({
-            _sum: { budgetAmount: true },
-            where: ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } },
-          })
-        : Promise.resolve(null),
+      prisma.project.aggregate({
+        _sum: { totalTowers: true, totalUnits: true },
+        where: projectScope,
+      }),
     ]);
+    const added = active - lastMonth;
+    const towers = agg._sum.totalTowers ?? 0;
+    const units = agg._sum.totalUnits ?? 0;
     kpis.push({
-      label: "Active projects", value: String(active),
-      sub: budget ? `${moneyShort(budget._sum.budgetAmount)} sanctioned` : undefined,
+      label: "Active projects",
+      value: String(active),
+      delta: added > 0 ? `▲ ${added}` : added < 0 ? `▼ ${Math.abs(added)}` : "—",
+      deltaTone: added > 0 ? "good" : added < 0 ? "bad" : "navy",
+      sub: `${towers} tower${towers === 1 ? "" : "s"} · ${units.toLocaleString("en-IN")} units`,
       icon: <Building2 className="h-3.5 w-3.5" />, href: "/projects", tone: "brand",
     });
   }
 
-  if (ctx.has(PERM.material.indent.view)) {
-    const pending = await prisma.indent.count({
-      where: { ...scope, status: { in: ["SUBMITTED", "PM_APPROVED"] } },
-    });
-    kpis.push({
-      label: "Indents awaiting", value: String(pending),
-      sub: pending > 0 ? "sitting in the approval chain" : "queue is clear",
-      icon: <ClipboardList className="h-3.5 w-3.5" />, href: "/material/indents",
-      tone: pending > 0 ? "warn" : "good",
-    });
-  }
-
-  if (ctx.has(PERM.material.purchaseOrder.view)) {
-    const openPo = await prisma.purchaseOrder.count({
-      where: { ...scope, status: { in: ["APPROVED", "PARTIALLY_RECEIVED"] } },
-    });
-    kpis.push({
-      label: "Open purchase orders", value: String(openPo), sub: "awaiting delivery",
-      icon: <PackageCheck className="h-3.5 w-3.5" />, href: "/material/purchase-orders", tone: "navy",
-    });
-  }
-
-  if (ctx.has(PERM.material.stock.view) && ctx.has(PERM.material.stock.viewValuation)) {
-    const value = await prisma.stockBalance.aggregate({ _sum: { value: true } });
-    kpis.push({
-      label: "Stock on hand", value: moneyShort(value._sum.value), sub: "weighted-average valuation",
-      icon: <Boxes className="h-3.5 w-3.5" />, href: "/material/stock", tone: "brand",
-    });
-  }
-
-  if (ctx.has(PERM.sales.lead.view)) {
-    const own = ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id };
-    const [openLeads, due] = await Promise.all([
-      prisma.lead.count({ where: { ...own, state: { notIn: ["BOOKED", "LOST"] } } }),
-      prisma.lead.count({
-        where: { ...own, nextActionAt: { lte: today }, state: { notIn: ["BOOKED", "LOST"] } },
+  if (showMoney && ctx.has(PERM.project.project.view)) {
+    const [budget, committed] = await Promise.all([
+      prisma.project.aggregate({ _sum: { budgetAmount: true }, where: projectScope }),
+      prisma.purchaseOrder.aggregate({
+        _sum: { totalAmount: true },
+        where: { ...scope, status: { notIn: ["CANCELLED", "DRAFT"] } },
       }),
     ]);
+    const sanctioned = Number(budget._sum.budgetAmount ?? 0);
+    const spent = Number(committed._sum.totalAmount ?? 0);
+    const pct = sanctioned > 0 ? (spent / sanctioned) * 100 : 0;
     kpis.push({
-      label: "Open leads", value: String(openLeads),
-      sub: due > 0 ? `${due} follow-up${due === 1 ? "" : "s"} due` : "no follow-ups due",
-      icon: <UserPlus className="h-3.5 w-3.5" />, href: "/sales/leads",
-      tone: due > 0 ? "warn" : "brand",
+      label: "Budget vs actual",
+      value: moneyShort(spent),
+      delta: `${pct.toFixed(1)}%`,
+      deltaTone: pct > 100 ? "bad" : pct > 90 ? "warn" : "navy",
+      sub: `of ${moneyShort(sanctioned)} sanctioned`,
+      icon: <IndianRupee className="h-3.5 w-3.5" />, href: "/reports/budgetVsActual", tone: "navy",
     });
   }
 
-  if (ctx.has(PERM.unit.unit.view)) {
-    const [available, total] = await Promise.all([
-      prisma.unit.count({ where: { ...scope, status: "AVAILABLE" } }),
-      prisma.unit.count({ where: scope }),
-    ]);
+  if (ctx.has(PERM.material.indent.view)) {
+    const waiting = await prisma.indent.findMany({
+      where: { ...scope, status: { in: ["SUBMITTED", "PM_APPROVED"] } },
+      select: { raisedAt: true, items: { select: { requestedQty: true, estimatedRate: true } } },
+    });
+    const value = waiting.reduce(
+      (sum, i) => sum + i.items.reduce((s, l) => s + Number(l.requestedQty) * Number(l.estimatedRate), 0),
+      0,
+    );
+    const oldestDays = waiting.length
+      ? Math.max(...waiting.map((i) => Math.floor((today.getTime() - i.raisedAt.getTime()) / 86_400_000)))
+      : 0;
     kpis.push({
-      label: "Units available", value: `${available} / ${total}`, sub: "live inventory",
-      icon: <TrendingUp className="h-3.5 w-3.5" />, href: "/units/board", tone: "good",
+      label: "Pending approvals",
+      value: String(waiting.length),
+      delta: showMoney ? moneyShort(value) : undefined,
+      deltaTone: "warn",
+      sub: waiting.length
+        ? `oldest waiting ${oldestDays} day${oldestDays === 1 ? "" : "s"}`
+        : "queue is clear",
+      icon: <Clock className="h-3.5 w-3.5" />, href: "/material/indents",
+      tone: waiting.length > 0 ? "warn" : "good",
+    });
+  }
+
+  if (ctx.has(PERM.sales.receipt.view) && showMoney) {
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const [thisMonth, lastMonthTotal, bookings] = await Promise.all([
+      prisma.receipt.aggregate({ _sum: { amount: true }, where: { receiptDate: { gte: monthStart } } }),
+      prisma.receipt.aggregate({
+        _sum: { amount: true },
+        where: { receiptDate: { gte: prevStart, lt: monthStart } },
+      }),
+      prisma.booking.count({ where: { ...scope, bookingDate: { gte: monthStart } } }),
+    ]);
+    const now = Number(thisMonth._sum?.amount ?? 0);
+    const prev = Number(lastMonthTotal._sum?.amount ?? 0);
+    const change = prev > 0 ? Math.round(((now - prev) / prev) * 100) : null;
+    kpis.push({
+      label: `Collections · ${today.toLocaleDateString("en-IN", { month: "short" })}`,
+      value: moneyShort(now),
+      delta: change === null ? "—" : change >= 0 ? `▲ ${change}%` : `▼ ${Math.abs(change)}%`,
+      deltaTone: change !== null && change < 0 ? "bad" : "good",
+      sub: `${bookings} booking${bookings === 1 ? "" : "s"} this month`,
+      icon: <TrendingUp className="h-3.5 w-3.5" />, href: "/sales/receipts", tone: "good",
     });
   }
 
@@ -285,9 +322,16 @@ export default async function DashboardPage() {
 
   const canFunnel = ctx.has(PERM.sales.lead.view);
   const funnelOrder = ["NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED"] as const;
+  // The design's five funnel stages, under its own abbreviations.
   const funnelLabels: Record<string, string> = {
-    NEW: "New", CONTACTED: "Contacted", SITE_VISIT_SCHEDULED: "Visit set",
-    VISIT_DONE: "Visited", NEGOTIATION: "Negotiation", BOOKED: "Booked",
+    NEW: "New", CONTACTED: "Contacted", SITE_VISIT_SCHEDULED: "Visit",
+    VISIT_DONE: "Visit", NEGOTIATION: "Nego.", BOOKED: "Booked",
+  };
+
+  /** Each stage's bar colour, taken from the design. */
+  const funnelColour: Record<string, string> = {
+    NEW: "#5BC8F2", CONTACTED: "#0089C9", SITE_VISIT_SCHEDULED: "#2F308C",
+    VISIT_DONE: "#2F308C", NEGOTIATION: "#191A5C", BOOKED: "#1F9D66",
   };
 
   const grouped = canFunnel
@@ -341,6 +385,16 @@ export default async function DashboardPage() {
     bad: "bg-bad-050 text-bad-600",
     warn: "bg-warn-050 text-warn-700",
     brand: "bg-brand-100 text-brand-700",
+    navy: "bg-[#EFE9FC] text-navy-800",
+  };
+
+  /** The design's delta pill beside each KPI value. */
+  const deltaTone: Record<string, string> = {
+    good: "bg-good-050 text-good-700",
+    bad: "bg-bad-050 text-bad-600",
+    warn: "bg-warn-050 text-warn-700",
+    brand: "bg-brand-100 text-brand-700",
+    navy: "bg-surface-hover text-navy-800",
   };
 
   const showApprovals = queue.length > 0 || ctx.has(PERM.material.indent.view);
@@ -355,8 +409,8 @@ export default async function DashboardPage() {
             weekday: "long", day: "numeric", month: "long", year: "numeric",
           })}
         </div>
-        <div className="text-[11.5px] font-semibold uppercase tracking-[.05em] text-brand-500">
-          {ctx.roles.map((r) => r.name).join(", ") || "No role"}
+        <div className="text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">
+          Last sync just now
         </div>
       </div>
 
@@ -377,7 +431,19 @@ export default async function DashboardPage() {
                     {k.icon}
                   </span>
                 </div>
-                <StatValue>{k.value}</StatValue>
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <StatValue>{k.value}</StatValue>
+                  {k.delta && (
+                    <span
+                      className={cn(
+                        "rounded-full px-[9px] py-[3px] text-[10.5px] font-bold",
+                        deltaTone[k.deltaTone],
+                      )}
+                    >
+                      {k.delta}
+                    </span>
+                  )}
+                </div>
                 {k.sub && <p className="text-[11.5px] font-medium text-muted-400">{k.sub}</p>}
               </div>
             );
@@ -514,7 +580,7 @@ export default async function DashboardPage() {
         {canFunnel && (
           <Card className="px-[18px] py-4">
             <div className="mb-3.5 font-display text-[14px] font-bold text-navy-950">
-              Sales funnel · current pipeline
+              Sales funnel · this month
             </div>
             <div className="flex h-[120px] items-end gap-2.5">
               {funnelOrder.map((stage) => {
@@ -527,10 +593,7 @@ export default async function DashboardPage() {
                       className="w-full rounded-t-[6px]"
                       style={{
                         height: `${heightPct}%`,
-                        background:
-                          stage === "BOOKED"
-                            ? "linear-gradient(180deg,#1F9D66,#178555)"
-                            : "linear-gradient(180deg,#0089C9,#2F308C)",
+                        background: funnelColour[stage] ?? "#0089C9",
                       }}
                     />
                     <div className="text-center text-[10px] font-semibold uppercase tracking-[.03em] text-muted-500">
