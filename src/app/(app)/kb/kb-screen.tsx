@@ -2,13 +2,14 @@
 
 import * as React from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { ArrowLeft, FileText, Pencil, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Search, X } from "lucide-react";
 
 import { Badge, Card, Field, Input, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { formatDate } from "@/lib/utils";
+import { FileChip } from "@/components/ui/file-tag";
 import {
   createArticleAction, deleteArticleAction, toggleArticlePublishedAction, updateArticleAction,
 } from "./actions";
@@ -105,9 +106,8 @@ export function KbScreen({
               <p className="text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">Attachments</p>
               <ul className="mt-2 space-y-1.5">
                 {open.attachments.map((f) => (
-                  <li key={f.id} className="flex items-center gap-2 rounded-[9px] border border-line-300 px-3 py-2">
-                    <FileText className="h-3.5 w-3.5 shrink-0 text-muted-500" />
-                    <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-navy-900">{f.fileName}</span>
+                  <li key={f.id} className="flex items-center gap-2">
+                    <FileChip fileName={f.fileName} />
                     <span className="num shrink-0 text-[11px] font-medium text-muted-500">
                       {Math.round(f.fileSize / 1024)} KB
                     </span>
@@ -183,15 +183,23 @@ export function KbScreen({
                 {a.summary ?? a.body.slice(0, 180)}
               </p>
 
+              {a.attachments.length > 0 && (
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {a.attachments.slice(0, 3).map((f) => (
+                    <FileChip key={f.id} fileName={f.fileName} />
+                  ))}
+                  {a.attachments.length > 3 && (
+                    <span className="self-center text-[11px] font-semibold text-muted-400">
+                      +{a.attachments.length - 3}
+                    </span>
+                  )}
+                </div>
+              )}
+
               <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line-200 pt-2.5">
                 <span className="text-[11px] font-medium text-muted-500">
-                  {a.author} · {formatDate(a.updatedAt)}
+                  {a.attachments.length} attachment{a.attachments.length === 1 ? "" : "s"} · {a.author} · {formatDate(a.updatedAt)}
                 </span>
-                {a.attachments.length > 0 && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-700">
-                    <FileText className="h-3 w-3" /> {a.attachments.length}
-                  </span>
-                )}
                 <span className="ml-auto flex gap-1">
                   {can.publish && (
                     <button
