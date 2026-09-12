@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ClipboardList } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
@@ -7,33 +6,14 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { indentLookups } from "./lookups";
 import { NewIndentDrawer } from "./new-indent-drawer";
+import { IndentCard } from "./indent-card";
+import { Pagination } from "@/components/ui/data-table";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
-import { daysBetween, formatDate, money } from "@/lib/utils";
 import { IndentFilters } from "./indent-filters";
 
-export const metadata = { title: "Indents" };
+export const metadata = { title: "Requirement Indents" };
 
 const PAGE_SIZE = 30;
-
-const STATUS_TONE: Record<string, "slate" | "warn" | "brand" | "good" | "bad" | "navy"> = {
-  DRAFT: "slate", SUBMITTED: "warn", PM_APPROVED: "brand", ADMIN_APPROVED: "good",
-  PARTIALLY_ORDERED: "navy", ORDERED: "navy", CLOSED: "slate",
-  REJECTED: "bad", CANCELLED: "slate",
-};
-
-type IndentRow = {
-  id: string;
-  indentNo: string;
-  status: string;
-  raisedAt: Date;
-  requiredByDate: Date;
-  estimatedValue: unknown;
-  purpose: string | null;
-  project: { code: string; name: string };
-  raisedBy: { name: string };
-  _count: { items: number };
-};
 
 export default async function IndentsPage({
   searchParams,
@@ -67,6 +47,13 @@ export default async function IndentsPage({
       include: {
         project: { select: { code: true, name: true } },
         raisedBy: { select: { name: true } },
+        workPackage: { select: { name: true } },
+        items: {
+          select: {
+            requestedQty: true, approvedQty: true,
+            issueFromStockQty: true, toPurchaseQty: true,
+          },
+        },
         _count: { select: { items: true } },
       },
     }),
@@ -77,68 +64,8 @@ export default async function IndentsPage({
   ]);
 
   const showAgeing = ctx.has(PERM.material.indent.viewAgeing);
-
-  const columns: Column<IndentRow>[] = [
-    {
-      key: "no",
-      header: "Indent",
-      render: (i) => (
-        <div>
-          <Link href={`/material/indents/${i.id}`} className="text-sm font-medium text-navy-950 hover:text-brand-600">
-            {i.indentNo}
-          </Link>
-          <p className="text-xs text-muted-500">{i.project.code} · {i._count.items} line(s)</p>
-        </div>
-      ),
-    },
-    { key: "raisedBy", header: "Raised by", render: (i) => <span className="text-sm">{i.raisedBy.name}</span> },
-    {
-      key: "purpose",
-      header: "For",
-      render: (i) => <span className="text-xs text-muted-600">{i.purpose ?? "—"}</span>,
-    },
-    { key: "raised", header: "Raised", render: (i) => <span className="text-xs text-muted-500">{formatDate(i.raisedAt)}</span> },
-    {
-      key: "required",
-      header: "Required by",
-      render: (i) => {
-        const overdue = new Date(i.requiredByDate) < new Date();
-        return (
-          <span className={overdue ? "text-xs font-medium text-bad-600" : "text-xs text-muted-500"}>
-            {formatDate(i.requiredByDate)}
-          </span>
-        );
-      },
-    },
-    {
-      key: "ageing",
-      header: "Waiting",
-      align: "right",
-      visible: showAgeing,
-      render: (i) => {
-        if (!["SUBMITTED", "PM_APPROVED"].includes(i.status)) return <span className="text-muted-400">—</span>;
-        const days = daysBetween(i.raisedAt);
-        return (
-          <span className={`num text-xs font-medium ${days > 3 ? "text-bad-600" : days > 1 ? "text-warn-700" : "text-muted-500"}`}>
-            {days}d
-          </span>
-        );
-      },
-    },
-    {
-      key: "value",
-      header: "Value",
-      align: "right",
-      className: "num",
-      render: (i) => <span className="text-sm">{money(i.estimatedValue)}</span>,
-    },
-    {
-      key: "status",
-      header: "Status",
-      align: "center",
-      render: (i) => <Badge tone={STATUS_TONE[i.status] ?? "slate"}>{i.status.replace(/_/g, " ")}</Badge>,
-    },
-  ];
+  // Read once, after fetching, so every row ages against the same instant.
+  const asOfMs = new Date().getTime();
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -176,7 +103,34 @@ export default async function IndentsPage({
           </Card>
         ) : (
           <>
-            <DataTable columns={columns} rows={indents} rowKey={(i) => i.id} dense />
+            <div className="space-y-2.5">
+              {indents.map((i) => (
+                <IndentCard
+                  key={i.id}
+                  indent={{
+                    id: i.id,
+                    indentNo: i.indentNo,
+                    title: i.purpose || `${i._count.items} line${i._count.items === 1 ? "" : "s"}`,
+                    project: i.project.code,
+                    raisedBy: i.raisedBy.name,
+                    raisedAt: i.raisedAt.toISOString(),
+                    requiredBy: i.requiredByDate?.toISOString() ?? null,
+                    activity: i.workPackage?.name ?? null,
+                    status: i.status,
+                    waitingDays:
+                      showAgeing && ["SUBMITTED", "PM_APPROVED"].includes(i.status)
+                        ? Math.floor((asOfMs - i.raisedAt.getTime()) / 86_400_000)
+                        : null,
+                    lines: i.items.map((l) => ({
+                      requestedQty: Number(l.requestedQty),
+                      approvedQty: l.approvedQty === null ? null : Number(l.approvedQty),
+                      issueFromStockQty: Number(l.issueFromStockQty),
+                      toPurchaseQty: Number(l.toPurchaseQty),
+                    })),
+                  }}
+                />
+              ))}
+            </div>
             <Pagination
               page={page}
               pageSize={PAGE_SIZE}
