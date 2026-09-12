@@ -115,6 +115,9 @@ export default async function PoDetailPage({ params }: { params: Promise<{ id: s
         }))}
         can={{
           approve: ctx.has(PERM.material.purchaseOrder.approve),
+          approvePm: ctx.has(PERM.material.purchaseOrder.approvePm),
+          approveAdmin: ctx.has(PERM.material.purchaseOrder.approveAdmin),
+          revise: ctx.has(PERM.material.purchaseOrder.revise),
           cancel: ctx.has(PERM.material.purchaseOrder.cancel),
           close: ctx.has(PERM.material.purchaseOrder.close),
           print: ctx.has(PERM.material.purchaseOrder.print),

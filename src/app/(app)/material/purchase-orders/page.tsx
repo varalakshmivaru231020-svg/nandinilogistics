@@ -17,7 +17,8 @@ export const metadata = { title: "Purchase Orders" };
 const PAGE_SIZE = 30;
 
 const STATUS_TONE: Record<string, "slate" | "warn" | "good" | "brand" | "navy" | "bad"> = {
-  DRAFT: "slate", PENDING_APPROVAL: "warn", APPROVED: "good",
+  DRAFT: "slate", PENDING_APPROVAL: "warn",
+  PENDING_PM_APPROVAL: "warn", PENDING_ADMIN_APPROVAL: "navy", APPROVED: "good",
   PARTIALLY_RECEIVED: "brand", RECEIVED: "navy", CLOSED: "slate", CANCELLED: "bad",
 };
 
@@ -68,7 +69,7 @@ export default async function PurchaseOrdersPage({
     }),
     prisma.purchaseOrder.count({ where }),
     prisma.purchaseOrder.count({
-      where: { ...projectScopeFilter(ctx), status: "PENDING_APPROVAL" },
+      where: { ...projectScopeFilter(ctx), status: { in: ["PENDING_APPROVAL", "PENDING_PM_APPROVAL", "PENDING_ADMIN_APPROVAL"] } },
     }),
   ]);
 

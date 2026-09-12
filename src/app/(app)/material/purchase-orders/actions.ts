@@ -86,7 +86,7 @@ export async function createPurchaseOrderAction(
           taxAmount,
           otherCharges: v.otherCharges,
           totalAmount,
-          status: submitForApproval ? "PENDING_APPROVAL" : "DRAFT",
+          status: submitForApproval ? "PENDING_PM_APPROVAL" : "DRAFT",
           items: {
             create: v.items.map((l) => {
               const { net, tax } = priceLine(l);
@@ -120,29 +120,62 @@ export async function createPurchaseOrderAction(
   });
 }
 
-export async function approvePurchaseOrderAction(
-  id: string,
-  remarks: string,
-): Promise<ActionResult<null>> {
-  return runAction(async () => {
-    const ctx = await authorize(PERM.material.purchaseOrder.approve);
+/**
+ * The design approves a purchase order in two levels — Project Manager, then
+ * Owner/Admin — and shows both on the list. Each level is its own permission,
+ * so they can be held by different people; a single person holding both still
+ * has to pass it twice, which is what makes the second level mean anything.
+ *
+ * Value-based routing applies at each level: an approver may not exceed their
+ * configured ceiling.
+ */
+type ApprovalLevel = "PM" | "ADMIN";
 
-    const po = await prisma.purchaseOrder.findUnique({ where: { id } });
-    if (!po) throw new Error("Purchase order not found.");
-    assertProjectAccess(ctx, po.projectId);
-    if (!["DRAFT", "PENDING_APPROVAL"].includes(po.status)) {
-      throw new Error(`This PO is ${po.status.replace(/_/g, " ").toLowerCase()} and cannot be approved again.`);
-    }
+async function approveAtLevel(id: string, level: ApprovalLevel, remarks: string) {
+  const ctx = await authorize(
+    level === "PM" ? PERM.material.purchaseOrder.approvePm : PERM.material.purchaseOrder.approveAdmin,
+  );
 
-    // Value-based routing: an approver may not exceed their configured ceiling.
-    assertWithinApprovalLimit(ctx, APPROVAL_SCOPE, Number(po.totalAmount));
+  const po = await prisma.purchaseOrder.findUnique({ where: { id } });
+  if (!po) throw new Error("Purchase order not found.");
+  assertProjectAccess(ctx, po.projectId);
 
-    await prisma.purchaseOrder.update({
-      where: { id },
-      data: { status: "APPROVED", approvedById: ctx.id, approvedAt: new Date() },
-    });
+  const awaitingPm = ["DRAFT", "PENDING_APPROVAL", "PENDING_PM_APPROVAL"].includes(po.status);
+  const awaitingAdmin = po.status === "PENDING_ADMIN_APPROVAL";
 
-    // Mark the source indents as ordered once a PO covers them.
+  if (level === "PM" && !awaitingPm) {
+    throw new Error(
+      po.pmApprovedById
+        ? `${po.poNo} already has its Project Manager approval.`
+        : `${po.poNo} is ${po.status.replace(/_/g, " ").toLowerCase()} and cannot take a PM approval.`,
+    );
+  }
+  if (level === "ADMIN" && !awaitingAdmin) {
+    throw new Error(
+      awaitingPm
+        ? `${po.poNo} needs its Project Manager approval first.`
+        : `${po.poNo} is ${po.status.replace(/_/g, " ").toLowerCase()} and cannot be approved again.`,
+    );
+  }
+
+  assertWithinApprovalLimit(ctx, APPROVAL_SCOPE, Number(po.totalAmount));
+
+  const now = new Date();
+  await prisma.purchaseOrder.update({
+    where: { id },
+    data:
+      level === "PM"
+        ? { status: "PENDING_ADMIN_APPROVAL", pmApprovedById: ctx.id, pmApprovedAt: now }
+        : {
+            status: "APPROVED",
+            adminApprovedById: ctx.id, adminApprovedAt: now,
+            // Kept in step so anything still reading the old field stays right.
+            approvedById: ctx.id, approvedAt: now,
+          },
+  });
+
+  // Only a fully approved order marks its indents ordered.
+  if (level === "ADMIN") {
     const linkedIndentIds = (
       await prisma.purchaseOrderItem.findMany({
         where: { poId: id, indentId: { not: null } },
@@ -159,19 +192,78 @@ export async function approvePurchaseOrderAction(
         data: { status: "ORDERED" },
       });
     }
+  }
+
+  await recordAudit({
+    action: "APPROVE",
+    entity: "PurchaseOrder",
+    entityId: id,
+    userId: ctx.id,
+    projectId: po.projectId,
+    summary:
+      `${level === "PM" ? "PM approved" : "Admin approved"} purchase order ${po.poNo}` +
+      ` for ₹${Number(po.totalAmount).toLocaleString("en-IN")}${remarks ? ` — ${remarks}` : ""}`,
+  });
+
+  revalidatePath("/material/purchase-orders");
+  revalidatePath(`/material/purchase-orders/${id}`);
+  return null;
+}
+
+export async function approvePoPmAction(id: string, remarks = ""): Promise<ActionResult<null>> {
+  return runAction(() => approveAtLevel(id, "PM", remarks));
+}
+
+export async function approvePoAdminAction(id: string, remarks = ""): Promise<ActionResult<null>> {
+  return runAction(() => approveAtLevel(id, "ADMIN", remarks));
+}
+
+/**
+ * Editing an approved order raises its revision and sends it back through both
+ * approvals, per the design's own note. The previous approvals are cleared
+ * rather than kept, because they applied to different numbers.
+ */
+export async function revisePurchaseOrderAction(id: string, reason: string): Promise<ActionResult<{ revision: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.material.purchaseOrder.revise);
+
+    const po = await prisma.purchaseOrder.findUnique({
+      where: { id },
+      include: { _count: { select: { grns: true } } },
+    });
+    if (!po) throw new Error("Purchase order not found.");
+    assertProjectAccess(ctx, po.projectId);
+    if (po.status !== "APPROVED") {
+      throw new Error("Only an approved purchase order is revised — edit a draft directly.");
+    }
+    if (po._count.grns > 0) {
+      throw new Error(
+        `${po.poNo} already has material received against it. Revising it now would change an order the store has acted on.`,
+      );
+    }
+    if (!reason.trim()) throw new Error("A revision needs a reason.");
+
+    const revision = po.revision + 1;
+    await prisma.purchaseOrder.update({
+      where: { id },
+      data: {
+        revision,
+        status: "PENDING_PM_APPROVAL",
+        pmApprovedById: null, pmApprovedAt: null,
+        adminApprovedById: null, adminApprovedAt: null,
+        approvedById: null, approvedAt: null,
+      },
+    });
 
     await recordAudit({
-      action: "APPROVE",
-      entity: "PurchaseOrder",
-      entityId: id,
-      userId: ctx.id,
+      action: "UPDATE", entity: "PurchaseOrder", entityId: id, userId: ctx.id,
       projectId: po.projectId,
-      summary: `Approved purchase order ${po.poNo} for ₹${Number(po.totalAmount).toLocaleString("en-IN")}${remarks ? ` — ${remarks}` : ""}`,
+      summary: `Revised ${po.poNo} to rev ${revision} — ${reason.trim()}. Approvals restarted.`,
     });
 
     revalidatePath("/material/purchase-orders");
     revalidatePath(`/material/purchase-orders/${id}`);
-    return null;
+    return { revision };
   });
 }
 

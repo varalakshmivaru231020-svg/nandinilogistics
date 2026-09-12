@@ -10,7 +10,10 @@ import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, Field, Textarea } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { cn, formatDate, money, qty } from "@/lib/utils";
-import { approvePurchaseOrderAction, cancelPurchaseOrderAction, closePurchaseOrderAction } from "../actions";
+import {
+  approvePoAdminAction, approvePoPmAction,
+  cancelPurchaseOrderAction, closePurchaseOrderAction,
+} from "../actions";
 
 interface Po {
   id: string; poNo: string; status: string; poDate: string; expectedDate: string | null;
@@ -50,7 +53,13 @@ export function PoDetail({
   const [approving, setApproving] = React.useState(false);
   const [cancelling, setCancelling] = React.useState(false);
 
-  const awaitingApproval = ["DRAFT", "PENDING_APPROVAL"].includes(po.status);
+  // The design approves in two levels. Which one is outstanding decides both
+  // the label and the action; holding one permission does not imply the other.
+  const awaitingPm = ["DRAFT", "PENDING_APPROVAL", "PENDING_PM_APPROVAL"].includes(po.status);
+  const awaitingAdmin = po.status === "PENDING_ADMIN_APPROVAL";
+  const awaitingApproval = awaitingPm || awaitingAdmin;
+  const mayApproveNow = awaitingPm ? can.approvePm : awaitingAdmin ? can.approveAdmin : false;
+  const approvalLabel = awaitingPm ? "PM approve" : "Admin approve";
   const receivable = ["APPROVED", "PARTIALLY_RECEIVED"].includes(po.status);
   const aboveCeiling = approvalCeiling > 0 && po.totalAmount > approvalCeiling;
 
@@ -203,11 +212,11 @@ export function PoDetail({
             </div>
 
             <div className="flex flex-col gap-2 border-t border-line-200 pt-3">
-              {awaitingApproval && can.approve && (
+              {awaitingApproval && mayApproveNow && (
                 <>
                   <Button size="sm" variant="success" onClick={() => setApproving(true)} disabled={aboveCeiling}>
                     <Check className="h-3.5 w-3.5" />
-                    Approve purchase order
+                    {approvalLabel}
                   </Button>
                   {aboveCeiling && (
                     <p className="text-xs text-warn-700">
@@ -250,7 +259,7 @@ export function PoDetail({
                 </Button>
               )}
 
-              {awaitingApproval && !can.approve && (
+              {awaitingApproval && !mayApproveNow && (
                 <p className="text-xs text-muted-500">
                   Waiting for approval. You do not hold the PO approval permission.
                 </p>
@@ -335,14 +344,24 @@ export function PoDetail({
 
       {approving && (
         <RemarkModal
-          title={`Approve ${po.poNo}`}
-          description={`Approving commits ${money(po.totalAmount)} to ${po.vendorName}.`}
-          confirmLabel="Approve"
+          title={`${approvalLabel} ${po.poNo}`}
+          description={
+            awaitingPm
+              ? `Passing ${po.poNo} to the Admin level. It commits nothing until that second approval.`
+              : `Approving commits ${money(po.totalAmount)} to ${po.vendorName}.`
+          }
+          confirmLabel={approvalLabel}
           variant="success"
           onClose={() => setApproving(false)}
           onSubmit={async (remarks) => {
-            const res = await approvePurchaseOrderAction(po.id, remarks);
-            if (res.ok) { setApproving(false); setNotice("Purchase order approved."); router.refresh(); }
+            const res = awaitingPm
+              ? await approvePoPmAction(po.id, remarks)
+              : await approvePoAdminAction(po.id, remarks);
+            if (res.ok) {
+              setApproving(false);
+              setNotice(awaitingPm ? "Passed to the Admin level." : "Purchase order approved.");
+              router.refresh();
+            }
             return res.ok ? null : res.error;
           }}
         />

@@ -239,7 +239,7 @@ export default async function DashboardPage() {
 
   if (ctx.has(PERM.material.purchaseOrder.view)) {
     const pos = await prisma.purchaseOrder.findMany({
-      where: { ...scope, status: "PENDING_APPROVAL" },
+      where: { ...scope, status: { in: ["PENDING_APPROVAL", "PENDING_PM_APPROVAL", "PENDING_ADMIN_APPROVAL"] } },
       orderBy: { poDate: "asc" },
       take: 4,
       include: {
@@ -257,8 +257,13 @@ export default async function DashboardPage() {
         ref: p.poNo, project: p.project.code, by: p.createdBy.name,
         value: showMoney ? money(p.totalAmount) : "—",
         age: `${age.text} waiting`, ageDays: age.days,
-        href: `/material/purchase-orders/${p.id}`, level: null,
-        canApprove: ctx.has(PERM.material.purchaseOrder.approve),
+        href: `/material/purchase-orders/${p.id}`,
+        // Which of the two levels this order is actually waiting on.
+        level: p.status === "PENDING_ADMIN_APPROVAL" ? "ADMIN" : "PM",
+        canApprove:
+          p.status === "PENDING_ADMIN_APPROVAL"
+            ? ctx.has(PERM.material.purchaseOrder.approveAdmin)
+            : ctx.has(PERM.material.purchaseOrder.approvePm),
         canReject: false,
       });
     }

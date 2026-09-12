@@ -9,7 +9,9 @@ import { Modal } from "@/components/ui/modal";
 import { Alert, Field, Textarea } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 import { approveIndentAction, rejectIndentAction } from "@/app/(app)/material/indents/actions";
-import { approvePurchaseOrderAction } from "@/app/(app)/material/purchase-orders/actions";
+import {
+  approvePoAdminAction, approvePoPmAction,
+} from "@/app/(app)/material/purchase-orders/actions";
 
 export interface QueueRow {
   id: string;
@@ -51,7 +53,9 @@ export function ApprovalQueue({ rows }: { rows: QueueRow[] }) {
     const res =
       row.kind === "INDENT"
         ? await approveIndentAction(row.id, row.level ?? "PM", "Approved from the dashboard queue")
-        : await approvePurchaseOrderAction(row.id, "Approved from the dashboard queue");
+        : row.level === "ADMIN"
+          ? await approvePoAdminAction(row.id, "Approved from the dashboard queue")
+          : await approvePoPmAction(row.id, "Approved from the dashboard queue");
     setBusy(null);
     if (!res.ok) setError(res.error);
     else router.refresh();
