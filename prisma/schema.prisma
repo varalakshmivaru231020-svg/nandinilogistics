@@ -90,7 +90,10 @@ enum ApprovalLevel {
 
 enum PurchaseOrderStatus {
   DRAFT
+  /// Retained so historic rows keep resolving; new orders use the two levels.
   PENDING_APPROVAL
+  PENDING_PM_APPROVAL
+  PENDING_ADMIN_APPROVAL
   APPROVED
   PARTIALLY_RECEIVED
   RECEIVED
@@ -184,26 +187,28 @@ model User {
   sessions       Session[]
   auditLogs      AuditLog[]
 
-  indentsRaised     Indent[]            @relation("IndentRaisedBy")
-  indentApprovals   IndentApproval[]
-  purchaseOrders    PurchaseOrder[]
-  goodsReceipts     Grn[]
-  materialIssues    MaterialIssue[]
-  leadsOwned        Lead[]              @relation("LeadOwner")
-  followUps         LeadFollowUp[]
-  siteVisits        SiteVisit[]
-  bookings          Booking[]
-  unitHolds         UnitHold[]
-  progressLogs      SiteProgressLog[]
-  managedProjects   Project[]           @relation("ProjectManager")
-  extensionsAsked   ScheduleExtension[] @relation("ExtensionRequestedBy")
-  extensionsDecided ScheduleExtension[] @relation("ExtensionDecidedBy")
-  leadNotes         LeadNote[]
-  leadDocuments     LeadDocument[]
-  employeeDocuments EmployeeDocument[]
-  attendanceEntries AttendanceEntry[]
-  kbArticles        KbArticle[]
-  kbAttachments     KbAttachment[]
+  indentsRaised      Indent[]            @relation("IndentRaisedBy")
+  indentApprovals    IndentApproval[]
+  purchaseOrders     PurchaseOrder[]
+  goodsReceipts      Grn[]
+  materialIssues     MaterialIssue[]
+  leadsOwned         Lead[]              @relation("LeadOwner")
+  followUps          LeadFollowUp[]
+  siteVisits         SiteVisit[]
+  bookings           Booking[]
+  unitHolds          UnitHold[]
+  progressLogs       SiteProgressLog[]
+  managedProjects    Project[]           @relation("ProjectManager")
+  extensionsAsked    ScheduleExtension[] @relation("ExtensionRequestedBy")
+  extensionsDecided  ScheduleExtension[] @relation("ExtensionDecidedBy")
+  leadNotes          LeadNote[]
+  leadDocuments      LeadDocument[]
+  employeeDocuments  EmployeeDocument[]
+  attendanceEntries  AttendanceEntry[]
+  kbArticles         KbArticle[]
+  kbAttachments      KbAttachment[]
+  posApprovedAsPm    PurchaseOrder[]     @relation("PoPmApprover")
+  posApprovedAsAdmin PurchaseOrder[]     @relation("PoAdminApprover")
 
   @@index([status])
   @@index([departmentId])
@@ -1185,9 +1190,10 @@ model Indent {
   workPackage WorkPackage? @relation(fields: [workPackageId], references: [id])
   raisedBy    User         @relation("IndentRaisedBy", fields: [raisedById], references: [id])
 
-  items     IndentItem[]
-  approvals IndentApproval[]
-  poItems   PurchaseOrderItem[]
+  items          IndentItem[]
+  approvals      IndentApproval[]
+  poItems        PurchaseOrderItem[]
+  purchaseOrders PurchaseOrder[]     @relation("PoSourceIndent")
 
   @@index([projectId, status])
   @@index([status, raisedAt])
@@ -1237,30 +1243,43 @@ model IndentApproval {
 }
 
 model PurchaseOrder {
-  id              String              @id @default(cuid())
-  poNo            String              @unique
-  projectId       String
-  vendorId        String
-  poDate          DateTime            @default(now())
-  expectedDate    DateTime?
-  paymentTermId   String?
-  createdById     String
-  subTotal        Decimal             @default(0) @db.Decimal(16, 2)
-  taxAmount       Decimal             @default(0) @db.Decimal(16, 2)
-  otherCharges    Decimal             @default(0) @db.Decimal(16, 2)
-  totalAmount     Decimal             @default(0) @db.Decimal(16, 2)
-  deliveryAddress String?
-  terms           String?
-  status          PurchaseOrderStatus @default(DRAFT)
-  approvedById    String?
-  approvedAt      DateTime?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  id                String              @id @default(cuid())
+  poNo              String              @unique
+  projectId         String
+  vendorId          String
+  poDate            DateTime            @default(now())
+  expectedDate      DateTime?
+  paymentTermId     String?
+  createdById       String
+  subTotal          Decimal             @default(0) @db.Decimal(16, 2)
+  taxAmount         Decimal             @default(0) @db.Decimal(16, 2)
+  otherCharges      Decimal             @default(0) @db.Decimal(16, 2)
+  totalAmount       Decimal             @default(0) @db.Decimal(16, 2)
+  deliveryAddress   String?
+  terms             String?
+  status            PurchaseOrderStatus @default(DRAFT)
+  /// The design shows both approvals on the list and restarts them on a
+  /// revision, so each level is recorded separately rather than collapsed.
+  pmApprovedById    String?
+  pmApprovedAt      DateTime?
+  adminApprovedById String?
+  adminApprovedAt   DateTime?
+  approvedById      String?
+  approvedAt        DateTime?
+  /// Editing an approved order raises the revision and restarts approval.
+  revision          Int                 @default(0)
+  /// The approved indent this order was raised against, when it came from one.
+  indentId          String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
-  project     Project      @relation(fields: [projectId], references: [id])
-  vendor      Vendor       @relation(fields: [vendorId], references: [id])
-  paymentTerm PaymentTerm? @relation(fields: [paymentTermId], references: [id])
-  createdBy   User         @relation(fields: [createdById], references: [id])
+  project         Project      @relation(fields: [projectId], references: [id])
+  vendor          Vendor       @relation(fields: [vendorId], references: [id])
+  paymentTerm     PaymentTerm? @relation(fields: [paymentTermId], references: [id])
+  createdBy       User         @relation(fields: [createdById], references: [id])
+  pmApprovedBy    User?        @relation("PoPmApprover", fields: [pmApprovedById], references: [id])
+  adminApprovedBy User?        @relation("PoAdminApprover", fields: [adminApprovedById], references: [id])
+  sourceIndent    Indent?      @relation("PoSourceIndent", fields: [indentId], references: [id])
 
   items    PurchaseOrderItem[]
   grns     Grn[]

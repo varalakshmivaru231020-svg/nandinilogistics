@@ -264,6 +264,9 @@ crud({
   group: G_MAT_PO,
   extra: [
     ["approve", "Approve purchase order", "BUTTON"],
+    ["approvePm", "Approve a purchase order — PM level", "BUTTON", "The first of the design's two levels."],
+    ["approveAdmin", "Approve a purchase order — Admin level", "BUTTON", "The second level. Above it the order is live."],
+    ["revise", "Revise an approved purchase order", "BUTTON", "Raises the revision and sends it back through both approvals."],
     ["cancel", "Cancel purchase order", "BUTTON"],
     ["close", "Close purchase order", "BUTTON"],
     ["print", "Print purchase order", "BUTTON"],

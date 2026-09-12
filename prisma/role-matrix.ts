@@ -80,6 +80,7 @@ export const ROLES: RoleSeed[] = [
       "kb.article.update",
       "material.indent.*",
       "material.purchaseOrder.view",
+      "material.purchaseOrder.approvePm",
       "material.purchaseOrder.export",
       "material.purchaseOrder.print",
       "material.purchaseOrder.viewRate",

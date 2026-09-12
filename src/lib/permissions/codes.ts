@@ -3,7 +3,7 @@
  * Source: src/lib/permissions/registry.ts
  * Regenerate: pnpm perms:codegen
  *
- * 506 permission codes.
+ * 509 permission codes.
  */
 
 export const PERM = {
@@ -154,6 +154,9 @@ export const PERM = {
       "delete": "material.purchaseOrder.delete",
       "export": "material.purchaseOrder.export",
       "approve": "material.purchaseOrder.approve",
+      "approvePm": "material.purchaseOrder.approvePm",
+      "approveAdmin": "material.purchaseOrder.approveAdmin",
+      "revise": "material.purchaseOrder.revise",
       "cancel": "material.purchaseOrder.cancel",
       "close": "material.purchaseOrder.close",
       "print": "material.purchaseOrder.print",
