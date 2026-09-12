@@ -29,7 +29,7 @@ interface Block { id: string; name: string; units: Unit[] }
 /** One status, one colour, everywhere. */
 const STATUS_STYLE: Record<string, { cell: string; dot: string; label: string }> = {
   AVAILABLE:  { cell: "border-good-050 bg-good-050 text-good-700 hover:border-good-600",    dot: "bg-good-600",  label: "Available" },
-  HELD:       { cell: "border-warn-050 bg-warn-050 text-warn-700 hover:border-warn-700",    dot: "bg-warn-700",  label: "Held" },
+  HELD:       { cell: "border-warn-050 bg-warn-050 text-warn-700 hover:border-warn-700",    dot: "bg-warn-700",  label: "On hold" },
   BOOKED:     { cell: "border-brand-100 bg-brand-100 text-brand-700 hover:border-brand-500", dot: "bg-brand-500", label: "Booked" },
   AGREEMENT:  { cell: "border-line-400 bg-surface-field text-navy-800 hover:border-navy-800", dot: "bg-navy-800",  label: "Agreement" },
   REGISTERED: { cell: "border-line-500 bg-line-400 text-navy-600 hover:border-navy-600",     dot: "bg-navy-500",  label: "Registered" },
@@ -37,13 +37,15 @@ const STATUS_STYLE: Record<string, { cell: string; dot: string; label: string }>
 };
 
 export function BoardGrid({
-  projects, activeProjectId, blocks, statusCounts, leads, can, nowMs,
+  projects, activeProjectId, blocks, statusCounts, leads, can, nowMs, projectType,
 }: {
   nowMs: number;
   projects: Array<{ id: string; name: string; code: string }>;
   activeProjectId: string;
   blocks: Block[];
   statusCounts: Array<{ status: string; count: number }>;
+  /** Villa and plotted projects have clusters, not towers, as the design names them. */
+  projectType: string | null;
   leads: Array<{ id: string; name: string; leadNo: string }>;
   can: Record<string, boolean>;
 }) {
@@ -53,6 +55,8 @@ export function BoardGrid({
   const [notice, setNotice] = React.useState<string | null>(null);
 
   const total = statusCounts.reduce((s, c) => s + c.count, 0);
+  // The design writes "Cluster A" for a villa project and "Tower A" otherwise.
+  const blockWord = /villa|plot/i.test(projectType ?? "") ? "Cluster" : "Tower";
 
   return (
     <div className="space-y-4">
@@ -99,7 +103,9 @@ export function BoardGrid({
         return (
           <Card key={block.id}>
             <CardHeader>
-              <CardTitle>{block.name}</CardTitle>
+              <CardTitle>
+                {/^(tower|cluster|block)\b/i.test(block.name) ? block.name : `${blockWord} ${block.name}`}
+              </CardTitle>
               <div className="flex items-center gap-2">
                 <Badge tone="slate">{block.units.length} units</Badge>
                 <Badge tone="good">

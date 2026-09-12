@@ -22,7 +22,7 @@ export default async function AvailabilityBoardPage({
   const projects = await prisma.project.findMany({
     where: projectWhere,
     orderBy: { name: "asc" },
-    select: { id: true, name: true, code: true },
+    select: { id: true, name: true, code: true, projectType: { select: { name: true } } },
   });
 
   const projectId =
@@ -81,6 +81,7 @@ export default async function AvailabilityBoardPage({
         projects={projects}
         activeProjectId={projectId}
         statusCounts={statusCounts.map((s) => ({ status: s.status, count: s._count }))}
+        projectType={projects.find((p) => p.id === projectId)?.projectType?.name ?? null}
         blocks={blocks.map((b) => ({
           id: b.id,
           name: b.name,
