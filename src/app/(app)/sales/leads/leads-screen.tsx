@@ -22,8 +22,11 @@ const BOARD_STAGES: Stage[] = [
 ];
 
 const STAGE_LABEL: Record<string, string> = {
-  NEW: "New", CONTACTED: "Contacted", SITE_VISIT_SCHEDULED: "Visit scheduled",
-  VISIT_DONE: "Visit done", NEGOTIATION: "Negotiation", BOOKED: "Booked", LOST: "Lost",
+  // The design's own stage names. It keeps one "Site Visit" column; this
+  // splits scheduled from done, which the site-visit module needs, so the two
+  // are named as stages of the same thing rather than as separate ideas.
+  NEW: "New", CONTACTED: "Contacted", SITE_VISIT_SCHEDULED: "Site Visit · planned",
+  VISIT_DONE: "Site Visit · done", NEGOTIATION: "Negotiation", BOOKED: "Booked", LOST: "Lost",
 };
 
 const STAGE_TONE: Record<string, "muted" | "brand" | "warn" | "navy" | "good" | "bad"> = {
@@ -54,11 +57,12 @@ function followUp(nextActionAt: string | null, nowMs: number) {
 }
 
 export function LeadsScreen({
-  leads, sources, lostReasons, projects, owners, can,
+  leads, sources, lostReasons, projects, owners, unitTypes, can,
   query, stateFilter, sourceFilter, followUpFilter, view, nowMs,
 }: {
   leads: Lead[];
   sources: Lookup;
+  unitTypes: Lookup;
   lostReasons: Lookup;
   projects: Lookup;
   owners: Lookup;
@@ -144,19 +148,19 @@ export function LeadsScreen({
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-1.5">
-            {(["board", "list"] as const).map((v) => (
+            {([["board", "▦ Grid"], ["list", "☰ List"]] as const).map(([v, label]) => (
               <button
                 key={v}
                 type="button"
                 onClick={() => setParam({ view: v === "board" ? undefined : v })}
                 className={cn(
-                  "rounded-[9px] border px-3.5 py-2 text-[12px] font-bold capitalize transition-colors",
+                  "rounded-[9px] border px-3.5 py-2 text-[12px] font-bold transition-colors",
                   view === v
                     ? "border-brand-500 bg-brand-100 text-brand-700"
                     : "border-line-400 bg-white text-muted-600 hover:border-brand-300",
                 )}
               >
-                {v}
+                {label}
               </button>
             ))}
           </div>
@@ -418,6 +422,7 @@ export function LeadsScreen({
         <NewLeadModal
           sources={sources}
           projects={projects}
+          unitTypes={unitTypes}
           onClose={() => setCreating(false)}
           onSaved={(m) => { setCreating(false); setNotice(m); router.refresh(); }}
         />
@@ -454,8 +459,11 @@ export function LeadsScreen({
 /* ------------------------------- Modals ---------------------------------- */
 
 function NewLeadModal({
-  sources, projects, onClose, onSaved,
-}: { sources: Lookup; projects: Lookup; onClose: () => void; onSaved: (m: string) => void }) {
+  sources, projects, unitTypes, onClose, onSaved,
+}: {
+  sources: Lookup; projects: Lookup; unitTypes: Lookup;
+  onClose: () => void; onSaved: (m: string) => void;
+}) {
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -497,6 +505,12 @@ function NewLeadModal({
             <Select name="projectId" defaultValue="">
               <option value="">— Not specified —</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Interested in" hint="Matched against available inventory.">
+            <Select name="unitTypeId" defaultValue="">
+              <option value="">Any unit type</option>
+              {unitTypes.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </Select>
           </Field>
           <Field label="Budget from (₹)"><Input name="budgetMin" type="number" min={0} step="any" /></Field>

@@ -4,7 +4,7 @@ import { PERM } from "@/lib/permissions/codes";
 import { Card, CardBody, PageHeader } from "@/components/ui/primitives";
 import { LeadsScreen } from "./leads-screen";
 
-export const metadata = { title: "Leads" };
+export const metadata = { title: "Lead Management · Sales CRM" };
 
 const STAGES = ["NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED", "LOST"] as const;
 
@@ -48,7 +48,7 @@ export default async function LeadsPage({
     ...(fu === "none" ? { nextActionAt: null } : {}),
   };
 
-  const [leads, stageCounts, sources, lostReasons, projects, owners] = await Promise.all([
+  const [leads, stageCounts, sources, lostReasons, projects, owners, unitTypes] = await Promise.all([
     prisma.lead.findMany({
       where,
       orderBy: [{ nextActionAt: "asc" }, { createdAt: "desc" }],
@@ -68,6 +68,7 @@ export default async function LeadsPage({
     ctx.has(PERM.sales.lead.assign)
       ? prisma.user.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } })
       : Promise.resolve([]),
+    prisma.unitType.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
   const counts = Object.fromEntries(stageCounts.map((s) => [s.state, s._count]));
@@ -75,7 +76,7 @@ export default async function LeadsPage({
   return (
     <div className="mx-auto max-w-7xl">
       <PageHeader
-        title="Leads"
+        title="Lead Management · Sales CRM"
         description={
           ctx.has(PERM.sales.lead.viewAll)
             ? "The whole pipeline, worked against live availability."
@@ -96,6 +97,7 @@ export default async function LeadsPage({
       </Card>
 
       <LeadsScreen
+        unitTypes={unitTypes}
         query={q}
         stateFilter={state}
         sourceFilter={source}

@@ -507,6 +507,7 @@ model UnitType {
   updatedAt   DateTime     @updatedAt
 
   units Unit[]
+  leads Lead[]
 
   @@map("m_unit_types")
 }
@@ -1609,6 +1610,10 @@ model Lead {
   budgetMin         Decimal?  @db.Decimal(14, 2)
   budgetMax         Decimal?  @db.Decimal(14, 2)
   requirement       String?
+  /// The design's "Interested in" — which unit type the lead wants, kept as a
+  /// reference rather than buried in free text so it can be matched against
+  /// available inventory.
+  unitTypeId        String?
   /// Set when duplicate detection matches an existing phone/email.
   duplicateOfId     String?
   assignedAt        DateTime?
@@ -1624,6 +1629,7 @@ model Lead {
   source      LeadSource  @relation(fields: [sourceId], references: [id])
   project     Project?    @relation(fields: [projectId], references: [id])
   owner       User?       @relation("LeadOwner", fields: [ownerId], references: [id])
+  unitType    UnitType?   @relation(fields: [unitTypeId], references: [id])
   lostReason  LostReason? @relation(fields: [lostReasonId], references: [id])
   duplicateOf Lead?       @relation("LeadDuplicate", fields: [duplicateOfId], references: [id])
   duplicates  Lead[]      @relation("LeadDuplicate")

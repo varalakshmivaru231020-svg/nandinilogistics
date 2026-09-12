@@ -53,6 +53,7 @@ export async function createLeadAction(formData: FormData): Promise<ActionResult
           budgetMin: v.budgetMin ?? null,
           budgetMax: v.budgetMax ?? null,
           nextActionAt: v.nextActionAt ? new Date(v.nextActionAt) : null,
+          unitTypeId: String(formData.get("unitTypeId") ?? "") || null,
           duplicateOfId: existing?.id ?? null,
         },
       });
