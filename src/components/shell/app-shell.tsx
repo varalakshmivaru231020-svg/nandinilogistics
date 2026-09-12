@@ -17,7 +17,10 @@ export function AppShell({
 
   return (
     <ToastProvider>
-      <div className="flex min-h-screen">
+      {/* h-screen, not min-h-screen: the shell is pinned to the viewport so the
+          sidebar and topbar stay put and only the content pane scrolls. With
+          min-h-screen the whole page scrolled and took the sidebar with it. */}
+      <div className="flex h-screen overflow-hidden">
         <Sidebar
           badges={badges}
           mobileOpen={mobileOpen}
@@ -28,7 +31,7 @@ export function AppShell({
             onOpenMobile={() => setMobileOpen(true)}
             pendingCount={badges?.indentPending ?? 0}
           />
-          <main className="flex-1 overflow-y-auto px-[26px] pb-10 pt-6">
+          <main data-app-scroll className="flex-1 overflow-y-auto px-[26px] pb-10 pt-6">
             {children}
           </main>
         </div>

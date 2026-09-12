@@ -4,6 +4,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
+import { lockAppScroll } from "@/lib/scroll-lock";
 
 /**
  * The design's right-hand panel, used wherever a record is created or built:
@@ -43,10 +44,10 @@ export function Drawer({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
+    const unlock = lockAppScroll();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      unlock();
     };
   }, [open, onClose]);
 
