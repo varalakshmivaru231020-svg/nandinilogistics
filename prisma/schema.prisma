@@ -207,6 +207,7 @@ model User {
   attendanceEntries  AttendanceEntry[]
   kbArticles         KbArticle[]
   kbAttachments      KbAttachment[]
+  grnsInspected      Grn[]               @relation("GrnInspector")
   posApprovedAsPm    PurchaseOrder[]     @relation("PoPmApprover")
   posApprovedAsAdmin PurchaseOrder[]     @relation("PoAdminApprover")
 
@@ -1336,6 +1337,7 @@ model Grn {
   vendor        Vendor        @relation(fields: [vendorId], references: [id])
   store         Store         @relation(fields: [storeId], references: [id])
   receivedBy    User          @relation(fields: [receivedById], references: [id])
+  inspectedBy   User?         @relation("GrnInspector", fields: [inspectedById], references: [id])
 
   items       GrnItem[]
   stockLedger StockLedger[]

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { PackageCheck } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
@@ -7,21 +6,12 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { grnLookups } from "./lookups";
 import { NewGrnDrawer } from "./new-grn-drawer";
+import { GrnCard } from "./grn-card";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { DataTable, type Column } from "@/components/ui/data-table";
-import { formatDate, qty } from "@/lib/utils";
 
 export const metadata = { title: "Goods Receipt" };
 
-const STATUS_TONE: Record<string, "slate" | "warn" | "good" | "bad"> = {
-  DRAFT: "slate", INSPECTED: "warn", POSTED: "good", CANCELLED: "bad",
-};
 
-type GrnRow = {
-  id: string; grnNo: string; status: string; grnDate: Date; challanNo: string | null;
-  store: { name: string }; vendor: { name: string }; purchaseOrder: { poNo: string; id: string };
-  items: Array<{ receivedQty: unknown; acceptedQty: unknown; rejectedQty: unknown }>;
-};
 
 export default async function GrnListPage() {
   const ctx = await requirePermission(PERM.material.grn.view);
@@ -35,74 +25,15 @@ export default async function GrnListPage() {
     include: {
       store: { select: { name: true } },
       vendor: { select: { name: true } },
-      purchaseOrder: { select: { poNo: true, id: true } },
-      items: { select: { receivedQty: true, acceptedQty: true, rejectedQty: true } },
+      inspectedBy: { select: { name: true } },
+      purchaseOrder: {
+        select: { poNo: true, id: true, _count: { select: { invoices: true } } },
+      },
+      items: { select: { receivedQty: true, acceptedQty: true, rejectedQty: true, shortQty: true } },
     },
   });
 
   const awaitingPost = grns.filter((g) => g.status === "INSPECTED").length;
-
-  const columns: Column<GrnRow>[] = [
-    {
-      key: "grn",
-      header: "Receipt",
-      render: (g) => (
-        <div>
-          <Link href={`/material/grn/${g.id}`} className="text-sm font-medium text-navy-950 hover:text-brand-600">
-            {g.grnNo}
-          </Link>
-          <p className="text-xs text-muted-500">
-            against{" "}
-            <Link href={`/material/purchase-orders/${g.purchaseOrder.id}`} className="hover:text-brand-600">
-              {g.purchaseOrder.poNo}
-            </Link>
-          </p>
-        </div>
-      ),
-    },
-    { key: "vendor", header: "Vendor", render: (g) => <span className="text-sm">{g.vendor.name}</span> },
-    { key: "store", header: "Store", render: (g) => <span className="text-xs text-muted-600">{g.store.name}</span> },
-    {
-      key: "challan",
-      header: "Challan",
-      render: (g) => <span className="text-xs text-muted-600">{g.challanNo ?? "—"}</span>,
-    },
-    { key: "date", header: "Received", render: (g) => <span className="text-xs text-muted-500">{formatDate(g.grnDate)}</span> },
-    {
-      key: "accepted",
-      header: "Accepted",
-      align: "right",
-      className: "num",
-      render: (g) => {
-        const accepted = g.items.reduce((s, i) => s + Number(i.acceptedQty), 0);
-        const received = g.items.reduce((s, i) => s + Number(i.receivedQty), 0);
-        return (
-          <span className="text-xs">
-            <span className="font-medium text-good-700">{qty(accepted, 2)}</span>
-            <span className="text-muted-400"> / {qty(received, 2)}</span>
-          </span>
-        );
-      },
-    },
-    {
-      key: "rejected",
-      header: "Rejected",
-      align: "right",
-      className: "num",
-      render: (g) => {
-        const rejected = g.items.reduce((s, i) => s + Number(i.rejectedQty), 0);
-        return rejected > 0
-          ? <span className="text-xs font-medium text-bad-600">{qty(rejected, 2)}</span>
-          : <span className="text-xs text-muted-400">—</span>;
-      },
-    },
-    {
-      key: "status",
-      header: "Status",
-      align: "center",
-      render: (g) => <Badge tone={STATUS_TONE[g.status] ?? "slate"}>{g.status}</Badge>,
-    },
-  ];
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -128,7 +59,47 @@ export default async function GrnListPage() {
           />
         </Card>
       ) : (
-        <DataTable columns={columns} rows={grns} rowKey={(g) => g.id} dense />
+        <div className="space-y-2.5">
+          {grns.map((g) => {
+            const accepted = g.items.reduce((n, i) => n + Number(i.acceptedQty), 0);
+            const rejected = g.items.reduce((n, i) => n + Number(i.rejectedQty), 0);
+            const short = g.items.reduce((n, i) => n + Number(i.shortQty), 0);
+
+            // Where this receipt sits in the three-way match: nothing is matched
+            // until it is posted, and a short or rejected line is what the match
+            // is for.
+            const match =
+              g.status !== "POSTED"
+                ? { label: "NOT POSTED", tone: "muted" as const }
+                : rejected > 0 || short > 0
+                  ? { label: "MATCH — WITH EXCEPTIONS", tone: "warn" as const }
+                  : g.purchaseOrder._count.invoices > 0
+                    ? { label: "3-WAY MATCHED", tone: "good" as const }
+                    : { label: "AWAITING INVOICE", tone: "muted" as const };
+
+            return (
+              <GrnCard
+                key={g.id}
+                grn={{
+                  id: g.id,
+                  grnNo: g.grnNo,
+                  poNo: g.purchaseOrder.poNo,
+                  poId: g.purchaseOrder.id,
+                  vendor: g.vendor.name,
+                  grnDate: g.grnDate.toISOString(),
+                  store: g.store.name,
+                  lineCount: g.items.length,
+                  challanNo: g.challanNo,
+                  hasChallanPhoto: Boolean(g.challanPhotoUrl),
+                  inspectedBy: g.inspectedBy?.name ?? null,
+                  accepted, rejected, short,
+                  status: g.status,
+                  match,
+                }}
+              />
+            );
+          })}
+        </div>
       )}
     </div>
   );
