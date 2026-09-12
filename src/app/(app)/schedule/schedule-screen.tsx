@@ -63,23 +63,39 @@ export function ScheduleScreen({
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
 
-  const delayed = activities.filter((a) => a.status === "DELAYED");
   const done = activities.filter((a) => a.status === "COMPLETED");
   const critical = activities.filter((a) => a.isCriticalPath);
   const pendingExt = extensions.filter((e) => e.status === "PENDING");
 
-  const stats = [
-    { v: String(activities.length), l: "Activities in plan" },
-    { v: String(done.length), l: "Completed" },
-    { v: String(delayed.length), l: "Delayed" },
+  // The design's four tiles: completion, punctuality at each end, and what is
+  // running late. Each ratio reads "n of m" so the denominator is visible.
+  const started = activities.filter((a) => a.actualStart);
+  const startedOnTime = started.filter(
+    (a) => a.plannedStart && a.actualStart && new Date(a.actualStart) <= new Date(a.plannedStart),
+  );
+  const finishedOnTime = done.filter(
+    (a) => a.plannedEnd && a.actualEnd && new Date(a.actualEnd) <= new Date(a.plannedEnd),
+  );
+  const overdue = activities.filter(
+    (a) => a.status !== "COMPLETED" && a.plannedEnd && new Date(a.plannedEnd).getTime() < nowMs,
+  );
+
+  const stats: Array<{ v: string; l: string; tone: "navy" | "good" | "brand" | "bad" }> = [
+    { v: `${done.length} of ${activities.length}`, l: "Activities completed", tone: "navy" },
     {
-      v: activities.length
-        ? `${Math.round(activities.reduce((s, a) => s + a.progressPct, 0) / activities.length)}%`
-        : "—",
-      l: "Average progress",
+      v: started.length ? `${startedOnTime.length} of ${started.length}` : "—",
+      l: "Started on time", tone: "good",
+    },
+    {
+      v: done.length ? `${finishedOnTime.length} of ${done.length}` : "—",
+      l: "Completed on time", tone: "brand",
+    },
+    {
+      v: String(overdue.length),
+      l: overdue.length === 1 ? "Activity overdue" : "Activities overdue", tone: "bad",
     },
     ...(can.viewCriticalPath
-      ? [{ v: String(critical.length), l: "On the critical path" }]
+      ? [{ v: String(critical.length), l: "On the critical path", tone: "navy" as const }]
       : []),
   ];
 
@@ -143,7 +159,7 @@ export function ScheduleScreen({
         </Select>
 
         <div className="flex flex-wrap gap-1.5">
-          {([["plan", "Plan"], ["extensions", "Extensions"], ["reports", "Reports"]] as const)
+          {([["plan", "Schedule"], ["extensions", "Extension requests"], ["reports", "Reports"]] as const)
             .filter(([k]) =>
               (k !== "extensions" || can.viewExtensions) && (k !== "reports" || can.viewReports))
             .map(([key, label]) => (
@@ -182,9 +198,18 @@ export function ScheduleScreen({
         <>
           <div className="mb-3.5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
             {stats.map((k) => (
-              <div key={k.l} className="rounded-[12px] border border-line-400 bg-white px-4 py-3.5">
-                <div className="num font-display text-[19px] font-extrabold text-navy-950">{k.v}</div>
-                <div className="mt-0.5 text-[11.5px] font-semibold text-muted-600">{k.l}</div>
+              <div
+                key={k.l}
+                className={cn(
+                  "rounded-[12px] border px-4 py-3.5",
+                  k.tone === "navy" && "border-line-300 bg-surface-hover text-navy-800",
+                  k.tone === "good" && "border-good-050 bg-good-050 text-good-700",
+                  k.tone === "brand" && "border-brand-100 bg-brand-100 text-brand-700",
+                  k.tone === "bad" && "border-bad-050 bg-bad-050 text-bad-600",
+                )}
+              >
+                <div className="num font-display text-[19px] font-extrabold">{k.v}</div>
+                <div className="mt-0.5 text-[11.5px] font-semibold opacity-90">{k.l}</div>
               </div>
             ))}
           </div>
