@@ -7,158 +7,168 @@ import { masterGroups, masterPerm, MASTERS } from "@/lib/masters/registry";
 import { delegate } from "@/lib/masters/service";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { PERM } from "@/lib/permissions/codes";
+import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Masters & Users" };
 
-export default async function MastersIndexPage() {
+/**
+ * The design lays this screen out as two panes: a "Master data" rail on the
+ * left and the chosen section's content beside it. The sections are the
+ * registry's own groups plus the three destinations that are not masters —
+ * Users & Roles, Approval Limits and Workforce Setup — which the design keeps
+ * on this screen rather than elsewhere.
+ */
+interface Destination {
+  key: string;
+  label: string;
+  href: string;
+  description: string;
+  icon: string;
+  show: boolean;
+}
+
+export default async function MastersIndexPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ section?: string }>;
+}) {
   const ctx = await requireAuth();
+  const { section } = await searchParams;
 
-  // Only the masters this user may open.
   const allowed = MASTERS.filter((m) => ctx.has(masterPerm(m, "view")));
-
-  // Row counts, so the index tells you what is actually configured.
-  const counts = new Map<string, number>();
-  await Promise.all(
-    allowed.map(async (m) => {
-      try {
-        counts.set(m.key, await delegate(m).count());
-      } catch {
-        counts.set(m.key, 0);
-      }
-    }),
-  );
 
   const groups = masterGroups()
     .map((g) => ({ ...g, masters: g.masters.filter((m) => allowed.includes(m)) }))
     .filter((g) => g.masters.length > 0);
 
+  const destinations: Destination[] = [
+    {
+      key: "users", label: "Users & Roles", href: "/admin/users", icon: "Users",
+      description: "Who signs in, and what each role may do.",
+      show: ctx.has(PERM.admin.user.view),
+    },
+    {
+      key: "limits", label: "Approval Limits", href: "/admin/approval-limits", icon: "SlidersHorizontal",
+      description: "The value ceilings that decide which approval level applies.",
+      show: ctx.has(PERM.admin.approvalLimit.view),
+    },
+    {
+      key: "workforce", label: "Workforce Setup", href: "/hr", icon: "HardHat",
+      description: "Employment types, designations and the people on site.",
+      show: ctx.has(PERM.hr.employee.view),
+    },
+  ].filter((d) => d.show);
+
+  const sections = [
+    ...groups.map((g) => ({ key: g.group.toLowerCase(), label: g.group })),
+    ...destinations.map((d) => ({ key: d.key, label: d.label })),
+  ];
+
+  const active = sections.find((s) => s.key === section) ?? sections[0];
+  const activeGroup = groups.find((g) => g.group.toLowerCase() === active?.key);
+  const activeDestination = destinations.find((d) => d.key === active?.key);
+
+  // Row counts, so the section tells you what is actually configured.
+  const counts = new Map<string, number>();
+  if (activeGroup) {
+    await Promise.all(
+      activeGroup.masters.map(async (m) => {
+        try {
+          counts.set(m.key, await delegate(m).count());
+        } catch {
+          counts.set(m.key, 0);
+        }
+      }),
+    );
+  }
+
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-[1400px]">
       <PageHeader
         title="Masters & Users"
-        description="The reference data every other module reads from, and the people and limits that govern it. Configure it once, reuse it everywhere."
+        description="The reference data every other module reads from, and the people and limits that govern it."
       />
 
-      {groups.length === 0 ? (
+      {sections.length === 0 ? (
         <Card>
           <EmptyState
             icon={<Database className="h-8 w-8" />}
-            title="No masters available to you"
+            title="Nothing here is available to you"
             description="Your role does not include view access to any master. Ask an administrator to grant it."
           />
         </Card>
       ) : (
-        <div className="space-y-6">
-          <AdminSection ctx={ctx} />
-          {groups.map((group) => (
-            <section key={group.group}>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-500">
-                {group.group}
-              </h2>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {group.masters.map((m) => {
+        <div className="flex flex-wrap items-start gap-3.5">
+          {/* The design's left rail */}
+          <nav className="min-w-[190px] flex-[0_1_220px] rounded-[13px] border border-line-400 bg-white p-2.5">
+            <p className="px-2.5 pb-2 pt-2 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+              Master data
+            </p>
+            {sections.map((s) => (
+              <Link
+                key={s.key}
+                href={`/masters?section=${s.key}`}
+                className={cn(
+                  "block rounded-[9px] px-2.5 py-2 text-[12.5px] transition-colors",
+                  s.key === active?.key
+                    ? "bg-brand-100 font-bold text-brand-700"
+                    : "font-semibold text-navy-500 hover:bg-surface-hover hover:text-navy-950",
+                )}
+              >
+                {s.label}
+              </Link>
+            ))}
+          </nav>
+
+          {/* Content for the chosen section */}
+          <div className="min-w-[280px] flex-[1_1_420px]">
+            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-display text-[15px] font-bold text-navy-950">{active?.label}</h2>
+            </div>
+
+            {activeDestination ? (
+              <Card className="px-4 py-4">
+                <p className="text-[12.5px] font-medium text-muted-600">{activeDestination.description}</p>
+                <Link
+                  href={activeDestination.href}
+                  className="mt-3 inline-flex items-center rounded-[9px] bg-brand-500 px-4 py-2 text-[12.5px] font-bold text-white transition-colors hover:bg-brand-600"
+                >
+                  Open {activeDestination.label}
+                </Link>
+              </Card>
+            ) : (
+              <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]">
+                {activeGroup?.masters.map((m) => {
                   const Icon =
-                    (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[
-                      m.icon
-                    ] ?? Icons.Database;
+                    (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[m.icon] ??
+                    Database;
                   return (
                     <Link
                       key={m.key}
                       href={`/masters/${m.key}`}
-                      className="group rounded-lg border border-line-400 bg-white p-4 shadow-sm transition hover:border-brand-300 hover:shadow"
+                      className="group rounded-[13px] border border-line-400 bg-white px-4 py-3.5 transition-shadow hover:shadow-[0_6px_18px_rgba(25,26,92,.08)]"
                     >
-                      <div className="flex items-start gap-3">
-                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-600 group-hover:bg-brand-100">
-                          <Icon className="h-4.5 w-4.5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <p className="truncate text-sm font-medium text-navy-950">{m.label}</p>
-                            <span className="num shrink-0 text-xs text-muted-400">
-                              {counts.get(m.key) ?? 0}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-500">
-                            {m.description}
-                          </p>
-                        </div>
-                      </div>
+                      <span className="flex items-center gap-2.5">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-brand-100 text-brand-700">
+                          <Icon className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[13px] font-bold text-navy-950 transition-colors group-hover:text-brand-700">
+                            {m.label}
+                          </span>
+                          <span className="num block text-[11px] font-medium text-muted-400">
+                            {counts.get(m.key) ?? 0} record{(counts.get(m.key) ?? 0) === 1 ? "" : "s"}
+                          </span>
+                        </span>
+                      </span>
                     </Link>
                   );
                 })}
               </div>
-            </section>
-          ))}
+            )}
+          </div>
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * The design keeps Masters and Users on one screen — its tab strip runs Store
- * Master, Tax & UOM, Users & Roles, Approval Limits, Lead Settings, Workforce
- * Setup. The masters themselves stay driven by the registry, so these are the
- * three destinations that are not masters, surfaced beside them.
- */
-function AdminSection({ ctx }: { ctx: Awaited<ReturnType<typeof requireAuth>> }) {
-  const links = [
-    {
-      href: "/admin/users",
-      label: "Users & Roles",
-      description: "Who signs in, and what each role may do.",
-      icon: "Users",
-      show: ctx.has(PERM.admin.user.view),
-    },
-    {
-      href: "/admin/approval-limits",
-      label: "Approval Limits",
-      description: "The value ceilings that decide which approval level applies.",
-      icon: "SlidersHorizontal",
-      show: ctx.has(PERM.admin.approvalLimit.view),
-    },
-    {
-      href: "/hr",
-      label: "Workforce Setup",
-      description: "Employment types, designations and the people on site.",
-      icon: "HardHat",
-      show: ctx.has(PERM.hr.employee.view),
-    },
-  ].filter((l) => l.show);
-
-  if (links.length === 0) return null;
-
-  return (
-    <section>
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-500">
-        Users &amp; Configuration
-      </h2>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {links.map((l) => {
-          const Icon =
-            (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[l.icon] ??
-            Database;
-          return (
-            <Link
-              key={l.href}
-              href={l.href}
-              className="group rounded-[13px] border border-line-400 bg-white px-4 py-3.5 transition-shadow hover:shadow-[0_6px_18px_rgba(25,26,92,.08)]"
-            >
-              <span className="flex items-center gap-2.5">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-brand-100 text-brand-700">
-                  <Icon className="h-4 w-4" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[13px] font-bold text-navy-950 transition-colors group-hover:text-brand-700">
-                    {l.label}
-                  </span>
-                  <span className="block text-[11.5px] font-medium text-muted-500">{l.description}</span>
-                </span>
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-    </section>
   );
 }
