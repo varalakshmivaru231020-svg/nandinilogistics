@@ -4,6 +4,7 @@ import { PERM } from "@/lib/permissions/codes";
 import { Badge, Card, CardBody, PageHeader } from "@/components/ui/primitives";
 import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
 import { qty } from "@/lib/utils";
+import { readUnitListParams, unitListWhere } from "@/lib/units/unit-list";
 import { UnitFilters } from "./unit-filters";
 
 export const metadata = { title: "Units" };
@@ -20,8 +21,8 @@ type UnitRow = {
   unitNumber: string;
   floorNumber: number;
   status: string;
-  carpetArea: unknown;
-  superBuiltUpArea: unknown;
+  carpetArea: number;
+  superBuiltUpArea: number;
   facing: string | null;
   plcTag: string | null;
   parkingSlots: number;
@@ -33,20 +34,20 @@ type UnitRow = {
 export default async function UnitsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; page?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const ctx = await requirePermission(PERM.unit.unit.view);
-  const { q = "", status = "all", page: pageParam } = await searchParams;
+  const raw = await searchParams;
+  const params = readUnitListParams(raw);
+  const pageParam = Array.isArray(raw.page) ? raw.page[0] : raw.page;
   const page = Math.max(1, Number(pageParam ?? 1) || 1);
 
-  const scope = ctx.canAccessAllProjects ? {} : { projectId: { in: ctx.projectIds } };
-  const where = {
-    ...scope,
-    ...(q.trim() ? { unitNumber: { contains: q.trim(), mode: "insensitive" as const } } : {}),
-    ...(status !== "all" ? { status: status as never } : {}),
-  };
+  // The same where clause the export uses, so a download matches the screen.
+  const where = unitListWhere(ctx, params);
+  const projectScope = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
+  const selectedProject = params.project !== "all" && params.project ? params.project : null;
 
-  const [units, total] = await Promise.all([
+  const [units, total, projects, blocks, unitTypes] = await Promise.all([
     prisma.unit.findMany({
       where,
       orderBy: [{ unitNumber: "asc" }],
@@ -59,6 +60,16 @@ export default async function UnitsPage({
       },
     }),
     prisma.unit.count({ where }),
+    prisma.project.findMany({ where: projectScope, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
+    prisma.block.findMany({
+      where: {
+        project: projectScope,
+        ...(selectedProject ? { projectId: selectedProject } : {}),
+      },
+      orderBy: [{ project: { code: "asc" } }, { code: "asc" }],
+      select: { id: true, name: true, project: { select: { code: true } } },
+    }),
+    prisma.unitType.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
   const showPrice = ctx.has(PERM.unit.unit.viewPrice);
@@ -97,6 +108,21 @@ export default async function UnitsPage({
     },
   ];
 
+  const rows: UnitRow[] = units.map((u) => ({
+    id: u.id,
+    unitNumber: u.unitNumber,
+    floorNumber: u.floorNumber,
+    status: u.status,
+    carpetArea: Number(u.carpetArea),
+    superBuiltUpArea: Number(u.superBuiltUpArea),
+    facing: u.facing,
+    plcTag: u.plcTag,
+    parkingSlots: u.parkingSlots,
+    block: u.block,
+    unitType: u.unitType,
+    project: u.project,
+  }));
+
   return (
     <div className="mx-auto max-w-7xl">
       <PageHeader
@@ -106,21 +132,29 @@ export default async function UnitsPage({
       />
 
       <div className="space-y-3">
-        <UnitFilters q={q} status={status} />
+        <UnitFilters
+          projects={projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
+          blocks={blocks.map((b) => ({ value: b.id, label: selectedProject ? b.name : `${b.project.code} · ${b.name}` }))}
+          unitTypes={unitTypes.map((t) => ({ value: t.id, label: t.name }))}
+          total={total}
+          can={{ export: ctx.has(PERM.unit.unit.export), import: ctx.has(PERM.unit.unit.import) }}
+        />
 
-        {units.length === 0 ? (
+        {rows.length === 0 ? (
           <Card><CardBody><p className="py-8 text-center text-sm text-muted-500">No units match these filters.</p></CardBody></Card>
         ) : (
           <>
-            <DataTable columns={columns} rows={units} rowKey={(u) => u.id} dense />
+            <DataTable columns={columns} rows={rows} rowKey={(u) => u.id} dense />
             <Pagination
               page={page}
               pageSize={PAGE_SIZE}
               total={total}
               buildHref={(p) => {
                 const sp = new URLSearchParams();
-                if (q) sp.set("q", q);
-                if (status !== "all") sp.set("status", status);
+                if (params.q) sp.set("q", params.q);
+                for (const key of ["status", "project", "block", "type"] as const) {
+                  if (params[key] && params[key] !== "all") sp.set(key, params[key]);
+                }
                 sp.set("page", String(p));
                 return `?${sp.toString()}`;
               }}

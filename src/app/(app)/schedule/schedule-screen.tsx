@@ -2,8 +2,12 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CalendarClock, Check, Copy, Diamond, Link2, Plus, Save, Trash2, X, Zap } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, Copy, Diamond, Link2, Plus, Save, Trash2, Upload, X, Zap } from "lucide-react";
 
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ImportDialog } from "@/components/import/import-dialog";
+import { ACTIVITY_IMPORT_COLUMNS } from "@/lib/schedule/activity-import";
+import { importActivitiesAction, previewActivityImportAction } from "./import-actions";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
@@ -70,6 +74,7 @@ export function ScheduleScreen({
   const [deciding, setDeciding] = React.useState<Extension | null>(null);
   const [linking, setLinking] = React.useState<Activity | null>(null);
   const [templating, setTemplating] = React.useState<"save" | "apply" | null>(null);
+  const [importing, setImporting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -193,6 +198,19 @@ export function ScheduleScreen({
           <Button size="lg" variant="ghost" onClick={() => setTemplating("save")}>
             <Save className="h-3.5 w-3.5" />
             Save as template
+          </Button>
+        )}
+        {tab === "plan" && can.exportActivities && (
+          <ExportMenu
+            size="md"
+            href={(format) => exportHref("/api/schedule/activities/export", format, `project=${activeProjectId}`)}
+            disabled={activities.length === 0}
+          />
+        )}
+        {tab === "plan" && can.importActivities && (
+          <Button size="lg" variant="ghost" onClick={() => setImporting(true)}>
+            <Upload className="h-3.5 w-3.5" />
+            Import
           </Button>
         )}
         {tab === "plan" && can.applyTemplate && (
@@ -468,6 +486,18 @@ export function ScheduleScreen({
           activityCount={activities.length}
           onClose={() => setTemplating(null)}
           onDone={(m) => { setTemplating(null); setNotice(m); router.refresh(); }}
+        />
+      )}
+      {importing && (
+        <ImportDialog
+          title="Import schedule activities"
+          description={`Upload a .csv or .xlsx into ${projects.find((p) => p.id === activeProjectId)?.code ?? "this project"}. Imported dates become the baseline; predecessors are finish-to-start, and the schedule is recalculated after import.`}
+          columns={ACTIVITY_IMPORT_COLUMNS}
+          templateName="schedule"
+          preview={(fd) => previewActivityImportAction(activeProjectId, fd)}
+          commit={(fd) => importActivitiesAction(activeProjectId, fd)}
+          onClose={() => setImporting(false)}
+          onImported={(m) => { setImporting(false); setError(null); setNotice(m); router.refresh(); }}
         />
       )}
       {templating === "apply" && (

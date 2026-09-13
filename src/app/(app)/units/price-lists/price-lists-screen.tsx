@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Tags, Zap } from "lucide-react";
 
+import { ExportMenu } from "@/components/export/export-menu";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, Field, Input, Select } from "@/components/ui/primitives";
@@ -50,12 +51,17 @@ export function PriceListsScreen({
       {error && <Alert tone="error">{error}</Alert>}
       {notice && !error && <Alert tone="success">{notice}</Alert>}
 
-      {can.create && (
-        <div className="flex justify-end">
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus className="h-3.5 w-3.5" />
-            New price list version
-          </Button>
+      {(can.create || can.export) && (
+        <div className="flex flex-wrap justify-end gap-2">
+          {can.export && (
+            <ExportMenu href={(format) => `/api/units/price-lists/export?format=${format}`} disabled={lists.length === 0} />
+          )}
+          {can.create && (
+            <Button size="sm" onClick={() => setCreating(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              New price list version
+            </Button>
+          )}
         </div>
       )}
 
