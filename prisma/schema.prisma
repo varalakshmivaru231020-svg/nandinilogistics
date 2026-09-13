@@ -208,6 +208,7 @@ model User {
   kbArticles         KbArticle[]
   kbAttachments      KbAttachment[]
   grnsInspected      Grn[]               @relation("GrnInspector")
+  scheduleTemplates  ScheduleTemplate[]
   posApprovedAsPm    PurchaseOrder[]     @relation("PoPmApprover")
   posApprovedAsAdmin PurchaseOrder[]     @relation("PoAdminApprover")
 
@@ -490,7 +491,8 @@ model ProjectType {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  projects Project[]
+  projects          Project[]
+  scheduleTemplates ScheduleTemplate[]
 
   @@map("m_project_types")
 }
@@ -1033,6 +1035,26 @@ model ScheduleActivity {
 /// The site asks, the Project Manager decides. The baseline never moves — only
 /// the planned date does, and every request stays on the record with its reason,
 /// which is what makes the variance report defensible.
+/// A proven schedule captured once and laid onto a new project. Stored as a
+/// shape — offsets from the first start, durations, and links by code — rather
+/// than as dates, so it can start on any date. Validated again on every apply.
+model ScheduleTemplate {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  description   String?
+  projectTypeId String?
+  activityCount Int      @default(0)
+  shape         Json
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  projectType ProjectType? @relation(fields: [projectTypeId], references: [id])
+  createdBy   User         @relation(fields: [createdById], references: [id])
+
+  @@map("schedule_templates")
+}
+
 model ScheduleExtension {
   id            String    @id @default(cuid())
   activityId    String

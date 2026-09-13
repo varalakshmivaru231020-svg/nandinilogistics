@@ -14,6 +14,19 @@ export default async function SchedulePage({
   const ctx = await requirePermission(PERM.schedule.activity.view);
   const { project: projectParam, tab = "plan", report = "plan" } = await searchParams;
 
+  // Templates are shared across projects, so they load before one is chosen.
+  const canSeeTemplates =
+    ctx.has(PERM.schedule.template.view) || ctx.has(PERM.schedule.template.apply);
+  const templates = canSeeTemplates
+    ? await prisma.scheduleTemplate.findMany({
+        orderBy: { name: "asc" },
+        select: {
+          id: true, name: true, description: true, activityCount: true, createdAt: true,
+          createdBy: { select: { name: true } },
+        },
+      })
+    : [];
+
   const projectWhere = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
   const projects = await prisma.project.findMany({
     where: projectWhere,
@@ -89,6 +102,14 @@ export default async function SchedulePage({
       projectManager={active.projectManager?.name ?? null}
       tab={tab === "extensions" ? "extensions" : tab === "reports" ? "reports" : "plan"}
       reportTab={report === "performance" ? "performance" : "plan"}
+      templates={templates.map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        activityCount: t.activityCount,
+        createdBy: t.createdBy.name,
+        createdAt: t.createdAt.toISOString(),
+      }))}
       nowMs={new Date().getTime()}
       workPackages={active.phases.flatMap((ph) =>
         ph.workPackages.map((w) => ({ id: w.id, code: w.code, name: w.name, phase: ph.name })),
@@ -147,6 +168,9 @@ export default async function SchedulePage({
         viewReports: ctx.has(PERM.schedule.report.view),
         startActivity: ctx.has(PERM.schedule.activity.start),
         completeActivity: ctx.has(PERM.schedule.activity.complete),
+        saveTemplate: ctx.has(PERM.schedule.template.save),
+        applyTemplate: ctx.has(PERM.schedule.template.apply),
+        deleteTemplate: ctx.has(PERM.schedule.template.delete),
       }}
     />
   );

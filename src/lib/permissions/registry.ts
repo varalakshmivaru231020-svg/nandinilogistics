@@ -222,6 +222,8 @@ perm("schedule", "activity", "complete", "Mark an activity completed", G_SCHED, 
 
 perm("schedule", "template", "apply", "Start a schedule from a template", G_SCHED, "BUTTON");
 perm("schedule", "template", "save", "Save a schedule as a template", G_SCHED, "BUTTON");
+perm("schedule", "template", "view", "See schedule templates", G_SCHED, "TAB");
+perm("schedule", "template", "delete", "Delete a schedule template", G_SCHED, "BUTTON", "Removes the template only; schedules already built from it are untouched.");
 
 // ===========================================================================
 // MODULE 05 — MATERIAL & INVENTORY

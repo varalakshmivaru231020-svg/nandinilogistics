@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
 import { authorize, runAction, assertProjectAccess, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
 import { isLinkType } from "@/lib/schedule/engine";
+import { buildTemplate, clashingCodes, instantiateTemplate, type TemplateShape } from "@/lib/schedule/template";
 import { assertLinkIsAcyclic, reschedule } from "@/lib/schedule/service";
 
 const ActivitySchema = z.object({
@@ -294,5 +296,193 @@ export async function removeDependencyAction(id: string): Promise<ActionResult<{
 
     revalidatePath("/schedule");
     return { shifted: shifted.length };
+  });
+}
+
+/* -------------------------------- Templates ------------------------------- */
+
+/** The structure a stored template must have before it is trusted. */
+const TemplateShapeSchema = z.object({
+  activities: z
+    .array(
+      z.object({
+        code: z.string().min(1),
+        name: z.string().min(1),
+        sequence: z.number().int(),
+        offsetDays: z.number().int().min(0),
+        durationDays: z.number().int().min(0),
+        isMilestone: z.boolean(),
+      }),
+    )
+    .min(1),
+  links: z.array(
+    z.object({
+      predecessorCode: z.string().min(1),
+      successorCode: z.string().min(1),
+      type: z.enum(["FS", "SS", "FF", "SF"]),
+      lagDays: z.number().int(),
+    }),
+  ),
+});
+
+/**
+ * Capture a project's schedule as a template: each activity's offset from the
+ * first start, its duration, and the links between activities. Actual dates
+ * and progress are deliberately not captured — a template is a plan, not a
+ * record of how a particular project went.
+ */
+export async function saveScheduleAsTemplateAction(
+  projectId: string,
+  name: string,
+  description: string,
+): Promise<ActionResult<{ id: string; activityCount: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.schedule.template.save);
+    assertProjectAccess(ctx, projectId);
+
+    const trimmed = name.trim();
+    if (trimmed.length < 3) throw new Error("Give the template a name of at least three characters.");
+    if (await prisma.scheduleTemplate.findUnique({ where: { name: trimmed } })) {
+      throw new Error(`A template called "${trimmed}" already exists.`);
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { projectTypeId: true, code: true },
+    });
+    if (!project) throw new Error("Project not found.");
+
+    const rows = await prisma.scheduleActivity.findMany({
+      where: { projectId, plannedStart: { not: null }, plannedEnd: { not: null } },
+      select: {
+        id: true, code: true, name: true, sequence: true,
+        plannedStart: true, plannedEnd: true, isMilestone: true,
+      },
+    });
+    const links = await prisma.scheduleDependency.findMany({
+      where: { predecessor: { projectId } },
+      select: { predecessorId: true, successorId: true, type: true, lagDays: true },
+    });
+
+    const shape = buildTemplate(
+      rows.map((r) => ({ ...r, plannedStart: r.plannedStart!.getTime(), plannedEnd: r.plannedEnd!.getTime() })),
+      links,
+    );
+
+    const template = await prisma.scheduleTemplate.create({
+      data: {
+        name: trimmed,
+        description: description.trim() || null,
+        projectTypeId: project.projectTypeId,
+        activityCount: shape.activities.length,
+        shape: shape as unknown as Prisma.InputJsonValue,
+        createdById: ctx.id,
+      },
+    });
+
+    await recordAudit({
+      action: "CREATE", entity: "ScheduleTemplate", entityId: template.id, userId: ctx.id, projectId,
+      summary: `Saved ${project.code}'s schedule as the template "${trimmed}" — ${shape.activities.length} activities, ${shape.links.length} links`,
+    });
+
+    revalidatePath("/schedule");
+    return { id: template.id, activityCount: shape.activities.length };
+  });
+}
+
+/**
+ * Lay a template onto a project from a start date. Every activity, its
+ * baseline and its links are created in one transaction and the project is
+ * rescheduled from them, so a template never lands half-applied.
+ */
+export async function applyTemplateAction(
+  templateId: string,
+  projectId: string,
+  startDate: string,
+): Promise<ActionResult<{ created: number; shifted: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.schedule.template.apply);
+    assertProjectAccess(ctx, projectId);
+
+    const start = new Date(startDate);
+    if (!startDate || Number.isNaN(start.getTime())) throw new Error("Pick the date the schedule starts from.");
+
+    const template = await prisma.scheduleTemplate.findUnique({ where: { id: templateId } });
+    if (!template) throw new Error("Template not found.");
+
+    const parsed = TemplateShapeSchema.safeParse(template.shape);
+    if (!parsed.success) {
+      throw new Error(`The template "${template.name}" is damaged and cannot be applied.`);
+    }
+    const shape = parsed.data as TemplateShape;
+
+    const existing = await prisma.scheduleActivity.findMany({ where: { projectId }, select: { code: true } });
+    const clashes = clashingCodes(shape, existing.map((e) => e.code));
+    if (clashes.length) {
+      throw new Error(
+        `This project already has ${clashes.length === 1 ? "an activity" : "activities"} coded ` +
+        `${clashes.join(", ")}. Rename ${clashes.length === 1 ? "it" : "them"} before applying the template.`,
+      );
+    }
+
+    const plan = instantiateTemplate(shape, start.getTime());
+
+    const { shifted } = await prisma.$transaction(async (tx) => {
+      const idByCode = new Map<string, string>();
+      for (const a of plan.activities) {
+        const row = await tx.scheduleActivity.create({
+          data: {
+            projectId,
+            code: a.code,
+            name: a.name,
+            sequence: a.sequence,
+            isMilestone: a.isMilestone,
+            plannedStart: new Date(a.start),
+            plannedEnd: new Date(a.end),
+            // A template's dates become this project's baseline, frozen from here.
+            baselineStart: new Date(a.start),
+            baselineEnd: new Date(a.end),
+          },
+        });
+        idByCode.set(a.code, row.id);
+      }
+      for (const l of plan.links) {
+        await tx.scheduleDependency.create({
+          data: {
+            predecessorId: idByCode.get(l.predecessorCode)!,
+            successorId: idByCode.get(l.successorCode)!,
+            type: l.type,
+            lagDays: l.lagDays,
+          },
+        });
+      }
+      return reschedule(tx, projectId);
+    });
+
+    await recordAudit({
+      action: "CREATE", entity: "ScheduleActivity", userId: ctx.id, projectId,
+      summary: `Applied the template "${template.name}" from ${startDate} — ${plan.activities.length} activities, ${plan.links.length} links`,
+    });
+
+    revalidatePath("/schedule");
+    return { created: plan.activities.length, shifted: shifted.length };
+  });
+}
+
+/** Removes the template only. Schedules already built from it stay as they are. */
+export async function deleteTemplateAction(templateId: string): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.schedule.template.delete);
+    const template = await prisma.scheduleTemplate.findUnique({ where: { id: templateId } });
+    if (!template) throw new Error("Template not found.");
+
+    await prisma.scheduleTemplate.delete({ where: { id: templateId } });
+    await recordAudit({
+      action: "DELETE", entity: "ScheduleTemplate", entityId: templateId, userId: ctx.id,
+      summary: `Deleted the schedule template "${template.name}"`,
+    });
+
+    revalidatePath("/schedule");
+    return null;
   });
 }

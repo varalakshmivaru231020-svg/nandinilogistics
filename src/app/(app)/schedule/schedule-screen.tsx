@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CalendarClock, Check, Diamond, Link2, Plus, X, Zap } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, Copy, Diamond, Link2, Plus, Save, Trash2, X, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -10,7 +10,8 @@ import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, Field,
 import { cn, formatDate } from "@/lib/utils";
 import {
   addDependencyAction, completeActivityAction, createActivityAction,
-  removeDependencyAction, startActivityAction, updateActivityProgressAction,
+  applyTemplateAction, deleteTemplateAction, removeDependencyAction, saveScheduleAsTemplateAction,
+  startActivityAction, updateActivityProgressAction,
 } from "./actions";
 import { LINK_LABEL, LINK_TYPES, type LinkType } from "@/lib/schedule/engine";
 import { decideExtensionAction, requestExtensionAction } from "./extension-actions";
@@ -43,7 +44,7 @@ const STATUS_TONE: Record<string, "muted" | "brand" | "good" | "bad"> = {
 const DAY = 86_400_000;
 
 export function ScheduleScreen({
-  projects, activeProjectId, projectManager, tab, reportTab, activities, extensions,
+  projects, activeProjectId, projectManager, tab, reportTab, templates, activities, extensions,
   workPackages, delayReasons, can, nowMs,
 }: {
   projects: Array<{ id: string; name: string; code: string }>;
@@ -51,6 +52,10 @@ export function ScheduleScreen({
   projectManager: string | null;
   tab: "plan" | "extensions" | "reports";
   reportTab: "plan" | "performance";
+  templates: Array<{
+    id: string; name: string; description: string | null;
+    activityCount: number; createdBy: string; createdAt: string;
+  }>;
   activities: Activity[];
   extensions: Extension[];
   workPackages: Array<{ id: string; code: string; name: string; phase: string }>;
@@ -64,6 +69,7 @@ export function ScheduleScreen({
   const [extending, setExtending] = React.useState<Activity | null>(null);
   const [deciding, setDeciding] = React.useState<Extension | null>(null);
   const [linking, setLinking] = React.useState<Activity | null>(null);
+  const [templating, setTemplating] = React.useState<"save" | "apply" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -183,6 +189,18 @@ export function ScheduleScreen({
         </div>
 
         <div className="flex-1" />
+        {tab === "plan" && can.saveTemplate && activities.length > 0 && (
+          <Button size="lg" variant="ghost" onClick={() => setTemplating("save")}>
+            <Save className="h-3.5 w-3.5" />
+            Save as template
+          </Button>
+        )}
+        {tab === "plan" && can.applyTemplate && (
+          <Button size="lg" variant="secondary" onClick={() => setTemplating("apply")}>
+            <Copy className="h-3.5 w-3.5" />
+            Apply template
+          </Button>
+        )}
         {tab === "plan" && can.create && (
           <Button size="lg" onClick={() => setAdding(true)}>
             <Plus className="h-3.5 w-3.5" />
@@ -442,6 +460,23 @@ export function ScheduleScreen({
           activity={extending}
           onClose={() => setExtending(null)}
           onDone={(m) => { setExtending(null); setNotice(m); router.refresh(); }}
+        />
+      )}
+      {templating === "save" && (
+        <SaveTemplateModal
+          projectId={activeProjectId}
+          activityCount={activities.length}
+          onClose={() => setTemplating(null)}
+          onDone={(m) => { setTemplating(null); setNotice(m); router.refresh(); }}
+        />
+      )}
+      {templating === "apply" && (
+        <ApplyTemplateModal
+          projectId={activeProjectId}
+          templates={templates}
+          canDelete={Boolean(can.deleteTemplate)}
+          onClose={() => setTemplating(null)}
+          onDone={(m) => { setTemplating(null); setNotice(m); router.refresh(); }}
         />
       )}
       {linking && (
@@ -996,6 +1031,154 @@ function DependencyModal({
         <Button variant="ghost" onClick={onClose}>Close</Button>
         <Button onClick={add} loading={busy === "add"} disabled={!predecessorId || busy !== null}>
           Add link
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+/* -------------------------------- Templates ------------------------------- */
+
+function SaveTemplateModal({
+  projectId, activityCount, onClose, onDone,
+}: {
+  projectId: string;
+  activityCount: number;
+  onClose: () => void;
+  onDone: (m: string) => void;
+}) {
+  const [name, setName] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const res = await saveScheduleAsTemplateAction(projectId, name, description);
+    setBusy(false);
+    if (!res.ok) { setError(res.error); return; }
+    onDone(`Saved "${name.trim()}" — ${res.data.activityCount} activities, ready to start a new project from.`);
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Save as template"
+      description={`Captures the plan — ${activityCount} activities, their durations and links — so a new tower or project can start from it. Actual dates and progress are not copied.`}
+      size="sm"
+    >
+      {error && <Alert tone="error">{error}</Alert>}
+      <div className="space-y-3">
+        <Field label="Template name" required>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. 12-floor residential tower" autoFocus />
+        </Field>
+        <Field label="Description">
+          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+        </Field>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button onClick={save} loading={busy} disabled={name.trim().length < 3}>Save template</Button>
+      </div>
+    </Modal>
+  );
+}
+
+function ApplyTemplateModal({
+  projectId, templates, canDelete, onClose, onDone,
+}: {
+  projectId: string;
+  templates: Array<{ id: string; name: string; description: string | null; activityCount: number; createdBy: string; createdAt: string }>;
+  canDelete: boolean;
+  onClose: () => void;
+  onDone: (m: string) => void;
+}) {
+  const [templateId, setTemplateId] = React.useState(templates[0]?.id ?? "");
+  const [startDate, setStartDate] = React.useState("");
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const chosen = templates.find((t) => t.id === templateId);
+
+  async function apply() {
+    setBusy("apply");
+    setError(null);
+    const res = await applyTemplateAction(templateId, projectId, startDate);
+    setBusy(null);
+    if (!res.ok) { setError(res.error); return; }
+    onDone(`Applied "${chosen?.name}" — ${res.data.created} activities added, baselines frozen from ${formatDate(startDate)}.`);
+  }
+
+  async function remove(id: string, name: string) {
+    setBusy(id);
+    setError(null);
+    const res = await deleteTemplateAction(id);
+    setBusy(null);
+    if (!res.ok) { setError(res.error); return; }
+    onDone(`Deleted the template "${name}". Schedules already built from it are unchanged.`);
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Apply template"
+      description="Starts this project's schedule from a proven plan. Each activity lands at its offset from the date you pick, with its links, and becomes the baseline."
+      size="md"
+    >
+      {error && <Alert tone="error">{error}</Alert>}
+
+      {templates.length === 0 ? (
+        <p className="text-[12.5px] font-medium text-muted-500">
+          No templates yet. Open a finished schedule and use “Save as template” to create one.
+        </p>
+      ) : (
+        <>
+          <ul className="mb-4 space-y-1.5">
+            {templates.map((t) => (
+              <li
+                key={t.id}
+                className={cn(
+                  "flex items-start gap-2.5 rounded-[10px] border px-3 py-2.5 transition-colors",
+                  t.id === templateId ? "border-brand-500 bg-brand-100" : "border-line-300 bg-white",
+                )}
+              >
+                <button type="button" onClick={() => setTemplateId(t.id)} className="min-w-0 flex-1 text-left">
+                  <span className="block text-[12.5px] font-bold text-navy-950">{t.name}</span>
+                  <span className="block text-[11px] font-medium text-muted-500">
+                    {t.activityCount} activities · by {t.createdBy} · {formatDate(t.createdAt)}
+                  </span>
+                  {t.description && (
+                    <span className="mt-0.5 block text-[11.5px] font-medium text-muted-600">{t.description}</span>
+                  )}
+                </button>
+                {canDelete && (
+                  <button
+                    type="button"
+                    title="Delete template"
+                    disabled={busy !== null}
+                    onClick={() => remove(t.id, t.name)}
+                    className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[7px] text-muted-400 transition-colors hover:bg-bad-050 hover:text-bad-600 disabled:opacity-40"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          <Field label="Schedule starts on" required>
+            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          </Field>
+        </>
+      )}
+
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button onClick={apply} loading={busy === "apply"} disabled={!templateId || !startDate || busy !== null}>
+          Apply template
         </Button>
       </div>
     </Modal>
