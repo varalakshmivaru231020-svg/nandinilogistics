@@ -5,7 +5,12 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { Badge, Card, EmptyState } from "@/components/ui/primitives";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { cn, moneyShort } from "@/lib/utils";
+import {
+  PROJECT_STATUSES, PROJECT_STATUS_LABEL, projectListWhere, readProjectListParams,
+} from "@/lib/projects/list-filters";
 import { NewProjectButton } from "./new-project-button";
 
 export const metadata = { title: "Project Management" };
@@ -19,11 +24,26 @@ function initials(name: string) {
   return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 }
 
-export default async function ProjectsPage() {
+export default async function ProjectsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.project.project.view);
+  const raw = await searchParams;
+  const listParams = readProjectListParams(raw);
+  const filtered = Boolean(listParams.q || listParams.status);
 
-  // Project-team scoping: you only see projects mapped to you.
-  const where = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
+  // Project-team scoping (you only see projects mapped to you), then the
+  // search and status filter — the same function the export uses.
+  const where = projectListWhere(ctx, listParams);
+
+  // The current query, for the export links.
+  const query = new URLSearchParams();
+  for (const [k, v] of Object.entries(raw)) {
+    const value = Array.isArray(v) ? v[0] : v;
+    if (value) query.set(k, value);
+  }
 
   const [projects, types, companies, cities, managers] = await Promise.all([
     prisma.project.findMany({
@@ -61,13 +81,35 @@ export default async function ProjectsPage() {
         )}
       </div>
 
+      <ListToolbar
+        searchPlaceholder="Search code, name, city, RERA or manager…"
+        filters={[
+          {
+            name: "status",
+            label: "Status",
+            allLabel: "All statuses",
+            options: PROJECT_STATUSES.map((s) => ({ value: s, label: PROJECT_STATUS_LABEL[s] })),
+          },
+        ]}
+        count={projects.length}
+      >
+        {ctx.has(PERM.project.project.export) && (
+          <ExportMenu
+            href={(format) => exportHref("/api/projects/projects/export", format, query)}
+            disabled={projects.length === 0}
+          />
+        )}
+      </ListToolbar>
+
       {projects.length === 0 ? (
         <Card>
           <EmptyState
             icon={<Building2 className="h-8 w-8" />}
-            title="No projects yet"
+            title={filtered ? "No projects match" : "No projects yet"}
             description={
-              ctx.canAccessAllProjects
+              filtered
+                ? "Nothing matches this search and status. Clear the filters to see every project."
+                : ctx.canAccessAllProjects
                 ? "Create the first project — every task, indent, purchase order and unit hangs off one."
                 : "You are not mapped to any project yet. An administrator can map you from Administration → Users."
             }

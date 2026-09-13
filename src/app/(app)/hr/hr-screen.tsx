@@ -2,10 +2,12 @@
 
 import * as React from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Download, Pencil, Plus, Search, X } from "lucide-react";
+import { Download, Pencil, Plus, X } from "lucide-react";
 
 import { Badge, Card, Field, Input, Select } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
@@ -39,9 +41,9 @@ const TABS = [
 ];
 
 export function HrScreen({
-  tab, date, from, to, query, employees, employmentTypes, designations, dayMarks, report, can,
+  tab, date, from, to, employees, employmentTypes, designations, dayMarks, report, can,
 }: {
-  tab: string; date: string; from: string; to: string; query: string;
+  tab: string; date: string; from: string; to: string;
   employees: Employee[]; employmentTypes: TypeRow[];
   designations: Array<{ id: string; name: string }>;
   dayMarks: Mark[]; report: ReportRow[];
@@ -125,11 +127,11 @@ export function HrScreen({
         <StaffTab
           employees={employees}
           employmentTypes={employmentTypes}
-          query={query}
+          designations={designations}
+          params={params}
           can={can}
           newType={newType}
           busy={busy}
-          onQuery={(v) => setParam({ q: v || undefined })}
           onNewType={setNewType}
           onAddType={addType}
           onRemoveType={removeType}
@@ -195,41 +197,60 @@ export function HrScreen({
 /* -------------------------------- Employees -------------------------------- */
 
 function StaffTab({
-  employees, employmentTypes, query, can, newType, busy,
-  onQuery, onNewType, onAddType, onRemoveType, onEdit, onRemove,
+  employees, employmentTypes, designations, params, can, newType, busy,
+  onNewType, onAddType, onRemoveType, onEdit, onRemove,
 }: {
-  employees: Employee[]; employmentTypes: TypeRow[]; query: string;
+  employees: Employee[]; employmentTypes: TypeRow[];
+  designations: Array<{ id: string; name: string }>;
+  /** The current query, for the export link. */
+  params: URLSearchParams;
   can: Record<string, boolean>; newType: string; busy: boolean;
-  onQuery: (v: string) => void; onNewType: (v: string) => void;
+  onNewType: (v: string) => void;
   onAddType: () => void; onRemoveType: (t: TypeRow) => void;
   onEdit: (e: Employee | "new") => void; onRemove: (e: Employee) => void;
 }) {
-  const [q, setQ] = React.useState(query);
+  // The export carries only the employee filters, not the attendance tabs' dates.
+  const exportParams = new URLSearchParams();
+  for (const k of ["q", "type", "designation"]) {
+    const v = params.get(k);
+    if (v) exportParams.set(k, v);
+  }
 
   return (
     <div>
-      <div className="mb-3.5 flex flex-wrap items-center gap-2.5">
-        <span className="text-[12.5px] font-bold text-navy-950">
+      <ListToolbar
+        className="mb-3.5"
+        searchPlaceholder="Search name, code or mobile…"
+        filters={[
+          {
+            name: "type",
+            label: "Employment type",
+            allLabel: "All types",
+            options: employmentTypes.map((t) => ({ value: t.id, label: t.name })),
+          },
+          {
+            name: "designation",
+            label: "Designation",
+            allLabel: "All designations",
+            options: designations.map((d) => ({ value: d.id, label: d.name })),
+          },
+        ]}
+      >
+        <span className="text-[11.5px] font-semibold text-muted-600">
           {employees.length} employee{employees.length === 1 ? "" : "s"} on record
         </span>
-        <form
-          className="relative min-w-[200px] flex-1"
-          onSubmit={(e) => { e.preventDefault(); onQuery(q); }}
-        >
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-500" />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search name, code or mobile…"
-            className="pl-9"
+        {can.exportEmployees && (
+          <ExportMenu
+            href={(format) => exportHref("/api/hr/employees/export", format, exportParams)}
+            disabled={employees.length === 0}
           />
-        </form>
+        )}
         {can.create && (
-          <Button size="md" onClick={() => onEdit("new")}>
+          <Button size="sm" onClick={() => onEdit("new")}>
             <Plus className="mr-1.5 h-3.5 w-3.5" /> New employee
           </Button>
         )}
-      </div>
+      </ListToolbar>
 
       {/* Employment types — configurable, as the design's chips */}
       <Card className="mb-3.5 px-4 py-3.5">

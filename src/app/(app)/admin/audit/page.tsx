@@ -4,6 +4,7 @@ import { PERM } from "@/lib/permissions/codes";
 import { Badge, Card, CardBody, PageHeader } from "@/components/ui/primitives";
 import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
 import { formatDateTime } from "@/lib/utils";
+import { auditListWhere, auditQuery, readAuditListParams } from "@/lib/admin/list-filters";
 import { AuditFilters } from "./audit-filters";
 
 export const metadata = { title: "Audit Trail" };
@@ -25,17 +26,16 @@ type AuditRow = {
 export default async function AuditPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; action?: string; entity?: string; page?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const ctx = await requirePermission(PERM.admin.audit.view);
-  const { q = "", action = "all", entity = "all", page: pageParam } = await searchParams;
+  const raw = await searchParams;
+  const listParams = readAuditListParams(raw);
+  const pageParam = Array.isArray(raw.page) ? raw.page[0] : raw.page;
   const page = Math.max(1, Number(pageParam ?? 1) || 1);
 
-  const where = {
-    ...(q.trim() ? { summary: { contains: q.trim(), mode: "insensitive" as const } } : {}),
-    ...(action !== "all" ? { action: action as never } : {}),
-    ...(entity !== "all" ? { entity } : {}),
-  };
+  // Search, action, entity and date range — the same function the export uses.
+  const where = auditListWhere(listParams);
 
   const [logs, total, entities] = await Promise.all([
     prisma.auditLog.findMany({
@@ -116,10 +116,8 @@ export default async function AuditPage({
 
       <div className="space-y-3">
         <AuditFilters
-          q={q}
-          action={action}
-          entity={entity}
           entities={entities.map((e) => ({ entity: e.entity, count: e._count }))}
+          total={total}
           canExport={ctx.has(PERM.admin.audit.export)}
         />
 
@@ -137,10 +135,7 @@ export default async function AuditPage({
               pageSize={PAGE_SIZE}
               total={total}
               buildHref={(p) => {
-                const sp = new URLSearchParams();
-                if (q) sp.set("q", q);
-                if (action !== "all") sp.set("action", action);
-                if (entity !== "all") sp.set("entity", entity);
+                const sp = auditQuery(listParams);
                 sp.set("page", String(p));
                 return `?${sp.toString()}`;
               }}
