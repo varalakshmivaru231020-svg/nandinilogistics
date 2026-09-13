@@ -2,8 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 
+import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/rbac/guard";
 import { getReport, runReport } from "@/lib/reports";
+import { filterSpecFor, hasFilters, parseReportFilters } from "@/lib/reports/filters";
 import { Badge, PageHeader } from "@/components/ui/primitives";
 import { ReportView } from "./report-view";
 
@@ -12,13 +14,34 @@ export async function generateMetadata({ params }: { params: Promise<{ key: stri
   return { title: getReport(key)?.label ?? "Report" };
 }
 
-export default async function ReportPage({ params }: { params: Promise<{ key: string }> }) {
+export default async function ReportPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ key: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { key } = await params;
   const def = getReport(key);
   if (!def) notFound();
 
   const ctx = await requirePermission(`reports.${def.key}.view`);
-  const result = await runReport(def.key, ctx);
+
+  const spec = filterSpecFor(def.key);
+  const filters = parseReportFilters(await searchParams, spec);
+
+  const [result, projects] = await Promise.all([
+    runReport(def.key, ctx, filters),
+    // Only the projects this user may see are offered. Choosing any other by
+    // editing the URL yields an empty report — runReport never widens scope.
+    spec.project
+      ? prisma.project.findMany({
+          where: ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } },
+          select: { id: true, code: true, name: true },
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
+  ]);
 
   // Dates and Decimals do not cross the server/client boundary intact.
   const rows = JSON.parse(JSON.stringify(result.rows)) as Array<Record<string, unknown>>;
@@ -39,12 +62,15 @@ export default async function ReportPage({ params }: { params: Promise<{ key: st
       />
 
       <ReportView
-        title={def.label}
+        reportKey={def.key}
         columns={result.columns}
         rows={rows}
         summary={result.summary}
-        emptyMessage={result.emptyMessage}
+        emptyMessage={hasFilters(filters) ? "Nothing matches these filters." : result.emptyMessage}
         canExport={ctx.has(`reports.${def.key}.export`)}
+        spec={spec}
+        filters={filters}
+        projects={projects.map((p) => ({ id: p.id, label: `${p.code} — ${p.name}` }))}
       />
     </div>
   );

@@ -112,6 +112,65 @@ describe("project scoping is applied inside reports", () => {
   });
 });
 
+describe("report filters narrow, and never widen", () => {
+  async function someProject() {
+    const project = await prisma.project.findFirst({
+      where: { units: { some: {} } },
+      select: { id: true },
+      orderBy: { code: "asc" },
+    });
+    expect(project, "the demo data has a project with units").not.toBeNull();
+    return project!.id;
+  }
+
+  it("refuses to show a project the principal is not mapped to, even when asked for by id", async () => {
+    const ctx = await scopedToNothing();
+    const projectId = await someProject();
+    for (const key of ["collections", "bookingRegister", "unitAvailability", "indentAgeing", "budgetVsActual"]) {
+      const result = await runReport(key, ctx, { projectId });
+      expect(result.rows, `${key} widened scope through the project filter`).toHaveLength(0);
+    }
+  });
+
+  it("returns a subset of the unfiltered report when narrowed to one project", async () => {
+    const ctx = await omniscient();
+    const projectId = await someProject();
+    const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { code: true } });
+
+    const all = await runReport("unitAvailability", ctx);
+    const one = await runReport("unitAvailability", ctx, { projectId });
+    expect(one.rows.length).toBeGreaterThan(0);
+    expect(one.rows.length).toBeLessThanOrEqual(all.rows.length);
+    expect(one.rows.every((r) => r.project === project.code)).toBe(true);
+  });
+
+  it("keeps only bookings inside the date range", async () => {
+    const ctx = await omniscient();
+    const all = await runReport("bookingRegister", ctx);
+    if (all.rows.length === 0) return;
+
+    const dates = all.rows.map((r) => new Date(r.bookingDate as Date).toISOString().slice(0, 10)).sort();
+    const pivot = dates[Math.floor(dates.length / 2)];
+
+    const from = await runReport("bookingRegister", ctx, { from: pivot });
+    expect(from.rows.every((r) => new Date(r.bookingDate as Date).toISOString().slice(0, 10) >= pivot)).toBe(true);
+
+    const upTo = await runReport("bookingRegister", ctx, { to: pivot });
+    expect(upTo.rows.every((r) => new Date(r.bookingDate as Date).toISOString().slice(0, 10) <= pivot)).toBe(true);
+
+    // The pivot day is in both halves; every other booking is in exactly one.
+    const onPivot = dates.filter((d) => d === pivot).length;
+    expect(from.rows.length + upTo.rows.length).toBe(all.rows.length + onPivot);
+  });
+
+  it("ignores a date range on a report that is a position at a moment", async () => {
+    const ctx = await omniscient();
+    const plain = await runReport("stockValuation", ctx);
+    const ranged = await runReport("stockValuation", ctx, { from: "1990-01-01", to: "1990-01-02" });
+    expect(ranged.rows.length).toBe(plain.rows.length);
+  });
+});
+
 describe("reports compute rather than merely list", () => {
   it("derives budget utilisation from committed purchase orders", async () => {
     const result = await runReport("budgetVsActual", await omniscient());

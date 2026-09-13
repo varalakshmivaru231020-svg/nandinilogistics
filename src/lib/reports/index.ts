@@ -1,9 +1,10 @@
-import { formatResponse, median } from "@/lib/sales/assignment";
 import "server-only";
 
 import { prisma } from "@/lib/db";
 import type { AuthContext } from "@/lib/rbac/context";
-import { projectScopeFilter } from "@/lib/rbac/context";
+import { formatResponse, median } from "@/lib/sales/assignment";
+
+import { dateCondition, filterSpecFor, type ReportFilters } from "./filters";
 import type { ReportDef, ReportResult } from "./types";
 
 /**
@@ -33,9 +34,28 @@ export function getReport(key: string): ReportDef | undefined {
 const num = (v: unknown) => Number(v ?? 0);
 const inr = (v: number) => `₹${Math.round(v).toLocaleString("en-IN")}`;
 
-export async function runReport(key: string, ctx: AuthContext): Promise<ReportResult> {
-  const scope = projectScopeFilter(ctx);
-  const projectIds = ctx.canAccessAllProjects ? undefined : ctx.projectIds;
+export async function runReport(
+  key: string,
+  ctx: AuthContext,
+  filters: ReportFilters = {},
+): Promise<ReportResult> {
+  const spec = filterSpecFor(key);
+
+  // A project filter narrows what the user may see; it never widens it. Asking
+  // for a project outside their access yields nothing, not that project.
+  const chosenProject = spec.project ? filters.projectId : undefined;
+  const projectIds: string[] | undefined = chosenProject
+    ? (ctx.canAccessAllProjects || ctx.projectIds.includes(chosenProject) ? [chosenProject] : [])
+    : ctx.canAccessAllProjects ? undefined : ctx.projectIds;
+  const scope: Record<string, unknown> = projectIds ? { projectId: { in: projectIds } } : {};
+
+  // Records with no project of their own (leads, central-store stock) are only
+  // narrowed when a project is explicitly chosen — they keep today's visibility
+  // otherwise.
+  const chosenScope: Record<string, unknown> = chosenProject ? { projectId: { in: projectIds } } : {};
+
+  const range = spec.date ? dateCondition(filters) : undefined;
+  const during = (field: string): Record<string, unknown> => (range ? { [field]: range } : {});
 
   switch (key) {
     /* ------------------------------ Budget vs actual ----------------------- */
@@ -49,10 +69,14 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
       const [committed, consumed] = await Promise.all([
         prisma.purchaseOrder.groupBy({
           by: ["projectId"],
-          where: { status: { in: ["APPROVED", "PARTIALLY_RECEIVED", "RECEIVED", "CLOSED"] } },
+          where: { ...scope, ...during("poDate"), status: { in: ["APPROVED", "PARTIALLY_RECEIVED", "RECEIVED", "CLOSED"] } },
           _sum: { totalAmount: true },
         }),
-        prisma.materialIssue.groupBy({ by: ["projectId"], _sum: { totalValue: true } }),
+        prisma.materialIssue.groupBy({
+          by: ["projectId"],
+          where: { ...scope, ...during("issueDate") },
+          _sum: { totalValue: true },
+        }),
       ]);
 
       const committedBy = new Map(committed.map((c) => [c.projectId, num(c._sum.totalAmount)]));
@@ -100,7 +124,7 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
     /* ----------------------------- Schedule variance ----------------------- */
     case "scheduleVariance": {
       const activities = await prisma.scheduleActivity.findMany({
-        where: projectIds ? { projectId: { in: projectIds } } : {},
+        where: { ...scope, ...during("plannedEnd") },
         include: {
           project: { select: { code: true } },
           delayReason: { select: { name: true } },
@@ -212,17 +236,17 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
       const [indented, ordered, issued] = await Promise.all([
         prisma.indentItem.groupBy({
           by: ["itemId"],
-          where: { indent: { ...scope, status: { notIn: ["DRAFT", "REJECTED", "CANCELLED"] } } },
+          where: { indent: { ...scope, ...during("raisedAt"), status: { notIn: ["DRAFT", "REJECTED", "CANCELLED"] } } },
           _sum: { requestedQty: true, approvedQty: true },
         }),
         prisma.purchaseOrderItem.groupBy({
           by: ["itemId"],
-          where: { purchaseOrder: { ...scope, status: { notIn: ["DRAFT", "CANCELLED"] } } },
+          where: { purchaseOrder: { ...scope, ...during("poDate"), status: { notIn: ["DRAFT", "CANCELLED"] } } },
           _sum: { orderedQty: true, receivedQty: true },
         }),
         prisma.materialIssueItem.groupBy({
           by: ["itemId"],
-          where: { issue: scope },
+          where: { issue: { ...scope, ...during("issueDate") } },
           _sum: { issuedQty: true, value: true },
         }),
       ]);
@@ -282,7 +306,12 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
     /* ----------------------------- Stock valuation ------------------------- */
     case "stockValuation": {
       const balances = await prisma.stockBalance.findMany({
-        where: { quantity: { not: 0 } },
+        where: {
+          quantity: { not: 0 },
+          ...(chosenProject
+            ? { OR: [{ projectId: { in: projectIds } }, { store: { projectId: { in: projectIds } } }] }
+            : {}),
+        },
         include: {
           item: { select: { code: true, name: true, reorderLevel: true, uom: { select: { code: true } } } },
           store: { select: { name: true } },
@@ -328,7 +357,13 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
     /* --------------------------- Open purchase orders ---------------------- */
     case "openPurchaseOrders": {
       const orders = await prisma.purchaseOrder.findMany({
-        where: { ...scope, status: { in: ["APPROVED", "PARTIALLY_RECEIVED", "PENDING_APPROVAL"] } },
+        where: {
+          ...scope,
+          ...during("poDate"),
+          status: {
+            in: ["PENDING_APPROVAL", "PENDING_PM_APPROVAL", "PENDING_ADMIN_APPROVAL", "APPROVED", "PARTIALLY_RECEIVED"],
+          },
+        },
         include: {
           vendor: { select: { name: true } },
           project: { select: { code: true } },
@@ -382,7 +417,7 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
     /* --------------------------- Vendor outstanding ------------------------ */
     case "vendorOutstanding": {
       const invoices = await prisma.vendorInvoice.findMany({
-        where: { purchaseOrder: scope, status: { notIn: ["CANCELLED"] } },
+        where: { purchaseOrder: scope, ...during("invoiceDate"), status: { notIn: ["CANCELLED"] } },
         include: { vendor: { select: { id: true, code: true, name: true } } },
       });
 
@@ -430,7 +465,7 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
     /* ------------------------------ Indent ageing -------------------------- */
     case "indentAgeing": {
       const indents = await prisma.indent.findMany({
-        where: { ...scope, status: { in: ["SUBMITTED", "PM_APPROVED"] } },
+        where: { ...scope, ...during("raisedAt"), status: { in: ["SUBMITTED", "PM_APPROVED"] } },
         include: {
           project: { select: { code: true } },
           raisedBy: { select: { name: true } },
@@ -480,7 +515,11 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
     /* ------------------------------- Sales funnel -------------------------- */
     case "salesFunnel": {
       const ownership = ctx.has("sales.lead.viewAll") ? {} : { ownerId: ctx.id };
-      const grouped = await prisma.lead.groupBy({ by: ["state"], where: ownership, _count: true });
+      const grouped = await prisma.lead.groupBy({
+        by: ["state"],
+        where: { ...ownership, ...chosenScope, ...during("createdAt") },
+        _count: true,
+      });
 
       const order = [
         "NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED", "LOST",
@@ -520,6 +559,7 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
     /* ---------------------------- Lead performance ------------------------- */
     case "leadPerformance": {
       const leads = await prisma.lead.findMany({
+        where: { ...chosenScope, ...during("createdAt") },
         include: { source: { select: { name: true } }, owner: { select: { name: true } } },
       });
       const allResponses = leads
@@ -581,7 +621,7 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
     /* ------------------------------- Collections --------------------------- */
     case "collections": {
       const bookings = await prisma.booking.findMany({
-        where: { ...scope, status: { not: "CANCELLED" } },
+        where: { ...scope, ...during("bookingDate"), status: { not: "CANCELLED" } },
         include: {
           unit: { select: { unitNumber: true } },
           customer: { select: { name: true } },
@@ -700,7 +740,7 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
     /* ---------------------------- Booking register ------------------------- */
     case "bookingRegister": {
       const bookings = await prisma.booking.findMany({
-        where: scope,
+        where: { ...scope, ...during("bookingDate") },
         include: {
           unit: { select: { unitNumber: true, superBuiltUpArea: true } },
           customer: { select: { name: true, phone: true } },

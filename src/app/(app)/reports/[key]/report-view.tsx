@@ -1,12 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Download, Search } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Download, FileSpreadsheet, FileText, Filter, Search, X } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { Badge, Card, CardBody, EmptyState, Input } from "@/components/ui/primitives";
+import { Badge, Card, CardBody, EmptyState, Input, Select } from "@/components/ui/primitives";
 import { cn, formatDate, money, qty } from "@/lib/utils";
+import {
+  filterQueryString, hasFilters, type ReportFilterSpec, type ReportFilters,
+} from "@/lib/reports/filters";
 import type { ReportColumn } from "@/lib/reports/types";
 
 type Row = Record<string, unknown>;
@@ -34,15 +38,93 @@ function render(value: unknown, format?: string): React.ReactNode {
   }
 }
 
-export function ReportView({
-  title, columns, rows, summary, emptyMessage, canExport,
+/**
+ * The project and date filters live in the URL and are applied on the server,
+ * so the export route — which reads the same URL — produces exactly these
+ * rows. The search box only narrows what is already on screen.
+ */
+function FilterBar({
+  spec, filters, projects,
 }: {
-  title: string;
+  spec: ReportFilterSpec;
+  filters: ReportFilters;
+  projects: Array<{ id: string; label: string }>;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [pending, startTransition] = React.useTransition();
+
+  function apply(next: ReportFilters) {
+    const qs = filterQueryString(next);
+    startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname));
+  }
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const value = (name: string) => String(data.get(name) ?? "") || undefined;
+    apply({ projectId: value("project"), from: value("from"), to: value("to") });
+  }
+
+  if (!spec.project && !spec.date) return null;
+
+  return (
+    <Card>
+      <CardBody className="py-3">
+        {/* Keyed on the applied filters so the inputs reset when the URL changes. */}
+        <form key={filterQueryString(filters)} onSubmit={submit} className="flex flex-wrap items-end gap-3">
+          {spec.project && (
+            <label className="grid gap-1 text-xs text-muted-500">
+              Project
+              <Select name="project" defaultValue={filters.projectId ?? ""} className="min-w-52">
+                <option value="">All accessible projects</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+              </Select>
+            </label>
+          )}
+          {spec.date && (
+            <>
+              <label className="grid gap-1 text-xs text-muted-500">
+                From <span className="sr-only">({spec.date})</span>
+                <Input type="date" name="from" defaultValue={filters.from ?? ""} />
+              </label>
+              <label className="grid gap-1 text-xs text-muted-500">
+                To
+                <Input type="date" name="to" defaultValue={filters.to ?? ""} />
+              </label>
+            </>
+          )}
+          <Button type="submit" size="sm" loading={pending}>
+            <Filter className="h-3.5 w-3.5" />
+            Apply
+          </Button>
+          {hasFilters(filters) && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => apply({})} disabled={pending}>
+              <X className="h-3.5 w-3.5" />
+              Clear
+            </Button>
+          )}
+          {spec.date && <p className="basis-full text-xs text-muted-400 sm:basis-auto">Dates are by {spec.date.toLowerCase()}.</p>}
+        </form>
+      </CardBody>
+    </Card>
+  );
+}
+
+export function ReportView({
+  reportKey, columns, rows, summary, emptyMessage, canExport, spec, filters, projects,
+}: {
+  reportKey: string;
   columns: ReportColumn[];
   rows: Row[];
   summary?: Array<{ label: string; value: string; tone?: string }>;
   emptyMessage?: string;
   canExport: boolean;
+  spec: ReportFilterSpec;
+  filters: ReportFilters;
+  projects: Array<{ id: string; label: string }>;
 }) {
   const [search, setSearch] = React.useState("");
 
@@ -54,26 +136,10 @@ export function ReportView({
     );
   }, [rows, search]);
 
-  function exportCsv() {
-    const header = columns.map((c) => c.header);
-    const lines = filtered.map((r) =>
-      columns.map((c) => {
-        const v = r[c.key];
-        if (v === null || v === undefined) return "";
-        if (c.format === "date") return formatDate(v as string);
-        return String(v);
-      }),
-    );
-    const csv = [header, ...lines]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+  const exportHref = (format: "csv" | "xlsx" | "pdf") => {
+    const qs = filterQueryString(filters);
+    return `/api/reports/${reportKey}/export?format=${format}${qs ? `&${qs}` : ""}`;
+  };
 
   const tableColumns: Column<Row>[] = columns.map((c) => ({
     key: c.key,
@@ -90,8 +156,15 @@ export function ReportView({
     default: "text-navy-950",
   };
 
+  const exportClass = cn(
+    buttonVariants({ variant: "secondary", size: "sm" }),
+    rows.length === 0 && "pointer-events-none opacity-50",
+  );
+
   return (
     <div className="space-y-3">
+      <FilterBar spec={spec} filters={filters} projects={projects} />
+
       {summary && summary.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-3">
           {summary.map((s) => (
@@ -110,15 +183,26 @@ export function ReportView({
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-56 flex-1 sm:max-w-sm">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-400" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter rows…" className="pl-8" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search these rows…" className="pl-8" />
         </div>
         <Badge tone="slate">{filtered.length} row(s)</Badge>
         <div className="flex-1" />
         {canExport && (
-          <Button variant="secondary" size="sm" onClick={exportCsv} disabled={filtered.length === 0}>
-            <Download className="h-3.5 w-3.5" />
-            Export CSV
-          </Button>
+          <div className="flex flex-wrap items-center gap-2" aria-label="Export">
+            {/* Exports carry the applied filters; the search box above is on-screen only. */}
+            <a href={exportHref("xlsx")} className={exportClass} aria-disabled={rows.length === 0}>
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              Excel
+            </a>
+            <a href={exportHref("pdf")} className={exportClass} aria-disabled={rows.length === 0}>
+              <FileText className="h-3.5 w-3.5" />
+              PDF
+            </a>
+            <a href={exportHref("csv")} className={exportClass} aria-disabled={rows.length === 0}>
+              <Download className="h-3.5 w-3.5" />
+              CSV
+            </a>
+          </div>
         )}
       </div>
 
@@ -132,7 +216,7 @@ export function ReportView({
           rows={filtered}
           rowKey={(_, i) => String(i)}
           dense
-          empty={<EmptyState title="No rows match your filter" />}
+          empty={<EmptyState title="No rows match your search" />}
         />
       )}
     </div>

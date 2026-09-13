@@ -1,0 +1,7 @@
+# Nightly database backup for nninfra.zapeat.in — installed as /etc/cron.d/nninfra-backup.
+# 02:30 server time, when nobody is on site or selling. Output appends to the log
+# so a failed night is visible after the fact.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+30 2 * * * root /var/www/nninfra/backup-db.sh >> /var/log/nninfra-backup.log 2>&1
