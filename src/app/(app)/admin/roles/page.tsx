@@ -4,14 +4,22 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { PERMISSIONS } from "@/lib/permissions/registry";
 import { PageHeader } from "@/components/ui/primitives";
+import { readRoleListParams, roleListWhere } from "@/lib/admin/list-filters";
 import { RolesScreen } from "./roles-screen";
 
 export const metadata = { title: "Roles & Permissions" };
 
-export default async function RolesPage() {
+export default async function RolesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.admin.role.view);
+  const listParams = readRoleListParams(await searchParams);
 
   const roles = await prisma.role.findMany({
+    // Search and status — the same function the export uses.
+    where: roleListWhere(listParams),
     orderBy: [{ level: "asc" }, { name: "asc" }],
     include: {
       _count: { select: { users: true, permissions: true } },
@@ -45,6 +53,7 @@ export default async function RolesPage() {
           clone: ctx.has(PERM.admin.role.clone),
           toggleStatus: ctx.has(PERM.admin.role.toggleStatus),
           managePermissions: ctx.has(PERM.admin.role.managePermissions),
+          export: ctx.has(PERM.admin.role.export),
         }}
       />
     </div>

@@ -2,45 +2,37 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { PageHeader } from "@/components/ui/primitives";
+import { employeeListWhere, maskId, readEmployeeListParams } from "@/lib/hr/list-filters";
 import { HrScreen } from "./hr-screen";
 
 export const metadata = { title: "Users & Attendance" };
 
-/** Masks all but the last four digits, as lead phone numbers are masked. */
-function maskId(value: string | null) {
-  if (!value) return null;
-  return value.length > 4 ? `${"•".repeat(Math.min(8, value.length - 4))} ${value.slice(-4)}` : "••••";
-}
-
 export default async function WorkforcePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; date?: string; from?: string; to?: string; q?: string }>;
+  searchParams: Promise<{
+    tab?: string; date?: string; from?: string; to?: string;
+    q?: string; type?: string; designation?: string;
+  }>;
 }) {
   const ctx = await requirePermission(PERM.hr.employee.view);
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
+  const raw = await searchParams;
   const {
     tab = "staff",
     date = today,
     from = new Date(now.getTime() - 6 * 86_400_000).toISOString().slice(0, 10),
     to = today,
-    q = "",
-  } = await searchParams;
+  } = raw;
+  const listParams = readEmployeeListParams(raw);
 
   const canIdentity = ctx.has(PERM.hr.employee.viewIdentity);
 
   const [employees, employmentTypes, designations] = await Promise.all([
     prisma.employee.findMany({
-      where: q.trim()
-        ? {
-            OR: [
-              { name: { contains: q.trim(), mode: "insensitive" } },
-              { employeeCode: { contains: q.trim(), mode: "insensitive" } },
-              { mobile: { contains: q.trim() } },
-            ],
-          }
-        : {},
+      // Search, employment type and designation — the same function the export uses.
+      where: employeeListWhere(listParams),
       orderBy: { name: "asc" },
       include: {
         employmentType: { select: { id: true, name: true } },
@@ -90,7 +82,6 @@ export default async function WorkforcePage({
         date={date}
         from={from}
         to={to}
-        query={q}
         employees={employees.map((e) => ({
           id: e.id,
           code: e.employeeCode,
@@ -136,6 +127,7 @@ export default async function WorkforcePage({
           markAll: ctx.has(PERM.hr.attendance.markAll),
           report: ctx.has(PERM.hr.attendance.tabReport),
           exportReport: ctx.has(PERM.hr.attendance.export),
+          exportEmployees: ctx.has(PERM.hr.employee.export),
         }}
       />
     </div>

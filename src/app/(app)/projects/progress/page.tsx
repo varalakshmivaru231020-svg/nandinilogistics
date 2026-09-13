@@ -1,21 +1,27 @@
 import { requirePermission } from "@/lib/rbac/guard";
-import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { PageHeader } from "@/components/ui/primitives";
+import { progressLogWhere, readProgressListParams } from "@/lib/projects/list-filters";
 import { ProgressScreen } from "./progress-screen";
 
 export const metadata = { title: "Site Progress" };
 
-export default async function SiteProgressPage() {
+export default async function SiteProgressPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.project.progressLog.view);
+  const listParams = readProgressListParams(await searchParams);
 
   // Without viewAll, a supervisor sees only the logs they wrote.
   const ownership = ctx.has(PERM.project.progressLog.viewAll) ? {} : { loggedById: ctx.id };
 
   const [logs, projects] = await Promise.all([
     prisma.siteProgressLog.findMany({
-      where: { ...projectScopeFilter(ctx), ...ownership },
+      // Project scoping, ownership, then the screen's filters — shared with the export.
+      where: progressLogWhere(ctx, ownership, listParams),
       orderBy: { logDate: "desc" },
       take: 120,
       include: {
@@ -29,6 +35,8 @@ export default async function SiteProgressPage() {
       orderBy: { name: "asc" },
     }),
   ]);
+
+  const { q, filters } = listParams;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -53,9 +61,11 @@ export default async function SiteProgressPage() {
           loggedByName: l.loggedBy?.name ?? "—",
         }))}
         projects={projects}
+        filtered={Boolean(q || filters.projectId || filters.from || filters.to)}
         can={{
           create: ctx.has(PERM.project.progressLog.create),
           delete: ctx.has(PERM.project.progressLog.delete),
+          export: ctx.has(PERM.project.progressLog.export),
         }}
       />
     </div>

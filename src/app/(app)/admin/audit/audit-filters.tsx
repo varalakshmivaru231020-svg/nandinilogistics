@@ -1,59 +1,52 @@
 "use client";
 
-import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Search } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
-import { Input, Select } from "@/components/ui/primitives";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { AUDIT_ACTIONS } from "@/lib/admin/list-filters";
 
-const ACTIONS = [
-  "CREATE", "UPDATE", "DELETE", "APPROVE", "REJECT", "SUBMIT",
-  "CANCEL", "LOGIN", "LOGOUT", "LOGIN_FAILED", "EXPORT", "VIEW", "ASSIGN",
-];
-
+/**
+ * Search, action, entity and date range for the audit trail, kept in the URL.
+ * The export link carries the same query, so it holds every matching entry —
+ * not only the page on display.
+ */
 export function AuditFilters({
-  q, action, entity, entities,
+  entities, total, canExport,
 }: {
-  q: string;
-  action: string;
-  entity: string;
   entities: Array<{ entity: string; count: number }>;
+  total: number;
   canExport: boolean;
 }) {
-  const router = useRouter();
   const params = useSearchParams();
 
-  function setParam(key: string, value: string) {
-    const sp = new URLSearchParams(params.toString());
-    if (!value || value === "all") sp.delete(key);
-    else sp.set(key, value);
-    sp.delete("page");
-    router.push(`?${sp.toString()}`);
-  }
-
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-56 flex-1 sm:max-w-sm">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-400" />
-        <Input
-          defaultValue={q}
-          placeholder="Search what happened…"
-          className="pl-8"
-          onKeyDown={(e) => {
-            if (e.key === "Enter") setParam("q", (e.target as HTMLInputElement).value);
-          }}
+    <ListToolbar
+      className="mb-0"
+      searchPlaceholder="Search what happened…"
+      filters={[
+        {
+          name: "action",
+          label: "Actions",
+          options: AUDIT_ACTIONS.map((a) => ({ value: a, label: a })),
+        },
+        {
+          name: "entity",
+          label: "Entities",
+          options: entities.map((e) => ({ value: e.entity, label: `${e.entity} (${e.count})` })),
+        },
+      ]}
+      dateRange={{ label: "When" }}
+    >
+      <span className="text-[11.5px] font-semibold text-muted-600">
+        {total.toLocaleString("en-IN")} match{total === 1 ? "" : "es"}
+      </span>
+      {canExport && (
+        <ExportMenu
+          href={(format) => exportHref("/api/admin/audit/export", format, params)}
+          disabled={total === 0}
         />
-      </div>
-      <Select value={action} onChange={(e) => setParam("action", e.target.value)} className="w-40">
-        <option value="all">All actions</option>
-        {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-      </Select>
-      <Select value={entity} onChange={(e) => setParam("entity", e.target.value)} className="w-48">
-        <option value="all">All entities</option>
-        {entities.map((e) => (
-          <option key={e.entity} value={e.entity}>{e.entity} ({e.count})</option>
-        ))}
-      </Select>
-    </div>
+      )}
+    </ListToolbar>
   );
 }

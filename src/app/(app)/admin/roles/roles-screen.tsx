@@ -2,10 +2,12 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Copy, KeyRound, Pencil, Plus, Power, Trash2, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog, Modal } from "@/components/ui/modal";
 import { Alert, Badge, Field, Input, Textarea } from "@/components/ui/primitives";
@@ -36,6 +38,7 @@ export function RolesScreen({
   can: Record<string, boolean>;
 }) {
   const router = useRouter();
+  const params = useSearchParams();
   const [editing, setEditing] = React.useState<RoleRow | null>(null);
   const [creating, setCreating] = React.useState(false);
   const [cloning, setCloning] = React.useState<RoleRow | null>(null);
@@ -157,14 +160,35 @@ export function RolesScreen({
     <div className="space-y-3">
       {error && <Alert tone="error">{error}</Alert>}
 
-      {can.create && (
-        <div className="flex justify-end">
+      <ListToolbar
+        className="mb-0"
+        searchPlaceholder="Search name, code or description…"
+        filters={[
+          {
+            name: "status",
+            label: "Status",
+            allLabel: "All statuses",
+            options: [
+              { value: "ACTIVE", label: "Active" },
+              { value: "INACTIVE", label: "Inactive" },
+            ],
+          },
+        ]}
+        count={roles.length}
+      >
+        {can.export && (
+          <ExportMenu
+            href={(format) => exportHref("/api/admin/roles/export", format, params)}
+            disabled={roles.length === 0}
+          />
+        )}
+        {can.create && (
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus className="h-3.5 w-3.5" />
             New role
           </Button>
-        </div>
-      )}
+        )}
+      </ListToolbar>
 
       <DataTable columns={columns} rows={roles} rowKey={(r) => r.id} />
 

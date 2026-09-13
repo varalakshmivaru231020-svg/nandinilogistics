@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { PageHeader } from "@/components/ui/primitives";
+import { readUserListParams, userListWhere } from "@/lib/admin/list-filters";
 import { UsersScreen } from "./users-screen";
 
 export const metadata = { title: "Users" };
@@ -9,20 +10,13 @@ export const metadata = { title: "Users" };
 export default async function UsersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const ctx = await requirePermission(PERM.admin.user.view);
-  const { q = "" } = await searchParams;
+  const listParams = readUserListParams(await searchParams);
 
-  const where = q.trim()
-    ? {
-        OR: [
-          { name: { contains: q.trim(), mode: "insensitive" as const } },
-          { email: { contains: q.trim(), mode: "insensitive" as const } },
-          { employeeCode: { contains: q.trim(), mode: "insensitive" as const } },
-        ],
-      }
-    : {};
+  // Search, status and role — the same function the export uses.
+  const where = userListWhere(listParams);
 
   const [users, roles, departments, designations] = await Promise.all([
     prisma.user.findMany({
@@ -48,7 +42,6 @@ export default async function UsersPage({
       />
 
       <UsersScreen
-        query={q}
         currentUserId={ctx.id}
         users={users.map((u) => ({
           id: u.id,
@@ -76,6 +69,7 @@ export default async function UsersPage({
           toggleStatus: ctx.has(PERM.admin.user.toggleStatus),
           resetPassword: ctx.has(PERM.admin.user.resetPassword),
           assignRoles: ctx.has(PERM.admin.user.assignRoles),
+          export: ctx.has(PERM.admin.user.export),
         }}
       />
     </div>

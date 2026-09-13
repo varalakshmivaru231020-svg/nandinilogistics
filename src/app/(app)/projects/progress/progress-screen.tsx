@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Camera, MapPin, Plus, Trash2, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, CardBody, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { formatDate } from "@/lib/utils";
@@ -18,13 +20,16 @@ interface Log {
 }
 
 export function ProgressScreen({
-  logs, projects, can,
+  logs, projects, filtered, can,
 }: {
   logs: Log[];
   projects: Array<{ id: string; name: string; code: string }>;
+  /** Whether a search, project or date range is narrowing the list. */
+  filtered: boolean;
   can: Record<string, boolean>;
 }) {
   const router = useRouter();
+  const params = useSearchParams();
   const [creating, setCreating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -56,21 +61,44 @@ export function ProgressScreen({
         fields, so the two are the same record.
       </Alert>
 
-      {can.create && (
-        <div className="flex justify-end">
+      <ListToolbar
+        className="mb-0"
+        searchPlaceholder="Search title, notes, weather or author…"
+        filters={[
+          {
+            name: "project",
+            label: "Project",
+            allLabel: "All projects",
+            options: projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` })),
+          },
+        ]}
+        dateRange={{ label: "Log date" }}
+        count={logs.length}
+      >
+        {can.export && (
+          <ExportMenu
+            href={(format) => exportHref("/api/projects/progress/export", format, params)}
+            disabled={logs.length === 0}
+          />
+        )}
+        {can.create && (
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus className="h-3.5 w-3.5" />
             Log today
           </Button>
-        </div>
-      )}
+        )}
+      </ListToolbar>
 
       {logs.length === 0 ? (
         <Card>
           <EmptyState
             icon={<Camera className="h-8 w-8" />}
-            title="No site logs yet"
-            description="A daily log is the visual record that survives to handover."
+            title={filtered ? "No site logs match" : "No site logs yet"}
+            description={
+              filtered
+                ? "Nothing matches this project, date range and search."
+                : "A daily log is the visual record that survives to handover."
+            }
           />
         </Card>
       ) : (

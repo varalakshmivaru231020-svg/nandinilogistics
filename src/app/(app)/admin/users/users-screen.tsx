@@ -3,12 +3,15 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { KeyRound, Pencil, Plus, Power, Search, ShieldCheck } from "lucide-react";
+import { KeyRound, Pencil, Plus, Power, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Field, Input, Select } from "@/components/ui/primitives";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { USER_STATUSES, USER_STATUS_LABEL } from "@/lib/admin/list-filters";
 import { formatDateTime } from "@/lib/utils";
 import {
   createUserAction, resetPasswordAction, toggleUserStatusAction, updateUserAction,
@@ -35,14 +38,13 @@ interface UserRow {
 type Lookup = Array<{ id: string; name: string }>;
 
 export function UsersScreen({
-  users, roles, departments, designations, can, query, currentUserId,
+  users, roles, departments, designations, can, currentUserId,
 }: {
   users: UserRow[];
   roles: Lookup;
   departments: Lookup;
   designations: Lookup;
   can: Record<string, boolean>;
-  query: string;
   currentUserId: string;
 }) {
   const router = useRouter();
@@ -163,31 +165,38 @@ export function UsersScreen({
       {error && <Alert tone="error">{error}</Alert>}
       {notice && !error && <Alert tone="success">{notice}</Alert>}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-56 flex-1 sm:max-w-sm">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-400" />
-          <Input
-            defaultValue={query}
-            placeholder="Search by name, email or employee code…"
-            className="pl-8"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                const sp = new URLSearchParams(params.toString());
-                const v = (e.target as HTMLInputElement).value;
-                if (v) sp.set("q", v); else sp.delete("q");
-                router.push(`?${sp.toString()}`);
-              }
-            }}
+      <ListToolbar
+        className="mb-0"
+        searchPlaceholder="Search by name, email or employee code…"
+        filters={[
+          {
+            name: "status",
+            label: "Status",
+            allLabel: "All statuses",
+            options: USER_STATUSES.map((s) => ({ value: s, label: USER_STATUS_LABEL[s] })),
+          },
+          {
+            name: "role",
+            label: "Role",
+            allLabel: "All roles",
+            options: roles.map((r) => ({ value: r.id, label: r.name })),
+          },
+        ]}
+        count={users.length}
+      >
+        {can.export && (
+          <ExportMenu
+            href={(format) => exportHref("/api/admin/users/export", format, params)}
+            disabled={users.length === 0}
           />
-        </div>
-        <div className="flex-1" />
+        )}
         {can.create && (
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus className="h-3.5 w-3.5" />
             New user
           </Button>
         )}
-      </div>
+      </ListToolbar>
 
       <DataTable columns={columns} rows={users} rowKey={(u) => u.id} />
 
