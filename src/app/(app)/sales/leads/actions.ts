@@ -1,80 +1,46 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
 import { prisma } from "@/lib/db";
 import { authorize, runAction, PermissionError, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
-import { nextDocumentNumber } from "@/lib/numbering";
 import { PERM } from "@/lib/permissions/codes";
 import { getSetting } from "@/lib/settings";
-import { chooseLeadOwner, recordFirstResponse } from "@/lib/sales/lead-service";
-
-const LeadSchema = z.object({
-  name: z.string().trim().min(2, "Name is required"),
-  phone: z.string().trim().min(8, "A valid phone number is required"),
-  altPhone: z.string().trim().optional(),
-  email: z.string().trim().email("Enter a valid email").or(z.literal("")).optional(),
-  sourceId: z.string().min(1, "Lead source is required"),
-  projectId: z.string().optional(),
-  requirement: z.string().trim().optional(),
-  budgetMin: z.coerce.number().min(0).optional(),
-  budgetMax: z.coerce.number().min(0).optional(),
-  nextActionAt: z.string().optional(),
-});
+import type { ImportPlan, ImportSummary } from "@/lib/import/columns";
+import { ImportFileError, parseUploadFrom } from "@/lib/import/parse";
+import { planLeadImport } from "@/lib/sales/lead-import";
+import { LeadSchema, phoneKey } from "@/lib/sales/lead-schema";
+import { captureLead, recordFirstResponse } from "@/lib/sales/lead-service";
 
 export async function createLeadAction(formData: FormData): Promise<ActionResult<{ id: string; duplicate: boolean }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.sales.lead.create);
     const parsed = LeadSchema.safeParse(Object.fromEntries(formData));
     if (!parsed.success) throw new Error(parsed.error.issues[0].message);
-    const v = parsed.data;
-
-    // Duplicate detection on phone — the lead is still captured, but linked.
-    const existing = await prisma.lead.findFirst({
-      where: { phone: v.phone },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, name: true },
-    });
 
     // The organisation's assignment rule decides who owns the lead: manual keeps
     // it with whoever captured it; round-robin and project-wise hand it on.
     const { mode } = await getSetting(prisma, "sales.leadAssignment");
-    const owner = await chooseLeadOwner(prisma, mode, v.projectId || null, ctx.id);
-
-    const lead = await prisma.$transaction(async (tx) => {
-      const leadNo = await nextDocumentNumber(tx, "LEAD", v.projectId || null);
-      return tx.lead.create({
-        data: {
-          leadNo,
-          name: v.name,
-          phone: v.phone,
-          altPhone: v.altPhone || null,
-          email: v.email || null,
-          sourceId: v.sourceId,
-          projectId: v.projectId || null,
-          ownerId: owner.ownerId,
-          assignedAt: new Date(),
-          requirement: v.requirement || null,
-          budgetMin: v.budgetMin ?? null,
-          budgetMax: v.budgetMax ?? null,
-          nextActionAt: v.nextActionAt ? new Date(v.nextActionAt) : null,
-          unitTypeId: String(formData.get("unitTypeId") ?? "") || null,
-          duplicateOfId: existing?.id ?? null,
-        },
-      });
-    });
+    const { lead, auto, duplicateOf } = await prisma.$transaction((tx) =>
+      captureLead(
+        tx,
+        { ...parsed.data, unitTypeId: String(formData.get("unitTypeId") ?? "") || null },
+        ctx.id,
+        mode,
+        new Date(),
+      ),
+    );
 
     await recordAudit({
       action: "CREATE", entity: "Lead", entityId: lead.id, userId: ctx.id,
       summary:
-        `Captured lead ${lead.leadNo} — ${lead.name}${existing ? ` (possible duplicate of ${existing.name})` : ""}` +
-        (owner.auto ? ` — assigned automatically (${mode.toLowerCase().replace("_", "-")})` : ""),
+        `Captured lead ${lead.leadNo} — ${lead.name}${duplicateOf ? ` (possible duplicate of ${duplicateOf.name})` : ""}` +
+        (auto ? ` — assigned automatically (${mode.toLowerCase().replace("_", "-")})` : ""),
     });
 
     revalidatePath("/sales/leads");
-    return { id: lead.id, duplicate: Boolean(existing) };
+    return { id: lead.id, duplicate: Boolean(duplicateOf) };
   });
 }
 
@@ -280,5 +246,110 @@ export async function releaseUnitForLeadAction(leadId: string, holdId: string): 
     revalidatePath(`/sales/leads/${leadId}`);
     revalidatePath("/units/board");
     return null;
+  });
+}
+
+/* -------------------------------- import --------------------------------- */
+
+async function planLeadUpload(canAssign: boolean, formData: FormData) {
+  let sheet;
+  try {
+    sheet = await parseUploadFrom(formData);
+  } catch (err) {
+    if (err instanceof ImportFileError) throw err;
+    throw new Error("The file could not be read. Save it again as .csv or .xlsx and retry.");
+  }
+
+  const [sources, projects, unitTypes, owners, existing] = await Promise.all([
+    prisma.leadSource.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
+    prisma.project.findMany({ where: { status: "ACTIVE" }, select: { id: true, code: true, name: true } }),
+    prisma.unitType.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
+    canAssign
+      ? prisma.user.findMany({
+          where: { status: "ACTIVE" },
+          select: { id: true, email: true, employeeCode: true, name: true },
+        })
+      : Promise.resolve([]),
+    prisma.lead.findMany({ select: { id: true, name: true, phone: true }, orderBy: { createdAt: "asc" } }),
+  ]);
+
+  // The earliest lead for each number, matched loosely (+91, leading zero, spacing).
+  const existingPhones = new Map<string, { id: string; name: string }>();
+  for (const l of existing) {
+    const key = phoneKey(l.phone);
+    if (key.length >= 8 && !existingPhones.has(key)) existingPhones.set(key, { id: l.id, name: l.name });
+  }
+
+  return planLeadImport(sheet, { sources, projects, unitTypes, owners, existingPhones, canAssign });
+}
+
+/** Checks every row of a lead upload and reports what an import would do. Writes nothing. */
+export async function previewLeadImportAction(formData: FormData): Promise<ActionResult<ImportPlan>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.sales.lead.import);
+    const plan = await planLeadUpload(ctx.has(PERM.sales.lead.assign), formData);
+    return { ...plan, rows: plan.rows.map(({ row, label, errors, notes }) => ({ row, label, errors, notes })) };
+  });
+}
+
+/**
+ * Imports every valid row of a lead upload, through captureLead — the same
+ * duplicate check, assignment rule and numbering as the New Lead form.
+ *
+ * The file is planned again rather than trusting the preview. All rows go in
+ * one transaction: the import lands whole or not at all.
+ */
+export async function importLeadsAction(formData: FormData): Promise<ActionResult<ImportSummary>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.sales.lead.import);
+    const plan = await planLeadUpload(ctx.has(PERM.sales.lead.assign), formData);
+    if (plan.missing.length > 0) throw new Error(`The file is missing: ${plan.missing.join(", ")}.`);
+
+    const inputs = plan.rows.flatMap((r) => (r.input ? [r.input] : []));
+    if (inputs.length === 0) {
+      throw new Error("No row in the file can be imported. Fix the rows marked in the preview and try again.");
+    }
+
+    const { mode } = await getSetting(prisma, "sales.leadAssignment");
+    const start = Date.now();
+
+    const { auto, duplicates } = await prisma.$transaction(
+      async (tx) => {
+        let auto = 0;
+        let duplicates = 0;
+        for (const [i, input] of inputs.entries()) {
+          // A later instant per row, so round-robin counts each lead it has just handed out.
+          const result = await captureLead(tx, input, ctx.id, mode, new Date(start + i));
+          if (result.auto) auto += 1;
+          if (result.duplicateOf) duplicates += 1;
+        }
+        return { auto, duplicates };
+      },
+      { timeout: 120_000, maxWait: 10_000 },
+    );
+
+    const file = formData.get("file");
+    const fileName = file && typeof file !== "string" ? file.name : "a file";
+    const created = inputs.length;
+    const skipped = plan.invalid;
+    const details = [
+      duplicates ? `${duplicates} flagged as possible duplicates` : null,
+      auto ? `${auto} assigned automatically (${mode.toLowerCase().replace("_", "-")})` : null,
+      skipped ? `${skipped} row(s) skipped` : null,
+    ].filter(Boolean);
+
+    await recordAudit({
+      action: "CREATE",
+      entity: "Lead",
+      userId: ctx.id,
+      summary: `Imported ${created} leads from ${fileName}${details.length ? ` — ${details.join(", ")}` : ""}`,
+    });
+
+    revalidatePath("/sales/leads");
+    return {
+      created,
+      skipped,
+      message: `Imported ${created} lead${created === 1 ? "" : "s"}${details.length ? `: ${details.join(", ")}` : ""}.`,
+    };
   });
 }

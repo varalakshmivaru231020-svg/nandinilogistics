@@ -2,9 +2,12 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Download, Pencil, Plus, Power, Search, Trash2 } from "lucide-react";
+import { Pencil, Plus, Power, Search, Trash2, Upload } from "lucide-react";
 
 import type { MasterDef } from "@/lib/masters/types";
+import { masterImportColumns } from "@/lib/masters/import";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ImportDialog } from "@/components/import/import-dialog";
 import { Button } from "@/components/ui/button";
 import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog, Modal } from "@/components/ui/modal";
@@ -13,6 +16,8 @@ import { cn, qty } from "@/lib/utils";
 import {
   createMasterAction,
   deleteMasterAction,
+  importMastersAction,
+  previewMasterImportAction,
   toggleMasterStatusAction,
   updateMasterAction,
 } from "../actions";
@@ -26,6 +31,7 @@ interface Capabilities {
   delete: boolean;
   toggleStatus: boolean;
   export: boolean;
+  import: boolean;
 }
 
 export function MasterScreen({
@@ -55,6 +61,7 @@ export function MasterScreen({
   const [editing, setEditing] = React.useState<Row | null>(null);
   const [creating, setCreating] = React.useState(false);
   const [deleting, setDeleting] = React.useState<Row | null>(null);
+  const [importing, setImporting] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -97,31 +104,6 @@ export function MasterScreen({
       setNotice("Record deleted.");
       router.refresh();
     }
-  }
-
-  function exportCsv() {
-    const cols = def.fields.filter((f) => f.inList);
-    const header = ["Status", ...cols.map((c) => c.label)];
-    const lines = rows.map((r) => [
-      String(r.status ?? ""),
-      ...cols.map((c) => {
-        const v = r[c.name];
-        if (c.type === "select" && options[c.name]) {
-          return options[c.name].find((o) => o.value === String(v))?.label ?? "";
-        }
-        return v === null || v === undefined ? "" : String(v);
-      }),
-    ]);
-    const csv = [header, ...lines]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${def.key}-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   /* -------------------------------- columns ------------------------------- */
@@ -249,11 +231,17 @@ export function MasterScreen({
 
         <div className="flex-1" />
 
-        {can.export && (
-          <Button variant="secondary" size="sm" onClick={exportCsv}>
-            <Download className="h-3.5 w-3.5" />
-            Export
+        {can.import && (
+          <Button variant="secondary" size="sm" onClick={() => setImporting(true)}>
+            <Upload className="h-3.5 w-3.5" />
+            Import
           </Button>
+        )}
+        {can.export && (
+          <ExportMenu
+            href={(format) => exportHref(`/api/masters/${def.key}/export`, format, params)}
+            disabled={total === 0}
+          />
         )}
         {can.create && (
           <Button size="sm" onClick={() => setCreating(true)}>
@@ -308,6 +296,23 @@ export function MasterScreen({
             setEditing(null);
             setNotice(msg);
             setError(null);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {importing && (
+        <ImportDialog
+          title={`Import ${def.label.toLowerCase()}`}
+          columns={masterImportColumns(def)}
+          templateName={def.key}
+          preview={(fd) => previewMasterImportAction(def.key, fd)}
+          commit={(fd) => importMastersAction(def.key, fd)}
+          onClose={() => setImporting(false)}
+          onImported={(message) => {
+            setImporting(false);
+            setError(null);
+            setNotice(message);
             router.refresh();
           }}
         />

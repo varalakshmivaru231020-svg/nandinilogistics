@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 
+import { nextDocumentNumber } from "@/lib/numbering";
 import { PERM } from "@/lib/permissions/codes";
 import { usersHolding } from "@/lib/rbac/holders";
 import { getSetting } from "@/lib/settings";
@@ -10,6 +11,7 @@ import {
   isEscalationDue, OPEN_LEAD_STATES, pickAssignee, responseMinutes,
   type AssignmentMode,
 } from "./assignment";
+import type { LeadInput } from "./lead-schema";
 
 /**
  * The database side of lead assignment, response time and escalation. The
@@ -61,6 +63,74 @@ export async function chooseLeadOwner(
     members,
   );
   return pick ? { ownerId: pick, auto: true } : { ownerId: capturedBy, auto: false };
+}
+
+export interface CaptureLeadInput extends LeadInput {
+  unitTypeId: string | null;
+  /** An owner chosen by someone allowed to assign; when absent the assignment rule decides. */
+  ownerId?: string | null;
+  /**
+   * The lead this one duplicates, when the caller has already matched it (the
+   * import matches phones loosely, across +91 and leading zeros). Undefined
+   * looks it up by exact phone, as the New Lead form always has.
+   */
+  duplicateOfId?: string | null;
+}
+
+/**
+ * Captures one lead: duplicate check, owner, number, record — the single path
+ * for the New Lead form and the import alike, so the two cannot drift apart.
+ *
+ * Runs inside the caller's transaction. `assignedAt` is passed in rather than
+ * read from the clock: an import hands each row a later instant, so
+ * round-robin sees every lead it has just given out when it chooses the next
+ * owner, instead of a tie it would break the same way every time.
+ */
+export async function captureLead(
+  tx: Prisma.TransactionClient,
+  input: CaptureLeadInput,
+  capturedBy: string,
+  mode: AssignmentMode,
+  assignedAt: Date,
+) {
+  let duplicateOf: { id: string; name: string } | null = null;
+  if (input.duplicateOfId === undefined) {
+    duplicateOf = await tx.lead.findFirst({
+      where: { phone: input.phone },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true },
+    });
+  } else if (input.duplicateOfId) {
+    duplicateOf = await tx.lead.findUnique({ where: { id: input.duplicateOfId }, select: { id: true, name: true } });
+  }
+
+  const owner = input.ownerId
+    ? { ownerId: input.ownerId, auto: false }
+    : await chooseLeadOwner(tx, mode, input.projectId || null, capturedBy);
+
+  const leadNo = await nextDocumentNumber(tx, "LEAD", input.projectId || null);
+  const lead = await tx.lead.create({
+    data: {
+      leadNo,
+      name: input.name,
+      phone: input.phone,
+      altPhone: input.altPhone || null,
+      email: input.email || null,
+      sourceId: input.sourceId,
+      projectId: input.projectId || null,
+      ownerId: owner.ownerId,
+      assignedAt,
+      requirement: input.requirement || null,
+      budgetMin: input.budgetMin ?? null,
+      budgetMax: input.budgetMax ?? null,
+      nextActionAt: input.nextActionAt ? new Date(input.nextActionAt) : null,
+      unitTypeId: input.unitTypeId,
+      duplicateOfId: duplicateOf?.id ?? null,
+    },
+    select: { id: true, leadNo: true, name: true },
+  });
+
+  return { lead, auto: owner.auto, duplicateOf };
 }
 
 /**

@@ -84,6 +84,7 @@ export default async function MasterListPage({
           delete: ctx.has(masterPerm(def, "delete")),
           toggleStatus: ctx.has(masterPerm(def, "toggleStatus")),
           export: ctx.has(masterPerm(def, "export")),
+          import: ctx.has(masterPerm(def, "import")),
         }}
       />
     </div>

@@ -4,8 +4,11 @@ import { revalidatePath } from "next/cache";
 
 import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit, diff } from "@/lib/audit";
+import type { ImportPlan, ImportSummary } from "@/lib/import/columns";
+import { ImportFileError, parseUploadFrom } from "@/lib/import/parse";
+import { planMasterImport } from "@/lib/masters/import";
 import { getMaster, masterPerm } from "@/lib/masters/registry";
-import { buildSchema, delegate, recordLabel, toPrismaData } from "@/lib/masters/service";
+import { buildSchema, delegate, loadOptions, recordLabel, toPrismaData } from "@/lib/masters/service";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -145,5 +148,99 @@ export async function toggleMasterStatusAction(
 
     revalidatePath(`/masters/${def.key}`);
     return { status };
+  });
+}
+
+/* -------------------------------- import --------------------------------- */
+
+async function planFromUpload(def: ReturnType<typeof must>, formData: FormData) {
+  let sheet;
+  try {
+    sheet = await parseUploadFrom(formData);
+  } catch (err) {
+    if (err instanceof ImportFileError) throw err;
+    throw new Error("The file could not be read. Save it again as .csv or .xlsx and retry.");
+  }
+
+  const hasCode = def.fields.some((f) => f.name === "code");
+  const [options, existing] = await Promise.all([
+    loadOptions(def),
+    hasCode ? delegate(def).findMany({ select: { code: true } }) : Promise.resolve([]),
+  ]);
+  const codes = new Set<string>(
+    (existing as Array<{ code: string | null }>).map((r) => String(r.code ?? "").toUpperCase()),
+  );
+  return planMasterImport(def, sheet, options, codes);
+}
+
+/** Checks every row of an upload and reports what an import would do. Writes nothing. */
+export async function previewMasterImportAction(
+  masterKey: string,
+  formData: FormData,
+): Promise<ActionResult<ImportPlan>> {
+  return runAction(async () => {
+    const def = must(masterKey);
+    await authorize(masterPerm(def, "import"));
+    const plan = await planFromUpload(def, formData);
+    // Only what the user needs to see — the prepared data is rebuilt on import.
+    return { ...plan, rows: plan.rows.map(({ row, label, errors, notes }) => ({ row, label, errors, notes })) };
+  });
+}
+
+/**
+ * Imports every valid row of an upload.
+ *
+ * The file is planned again here rather than trusting the preview the browser
+ * saw: the table may have changed since, and the preview is only a courtesy.
+ * All rows go in one statement, so an import lands whole or not at all.
+ */
+export async function importMastersAction(
+  masterKey: string,
+  formData: FormData,
+): Promise<ActionResult<ImportSummary>> {
+  return runAction(async () => {
+    const def = must(masterKey);
+    const ctx = await authorize(masterPerm(def, "import"));
+
+    const plan = await planFromUpload(def, formData);
+    if (plan.missing.length > 0) throw new Error(`The file is missing: ${plan.missing.join(", ")}.`);
+
+    const data = plan.rows.flatMap((r) => (r.data ? [r.data] : []));
+    if (data.length === 0) {
+      throw new Error("No row in the file can be imported. Fix the rows marked in the preview and try again.");
+    }
+
+    let created: number;
+    try {
+      ({ count: created } = await delegate(def).createMany({ data }));
+    } catch (err: any) {
+      if (err?.code === "P2002") {
+        throw new Error("Some of these records were added by someone else while you were importing. Preview the file again.");
+      }
+      if (err?.code === "P2003") {
+        throw new Error("An entry these rows refer to was removed while you were importing. Preview the file again.");
+      }
+      throw err;
+    }
+
+    const file = formData.get("file");
+    const fileName = file && typeof file !== "string" ? file.name : "a file";
+    const skipped = plan.invalid;
+
+    await recordAudit({
+      action: "CREATE",
+      entity: def.singular,
+      userId: ctx.id,
+      summary: `Imported ${created} ${def.label.toLowerCase()} from ${fileName}${skipped ? ` — ${skipped} row(s) skipped` : ""}`,
+    });
+
+    revalidatePath(`/masters/${def.key}`);
+    return {
+      created,
+      skipped,
+      message:
+        `Imported ${created} ${created === 1 ? def.singular : def.label.toLowerCase()}` +
+        (skipped ? `; ${skipped} row(s) with problems were skipped.` : "."),
+    };
   });
 }

@@ -1,6 +1,7 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { leadListWhere } from "@/lib/sales/lead-list";
 import { Card, CardBody, PageHeader } from "@/components/ui/primitives";
 import { LeadsScreen } from "./leads-screen";
 
@@ -16,37 +17,11 @@ export default async function LeadsPage({
   const ctx = await requirePermission(PERM.sales.lead.view);
   const { q = "", state = "all", source = "all", fu = "all", view = "board" } = await searchParams;
   const now = new Date();
-  const soon = new Date(now.getTime() + 7 * 86_400_000);
 
   // Without viewAll a sales executive sees only their own pipeline.
   const ownership = ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id };
-
-  const where = {
-    ...ownership,
-    ...(q.trim()
-      ? {
-          OR: [
-            { name: { contains: q.trim(), mode: "insensitive" as const } },
-            { phone: { contains: q.trim() } },
-            { leadNo: { contains: q.trim(), mode: "insensitive" as const } },
-          ],
-        }
-      : {}),
-    ...(state !== "all" ? { state: state as never } : {}),
-    ...(source !== "all" ? { sourceId: source } : {}),
-    // Follow-up filter, as in the design: overdue / today / this week / none set.
-    ...(fu === "overdue" ? { nextActionAt: { lt: now } } : {}),
-    ...(fu === "today"
-      ? {
-          nextActionAt: {
-            gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-            lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1),
-          },
-        }
-      : {}),
-    ...(fu === "week" ? { nextActionAt: { gte: now, lte: soon } } : {}),
-    ...(fu === "none" ? { nextActionAt: null } : {}),
-  };
+  // Shared with the export, so a download holds exactly what this screen shows.
+  const where = leadListWhere(ownership, { q, state, source, fu }, now);
 
   const [leads, stageCounts, sources, lostReasons, projects, owners, unitTypes] = await Promise.all([
     prisma.lead.findMany({
@@ -137,6 +112,7 @@ export default async function LeadsPage({
           viewContact: ctx.has(PERM.sales.lead.viewContact),
           followUp: ctx.has(PERM.sales.followUp.create),
           export: ctx.has(PERM.sales.lead.export),
+          import: ctx.has(PERM.sales.lead.import),
         }}
       />
     </div>

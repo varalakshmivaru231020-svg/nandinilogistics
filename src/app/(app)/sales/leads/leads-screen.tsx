@@ -3,13 +3,19 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Copy, Download, PhoneCall, Plus, Upload, UserCheck } from "lucide-react";
+import { Copy, PhoneCall, Plus, Upload, UserCheck } from "lucide-react";
 
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ImportDialog } from "@/components/import/import-dialog";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { cn, formatDate, money, maskPhone } from "@/lib/utils";
-import { assignLeadAction, changeLeadStageAction, createLeadAction, logFollowUpAction } from "./actions";
+import { LEAD_IMPORT_COLUMNS } from "@/lib/sales/lead-import";
+import {
+  assignLeadAction, changeLeadStageAction, createLeadAction, importLeadsAction, logFollowUpAction,
+  previewLeadImportAction,
+} from "./actions";
 
 const STAGES = [
   "NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED", "LOST",
@@ -80,6 +86,7 @@ export function LeadsScreen({
   const [staging, setStaging] = React.useState<Lead | null>(null);
   const [followingUp, setFollowingUp] = React.useState<Lead | null>(null);
   const [assigning, setAssigning] = React.useState<Lead | null>(null);
+  const [importing, setImporting] = React.useState(false);
   const [dragging, setDragging] = React.useState<string | null>(null);
   const [dropTarget, setDropTarget] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -110,23 +117,6 @@ export function LeadsScreen({
       setNotice(`Moved to ${STAGE_LABEL[stage]}.`);
       router.refresh();
     }
-  }
-
-  function exportCsv() {
-    const header = ["Lead No", "Name", "Phone", "Source", "Stage", "Owner", "Requirement", "Next action"];
-    const rows = leads.map((l) => [
-      l.leadNo, l.name, can.viewContact ? l.phone : maskPhone(l.phone),
-      l.source, l.state, l.ownerName ?? "", l.requirement ?? "", l.nextActionAt ?? "",
-    ]);
-    const csv = [header, ...rows]
-      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   const byStage = new Map<string, Lead[]>();
@@ -164,15 +154,18 @@ export function LeadsScreen({
               </button>
             ))}
           </div>
-          <Button variant="ghost" size="md" onClick={() => setNotice("Bulk import arrives with the portal integration.")}>
-            <Upload className="h-3.5 w-3.5" />
-            Import
-          </Button>
-          {can.export && (
-            <Button variant="ghost" size="md" onClick={exportCsv}>
-              <Download className="h-3.5 w-3.5" />
-              Export
+          {can.import && (
+            <Button variant="ghost" size="md" onClick={() => setImporting(true)}>
+              <Upload className="h-3.5 w-3.5" />
+              Import
             </Button>
+          )}
+          {can.export && (
+            <ExportMenu
+              size="md"
+              href={(format) => exportHref("/api/sales/leads/export", format, params)}
+              disabled={leads.length === 0}
+            />
           )}
           {can.create && (
             <Button size="md" onClick={() => setCreating(true)}>
@@ -442,6 +435,18 @@ export function LeadsScreen({
           lead={followingUp}
           onClose={() => setFollowingUp(null)}
           onSaved={(m) => { setFollowingUp(null); setNotice(m); router.refresh(); }}
+        />
+      )}
+      {importing && (
+        <ImportDialog
+          title="Import leads"
+          description="Upload a .csv or .xlsx — a portal export works as it is. Every row is checked, duplicates are flagged, and owners follow your assignment rule."
+          columns={LEAD_IMPORT_COLUMNS}
+          templateName="leads"
+          preview={previewLeadImportAction}
+          commit={importLeadsAction}
+          onClose={() => setImporting(false)}
+          onImported={(m) => { setImporting(false); setError(null); setNotice(m); router.refresh(); }}
         />
       )}
       {assigning && (
