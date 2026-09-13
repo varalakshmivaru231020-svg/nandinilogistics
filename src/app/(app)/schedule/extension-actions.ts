@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { authorize, runAction, assertProjectAccess, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
+import { reschedule } from "@/lib/schedule/service";
 
 /**
  * Requests a new finish date for an activity.
@@ -75,6 +76,7 @@ export async function decideExtensionAction(
     if (request.status !== "PENDING") throw new Error("This request has already been decided.");
     if (!approve && !note.trim()) throw new Error("Say why the extension is refused.");
 
+    let shifted = 0;
     await prisma.$transaction(async (tx) => {
       await tx.scheduleExtension.update({
         where: { id },
@@ -92,6 +94,8 @@ export async function decideExtensionAction(
           where: { id: request.activityId },
           data: { plannedEnd: request.requestedDate },
         });
+        // A later finish pushes everything waiting on it, in the same transaction.
+        shifted = (await reschedule(tx, request.activity.projectId)).shifted.length;
       }
     });
 
@@ -104,7 +108,8 @@ export async function decideExtensionAction(
       summary:
         `${approve ? "Approved" : "Refused"} a ${request.requestedDays}-day extension on ` +
         `${request.activity.code}${note.trim() ? ` — ${note.trim()}` : ""}` +
-        (approve ? ` (planned finish moved; baseline unchanged)` : ""),
+        (approve ? ` (planned finish moved; baseline unchanged)` : "") +
+        (shifted ? ` — ${shifted} downstream activit${shifted === 1 ? "y" : "ies"} moved with it` : ""),
     });
 
     revalidatePath("/schedule");

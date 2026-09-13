@@ -49,6 +49,12 @@ export default async function SchedulePage({
       include: {
         workPackage: { select: { id: true, code: true, name: true, phase: { select: { id: true, name: true } } } },
         delayReason: { select: { name: true } },
+        predecessors: {
+          select: {
+            id: true, predecessorId: true, type: true, lagDays: true,
+            predecessor: { select: { code: true, name: true } },
+          },
+        },
         extensions: {
           orderBy: { requestedAt: "desc" },
           include: {
@@ -109,6 +115,10 @@ export default async function SchedulePage({
         groupName: a.workPackage ? `${a.workPackage.code} — ${a.workPackage.name}` : "Unassigned activities",
         phaseName: a.workPackage?.phase.name ?? null,
         pendingExtension: a.extensions.some((e) => e.status === "PENDING"),
+        predecessors: a.predecessors.map((d) => ({
+          id: d.id, predecessorId: d.predecessorId, type: d.type, lagDays: d.lagDays,
+          code: d.predecessor.code, name: d.predecessor.name,
+        })),
       }))}
       extensions={extensions.map((e) => ({
         id: e.id,

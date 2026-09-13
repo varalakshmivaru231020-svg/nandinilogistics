@@ -2,16 +2,17 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CalendarClock, Check, Diamond, Plus, X, Zap } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, Diamond, Link2, Plus, X, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { cn, formatDate } from "@/lib/utils";
 import {
-  completeActivityAction, createActivityAction, setCriticalPathAction,
-  startActivityAction, updateActivityProgressAction,
+  addDependencyAction, completeActivityAction, createActivityAction,
+  removeDependencyAction, startActivityAction, updateActivityProgressAction,
 } from "./actions";
+import { LINK_LABEL, LINK_TYPES, type LinkType } from "@/lib/schedule/engine";
 import { decideExtensionAction, requestExtensionAction } from "./extension-actions";
 
 interface Activity {
@@ -23,6 +24,9 @@ interface Activity {
   delayReason: string | null; delayNotes: string | null;
   groupId: string; groupName: string; phaseName: string | null;
   pendingExtension: boolean;
+  predecessors: Array<{
+    id: string; predecessorId: string; type: string; lagDays: number; code: string; name: string;
+  }>;
 }
 
 interface Extension {
@@ -59,6 +63,7 @@ export function ScheduleScreen({
   const [updating, setUpdating] = React.useState<Activity | null>(null);
   const [extending, setExtending] = React.useState<Activity | null>(null);
   const [deciding, setDeciding] = React.useState<Extension | null>(null);
+  const [linking, setLinking] = React.useState<Activity | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -127,14 +132,7 @@ export function ScheduleScreen({
     router.refresh();
   }
 
-  async function toggleCritical(a: Activity) {
-    setBusy(a.id);
-    setError(null);
-    const res = await setCriticalPathAction(a.id, !a.isCriticalPath);
-    setBusy(null);
-    if (!res.ok) setError(res.error);
-    else router.refresh();
-  }
+
 
   function slipDays(a: Activity): number {
     if (!a.baselineEnd) return 0;
@@ -321,8 +319,11 @@ export function ScheduleScreen({
                                 </Button>
                               )}
                               {can.manageDependencies && (
-                                <Button size="xs" variant="plain" loading={busy === a.id} onClick={() => toggleCritical(a)}>
-                                  <Zap className={cn("h-3 w-3", a.isCriticalPath && "fill-warn-700 text-warn-700")} />
+                                <Button size="xs" variant="plain" title="Dependencies" onClick={() => setLinking(a)}>
+                                  <Link2 className="h-3 w-3" />
+                                  {a.predecessors.length > 0 && (
+                                    <span className="num text-[10px] font-bold">{a.predecessors.length}</span>
+                                  )}
                                 </Button>
                               )}
                             </div>
@@ -441,6 +442,14 @@ export function ScheduleScreen({
           activity={extending}
           onClose={() => setExtending(null)}
           onDone={(m) => { setExtending(null); setNotice(m); router.refresh(); }}
+        />
+      )}
+      {linking && (
+        <DependencyModal
+          activity={linking}
+          candidates={activities.filter((x) => x.id !== linking.id)}
+          onClose={() => setLinking(null)}
+          onDone={(m) => { setLinking(null); setNotice(m); router.refresh(); }}
         />
       )}
       {deciding && (
@@ -872,5 +881,123 @@ function ScheduleReports({
         </div>
       )}
     </div>
+  );
+}
+
+/* ------------------------------ Dependencies ------------------------------ */
+
+/**
+ * What an activity waits on. Adding a link reschedules the project straight
+ * away, so the message says what moved rather than leaving it to be noticed.
+ */
+function DependencyModal({
+  activity, candidates, onClose, onDone,
+}: {
+  activity: Activity;
+  candidates: Activity[];
+  onClose: () => void;
+  onDone: (m: string) => void;
+}) {
+  const [predecessorId, setPredecessorId] = React.useState("");
+  const [type, setType] = React.useState<LinkType>("FS");
+  const [lag, setLag] = React.useState("0");
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const linked = new Set(activity.predecessors.map((p) => p.predecessorId));
+  const options = candidates.filter((c) => !linked.has(c.id));
+  const moved = (n: number) => (n > 0 ? ` ${n} downstream activit${n === 1 ? "y" : "ies"} moved.` : "");
+
+  async function add() {
+    setBusy("add");
+    setError(null);
+    const res = await addDependencyAction(activity.id, predecessorId, type, Number(lag));
+    setBusy(null);
+    if (!res.ok) { setError(res.error); return; }
+    const chosen = options.find((o) => o.id === predecessorId);
+    onDone(`${activity.code} now waits on ${chosen?.code ?? "that activity"}.${moved(res.data.shifted)}`);
+  }
+
+  async function remove(dependencyId: string, code: string) {
+    setBusy(dependencyId);
+    setError(null);
+    const res = await removeDependencyAction(dependencyId);
+    setBusy(null);
+    if (!res.ok) { setError(res.error); return; }
+    onDone(`${activity.code} no longer waits on ${code}.`);
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Dependencies · ${activity.code}`}
+      description="What this activity waits on. When any of them slips, this moves — and so does everything after it."
+      size="md"
+    >
+      {error && <Alert tone="error">{error}</Alert>}
+
+      <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">Waits on</p>
+      {activity.predecessors.length === 0 ? (
+        <p className="mb-4 text-[12.5px] font-medium text-muted-500">
+          Nothing — this activity starts on its own planned date.
+        </p>
+      ) : (
+        <ul className="mb-4 space-y-1.5">
+          {activity.predecessors.map((p) => (
+            <li key={p.id} className="flex items-center gap-2 rounded-[9px] border border-line-300 px-3 py-2">
+              <span className="num shrink-0 text-[11px] font-bold text-muted-500">{p.code}</span>
+              <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-navy-900">{p.name}</span>
+              <Badge tone="slate">
+                {LINK_LABEL[p.type as LinkType] ?? p.type}
+                {p.lagDays ? ` · ${p.lagDays > 0 ? "+" : ""}${p.lagDays}d` : ""}
+              </Badge>
+              <button
+                type="button"
+                title="Remove link"
+                disabled={busy !== null}
+                onClick={() => remove(p.id, p.code)}
+                className="grid h-[24px] w-[24px] shrink-0 place-items-center rounded-[7px] text-muted-400 transition-colors hover:bg-bad-050 hover:text-bad-600 disabled:opacity-40"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">Add a link</p>
+      {options.length === 0 ? (
+        <p className="text-[12.5px] font-medium text-muted-500">
+          Every other activity in this project is already linked.
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_160px_96px]">
+          <Field label="Waits on">
+            <Select value={predecessorId} onChange={(e) => setPredecessorId(e.target.value)}>
+              <option value="">Choose an activity…</option>
+              {options.map((c) => (
+                <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Link">
+            <Select value={type} onChange={(e) => setType(e.target.value as LinkType)}>
+              {LINK_TYPES.map((t) => <option key={t} value={t}>{LINK_LABEL[t]}</option>)}
+            </Select>
+          </Field>
+          <Field label="Lag (days)">
+            <Input type="number" step={1} value={lag} onChange={(e) => setLag(e.target.value)} />
+          </Field>
+        </div>
+      )}
+
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>Close</Button>
+        <Button onClick={add} loading={busy === "add"} disabled={!predecessorId || busy !== null}>
+          Add link
+        </Button>
+      </div>
+    </Modal>
   );
 }
