@@ -208,6 +208,8 @@ model User {
   kbArticles         KbArticle[]
   kbAttachments      KbAttachment[]
   grnsInspected      Grn[]               @relation("GrnInspector")
+  settingsUpdated    AppSetting[]        @relation("SettingUpdatedBy")
+  notifications      Notification[]      @relation("NotificationRecipient")
   scheduleTemplates  ScheduleTemplate[]
   posApprovedAsPm    PurchaseOrder[]     @relation("PoPmApprover")
   posApprovedAsAdmin PurchaseOrder[]     @relation("PoAdminApprover")
@@ -1038,6 +1040,40 @@ model ScheduleActivity {
 /// A proven schedule captured once and laid onto a new project. Stored as a
 /// shape — offsets from the first start, durations, and links by code — rather
 /// than as dates, so it can start on any date. Validated again on every apply.
+/// Organisation-wide settings, one row per key. The value is JSON, validated
+/// by the code that reads it, which also supplies the default — so a missing
+/// row means "use the default", never an error.
+model AppSetting {
+  key         String   @id
+  value       Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  updatedBy User? @relation("SettingUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("app_settings")
+}
+
+/// Something one person needs to act on, addressed to them. Personal: a user
+/// only ever sees their own.
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  kind      String
+  title     String
+  body      String?
+  href      String?
+  entity    String?
+  entityId  String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
 model ScheduleTemplate {
   id            String   @id @default(cuid())
   name          String   @unique
@@ -1641,6 +1677,9 @@ model Lead {
   assignedAt        DateTime?
   /// First response time in minutes — measured, not assumed.
   firstResponseMins Int?
+  /// When this lead's overdue follow-up was escalated. Cleared when a follow-up
+  /// is logged, so the next lapse can escalate again — but one lapse only once.
+  escalatedAt       DateTime?
   nextActionAt      DateTime?
   lostReasonId      String?
   lostNotes         String?

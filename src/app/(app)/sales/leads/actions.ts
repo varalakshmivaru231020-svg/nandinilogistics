@@ -8,6 +8,8 @@ import { authorize, runAction, PermissionError, type ActionResult } from "@/lib/
 import { recordAudit } from "@/lib/audit";
 import { nextDocumentNumber } from "@/lib/numbering";
 import { PERM } from "@/lib/permissions/codes";
+import { getSetting } from "@/lib/settings";
+import { chooseLeadOwner, recordFirstResponse } from "@/lib/sales/lead-service";
 
 const LeadSchema = z.object({
   name: z.string().trim().min(2, "Name is required"),
@@ -36,6 +38,11 @@ export async function createLeadAction(formData: FormData): Promise<ActionResult
       select: { id: true, name: true },
     });
 
+    // The organisation's assignment rule decides who owns the lead: manual keeps
+    // it with whoever captured it; round-robin and project-wise hand it on.
+    const { mode } = await getSetting(prisma, "sales.leadAssignment");
+    const owner = await chooseLeadOwner(prisma, mode, v.projectId || null, ctx.id);
+
     const lead = await prisma.$transaction(async (tx) => {
       const leadNo = await nextDocumentNumber(tx, "LEAD", v.projectId || null);
       return tx.lead.create({
@@ -47,7 +54,7 @@ export async function createLeadAction(formData: FormData): Promise<ActionResult
           email: v.email || null,
           sourceId: v.sourceId,
           projectId: v.projectId || null,
-          ownerId: ctx.id,
+          ownerId: owner.ownerId,
           assignedAt: new Date(),
           requirement: v.requirement || null,
           budgetMin: v.budgetMin ?? null,
@@ -61,7 +68,9 @@ export async function createLeadAction(formData: FormData): Promise<ActionResult
 
     await recordAudit({
       action: "CREATE", entity: "Lead", entityId: lead.id, userId: ctx.id,
-      summary: `Captured lead ${lead.leadNo} — ${lead.name}${existing ? ` (possible duplicate of ${existing.name})` : ""}`,
+      summary:
+        `Captured lead ${lead.leadNo} — ${lead.name}${existing ? ` (possible duplicate of ${existing.name})` : ""}` +
+        (owner.auto ? ` — assigned automatically (${mode.toLowerCase().replace("_", "-")})` : ""),
     });
 
     revalidatePath("/sales/leads");
@@ -99,6 +108,8 @@ export async function changeLeadStageAction(
         lostNotes: state === "LOST" ? (notes || null) : null,
       },
     });
+    // Touching the lead at all is a response; only the first one is timed.
+    await recordFirstResponse(prisma, id, new Date());
 
     await recordAudit({
       action: "UPDATE", entity: "Lead", entityId: id, userId: ctx.id,
@@ -165,9 +176,12 @@ export async function logFollowUpAction(
       }),
       prisma.lead.update({
         where: { id: leadId },
-        data: { nextActionAt: nextActionAt ? new Date(nextActionAt) : null },
+        // A new next action is a new lapse: clearing escalatedAt lets it escalate
+        // again if this one is missed too.
+        data: { nextActionAt: nextActionAt ? new Date(nextActionAt) : null, escalatedAt: null },
       }),
     ]);
+    await recordFirstResponse(prisma, leadId, new Date());
 
     await recordAudit({
       action: "CREATE", entity: "LeadFollowUp", entityId: leadId, userId: ctx.id,

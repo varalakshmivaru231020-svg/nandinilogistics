@@ -3,7 +3,7 @@
  * Source: src/lib/permissions/registry.ts
  * Regenerate: pnpm perms:codegen
  *
- * 514 permission codes.
+ * 516 permission codes.
  */
 
 export const PERM = {
@@ -264,12 +264,14 @@ export const PERM = {
       "note": "sales.lead.note",
       "uploadFile": "sales.lead.uploadFile",
       "sendMail": "sales.lead.sendMail",
+      "receiveAssignment": "sales.lead.receiveAssignment",
     },
     "followUp": {
       "view": "sales.followUp.view",
       "create": "sales.followUp.create",
       "update": "sales.followUp.update",
       "delete": "sales.followUp.delete",
+      "receiveEscalation": "sales.followUp.receiveEscalation",
     },
     "siteVisit": {
       "view": "sales.siteVisit.view",

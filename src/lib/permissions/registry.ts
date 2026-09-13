@@ -392,6 +392,12 @@ crud({
 
 crud({ module: "sales", resource: "followUp", entity: "follow-up", group: G_SALES_LEAD, exportable: false });
 
+// Duties rather than access: who is handed new leads, and who is told when a
+// follow-up lapses. Resolved without the super-admin bypass, so administering
+// the system never quietly makes someone the recipient of the work.
+perm("sales", "lead", "receiveAssignment", "Receive auto-assigned leads", G_SALES_LEAD, "ACTION", "In round-robin or project-wise mode, new leads are shared among everyone holding this.");
+perm("sales", "followUp", "receiveEscalation", "Receive overdue follow-up escalations", G_SALES_LEAD, "ACTION", "Notified when a lead's follow-up stays overdue past the grace period.");
+
 crud({
   module: "sales",
   resource: "siteVisit",

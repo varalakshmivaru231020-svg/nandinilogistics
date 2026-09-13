@@ -1,3 +1,4 @@
+import { formatResponse, median } from "@/lib/sales/assignment";
 import "server-only";
 
 import { prisma } from "@/lib/db";
@@ -521,14 +522,18 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
       const leads = await prisma.lead.findMany({
         include: { source: { select: { name: true } }, owner: { select: { name: true } } },
       });
+      const allResponses = leads
+        .map((l) => l.firstResponseMins)
+        .filter((m): m is number => m !== null);
 
-      const bySource = new Map<string, { total: number; booked: number; lost: number }>();
+      const bySource = new Map<string, { total: number; booked: number; lost: number; responses: number[] }>();
       for (const l of leads) {
         const key = l.source.name;
-        const cur = bySource.get(key) ?? { total: 0, booked: 0, lost: 0 };
+        const cur = bySource.get(key) ?? { total: 0, booked: 0, lost: 0, responses: [] };
         cur.total += 1;
         if (l.state === "BOOKED") cur.booked += 1;
         if (l.state === "LOST") cur.lost += 1;
+        if (l.firstResponseMins !== null) cur.responses.push(l.firstResponseMins);
         bySource.set(key, cur);
       }
 
@@ -540,6 +545,8 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
           lost: v.lost,
           open: v.total - v.booked - v.lost,
           conversion: v.total > 0 ? Math.round((v.booked / v.total) * 100) : 0,
+          // The median: one lead that sat over a weekend should not speak for the rest.
+          response: formatResponse(median(v.responses)),
         }))
         .sort((a, b) => b.leads - a.leads);
 
@@ -551,6 +558,7 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
           { key: "booked", header: "Booked", align: "right", format: "number" },
           { key: "lost", header: "Lost", align: "right", format: "number" },
           { key: "conversion", header: "Conversion", align: "right", format: "percent" },
+          { key: "response", header: "Median first response", align: "right" },
         ],
         rows,
         summary: [
@@ -559,6 +567,11 @@ export async function runReport(key: string, ctx: AuthContext): Promise<ReportRe
             label: "Best converting",
             value: rows.length ? [...rows].sort((a, b) => b.conversion - a.conversion)[0].source : "—",
             tone: "good",
+          },
+          {
+            label: "Median first response",
+            value: formatResponse(median(allResponses)),
+            tone: "default",
           },
         ],
         emptyMessage: "No leads captured yet.",

@@ -151,6 +151,7 @@ export const NAVIGATION: NavSection[] = [
       { label: "Roles & Permissions", href: "/admin/roles", icon: "ShieldCheck", permission: PERM.admin.role.view },
       { label: "Permission Catalogue", href: "/admin/permissions", icon: "KeyRound", permission: PERM.admin.permission.view },
       { label: "Approval Limits", href: "/admin/approval-limits", icon: "SlidersHorizontal", permission: PERM.admin.approvalLimit.view },
+      { label: "Settings", href: "/admin/settings", icon: "Settings2", permission: PERM.admin.settings.view },
       { label: "Audit Trail", href: "/admin/audit", icon: "ScrollText", permission: PERM.admin.audit.view },
       { label: "Sessions", href: "/admin/sessions", icon: "MonitorSmartphone", permission: PERM.admin.session.view },
     ],

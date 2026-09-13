@@ -9,6 +9,7 @@ import { Badge, Card, Field, Input } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { cn, formatDate, money } from "@/lib/utils";
+import { formatResponse } from "@/lib/sales/assignment";
 import { addLeadNoteAction, blockUnitForLeadAction, releaseUnitForLeadAction } from "../actions";
 import { logFollowUpAction } from "../actions";
 
@@ -17,6 +18,7 @@ import { logFollowUpAction } from "../actions";
 interface Lead {
   id: string; leadNo: string; name: string; phone: string; email: string | null;
   sourceName: string; projectName: string | null; ownerName: string | null;
+  firstResponseMins: number | null;
   state: string; requirement: string | null;
   budgetMin: number | null; budgetMax: number | null;
   nextActionAt: string | null; lostReason: string | null; lostNotes: string | null;
@@ -96,6 +98,8 @@ export function LeadDetail({
     ["Source", lead.sourceName],
     ["Project", lead.projectName ?? "—"],
     ["Owner", lead.ownerName ?? "Unassigned"],
+    // Measured, not assumed: from assignment to the first follow-up or stage change.
+    ["First response", lead.firstResponseMins === null ? "Awaiting first response" : formatResponse(lead.firstResponseMins)],
     ["Requirement", lead.requirement || "—"],
     ["Budget", lead.budgetMin || lead.budgetMax
       ? `${money(lead.budgetMin ?? 0)} – ${money(lead.budgetMax ?? 0)}`

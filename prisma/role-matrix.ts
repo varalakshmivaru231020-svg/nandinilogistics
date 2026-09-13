@@ -63,6 +63,9 @@ export const ROLES: RoleSeed[] = [
     description: "Sees everything, approves what matters, owns masters and users.",
     level: 10,
     grant: ["*"],
+    // Duties, not access: the owner can open everything, but should not be
+    // handed a share of every new lead or every lapsed follow-up.
+    deny: ["sales.lead.receiveAssignment", "sales.followUp.receiveEscalation"],
   },
   {
     code: "PROJECT_MANAGER",
@@ -234,7 +237,9 @@ export const ROLES: RoleSeed[] = [
       "reports.unitAvailability.*",
       "reports.bookingRegister.*",
     ],
-    deny: ["unit.unit.delete", "sales.customer.delete"],
+    // The head supervises the pipeline and receives escalations; new leads go
+    // to the executives, not into the head's own queue.
+    deny: ["unit.unit.delete", "sales.customer.delete", "sales.lead.receiveAssignment"],
   },
   {
     code: "SALES",
@@ -246,6 +251,7 @@ export const ROLES: RoleSeed[] = [
       "dashboard.sales.view",
       "sales.lead.view",
       "sales.lead.create",
+      "sales.lead.receiveAssignment",
       "sales.lead.update",
       "sales.lead.changeStage",
       "sales.lead.markLost",
@@ -284,7 +290,9 @@ export const ROLES: RoleSeed[] = [
       "reports.unitAvailability.view",
       "reports.salesFunnel.view",
     ],
-    deny: ["sales.costSheet.approveDiscount", "sales.booking.cancel"],
+    // sales.followUp.* above would otherwise include the escalation duty, and an
+    // executive should not be the one told that their own follow-up has lapsed.
+    deny: ["sales.costSheet.approveDiscount", "sales.booking.cancel", "sales.followUp.receiveEscalation"],
   },
 ];
 

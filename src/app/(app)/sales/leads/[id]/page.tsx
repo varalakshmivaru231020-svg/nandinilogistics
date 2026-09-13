@@ -116,6 +116,7 @@ export default async function LeadDetailPage({
         sourceName: lead.source.name,
         projectName: lead.project?.name ?? null,
         ownerName: lead.owner?.name ?? null,
+        firstResponseMins: lead.firstResponseMins,
         state: lead.state,
         requirement: lead.requirement,
         budgetMin: lead.budgetMin ? Number(lead.budgetMin) : null,

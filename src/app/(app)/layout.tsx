@@ -4,6 +4,7 @@ import { PERM } from "@/lib/permissions/codes";
 import { PermissionProvider } from "@/components/rbac/permission-provider";
 import { AppShell } from "@/components/shell/app-shell";
 import { projectScopeFilter } from "@/lib/rbac/context";
+import { escalateOverdueFollowUps } from "@/lib/sales/lead-service";
 
 /**
  * Every screen below this layout is authenticated. The permission set is
@@ -16,6 +17,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Sidebar counters — each is computed only when the user can see that screen.
   const scope = projectScopeFilter(ctx);
   const badges: Record<string, number> = {};
+
+  // Overdue follow-ups escalate on their own. There is no scheduler, so the
+  // sweep runs whenever a signed-in page renders — the same approach expired
+  // unit holds use. Each lapse is claimed before anyone is notified, so
+  // concurrent renders cannot notify twice, and a failure here must never take
+  // the whole shell down with it.
+  try {
+    await escalateOverdueFollowUps(prisma, new Date());
+  } catch (error) {
+    console.error("Follow-up escalation sweep failed", error);
+  }
+
+  badges.notifications = await prisma.notification.count({
+    where: { userId: ctx.id, readAt: null },
+  });
 
   if (ctx.has(PERM.material.indent.view)) {
     const waitingOnMe: string[] = [];

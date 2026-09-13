@@ -29,7 +29,7 @@ export function AppShell({
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-surface-page">
           <Topbar
             onOpenMobile={() => setMobileOpen(true)}
-            pendingCount={badges?.indentPending ?? 0}
+            notificationCount={badges?.notifications ?? 0}
           />
           <main data-app-scroll className="flex-1 overflow-y-auto px-[26px] pb-10 pt-6">
             {children}

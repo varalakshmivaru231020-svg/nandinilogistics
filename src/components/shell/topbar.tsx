@@ -35,6 +35,8 @@ const SCREEN_TITLES: Array<[href: string, title: string]> = [
   ["/hr", "Users & Attendance"],
   ["/kb", "Knowledge Base"],
   ["/masters", "Masters & Users"],
+  ["/notifications", "Notifications"],
+  ["/admin/settings", "Settings"],
 ];
 
 /** The screen title the design shows at the head of the bar. */
@@ -67,10 +69,10 @@ function useScreenTitle(): string {
 
 export function Topbar({
   onOpenMobile,
-  pendingCount = 0,
+  notificationCount = 0,
 }: {
   onOpenMobile: () => void;
-  pendingCount?: number;
+  notificationCount?: number;
 }) {
   const perms = usePermissions();
   const title = useScreenTitle();
@@ -130,14 +132,14 @@ export function Topbar({
 
       {/* Notifications */}
       <Link
-        href="/dashboard"
+        href="/notifications"
         className="relative grid h-9 w-9 place-items-center rounded-[9px] border border-line-400 bg-surface-field text-navy-600 hover:bg-surface-hover"
         aria-label="Notifications"
       >
         <Bell className="h-4 w-4" />
-        {pendingCount > 0 && (
+        {notificationCount > 0 && (
           <span className="num absolute -right-1 -top-1 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-bad-600 px-1 text-[9.5px] font-bold text-white">
-            {pendingCount > 99 ? "99+" : pendingCount}
+            {notificationCount > 99 ? "99+" : notificationCount}
           </span>
         )}
       </Link>
