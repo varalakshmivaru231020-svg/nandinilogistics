@@ -1,6 +1,10 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { onTimeStats, readVendorListParams, toSearchParams, vendorListWhere } from "@/lib/material/list-filters";
+import { categoryOptions } from "@/lib/material/list-options";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 
@@ -11,35 +15,44 @@ export const metadata = { title: "Vendors" };
  * are tracked from goods-receipt history, so neither is a field somebody types:
  * on-time is computed here from receipts against each order's expected date.
  */
-export default async function VendorsPage() {
+export default async function VendorsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.material.vendor.view);
   const showPerformance = ctx.has(PERM.material.vendor.viewPerformance);
+  const raw = await searchParams;
+  const params = readVendorListParams(raw);
+  const query = toSearchParams(raw);
+  const filtered = Boolean(params.q || params.status || params.category);
 
-  const vendors = await prisma.vendor.findMany({
-    orderBy: [{ status: "asc" }, { name: "asc" }],
-    include: {
-      categories: { include: { category: { select: { name: true } } } },
-      purchaseOrders: {
-        select: {
-          expectedDate: true,
-          grns: { where: { status: "POSTED" }, select: { grnDate: true }, orderBy: { grnDate: "asc" }, take: 1 },
+  const [vendors, categories] = await Promise.all([
+    prisma.vendor.findMany({
+      // Shared with the export, so a download holds exactly what this screen shows.
+      where: vendorListWhere(params),
+      orderBy: [{ status: "asc" }, { name: "asc" }],
+      include: {
+        categories: { include: { category: { select: { name: true } } } },
+        purchaseOrders: {
+          select: {
+            expectedDate: true,
+            grns: { where: { status: "POSTED" }, select: { grnDate: true }, orderBy: { grnDate: "asc" }, take: 1 },
+          },
         },
       },
-    },
-  });
+    }),
+    categoryOptions(),
+  ]);
 
   const active = vendors.filter((v) => v.status === "ACTIVE").length;
 
-  const rows = vendors.map((v) => {
-    // A delivery counts only where both a promise and a posted receipt exist.
-    const judged = v.purchaseOrders.filter((p) => p.expectedDate && p.grns.length > 0);
-    const onTime = judged.filter((p) => p.grns[0].grnDate <= p.expectedDate!).length;
-    return {
-      ...v,
-      deliveries: judged.length,
-      onTimePct: judged.length ? Math.round((onTime / judged.length) * 100) : null,
-    };
-  });
+  const rows = vendors.map((v) => ({
+    ...v,
+    ...onTimeStats(
+      v.purchaseOrders.map((p) => ({ expectedDate: p.expectedDate, firstPostedGrnDate: p.grns[0]?.grnDate ?? null })),
+    ),
+  }));
 
   return (
     <div className="mx-auto max-w-[1400px]">
@@ -48,10 +61,34 @@ export default async function VendorsPage() {
         description={`${vendors.length} vendor${vendors.length === 1 ? "" : "s"} · ${active} active · rating and on-time delivery are tracked from goods-receipt history`}
       />
 
+      <ListToolbar
+        searchPlaceholder="Search name, code, contact, GSTIN…"
+        filters={[
+          {
+            name: "status",
+            label: "Status",
+            allLabel: "All statuses",
+            options: [
+              { value: "ACTIVE", label: "Active" },
+              { value: "INACTIVE", label: "Inactive" },
+            ],
+          },
+          { name: "category", label: "Categories", options: categories },
+        ]}
+        count={vendors.length}
+      >
+        {ctx.has(PERM.masters.vendor.export) && (
+          <ExportMenu
+            href={(format) => exportHref("/api/material/vendors/export", format, query)}
+            disabled={vendors.length === 0}
+          />
+        )}
+      </ListToolbar>
+
       {rows.length === 0 ? (
         <Card>
           <EmptyState
-            title="No vendors yet"
+            title={filtered ? "No vendors match these filters" : "No vendors yet"}
             description="Vendors are created under Masters → Vendors; their performance appears here."
           />
         </Card>

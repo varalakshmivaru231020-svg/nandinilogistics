@@ -1,16 +1,34 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import {
+  enumOptions, readTransferListParams, toSearchParams, TRANSFER_STATUSES, transferListWhere,
+} from "@/lib/material/list-filters";
+import { storeOptions } from "@/lib/material/list-options";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { PageHeader } from "@/components/ui/primitives";
 import { TransfersScreen } from "./transfers-screen";
 
 export const metadata = { title: "Store Transfers" };
 
-export default async function TransfersPage() {
+export default async function TransfersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.material.transfer.view);
+  const raw = await searchParams;
+  const params = readTransferListParams(raw);
+  const query = toSearchParams(raw);
+  const filtered = Boolean(
+    params.q || params.status || params.fromStore || params.toStore || params.from || params.to,
+  );
 
-  const [transfers, stores, stock] = await Promise.all([
+  const [transfers, stores, allStores, stock] = await Promise.all([
     prisma.stockTransfer.findMany({
+      // Shared with the export, so a download holds exactly what this screen shows.
+      where: transferListWhere(params),
       orderBy: { transferDate: "desc" },
       take: 100,
       include: {
@@ -24,6 +42,7 @@ export default async function TransfersPage() {
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    storeOptions(),
     prisma.stockBalance.findMany({
       where: { quantity: { gt: 0 } },
       include: { item: { select: { id: true, code: true, name: true, uom: { select: { code: true } } } } },
@@ -37,7 +56,26 @@ export default async function TransfersPage() {
         description="Inter-store movement, approved before stock leaves and confirmed on arrival — so nothing goes missing in transit."
       />
 
+      <ListToolbar
+        searchPlaceholder="Search transfer, store, item, remarks…"
+        filters={[
+          { name: "status", label: "Status", allLabel: "All statuses", options: enumOptions(TRANSFER_STATUSES) },
+          { name: "fromStore", label: "From store", allLabel: "From any store", options: allStores },
+          { name: "toStore", label: "To store", allLabel: "To any store", options: allStores },
+        ]}
+        dateRange={{ label: "Transferred" }}
+        count={transfers.length}
+      >
+        {ctx.has(PERM.material.transfer.export) && (
+          <ExportMenu
+            href={(format) => exportHref("/api/material/transfers/export", format, query)}
+            disabled={transfers.length === 0}
+          />
+        )}
+      </ListToolbar>
+
       <TransfersScreen
+        filtered={filtered}
         transfers={transfers.map((t) => ({
           id: t.id,
           transferNo: t.transferNo,

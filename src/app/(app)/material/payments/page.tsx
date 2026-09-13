@@ -2,9 +2,14 @@ import Link from "next/link";
 import { Banknote } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
-import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import {
+  enumOptions, PAYMENT_MODES, paymentListWhere, readPaymentListParams, toSearchParams,
+} from "@/lib/material/list-filters";
+import { projectOptions } from "@/lib/material/list-options";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatDate, money } from "@/lib/utils";
@@ -17,17 +22,29 @@ type Row = {
   invoice: { id: string; invoiceNo: string; vendor: { name: string } };
 };
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.material.vendorPayment.view);
+  const raw = await searchParams;
+  const params = readPaymentListParams(raw);
+  const query = toSearchParams(raw);
+  const filtered = Boolean(params.q || params.mode || params.project || params.from || params.to);
 
-  const payments = await prisma.vendorPayment.findMany({
-    where: { invoice: { purchaseOrder: projectScopeFilter(ctx) } },
-    orderBy: { paymentDate: "desc" },
-    take: 100,
-    include: {
-      invoice: { select: { id: true, invoiceNo: true, vendor: { select: { name: true } } } },
-    },
-  });
+  const [payments, projects] = await Promise.all([
+    prisma.vendorPayment.findMany({
+      // Shared with the export, so a download holds exactly what this screen shows.
+      where: paymentListWhere(ctx, params),
+      orderBy: { paymentDate: "desc" },
+      take: 100,
+      include: {
+        invoice: { select: { id: true, invoiceNo: true, vendor: { select: { name: true } } } },
+      },
+    }),
+    projectOptions(ctx),
+  ]);
 
   const total = payments.reduce((s, p) => s + Number(p.amount), 0);
 
@@ -65,11 +82,28 @@ export default async function PaymentsPage() {
         actions={<Badge tone="slate">{money(total)} paid</Badge>}
       />
 
+      <ListToolbar
+        searchPlaceholder="Search payment, invoice, vendor or reference…"
+        filters={[
+          { name: "mode", label: "Modes", options: enumOptions(PAYMENT_MODES) },
+          { name: "project", label: "Projects", options: projects },
+        ]}
+        dateRange={{ label: "Paid on" }}
+        count={payments.length}
+      >
+        {ctx.has(PERM.material.vendorPayment.export) && (
+          <ExportMenu
+            href={(format) => exportHref("/api/material/payments/export", format, query)}
+            disabled={payments.length === 0}
+          />
+        )}
+      </ListToolbar>
+
       {payments.length === 0 ? (
         <Card>
           <EmptyState
             icon={<Banknote className="h-8 w-8" />}
-            title="No payments yet"
+            title={filtered ? "No payments match these filters" : "No payments yet"}
             description="Payments are recorded from the invoice, once it is approved."
           />
         </Card>

@@ -2,6 +2,10 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { readStockListParams, stockListWhere, stockState, toSearchParams } from "@/lib/material/list-filters";
+import { categoryOptions, storeOptions } from "@/lib/material/list-options";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { cn, money, moneyShort, qty } from "@/lib/utils";
@@ -17,23 +21,37 @@ type StockRow = {
   store: { code: string; name: string };
 };
 
-export default async function StockPage() {
+export default async function StockPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.material.stock.view);
   const showValuation = ctx.has(PERM.material.stock.viewValuation);
+  const raw = await searchParams;
+  const params = readStockListParams(raw);
+  const query = toSearchParams(raw);
+  const filtered = Boolean(params.q || params.store || params.category);
 
-  const balances = await prisma.stockBalance.findMany({
-    orderBy: [{ store: { name: "asc" } }, { item: { name: "asc" } }],
-    include: {
-      item: {
-        select: {
-          code: true, name: true, reorderLevel: true,
-          uom: { select: { code: true } },
-          category: { select: { name: true } },
+  const [balances, stores, categories] = await Promise.all([
+    prisma.stockBalance.findMany({
+      // Shared with the export, so a download holds exactly what this screen shows.
+      where: stockListWhere(params),
+      orderBy: [{ store: { name: "asc" } }, { item: { name: "asc" } }],
+      include: {
+        item: {
+          select: {
+            code: true, name: true, reorderLevel: true,
+            uom: { select: { code: true } },
+            category: { select: { name: true } },
+          },
         },
+        store: { select: { code: true, name: true } },
       },
-      store: { select: { code: true, name: true } },
-    },
-  });
+    }),
+    storeOptions(),
+    categoryOptions(),
+  ]);
 
   const totalValue = balances.reduce((s, b) => s + Number(b.value), 0);
   // Strictly below the level, matching the design's "Restock now" band.
@@ -42,20 +60,6 @@ export default async function StockPage() {
   );
   const belowReorder = lowRows.length;
   const canRaisePo = ctx.has(PERM.material.purchaseOrder.create);
-
-  /**
-   * The design's three stock states, with its own 25% buffer band above the
-   * reorder level — so "order soon" arrives before the shortfall does, rather
-   * than at the moment it is already too late.
-   */
-  function stockState(onHand: number, reorder: number) {
-    if (reorder <= 0) return { label: "—", tone: "muted" as const, short: 0 };
-    if (onHand < reorder) {
-      return { label: "Restock now", tone: "bad" as const, short: reorder - onHand };
-    }
-    if (onHand < reorder * 1.25) return { label: "Order soon", tone: "warn" as const, short: 0 };
-    return { label: "Healthy", tone: "good" as const, short: 0 };
-  }
 
   const columns: Column<StockRow>[] = [
     {
@@ -189,9 +193,28 @@ export default async function StockPage() {
         </div>
       )}
 
+      <ListToolbar
+        searchPlaceholder="Search item code or name…"
+        filters={[
+          { name: "store", label: "Stores", options: stores },
+          { name: "category", label: "Categories", options: categories },
+        ]}
+        count={balances.length}
+      >
+        {ctx.has(PERM.material.stock.export) && (
+          <ExportMenu
+            href={(format) => exportHref("/api/material/stock/export", format, query)}
+            disabled={balances.length === 0}
+          />
+        )}
+      </ListToolbar>
+
       {balances.length === 0 ? (
         <Card>
-          <EmptyState title="No stock recorded yet" description="Stock enters the ledger when a goods receipt is posted." />
+          <EmptyState
+            title={filtered ? "No stock matches these filters" : "No stock recorded yet"}
+            description="Stock enters the ledger when a goods receipt is posted."
+          />
         </Card>
       ) : (
         <DataTable columns={columns} rows={balances} rowKey={(b) => b.id} dense />

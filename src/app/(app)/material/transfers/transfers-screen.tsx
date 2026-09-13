@@ -28,8 +28,10 @@ const STATUS_TONE: Record<string, "slate" | "warn" | "good" | "bad"> = {
 };
 
 export function TransfersScreen({
-  transfers, stores, stock, can,
+  transfers, stores, stock, can, filtered = false,
 }: {
+  /** Whether search or filters are narrowing the list — changes the empty message. */
+  filtered?: boolean;
   transfers: Transfer[];
   stores: Array<{ id: string; name: string }>;
   stock: StockRow[];
@@ -69,7 +71,7 @@ export function TransfersScreen({
         <Card>
           <EmptyState
             icon={<Truck className="h-8 w-8" />}
-            title="No transfers yet"
+            title={filtered ? "No transfers match these filters" : "No transfers yet"}
             description="Move stock between a site store and the central store, with approval at one end and confirmation at the other."
           />
         </Card>

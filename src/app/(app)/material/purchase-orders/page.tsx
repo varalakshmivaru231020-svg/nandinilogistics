@@ -5,12 +5,17 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import {
+  enumOptions, pageHref, PO_STATUSES, poListWhere, readPoListParams, toSearchParams,
+} from "@/lib/material/list-filters";
+import { projectOptions } from "@/lib/material/list-options";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { poLookups } from "./lookups";
 import { NewPoDrawer } from "./new-po-drawer";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
 import { cn, formatDate, money } from "@/lib/utils";
-import { PoFilters } from "./po-filters";
 
 export const metadata = { title: "Purchase Orders" };
 
@@ -36,22 +41,22 @@ type PoRow = {
 export default async function PurchaseOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; page?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const ctx = await requirePermission(PERM.material.purchaseOrder.view);
   const canPrint = ctx.has(PERM.material.purchaseOrder.print);
 
   const lookups = ctx.has(PERM.material.purchaseOrder.create) ? await poLookups(ctx) : null;
-  const { q = "", status = "all", page: pageParam } = await searchParams;
-  const page = Math.max(1, Number(pageParam ?? 1) || 1);
+  const raw = await searchParams;
+  const params = readPoListParams(raw);
+  const query = toSearchParams(raw);
+  const filtered = Boolean(params.q || params.status || params.project || params.from || params.to);
+  const page = Math.max(1, Number(query.get("page") ?? 1) || 1);
 
-  const where = {
-    ...projectScopeFilter(ctx),
-    ...(q.trim() ? { poNo: { contains: q.trim(), mode: "insensitive" as const } } : {}),
-    ...(status !== "all" ? { status: status as never } : {}),
-  };
+  // Shared with the export, so a download holds exactly what this screen shows.
+  const where = poListWhere(ctx, params);
 
-  const [orders, total, pendingApproval] = await Promise.all([
+  const [orders, total, pendingApproval, projects] = await Promise.all([
     prisma.purchaseOrder.findMany({
       where,
       orderBy: { poDate: "desc" },
@@ -71,6 +76,7 @@ export default async function PurchaseOrdersPage({
     prisma.purchaseOrder.count({
       where: { ...projectScopeFilter(ctx), status: { in: ["PENDING_APPROVAL", "PENDING_PM_APPROVAL", "PENDING_ADMIN_APPROVAL"] } },
     }),
+    projectOptions(ctx),
   ]);
 
   const showRate = ctx.has(PERM.material.purchaseOrder.viewRate);
@@ -200,13 +206,28 @@ export default async function PurchaseOrdersPage({
       />
 
       <div className="space-y-3">
-        <PoFilters q={q} status={status} />
+        <ListToolbar
+          className="mb-0"
+          searchPlaceholder="Search PO number or vendor…"
+          filters={[
+            { name: "status", label: "Status", allLabel: "All statuses", options: enumOptions(PO_STATUSES) },
+            { name: "project", label: "Projects", options: projects },
+          ]}
+          dateRange={{ label: "PO date" }}
+        >
+          {ctx.has(PERM.material.purchaseOrder.export) && (
+            <ExportMenu
+              href={(format) => exportHref("/api/material/purchase-orders/export", format, query)}
+              disabled={total === 0}
+            />
+          )}
+        </ListToolbar>
 
         {orders.length === 0 ? (
           <Card>
             <EmptyState
               icon={<FileText className="h-8 w-8" />}
-              title={q || status !== "all" ? "No purchase orders match" : "No purchase orders yet"}
+              title={filtered ? "No purchase orders match" : "No purchase orders yet"}
               description="A PO is raised from an approved indent, carrying only the shortfall left after the stock check."
             />
           </Card>
@@ -217,13 +238,7 @@ export default async function PurchaseOrdersPage({
               page={page}
               pageSize={PAGE_SIZE}
               total={total}
-              buildHref={(n) => {
-                const sp = new URLSearchParams();
-                if (q) sp.set("q", q);
-                if (status !== "all") sp.set("status", status);
-                sp.set("page", String(n));
-                return `?${sp.toString()}`;
-              }}
+              buildHref={(n) => pageHref(query, n)}
             />
           </>
         )}

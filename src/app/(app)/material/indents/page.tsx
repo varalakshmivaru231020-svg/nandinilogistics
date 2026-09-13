@@ -4,12 +4,17 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import {
+  enumOptions, INDENT_STATUSES, indentListWhere, pageHref, readIndentListParams, toSearchParams,
+} from "@/lib/material/list-filters";
+import { projectOptions } from "@/lib/material/list-options";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { indentLookups } from "./lookups";
 import { NewIndentDrawer } from "./new-indent-drawer";
 import { IndentCard } from "./indent-card";
 import { Pagination } from "@/components/ui/data-table";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { IndentFilters } from "./indent-filters";
 
 export const metadata = { title: "Requirement Indents" };
 
@@ -18,27 +23,26 @@ const PAGE_SIZE = 30;
 export default async function IndentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; page?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const ctx = await requirePermission(PERM.material.indent.view);
 
   // Only loaded for someone who can actually raise one — the drawer needs the
   // same options the full /new page offers.
   const lookups = ctx.has(PERM.material.indent.create) ? await indentLookups(ctx) : null;
-  const { q = "", status = "all", page: pageParam } = await searchParams;
-  const page = Math.max(1, Number(pageParam ?? 1) || 1);
+  const raw = await searchParams;
+  const params = readIndentListParams(raw);
+  const query = toSearchParams(raw);
+  const filtered = Boolean(params.q || params.status || params.project || params.from || params.to);
+  const page = Math.max(1, Number(query.get("page") ?? 1) || 1);
 
   // Without viewAll a user sees only the indents they raised.
   const ownership = ctx.has(PERM.material.indent.viewAll) ? {} : { raisedById: ctx.id };
 
-  const where = {
-    ...projectScopeFilter(ctx),
-    ...ownership,
-    ...(q.trim() ? { indentNo: { contains: q.trim(), mode: "insensitive" as const } } : {}),
-    ...(status !== "all" ? { status: status as never } : {}),
-  };
+  // Shared with the export, so a download holds exactly what this screen shows.
+  const where = indentListWhere(ctx, ownership, params);
 
-  const [indents, total, pendingCount] = await Promise.all([
+  const [indents, total, pendingCount, projects] = await Promise.all([
     prisma.indent.findMany({
       where,
       orderBy: { raisedAt: "desc" },
@@ -61,6 +65,7 @@ export default async function IndentsPage({
     prisma.indent.count({
       where: { ...projectScopeFilter(ctx), status: { in: ["SUBMITTED", "PM_APPROVED"] } },
     }),
+    projectOptions(ctx),
   ]);
 
   const showAgeing = ctx.has(PERM.material.indent.viewAgeing);
@@ -87,13 +92,28 @@ export default async function IndentsPage({
       />
 
       <div className="space-y-3">
-        <IndentFilters q={q} status={status} />
+        <ListToolbar
+          className="mb-0"
+          searchPlaceholder="Search indent number or purpose…"
+          filters={[
+            { name: "status", label: "Status", allLabel: "All statuses", options: enumOptions(INDENT_STATUSES) },
+            { name: "project", label: "Projects", options: projects },
+          ]}
+          dateRange={{ label: "Raised" }}
+        >
+          {ctx.has(PERM.material.indent.export) && (
+            <ExportMenu
+              href={(format) => exportHref("/api/material/indents/export", format, query)}
+              disabled={total === 0}
+            />
+          )}
+        </ListToolbar>
 
         {indents.length === 0 ? (
           <Card>
             <EmptyState
               icon={<ClipboardList className="h-8 w-8" />}
-              title={q || status !== "all" ? "No indents match these filters" : "No indents yet"}
+              title={filtered ? "No indents match these filters" : "No indents yet"}
               description={
                 ctx.has(PERM.material.indent.create)
                   ? "Raise one from site with the item, quantity and the activity it is for."
@@ -135,13 +155,7 @@ export default async function IndentsPage({
               page={page}
               pageSize={PAGE_SIZE}
               total={total}
-              buildHref={(p) => {
-                const sp = new URLSearchParams();
-                if (q) sp.set("q", q);
-                if (status !== "all") sp.set("status", status);
-                sp.set("page", String(p));
-                return `?${sp.toString()}`;
-              }}
+              buildHref={(p) => pageHref(query, p)}
             />
           </>
         )}
