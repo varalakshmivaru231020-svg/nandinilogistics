@@ -2,9 +2,14 @@ import Link from "next/link";
 import { ReceiptText } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
-import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import {
+  enumOptions, INVOICE_STATUSES, invoiceListWhere, readInvoiceListParams, toSearchParams,
+} from "@/lib/material/list-filters";
+import { projectOptions } from "@/lib/material/list-options";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { invoiceLookups } from "./lookups";
 import { NewInvoiceDrawer } from "./new-invoice-drawer";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
@@ -24,20 +29,32 @@ type Row = {
   vendor: { name: string }; purchaseOrder: { id: string; poNo: string };
 };
 
-export default async function InvoicesPage() {
+export default async function InvoicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.material.vendorInvoice.view);
+  const raw = await searchParams;
+  const params = readInvoiceListParams(raw);
+  const query = toSearchParams(raw);
+  const filtered = Boolean(params.q || params.status || params.project || params.from || params.to);
 
   const lookups = ctx.has(PERM.material.vendorInvoice.create) ? await invoiceLookups(ctx) : null;
 
-  const invoices = await prisma.vendorInvoice.findMany({
-    where: { purchaseOrder: projectScopeFilter(ctx) },
-    orderBy: { invoiceDate: "desc" },
-    take: 100,
-    include: {
-      vendor: { select: { name: true } },
-      purchaseOrder: { select: { id: true, poNo: true } },
-    },
-  });
+  const [invoices, projects] = await Promise.all([
+    prisma.vendorInvoice.findMany({
+      // Shared with the export, so a download holds exactly what this screen shows.
+      where: invoiceListWhere(ctx, params),
+      orderBy: { invoiceDate: "desc" },
+      take: 100,
+      include: {
+        vendor: { select: { name: true } },
+        purchaseOrder: { select: { id: true, poNo: true } },
+      },
+    }),
+    projectOptions(ctx),
+  ]);
 
   const mismatched = invoices.filter((i) => i.status === "MISMATCH").length;
   const outstanding = invoices
@@ -105,11 +122,28 @@ export default async function InvoicesPage() {
         }
       />
 
+      <ListToolbar
+        searchPlaceholder="Search invoice, vendor or PO…"
+        filters={[
+          { name: "status", label: "Status", allLabel: "All statuses", options: enumOptions(INVOICE_STATUSES) },
+          { name: "project", label: "Projects", options: projects },
+        ]}
+        dateRange={{ label: "Invoice date" }}
+        count={invoices.length}
+      >
+        {ctx.has(PERM.material.vendorInvoice.export) && (
+          <ExportMenu
+            href={(format) => exportHref("/api/material/invoices/export", format, query)}
+            disabled={invoices.length === 0}
+          />
+        )}
+      </ListToolbar>
+
       {invoices.length === 0 ? (
         <Card>
           <EmptyState
             icon={<ReceiptText className="h-8 w-8" />}
-            title="No invoices recorded"
+            title={filtered ? "No invoices match these filters" : "No invoices recorded"}
             description="An invoice is captured against its purchase order and matched to what was actually received."
           />
         </Card>

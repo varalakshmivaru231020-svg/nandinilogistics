@@ -1,60 +1,36 @@
 import { TriangleAlert } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
-import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { filterReorderRows, readReorderListParams, toSearchParams } from "@/lib/material/list-filters";
+import { categoryOptions, loadReorderRows, type ReorderRow } from "@/lib/material/list-options";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { money, qty } from "@/lib/utils";
 
 export const metadata = { title: "Reorder Alerts" };
 
-type Row = {
-  id: string;
-  code: string;
-  name: string;
-  uom: string;
-  category: string;
-  reorderLevel: number;
-  onHand: number;
-  standardRate: number;
-};
-
-export default async function ReorderPage() {
+export default async function ReorderPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.material.reorder.view);
+  const raw = await searchParams;
+  const params = readReorderListParams(raw);
+  const query = toSearchParams(raw);
+  const filtered = Boolean(params.q || params.category);
 
   // Alerts before you run out — total on-hand across every store vs the level.
-  const rows = await prisma.$queryRaw<Array<{
-    id: string; code: string; name: string; uom: string; category: string;
-    reorderLevel: string; onHand: string; standardRate: string;
-  }>>`
-    SELECT
-      i.id, i.code, i.name,
-      u.code AS uom,
-      c.name AS category,
-      i."reorderLevel"::text AS "reorderLevel",
-      COALESCE(sb.qty, 0)::text AS "onHand",
-      i."standardRate"::text AS "standardRate"
-    FROM "m_items" i
-    JOIN "m_uoms" u ON u.id = i."uomId"
-    JOIN "m_item_categories" c ON c.id = i."categoryId"
-    LEFT JOIN (
-      SELECT "itemId", SUM(quantity) AS qty FROM "stock_balances" GROUP BY "itemId"
-    ) sb ON sb."itemId" = i.id
-    WHERE i.status = 'ACTIVE'
-      AND i."reorderLevel" > 0
-      AND COALESCE(sb.qty, 0) <= i."reorderLevel"
-    ORDER BY (COALESCE(sb.qty, 0) / NULLIF(i."reorderLevel", 0)) ASC
-  `;
-
-  const items: Row[] = rows.map((r) => ({
-    id: r.id, code: r.code, name: r.name, uom: r.uom, category: r.category,
-    reorderLevel: Number(r.reorderLevel), onHand: Number(r.onHand), standardRate: Number(r.standardRate),
-  }));
+  const [all, categories] = await Promise.all([loadReorderRows(), categoryOptions()]);
+  // Shared with the export, so a download holds exactly what this screen shows.
+  const items = filterReorderRows(all, params);
 
   const showValue = ctx.has(PERM.material.stock.viewValuation);
 
-  const columns: Column<Row>[] = [
+  const columns: Column<ReorderRow>[] = [
     {
       key: "item",
       header: "Item",
@@ -101,14 +77,29 @@ export default async function ReorderPage() {
       <PageHeader
         title="Reorder Alerts"
         description="Items at or below their reorder level, most urgent first — surfaced rather than discovered."
-        actions={items.length > 0 ? <Badge tone="bad">{items.length} item(s)</Badge> : <Badge tone="good">All stocked</Badge>}
+        actions={all.length > 0 ? <Badge tone="bad">{all.length} item(s)</Badge> : <Badge tone="good">All stocked</Badge>}
       />
+
+      {all.length > 0 && (
+        <ListToolbar
+          searchPlaceholder="Search item code or name…"
+          filters={[{ name: "category", label: "Categories", options: categories }]}
+          count={items.length}
+        >
+          {ctx.has(PERM.material.stock.export) && (
+            <ExportMenu
+              href={(format) => exportHref("/api/material/reorder/export", format, query)}
+              disabled={items.length === 0}
+            />
+          )}
+        </ListToolbar>
+      )}
 
       {items.length === 0 ? (
         <Card>
           <EmptyState
             icon={<TriangleAlert className="h-8 w-8" />}
-            title="Nothing needs reordering"
+            title={filtered && all.length > 0 ? "No reorder alerts match these filters" : "Nothing needs reordering"}
             description="Every item with a reorder level is currently above it."
           />
         </Card>

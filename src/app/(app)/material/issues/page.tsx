@@ -1,9 +1,12 @@
 import { ArrowLeftRight } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
-import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { issueListWhere, readIssueListParams, toSearchParams } from "@/lib/material/list-filters";
+import { projectOptions } from "@/lib/material/list-options";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { issueLookups } from "./lookups";
 import { NewIssueDrawer } from "./new-issue-drawer";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
@@ -11,23 +14,35 @@ import { IssuesScreen } from "./issues-screen";
 
 export const metadata = { title: "Material Issues" };
 
-export default async function IssuesPage() {
+export default async function IssuesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.material.issue.view);
+  const raw = await searchParams;
+  const params = readIssueListParams(raw);
+  const query = toSearchParams(raw);
+  const filtered = Boolean(params.q || params.project || params.ack || params.from || params.to);
 
   const lookups = ctx.has(PERM.material.issue.create) ? await issueLookups(ctx) : null;
 
-  const issues = await prisma.materialIssue.findMany({
-    where: projectScopeFilter(ctx),
-    orderBy: { issueDate: "desc" },
-    take: 100,
-    include: {
-      store: { select: { name: true } },
-      project: { select: { code: true } },
-      workPackage: { select: { code: true, name: true } },
-      issuedBy: { select: { name: true } },
-      items: { include: { item: { select: { name: true, uom: { select: { code: true } } } } } },
-    },
-  });
+  const [issues, projects] = await Promise.all([
+    prisma.materialIssue.findMany({
+      // Shared with the export, so a download holds exactly what this screen shows.
+      where: issueListWhere(ctx, params),
+      orderBy: { issueDate: "desc" },
+      take: 100,
+      include: {
+        store: { select: { name: true } },
+        project: { select: { code: true } },
+        workPackage: { select: { code: true, name: true } },
+        issuedBy: { select: { name: true } },
+        items: { include: { item: { select: { name: true, uom: { select: { code: true } } } } } },
+      },
+    }),
+    projectOptions(ctx),
+  ]);
 
   // Who each slip went to — issuedToId is a plain field, so resolve the names.
   const recipientIds = [...new Set(issues.map((i) => i.issuedToId))];
@@ -57,11 +72,36 @@ export default async function IssuesPage() {
         }
       />
 
+      <ListToolbar
+        searchPlaceholder="Search issue, item, store, purpose…"
+        filters={[
+          { name: "project", label: "Projects", options: projects },
+          {
+            name: "ack",
+            label: "Acknowledgement",
+            allLabel: "Any acknowledgement",
+            options: [
+              { value: "pending", label: "Awaiting acknowledgement" },
+              { value: "acknowledged", label: "Acknowledged" },
+            ],
+          },
+        ]}
+        dateRange={{ label: "Issued" }}
+        count={issues.length}
+      >
+        {ctx.has(PERM.material.issue.export) && (
+          <ExportMenu
+            href={(format) => exportHref("/api/material/issues/export", format, query)}
+            disabled={issues.length === 0}
+          />
+        )}
+      </ListToolbar>
+
       {issues.length === 0 ? (
         <Card>
           <EmptyState
             icon={<ArrowLeftRight className="h-8 w-8" />}
-            title="Nothing issued yet"
+            title={filtered ? "No issue slips match these filters" : "Nothing issued yet"}
             description="Issuing material moves it out of the store ledger and onto a work package, so consumption can be compared with what was indented."
           />
         </Card>
