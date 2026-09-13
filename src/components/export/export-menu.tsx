@@ -1,9 +1,24 @@
 import { Download, FileSpreadsheet, FileText } from "lucide-react";
 
-import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export type ExportFormatOption = "xlsx" | "pdf" | "csv";
+
+/**
+ * The secondary button's look, spelled out rather than taken from
+ * buttonVariants: button.tsx is a client module, and a server page cannot call
+ * a function exported from one — only render its components. ExportMenu is
+ * rendered by server pages, so it keeps its own copy. Keep in step with the
+ * `secondary` variant and the `sm`/`md` sizes in src/components/ui/button.tsx.
+ */
+const BASE =
+  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-sans font-bold transition-colors " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-offset-1 " +
+  "border border-line-400 bg-white text-brand-700 hover:bg-surface-hover hover:border-brand-300";
+const SIZE = {
+  sm: "h-8 rounded-[8px] px-3.5 text-[11.5px]",
+  md: "h-9 rounded-[9px] px-4 text-[12.5px]",
+} as const;
 
 /**
  * Excel, PDF and CSV download links for a list or report.
@@ -25,7 +40,8 @@ export function ExportMenu({
   size?: "sm" | "md";
 }) {
   const className = cn(
-    buttonVariants({ variant: "secondary", size }),
+    BASE,
+    SIZE[size],
     disabled && "pointer-events-none opacity-50",
   );
   const meta: Record<ExportFormatOption, { label: string; Icon: typeof Download }> = {
