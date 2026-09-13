@@ -2,9 +2,11 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BadgeCheck, Plus, Users } from "lucide-react";
 
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ListToolbar } from "@/components/list/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal } from "@/components/ui/modal";
@@ -23,6 +25,8 @@ export function CustomersScreen({
   customers, can,
 }: { customers: Customer[]; can: Record<string, boolean> }) {
   const router = useRouter();
+  const params = useSearchParams();
+  const filtered = ["q", "kyc", "booking"].some((k) => params.get(k));
   const [creating, setCreating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -123,22 +127,58 @@ export function CustomersScreen({
       {error && <Alert tone="error">{error}</Alert>}
       {notice && !error && <Alert tone="success">{notice}</Alert>}
 
-      {can.create && (
-        <div className="flex justify-end">
+      <ListToolbar
+        className="mb-0"
+        searchPlaceholder={can.viewKyc ? "Search name, phone, email, PAN, booking, unit…" : "Search name, email, booking, unit…"}
+        filters={[
+          {
+            name: "kyc",
+            label: "KYC",
+            allLabel: "Any KYC",
+            options: [{ value: "verified", label: "KYC verified" }, { value: "pending", label: "KYC pending" }],
+          },
+          {
+            name: "booking",
+            label: "Bookings",
+            allLabel: "Any booking",
+            options: [
+              { value: "booked", label: "With a booking" },
+              { value: "active", label: "With an active booking" },
+              { value: "none", label: "No booking" },
+            ],
+          },
+        ]}
+        count={customers.length}
+      >
+        {can.export && (
+          <ExportMenu
+            href={(format) => exportHref("/api/sales/customers/export", format, params)}
+            disabled={customers.length === 0}
+          />
+        )}
+        {can.create && (
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus className="h-3.5 w-3.5" />
             New customer
           </Button>
-        </div>
-      )}
+        )}
+      </ListToolbar>
 
       {customers.length === 0 ? (
         <Card>
-          <EmptyState
-            icon={<Users className="h-8 w-8" />}
-            title="No customers yet"
-            description="A customer record is created at booking, from the lead that produced it."
-          />
+          {filtered ? (
+            <EmptyState
+              icon={<Users className="h-8 w-8" />}
+              title="No customers match"
+              description="Try a different search or clear the filters."
+            />
+          ) : (
+            <EmptyState
+              icon={<Users className="h-8 w-8" />}
+              title="No customers yet"
+              description="A customer record is created at booking, from the lead that produced it."
+            />
+          )}
         </Card>
       ) : (
         <DataTable columns={columns} rows={customers} rowKey={(c) => c.id} dense />

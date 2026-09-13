@@ -5,6 +5,10 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { toSearchParams } from "@/lib/sales/list-common";
+import { RECEIPT_MODES, readReceiptListParams, receiptListWhere } from "@/lib/sales/receipt-list";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ListToolbar } from "@/components/list/list-toolbar";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatDate, money, moneyShort } from "@/lib/utils";
@@ -19,26 +23,41 @@ type Row = {
   bank: { name: string } | null;
 };
 
-export default async function ReceiptsPage() {
+export default async function ReceiptsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.sales.receipt.view);
+  const raw = await searchParams;
+  const params = readReceiptListParams(raw);
+  const filtered = Boolean(params.q || params.mode || params.project || params.from || params.to);
 
-  const receipts = await prisma.receipt.findMany({
-    where: { booking: projectScopeFilter(ctx) },
-    orderBy: { receiptDate: "desc" },
-    take: 150,
-    include: {
-      booking: {
-        select: {
-          id: true, bookingNo: true,
-          unit: { select: { unitNumber: true } },
-          customer: { select: { name: true } },
-          project: { select: { code: true } },
+  const [receipts, projects] = await Promise.all([
+    prisma.receipt.findMany({
+      // Shared with the export, so a download holds exactly what this screen shows.
+      where: receiptListWhere(ctx, params),
+      orderBy: { receiptDate: "desc" },
+      take: 150,
+      include: {
+        booking: {
+          select: {
+            id: true, bookingNo: true,
+            unit: { select: { unitNumber: true } },
+            customer: { select: { name: true } },
+            project: { select: { code: true } },
+          },
         },
+        demand: { select: { milestone: true } },
+        bank: { select: { name: true } },
       },
-      demand: { select: { milestone: true } },
-      bank: { select: { name: true } },
-    },
-  });
+    }),
+    prisma.project.findMany({
+      where: projectScopeFilter(ctx, "id"),
+      select: { id: true, code: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   const total = receipts.reduce((s, r) => s + Number(r.amount), 0);
 
@@ -86,6 +105,8 @@ export default async function ReceiptsPage() {
     },
   ];
 
+  const query = toSearchParams(raw);
+
   return (
     <div className="mx-auto max-w-7xl">
       <PageHeader
@@ -94,13 +115,47 @@ export default async function ReceiptsPage() {
         actions={<Badge tone="good">{moneyShort(total)} collected</Badge>}
       />
 
+      <ListToolbar
+        searchPlaceholder="Search receipt no, reference, booking, customer, unit…"
+        filters={[
+          {
+            name: "mode",
+            label: "Mode",
+            allLabel: "All modes",
+            options: RECEIPT_MODES.map((m) => ({ value: m, label: m })),
+          },
+          {
+            name: "project",
+            label: "Projects",
+            options: projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` })),
+          },
+        ]}
+        dateRange={{ label: "Received" }}
+        count={receipts.length}
+      >
+        {ctx.has(PERM.sales.receipt.export) && (
+          <ExportMenu
+            href={(format) => exportHref("/api/sales/receipts/export", format, query)}
+            disabled={receipts.length === 0}
+          />
+        )}
+      </ListToolbar>
+
       {receipts.length === 0 ? (
         <Card>
-          <EmptyState
-            icon={<IndianRupee className="h-8 w-8" />}
-            title="Nothing collected yet"
-            description="Receipts are recorded from a booking, against a raised milestone demand."
-          />
+          {filtered ? (
+            <EmptyState
+              icon={<IndianRupee className="h-8 w-8" />}
+              title="No receipts match"
+              description="Try a different search, mode, project or date range."
+            />
+          ) : (
+            <EmptyState
+              icon={<IndianRupee className="h-8 w-8" />}
+              title="Nothing collected yet"
+              description="Receipts are recorded from a booking, against a raised milestone demand."
+            />
+          )}
         </Card>
       ) : (
         <DataTable columns={columns} rows={receipts} rowKey={(r) => r.id} dense />

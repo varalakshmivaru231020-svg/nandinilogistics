@@ -2,10 +2,15 @@ import Link from "next/link";
 import { Calculator } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
+import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { costSheetListWhere, readCostSheetListParams } from "@/lib/sales/cost-sheet-list";
+import { toSearchParams } from "@/lib/sales/list-common";
 import { costSheetLookups } from "./lookups";
 import { NewCostSheetDrawer } from "./new-cost-sheet-drawer";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ListToolbar } from "@/components/list/list-toolbar";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatDate, money } from "@/lib/utils";
@@ -20,23 +25,37 @@ type Row = {
   _count: { bookings: number };
 };
 
-export default async function CostSheetsPage() {
+export default async function CostSheetsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.sales.costSheet.view);
+  const raw = await searchParams;
+  const params = readCostSheetListParams(raw);
+  const filtered = Boolean(params.q || params.status || params.project);
+  const now = new Date();
 
   const lookups = ctx.has(PERM.sales.costSheet.create) ? await costSheetLookups(ctx) : null;
 
-  const scope = ctx.canAccessAllProjects ? {} : { unit: { projectId: { in: ctx.projectIds } } };
-
-  const sheets = await prisma.costSheet.findMany({
-    where: scope,
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    include: {
-      unit: { select: { unitNumber: true, project: { select: { code: true } } } },
-      lead: { select: { name: true } },
-      _count: { select: { bookings: true } },
-    },
-  });
+  const [sheets, projects] = await Promise.all([
+    prisma.costSheet.findMany({
+      // Shared with the export, so a download holds exactly what this screen shows.
+      where: costSheetListWhere(ctx, params, now),
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: {
+        unit: { select: { unitNumber: true, project: { select: { code: true } } } },
+        lead: { select: { name: true } },
+        _count: { select: { bookings: true } },
+      },
+    }),
+    prisma.project.findMany({
+      where: projectScopeFilter(ctx, "id"),
+      select: { id: true, code: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   const awaitingDiscount = sheets.filter(
     (s) => Number(s.discountAmount) > 0 && !s.discountApprovedAt,
@@ -64,7 +83,7 @@ export default async function CostSheetsPage() {
       header: "Valid until",
       render: (s) => {
         if (!s.validUntil) return <span className="text-xs text-muted-400">—</span>;
-        const expired = new Date(s.validUntil) < new Date();
+        const expired = new Date(s.validUntil) < now;
         return (
           <span className={expired ? "text-xs text-bad-600" : "text-xs text-muted-500"}>
             {formatDate(s.validUntil)}{expired && " · expired"}
@@ -98,6 +117,8 @@ export default async function CostSheetsPage() {
     },
   ];
 
+  const query = toSearchParams(raw);
+
   return (
     <div className="mx-auto max-w-7xl">
       <PageHeader
@@ -119,13 +140,51 @@ export default async function CostSheetsPage() {
         }
       />
 
+      <ListToolbar
+        searchPlaceholder="Search cost sheet no, lead, unit, project…"
+        filters={[
+          {
+            name: "status",
+            label: "Status",
+            allLabel: "All statuses",
+            options: [
+              { value: "quoted", label: "Quoted" },
+              { value: "booked", label: "Booked" },
+              { value: "discountPending", label: "Discount pending" },
+              { value: "expired", label: "Expired, not booked" },
+            ],
+          },
+          {
+            name: "project",
+            label: "Projects",
+            options: projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` })),
+          },
+        ]}
+        count={sheets.length}
+      >
+        {ctx.has(PERM.sales.costSheet.export) && (
+          <ExportMenu
+            href={(format) => exportHref("/api/sales/cost-sheets/export", format, query)}
+            disabled={sheets.length === 0}
+          />
+        )}
+      </ListToolbar>
+
       {sheets.length === 0 ? (
         <Card>
-          <EmptyState
-            icon={<Calculator className="h-8 w-8" />}
-            title="No cost sheets yet"
-            description="Pick an available unit and the cost sheet is generated from the price list active on that date."
-          />
+          {filtered ? (
+            <EmptyState
+              icon={<Calculator className="h-8 w-8" />}
+              title="No cost sheets match"
+              description="Try a different search, status or project."
+            />
+          ) : (
+            <EmptyState
+              icon={<Calculator className="h-8 w-8" />}
+              title="No cost sheets yet"
+              description="Pick an available unit and the cost sheet is generated from the price list active on that date."
+            />
+          )}
         </Card>
       ) : (
         <DataTable columns={columns} rows={sheets} rowKey={(s) => s.id} dense />
