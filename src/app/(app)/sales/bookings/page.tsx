@@ -5,6 +5,10 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { BOOKING_STATUSES, bookingListWhere, readBookingListParams } from "@/lib/sales/booking-list";
+import { toSearchParams } from "@/lib/sales/list-common";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ListToolbar } from "@/components/list/list-toolbar";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatDate, money, moneyShort } from "@/lib/utils";
@@ -23,21 +27,36 @@ type Row = {
   demands: Array<{ status: string; dueDate: Date; totalAmount: unknown; receivedAmount: unknown }>;
 };
 
-export default async function BookingsPage() {
+export default async function BookingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.sales.booking.view);
+  const raw = await searchParams;
+  const params = readBookingListParams(raw);
+  const filtered = Boolean(params.q || params.status || params.project || params.from || params.to);
 
-  const bookings = await prisma.booking.findMany({
-    where: projectScopeFilter(ctx),
-    orderBy: { bookingDate: "desc" },
-    take: 100,
-    include: {
-      unit: { select: { unitNumber: true } },
-      customer: { select: { name: true, phone: true } },
-      project: { select: { code: true } },
-      soldBy: { select: { name: true } },
-      demands: { select: { status: true, dueDate: true, totalAmount: true, receivedAmount: true } },
-    },
-  });
+  const [bookings, projects] = await Promise.all([
+    prisma.booking.findMany({
+      // Shared with the export, so a download holds exactly what this screen shows.
+      where: bookingListWhere(ctx, params),
+      orderBy: { bookingDate: "desc" },
+      take: 100,
+      include: {
+        unit: { select: { unitNumber: true } },
+        customer: { select: { name: true, phone: true } },
+        project: { select: { code: true } },
+        soldBy: { select: { name: true } },
+        demands: { select: { status: true, dueDate: true, totalAmount: true, receivedAmount: true } },
+      },
+    }),
+    prisma.project.findMany({
+      where: projectScopeFilter(ctx, "id"),
+      select: { id: true, code: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   const now = new Date();
   const totalValue = bookings
@@ -108,6 +127,8 @@ export default async function BookingsPage() {
     },
   ];
 
+  const query = toSearchParams(raw);
+
   return (
     <div className="mx-auto max-w-7xl">
       <PageHeader
@@ -121,13 +142,47 @@ export default async function BookingsPage() {
         }
       />
 
+      <ListToolbar
+        searchPlaceholder="Search booking no, customer, phone, unit…"
+        filters={[
+          {
+            name: "status",
+            label: "Status",
+            allLabel: "All statuses",
+            options: BOOKING_STATUSES.map((s) => ({ value: s, label: s.charAt(0) + s.slice(1).toLowerCase() })),
+          },
+          {
+            name: "project",
+            label: "Projects",
+            options: projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` })),
+          },
+        ]}
+        dateRange={{ label: "Booked" }}
+        count={bookings.length}
+      >
+        {ctx.has(PERM.sales.booking.export) && (
+          <ExportMenu
+            href={(format) => exportHref("/api/sales/bookings/export", format, query)}
+            disabled={bookings.length === 0}
+          />
+        )}
+      </ListToolbar>
+
       {bookings.length === 0 ? (
         <Card>
-          <EmptyState
-            icon={<BookCheck className="h-8 w-8" />}
-            title="No bookings yet"
-            description="A booking starts from an approved cost sheet — it moves the unit off the board and raises the payment schedule."
-          />
+          {filtered ? (
+            <EmptyState
+              icon={<BookCheck className="h-8 w-8" />}
+              title="No bookings match"
+              description="Try a different search, status, project or date range."
+            />
+          ) : (
+            <EmptyState
+              icon={<BookCheck className="h-8 w-8" />}
+              title="No bookings yet"
+              description="A booking starts from an approved cost sheet — it moves the unit off the board and raises the payment schedule."
+            />
+          )}
         </Card>
       ) : (
         <DataTable columns={columns} rows={bookings} rowKey={(b) => b.id} dense />

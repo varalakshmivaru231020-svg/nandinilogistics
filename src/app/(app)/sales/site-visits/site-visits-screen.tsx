@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarPlus, Check, MapPin, X } from "lucide-react";
 
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ListToolbar } from "@/components/list/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
@@ -26,6 +28,8 @@ export function SiteVisitsScreen({
   can: Record<string, boolean>;
 }) {
   const router = useRouter();
+  const params = useSearchParams();
+  const filtered = ["q", "status", "from", "to"].some((k) => params.get(k));
   const [scheduling, setScheduling] = React.useState(false);
   const [completing, setCompleting] = React.useState<Visit | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -49,22 +53,53 @@ export function SiteVisitsScreen({
       {error && <Alert tone="error">{error}</Alert>}
       {notice && !error && <Alert tone="success">{notice}</Alert>}
 
-      {can.schedule && (
-        <div className="flex justify-end">
+      <ListToolbar
+        className="mb-0"
+        searchPlaceholder={can.viewContact ? "Search lead, lead no, phone, executive…" : "Search lead, lead no, executive…"}
+        filters={[
+          {
+            name: "status",
+            label: "Status",
+            allLabel: "All statuses",
+            options: [
+              { value: "scheduled", label: "Scheduled" },
+              { value: "overdue", label: "Scheduled · past due" },
+              { value: "completed", label: "Completed" },
+            ],
+          },
+        ]}
+        dateRange={{ label: "Visit date" }}
+        count={visits.length}
+      >
+        {can.export && (
+          <ExportMenu
+            href={(format) => exportHref("/api/sales/site-visits/export", format, params)}
+            disabled={visits.length === 0}
+          />
+        )}
+        {can.schedule && (
           <Button size="sm" onClick={() => setScheduling(true)}>
             <CalendarPlus className="h-3.5 w-3.5" />
             Schedule a visit
           </Button>
-        </div>
-      )}
+        )}
+      </ListToolbar>
 
       {visits.length === 0 ? (
         <Card>
-          <EmptyState
-            icon={<MapPin className="h-8 w-8" />}
-            title="No site visits"
-            description="Schedule a visit against a lead and it appears here until the outcome is recorded."
-          />
+          {filtered ? (
+            <EmptyState
+              icon={<MapPin className="h-8 w-8" />}
+              title="No site visits match"
+              description="Try a different search, status or date range."
+            />
+          ) : (
+            <EmptyState
+              icon={<MapPin className="h-8 w-8" />}
+              title="No site visits"
+              description="Schedule a visit against a lead and it appears here until the outcome is recorded."
+            />
+          )}
         </Card>
       ) : (
         <>

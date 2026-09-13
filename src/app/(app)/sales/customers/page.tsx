@@ -1,15 +1,24 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { customerListWhere, readCustomerListParams } from "@/lib/sales/customer-list";
 import { PageHeader } from "@/components/ui/primitives";
 import { CustomersScreen } from "./customers-screen";
 
 export const metadata = { title: "Customers" };
 
-export default async function CustomersPage() {
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const ctx = await requirePermission(PERM.sales.customer.view);
+  const params = readCustomerListParams(await searchParams);
+  const canSeeKyc = ctx.has(PERM.sales.customer.viewKyc);
 
+  // Shared with the export, so a download holds exactly what this screen shows.
   const customers = await prisma.customer.findMany({
+    where: customerListWhere(params, canSeeKyc),
     orderBy: { createdAt: "desc" },
     take: 200,
     include: {
@@ -52,7 +61,8 @@ export default async function CustomersPage() {
         can={{
           create: ctx.has(PERM.sales.customer.create),
           verifyKyc: ctx.has(PERM.sales.customer.verifyKyc),
-          viewKyc: ctx.has(PERM.sales.customer.viewKyc),
+          viewKyc: canSeeKyc,
+          export: ctx.has(PERM.sales.customer.export),
         }}
       />
     </div>
