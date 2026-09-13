@@ -1,39 +1,71 @@
 "use client";
 
+import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search } from "lucide-react";
+import { Upload } from "lucide-react";
 
-import { Input, Select } from "@/components/ui/primitives";
+import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ImportDialog } from "@/components/import/import-dialog";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/primitives";
+import { UNIT_IMPORT_COLUMNS } from "@/lib/units/unit-import";
+import { UNIT_STATUSES } from "@/lib/units/unit-list";
+import { importUnitsAction, previewUnitImportAction } from "./actions";
 
-const STATUSES = ["AVAILABLE", "HELD", "BOOKED", "AGREEMENT", "REGISTERED", "BLOCKED"];
+type Option = { value: string; label: string };
 
-export function UnitFilters({ q, status }: { q: string; status: string }) {
+export function UnitFilters({
+  projects, blocks, unitTypes, total, can,
+}: {
+  projects: Option[];
+  blocks: Option[];
+  unitTypes: Option[];
+  total: number;
+  can: { export: boolean; import: boolean };
+}) {
   const router = useRouter();
   const params = useSearchParams();
-
-  function setParam(key: string, value: string) {
-    const sp = new URLSearchParams(params.toString());
-    if (!value || value === "all") sp.delete(key);
-    else sp.set(key, value);
-    sp.delete("page");
-    router.push(`?${sp.toString()}`);
-  }
+  const [importing, setImporting] = React.useState(false);
+  const [notice, setNotice] = React.useState<string | null>(null);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-56 flex-1 sm:max-w-sm">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-400" />
-        <Input
-          defaultValue={q}
-          placeholder="Search unit number…"
-          className="pl-8"
-          onKeyDown={(e) => { if (e.key === "Enter") setParam("q", (e.target as HTMLInputElement).value); }}
+    <>
+      {notice && <Alert tone="success">{notice}</Alert>}
+      <ListToolbar
+        className="mb-0"
+        searchPlaceholder="Search unit number…"
+        count={total}
+        filters={[
+          { name: "project", label: "Projects", options: projects },
+          { name: "block", label: "Blocks", options: blocks },
+          { name: "type", label: "Unit types", options: unitTypes },
+          { name: "status", label: "Statuses", options: UNIT_STATUSES.map((s) => ({ value: s, label: s })) },
+        ]}
+      >
+        {can.import && (
+          <Button variant="ghost" size="sm" onClick={() => setImporting(true)}>
+            <Upload className="h-3.5 w-3.5" />
+            Import
+          </Button>
+        )}
+        {can.export && (
+          <ExportMenu href={(format) => exportHref("/api/units/export", format, params)} disabled={total === 0} />
+        )}
+      </ListToolbar>
+
+      {importing && (
+        <ImportDialog
+          title="Import units"
+          description="Upload a .csv or .xlsx. Projects are matched by code, blocks by name within the project. Every unit starts Available."
+          columns={UNIT_IMPORT_COLUMNS}
+          templateName="units"
+          preview={previewUnitImportAction}
+          commit={importUnitsAction}
+          onClose={() => setImporting(false)}
+          onImported={(m) => { setImporting(false); setNotice(m); router.refresh(); }}
         />
-      </div>
-      <Select value={status} onChange={(e) => setParam("status", e.target.value)} className="w-44">
-        <option value="all">All statuses</option>
-        {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-      </Select>
-    </div>
+      )}
+    </>
   );
 }

@@ -52,6 +52,7 @@ export default async function PriceListsPage() {
         can={{
           create: ctx.has(PERM.unit.priceList.create),
           activate: ctx.has(PERM.unit.priceList.activate),
+          export: ctx.has(PERM.unit.priceList.export),
         }}
       />
     </div>
