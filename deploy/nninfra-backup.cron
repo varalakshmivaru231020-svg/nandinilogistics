@@ -1,7 +1,10 @@
 # Nightly database backup for nninfra.zapeat.in — installed as /etc/cron.d/nninfra-backup.
-# 02:30 server time, when nobody is on site or selling. Output appends to the log
-# so a failed night is visible after the fact.
+#
+# The server clock is UTC. 21:00 UTC is 02:30 IST: after the site office and
+# the sales team have gone home, and clear of the other applications on this
+# host, whose own jobs run at 02:30–03:15 UTC. Output appends to the log so a
+# failed night is visible after the fact.
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-30 2 * * * root /var/www/nninfra/backup-db.sh >> /var/log/nninfra-backup.log 2>&1
+0 21 * * * root /var/www/nninfra/backup-db.sh >> /var/log/nninfra-backup.log 2>&1
