@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Check, PackageSearch, Send, ThumbsDown, X } from "lucide-react";
+import Link from "next/link";
+import { Ban, Check, PackageSearch, Pencil, Send, ThumbsDown, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -55,7 +56,7 @@ function chainStage(status: string): number {
 }
 
 export function IndentDetail({
-  indent, items, approvals, can, currentUserId, approvalCeiling,
+  indent, items, approvals, can, currentUserId, approvalCeiling, editable,
 }: {
   indent: Indent;
   items: ItemLine[];
@@ -63,6 +64,8 @@ export function IndentDetail({
   can: Record<string, boolean>;
   currentUserId: string;
   approvalCeiling: number;
+  /** No approval step recorded yet — decided on the server. */
+  editable: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = React.useState<string | null>(null);
@@ -261,6 +264,15 @@ export function IndentDetail({
             </div>
 
             <div className="flex flex-col gap-2 border-t border-line-200 pt-3">
+              {editable && can.update && (
+                <Link href={`/material/indents/${indent.id}/edit`}>
+                  <Button size="sm" variant="secondary" className="w-full">
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit indent
+                  </Button>
+                </Link>
+              )}
+
               {isOwnDraft && can.submit && (
                 <Button size="sm" loading={busy} onClick={() => run(() => submitIndentAction(indent.id), "Submitted for approval.")}>
                   <Send className="h-3.5 w-3.5" />

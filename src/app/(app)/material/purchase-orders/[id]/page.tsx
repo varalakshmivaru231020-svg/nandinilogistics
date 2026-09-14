@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { isPoEditable } from "@/lib/material/procurement";
 import { Badge, PageHeader } from "@/components/ui/primitives";
 import { PoDetail } from "./po-detail";
 
@@ -14,9 +15,20 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: po?.poNo ?? "Purchase Order" };
 }
 
-export default async function PoDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PoDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ print?: string }>;
+}) {
   const { id } = await params;
   const ctx = await requirePermission(PERM.material.purchaseOrder.view);
+
+  // Old links carried ?print=1; the printable order now has its own route.
+  if ((await searchParams).print === "1" && ctx.has(PERM.material.purchaseOrder.print)) {
+    redirect(`/print/purchase-orders/${id}`);
+  }
 
   const po = await prisma.purchaseOrder.findUnique({
     where: { id },
@@ -127,7 +139,10 @@ export default async function PoDetailPage({ params }: { params: Promise<{ id: s
           tabInvoices: ctx.has(PERM.material.purchaseOrder.tabInvoices),
           createGrn: ctx.has(PERM.material.grn.create),
           createInvoice: ctx.has(PERM.material.vendorInvoice.create),
+          // Rates are part of the edit, so editing needs the rate permission too.
+          update: ctx.has(PERM.material.purchaseOrder.update) && ctx.has(PERM.material.purchaseOrder.viewRate),
         }}
+        editable={isPoEditable(po)}
         approvalCeiling={ctx.approvalLimitFor("material.po")}
       />
     </div>

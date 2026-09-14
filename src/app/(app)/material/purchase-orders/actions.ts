@@ -8,9 +8,11 @@ import {
   authorize, runAction, assertProjectAccess, assertWithinApprovalLimit,
   type ActionResult,
 } from "@/lib/rbac/guard";
-import { recordAudit } from "@/lib/audit";
+import { diff, recordAudit } from "@/lib/audit";
 import { nextDocumentNumber } from "@/lib/numbering";
 import { PERM } from "@/lib/permissions/codes";
+import { isPoEditable, poTotals, priceLine } from "@/lib/material/procurement";
+import { applyPurchaseOrderEdit } from "@/lib/material/procurement-edit";
 
 const APPROVAL_SCOPE = "material.po";
 
@@ -37,24 +39,20 @@ const PoSchema = z.object({
 
 type PoInput = z.infer<typeof PoSchema>;
 
-/** Line amount after discount, and the tax it attracts. */
-function priceLine(line: { orderedQty: number; rate: number; discountPct: number; taxPct: number }) {
-  const gross = line.orderedQty * line.rate;
-  const net = gross - (gross * line.discountPct) / 100;
-  const tax = (net * line.taxPct) / 100;
-  return { net, tax };
-}
+/** What an edit may change: everything the create form captures except the project. */
+const PoEditSchema = z.object({
+  vendorId: z.string().min(1, "Vendor is required"),
+  paymentTermId: z.string().optional(),
+  expectedDate: z.string().optional(),
+  deliveryAddress: z.string().trim().optional(),
+  terms: z.string().trim().optional(),
+  otherCharges: z.coerce.number().min(0).default(0),
+  items: z
+    .array(LineSchema.omit({ indentId: true }).extend({ id: z.string().optional() }))
+    .min(1, "Add at least one item"),
+});
 
-function totals(items: PoInput["items"], otherCharges: number) {
-  let subTotal = 0;
-  let taxAmount = 0;
-  for (const l of items) {
-    const { net, tax } = priceLine(l);
-    subTotal += net;
-    taxAmount += tax;
-  }
-  return { subTotal, taxAmount, totalAmount: subTotal + taxAmount + otherCharges };
-}
+export type PoEditInput = z.infer<typeof PoEditSchema>;
 
 export async function createPurchaseOrderAction(
   input: PoInput,
@@ -68,7 +66,7 @@ export async function createPurchaseOrderAction(
     const v = parsed.data;
     assertProjectAccess(ctx, v.projectId);
 
-    const { subTotal, taxAmount, totalAmount } = totals(v.items, v.otherCharges);
+    const { subTotal, taxAmount, totalAmount } = poTotals(v.items, v.otherCharges);
 
     const po = await prisma.$transaction(async (tx) => {
       const poNo = await nextDocumentNumber(tx, "PO", v.projectId);
@@ -89,7 +87,7 @@ export async function createPurchaseOrderAction(
           status: submitForApproval ? "PENDING_PM_APPROVAL" : "DRAFT",
           items: {
             create: v.items.map((l) => {
-              const { net, tax } = priceLine(l);
+              const { total } = priceLine(l);
               return {
                 itemId: l.itemId,
                 indentId: l.indentId || null,
@@ -97,7 +95,7 @@ export async function createPurchaseOrderAction(
                 rate: l.rate,
                 discountPct: l.discountPct,
                 taxPct: l.taxPct,
-                amount: net + tax,
+                amount: total,
                 specification: l.specification || null,
               };
             }),
@@ -117,6 +115,95 @@ export async function createPurchaseOrderAction(
 
     revalidatePath("/material/purchase-orders");
     return { id: po.id, poNo: po.poNo };
+  });
+}
+
+/**
+ * Edits an order nobody has approved yet — a draft, or one waiting on its PM
+ * approval with none recorded. Approved orders go through a revision instead.
+ *
+ * The state is checked twice: here, for a clear message, and again as the
+ * condition on the write itself, so an approval that lands in between wins.
+ * Rates are part of what is edited, so the rate permission is required too.
+ */
+export async function updatePurchaseOrderAction(
+  id: string,
+  input: PoEditInput,
+): Promise<ActionResult<{ id: string; totalAmount: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.material.purchaseOrder.update, PERM.material.purchaseOrder.viewRate);
+    const parsed = PoEditSchema.safeParse(input);
+    if (!parsed.success) throw new Error(parsed.error.issues[0].message);
+    const v = parsed.data;
+
+    const po = await prisma.purchaseOrder.findUnique({ where: { id }, include: { items: true } });
+    if (!po) throw new Error("Purchase order not found.");
+    assertProjectAccess(ctx, po.projectId);
+    if (!isPoEditable(po)) {
+      throw new Error(
+        `${po.poNo} is ${po.status.replace(/_/g, " ").toLowerCase()}${po.pmApprovedAt ? " with an approval recorded" : ""} and can no longer be edited.` +
+          (po.status === "APPROVED" ? " Raise a revision instead." : ""),
+      );
+    }
+
+    const expectedDate = v.expectedDate ? new Date(v.expectedDate) : null;
+    if (expectedDate && Number.isNaN(expectedDate.getTime())) throw new Error("Expected delivery is not a valid date.");
+
+    const result = await prisma.$transaction((tx) =>
+      applyPurchaseOrderEdit(tx, id, {
+        vendorId: v.vendorId,
+        paymentTermId: v.paymentTermId || null,
+        expectedDate,
+        deliveryAddress: v.deliveryAddress || null,
+        terms: v.terms || null,
+        otherCharges: v.otherCharges,
+        items: v.items.map((l) => ({ ...l, specification: l.specification || null })),
+      }),
+    );
+
+    const lineSummary = (l: { itemId: string; orderedQty: unknown; rate: unknown; discountPct: unknown; taxPct: unknown }) =>
+      `${l.itemId} × ${Number(l.orderedQty)} @ ${Number(l.rate)} −${Number(l.discountPct)}% +${Number(l.taxPct)}%`;
+
+    const before = {
+      vendorId: po.vendorId,
+      paymentTermId: po.paymentTermId,
+      expectedDate: po.expectedDate?.toISOString() ?? null,
+      deliveryAddress: po.deliveryAddress,
+      terms: po.terms,
+      otherCharges: Number(po.otherCharges),
+      subTotal: Number(po.subTotal),
+      taxAmount: Number(po.taxAmount),
+      totalAmount: Number(po.totalAmount),
+      lines: po.items.map(lineSummary),
+    };
+    const after = {
+      vendorId: v.vendorId,
+      paymentTermId: v.paymentTermId || null,
+      expectedDate: expectedDate?.toISOString() ?? null,
+      deliveryAddress: v.deliveryAddress || null,
+      terms: v.terms || null,
+      otherCharges: v.otherCharges,
+      subTotal: result.subTotal,
+      taxAmount: result.taxAmount,
+      totalAmount: result.totalAmount,
+      lines: v.items.map(lineSummary),
+    };
+
+    await recordAudit({
+      action: "UPDATE",
+      entity: "PurchaseOrder",
+      entityId: id,
+      userId: ctx.id,
+      projectId: po.projectId,
+      summary:
+        `Edited ${po.poNo} before approval — total ₹${before.totalAmount.toLocaleString("en-IN")} → ` +
+        `₹${result.totalAmount.toLocaleString("en-IN")} (${result.lineCount} line(s))`,
+      changes: diff(before, after),
+    });
+
+    revalidatePath("/material/purchase-orders");
+    revalidatePath(`/material/purchase-orders/${id}`);
+    return { id, totalAmount: result.totalAmount };
   });
 }
 

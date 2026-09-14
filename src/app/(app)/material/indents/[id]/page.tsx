@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { isIndentEditable, mayEditIndentAs } from "@/lib/material/procurement";
 import { Badge, PageHeader } from "@/components/ui/primitives";
 import { IndentDetail } from "./indent-detail";
 
@@ -112,7 +113,11 @@ export default async function IndentDetailPage({ params }: { params: Promise<{ i
           stockCheck: ctx.has(PERM.material.indent.stockCheck),
           tabItems: ctx.has(PERM.material.indent.tabItems),
           tabApprovals: ctx.has(PERM.material.indent.tabApprovals),
+          update:
+            ctx.has(PERM.material.indent.update) &&
+            mayEditIndentAs(indent, { id: ctx.id, hasViewAll: ctx.has(PERM.material.indent.viewAll) }),
         }}
+        editable={isIndentEditable({ status: indent.status, approvalCount: indent.approvals.length })}
         currentUserId={ctx.id}
         approvalCeiling={ctx.approvalLimitFor("material.indent")}
       />
