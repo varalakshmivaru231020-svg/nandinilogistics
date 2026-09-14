@@ -177,3 +177,23 @@ export function rupeesInWords(amount: number): string {
     `Rupees ${integerInWords(rupees)}` + (paise ? ` and ${belowHundred(paise)} Paise` : "") + " Only";
   return negative ? `Minus ${words}` : words;
 }
+
+/**
+ * The message when a purchase order or indent changed after the person acting
+ * on it opened it — an edit, or another approver, got there first.
+ */
+export function staleMessage(label: string): string {
+  return `${label} was changed after you opened it. Reload to see the current figures, then try again.`;
+}
+
+/**
+ * Refuses to act on a record the user has not seen in its current form. The
+ * screen sends back the `updatedAt` it loaded; an approver must never approve
+ * numbers that changed under them. Omitted by callers that have no screen.
+ */
+export function assertUnchanged(current: Date, expected: string | undefined, label: string): void {
+  if (expected === undefined) return;
+  const seen = new Date(expected).getTime();
+  if (Number.isNaN(seen) || seen !== current.getTime()) throw new Error(staleMessage(label));
+}
+

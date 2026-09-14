@@ -1,5 +1,7 @@
 "use server";
 
+import { assertUnchanged, staleMessage } from "@/lib/material/procurement";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -217,6 +219,7 @@ export async function approveIndentAction(
   level: "PM" | "ADMIN",
   remarks: string,
   revisions: Array<{ itemId: string; approvedQty: number }> = [],
+  expectedUpdatedAt?: string,
 ): Promise<ActionResult<{ status: string; skippedAdmin: boolean }>> {
   return runAction(async () => {
     const ctx = await authorize(
@@ -226,6 +229,7 @@ export async function approveIndentAction(
     const indent = await prisma.indent.findUnique({ where: { id }, include: { items: true } });
     if (!indent) throw new Error("Indent not found.");
     assertProjectAccess(ctx, indent.projectId);
+    assertUnchanged(indent.updatedAt, expectedUpdatedAt, `Indent ${indent.indentNo}`);
 
     const expected = level === "PM" ? "SUBMITTED" : "PM_APPROVED";
     if (indent.status !== expected) {
@@ -262,6 +266,14 @@ export async function approveIndentAction(
     const nextStatus = level === "ADMIN" || withinPmCeiling ? "ADMIN_APPROVED" : "PM_APPROVED";
 
     await prisma.$transaction(async (tx) => {
+      // Claim the indent first, exactly as it was checked: an edit or another
+      // decision landing in between wins, and nothing below is written.
+      const claimed = await tx.indent.updateMany({
+        where: { id, status: expected, updatedAt: indent.updatedAt },
+        data: { status: nextStatus, estimatedValue: approvedValue },
+      });
+      if (claimed.count === 0) throw new Error(staleMessage(`Indent ${indent.indentNo}`));
+
       for (const line of indent.items) {
         const requested = Number(line.requestedQty);
         const current = line.approvedQty === null ? requested : Number(line.approvedQty);
@@ -271,11 +283,6 @@ export async function approveIndentAction(
           data: { approvedQty: revised, toPurchaseQty: revised },
         });
       }
-
-      await tx.indent.update({
-        where: { id },
-        data: { status: nextStatus, estimatedValue: approvedValue },
-      });
 
       await tx.indentApproval.create({
         data: {
@@ -304,7 +311,7 @@ export async function approveIndentAction(
   });
 }
 
-export async function rejectIndentAction(id: string, remarks: string): Promise<ActionResult<null>> {
+export async function rejectIndentAction(id: string, remarks: string, expectedUpdatedAt?: string): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.material.indent.reject);
     if (!remarks.trim()) throw new Error("A reason is required when rejecting an indent.");
@@ -316,13 +323,19 @@ export async function rejectIndentAction(id: string, remarks: string): Promise<A
       throw new Error("Only an indent awaiting approval can be rejected.");
     }
 
+    assertUnchanged(indent.updatedAt, expectedUpdatedAt, `Indent ${indent.indentNo}`);
+
     const level = indent.status === "SUBMITTED" ? "PM" : "ADMIN";
-    await prisma.$transaction([
-      prisma.indent.update({ where: { id }, data: { status: "REJECTED" } }),
-      prisma.indentApproval.create({
+    await prisma.$transaction(async (tx) => {
+      const { count } = await tx.indent.updateMany({
+        where: { id, status: indent.status, updatedAt: indent.updatedAt },
+        data: { status: "REJECTED" },
+      });
+      if (count === 0) throw new Error(staleMessage(`Indent ${indent.indentNo}`));
+      await tx.indentApproval.create({
         data: { indentId: id, level, decision: "REJECTED", approvedById: ctx.id, remarks },
-      }),
-    ]);
+      });
+    });
 
     await recordAudit({
       action: "REJECT", entity: "Indent", entityId: id, userId: ctx.id, projectId: indent.projectId,
@@ -334,7 +347,7 @@ export async function rejectIndentAction(id: string, remarks: string): Promise<A
   });
 }
 
-export async function cancelIndentAction(id: string, remarks: string): Promise<ActionResult<null>> {
+export async function cancelIndentAction(id: string, remarks: string, expectedUpdatedAt?: string): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.material.indent.cancel);
     const indent = await prisma.indent.findUnique({ where: { id } });
@@ -344,7 +357,16 @@ export async function cancelIndentAction(id: string, remarks: string): Promise<A
       throw new Error("An indent that has already been ordered cannot be cancelled.");
     }
 
-    await prisma.indent.update({ where: { id }, data: { status: "CANCELLED" } });
+    assertUnchanged(indent.updatedAt, expectedUpdatedAt, `Indent ${indent.indentNo}`);
+    if (["CANCELLED", "REJECTED"].includes(indent.status)) {
+      throw new Error(`Indent ${indent.indentNo} is already ${indent.status.toLowerCase()}.`);
+    }
+
+    const { count: cancelled } = await prisma.indent.updateMany({
+      where: { id, status: indent.status, updatedAt: indent.updatedAt },
+      data: { status: "CANCELLED" },
+    });
+    if (cancelled === 0) throw new Error(staleMessage(`Indent ${indent.indentNo}`));
     await recordAudit({
       action: "CANCEL", entity: "Indent", entityId: id, userId: ctx.id, projectId: indent.projectId,
       summary: `Cancelled indent ${indent.indentNo}${remarks ? `: ${remarks}` : ""}`,

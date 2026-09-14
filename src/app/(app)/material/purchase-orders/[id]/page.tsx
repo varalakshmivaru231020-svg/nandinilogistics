@@ -76,6 +76,7 @@ export default async function PoDetailPage({
           id: po.id,
           poNo: po.poNo,
           status: po.status,
+          updatedAt: po.updatedAt.toISOString(),
           poDate: po.poDate.toISOString(),
           expectedDate: po.expectedDate?.toISOString() ?? null,
           approvedAt: po.approvedAt?.toISOString() ?? null,

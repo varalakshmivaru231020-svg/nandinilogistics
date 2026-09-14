@@ -16,6 +16,7 @@ import {
 } from "../actions";
 
 interface Indent {
+  updatedAt: string;
   id: string; indentNo: string; status: string; raisedAt: string; requiredByDate: string;
   purpose: string | null; remarks: string | null; estimatedValue: number; raisedById: string;
   projectName: string; projectCode: string; workPackage: string | null; raisedByName: string;
@@ -318,7 +319,7 @@ export function IndentDetail({
                   size="sm"
                   variant="ghost"
                   loading={busy}
-                  onClick={() => run(() => cancelIndentAction(indent.id, ""), "Indent cancelled.")}
+                  onClick={() => run(() => cancelIndentAction(indent.id, "", indent.updatedAt), "Indent cancelled.")}
                 >
                   <Ban className="h-3.5 w-3.5" />
                   Cancel indent
@@ -403,13 +404,13 @@ export function IndentDetail({
           canRevise={can.reviseQty}
           onClose={() => setApproving(null)}
           onDone={(msg) => { setApproving(null); setNotice(msg); router.refresh(); }}
-          indentId={indent.id}
+          indentId={indent.id} updatedAt={indent.updatedAt}
         />
       )}
 
       {rejecting && (
         <RejectModal
-          indentId={indent.id}
+          indentId={indent.id} updatedAt={indent.updatedAt}
           onClose={() => setRejecting(false)}
           onDone={(msg) => { setRejecting(false); setNotice(msg); router.refresh(); }}
         />
@@ -419,9 +420,11 @@ export function IndentDetail({
 }
 
 function ApproveModal({
-  indentId, level, items, canRevise, onClose, onDone,
+  indentId, updatedAt, level, items, canRevise, onClose, onDone,
 }: {
   indentId: string;
+  /** What the approver is looking at — the approval refuses if the indent has changed since. */
+  updatedAt: string;
   level: "PM" | "ADMIN";
   items: ItemLine[];
   canRevise: boolean;
@@ -447,7 +450,7 @@ function ApproveModal({
   async function submit() {
     setBusy(true);
     setError(null);
-    const res = await approveIndentAction(indentId, level, remarks, revisions);
+    const res = await approveIndentAction(indentId, level, remarks, revisions, updatedAt);
     setBusy(false);
     if (!res.ok) setError(res.error);
     else {
@@ -517,8 +520,8 @@ function ApproveModal({
 }
 
 function RejectModal({
-  indentId, onClose, onDone,
-}: { indentId: string; onClose: () => void; onDone: (message: string) => void }) {
+  indentId, updatedAt, onClose, onDone,
+}: { indentId: string; updatedAt: string; onClose: () => void; onDone: (message: string) => void }) {
   const [remarks, setRemarks] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -526,7 +529,7 @@ function RejectModal({
   async function submit() {
     setBusy(true);
     setError(null);
-    const res = await rejectIndentAction(indentId, remarks);
+    const res = await rejectIndentAction(indentId, remarks, updatedAt);
     setBusy(false);
     if (!res.ok) setError(res.error);
     else onDone("Indent rejected.");

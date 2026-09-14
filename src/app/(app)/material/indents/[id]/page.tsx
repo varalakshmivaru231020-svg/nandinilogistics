@@ -69,6 +69,7 @@ export default async function IndentDetailPage({ params }: { params: Promise<{ i
           id: indent.id,
           indentNo: indent.indentNo,
           status: indent.status,
+          updatedAt: indent.updatedAt.toISOString(),
           raisedAt: indent.raisedAt.toISOString(),
           requiredByDate: indent.requiredByDate.toISOString(),
           purpose: indent.purpose,

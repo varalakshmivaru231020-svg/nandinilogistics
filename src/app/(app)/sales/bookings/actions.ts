@@ -101,6 +101,9 @@ export async function createBookingAction(
       if (["BOOKED", "AGREEMENT", "REGISTERED"].includes(sheet.unit.status)) {
         throw new Error(`${sheet.unit.unitNumber} is already ${sheet.unit.status.toLowerCase()}.`);
       }
+      if (sheet.unit.status === "BLOCKED") {
+        throw new Error(`${sheet.unit.unitNumber} is blocked from sale. Unblock it on the Units screen before booking.`);
+      }
 
       // A discount that was never approved must not walk into a booking.
       if (Number(sheet.discountAmount) > 0 && !sheet.discountApprovedAt) {
@@ -111,6 +114,16 @@ export async function createBookingAction(
 
       const customer = await tx.customer.findUnique({ where: { id: customerId } });
       if (!customer) throw new Error("Customer not found.");
+
+      // Claim the unit exactly as it was checked. A block, another booking or a
+      // hold landing in between wins, and nothing below is written.
+      const claimed = await tx.unit.updateMany({
+        where: { id: sheet.unit.id, status: sheet.unit.status },
+        data: { status: "BOOKED" },
+      });
+      if (claimed.count === 0) {
+        throw new Error(`${sheet.unit.unitNumber} changed while this booking was being made. Reload and check its status.`);
+      }
 
       const bookingNo = await nextDocumentNumber(tx, "BOOKING", sheet.unit.projectId);
       const bookingDate = new Date();
@@ -150,7 +163,6 @@ export async function createBookingAction(
         });
       }
 
-      await tx.unit.update({ where: { id: sheet.unit.id }, data: { status: "BOOKED" } });
       await tx.unitHold.updateMany({
         where: { unitId: sheet.unit.id, isActive: true },
         data: { isActive: false, releasedAt: bookingDate, releaseNote: `Booked on ${bookingNo}` },

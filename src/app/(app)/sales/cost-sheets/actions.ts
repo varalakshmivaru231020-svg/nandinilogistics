@@ -38,11 +38,15 @@ export async function holdUnitAction(
         );
       }
 
+      // Claim the unit only if it is still available: a concurrent hold, block
+      // or booking wins, and no second hold is created.
+      const claimed = await tx.unit.updateMany({ where: { id: unitId, status: "AVAILABLE" }, data: { status: "HELD" } });
+      if (claimed.count === 0) throw new Error(`${unit.unitNumber} was just taken. Reload and pick another unit.`);
+
       const expiresAt = new Date(Date.now() + days * 86_400_000);
       await tx.unitHold.create({
         data: { unitId, leadId, heldById: ctx.id, expiresAt, isActive: true },
       });
-      await tx.unit.update({ where: { id: unitId }, data: { status: "HELD" } });
 
       return { unitNumber: unit.unitNumber, projectId: unit.projectId, expiresAt };
     });
@@ -103,15 +107,20 @@ export async function releaseHoldAction(holdId: string, note: string): Promise<A
     if (!hold.isActive) throw new Error("This hold is already released.");
     assertProjectAccess(ctx, hold.unit.projectId);
 
-    await prisma.$transaction([
-      prisma.unitHold.update({
-        where: { id: holdId },
+    await prisma.$transaction(async (tx) => {
+      const released = await tx.unitHold.updateMany({
+        where: { id: holdId, isActive: true },
         data: { isActive: false, releasedAt: new Date(), releaseNote: note || null },
-      }),
-      ...(hold.unit.status === "HELD"
-        ? [prisma.unit.update({ where: { id: hold.unit.id }, data: { status: "AVAILABLE" } })]
-        : []),
-    ]);
+      });
+      if (released.count === 0) throw new Error("This hold is already released.");
+
+      // Back to AVAILABLE only if the unit is still merely held, and by no other
+      // active hold — never undo a booking or a block made meanwhile.
+      const otherHolds = await tx.unitHold.count({ where: { unitId: hold.unit.id, isActive: true } });
+      if (otherHolds === 0) {
+        await tx.unit.updateMany({ where: { id: hold.unit.id, status: "HELD" }, data: { status: "AVAILABLE" } });
+      }
+    });
 
     await recordAudit({
       action: "UPDATE", entity: "UnitHold", entityId: holdId, userId: ctx.id,

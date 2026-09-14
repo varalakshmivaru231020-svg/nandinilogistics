@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db";
-import { authorize, runAction, PermissionError, type ActionResult } from "@/lib/rbac/guard";
+import { assertProjectAccess, authorize, runAction, PermissionError, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
 import { getSetting } from "@/lib/settings";
@@ -256,9 +256,17 @@ export async function blockUnitForLeadAction(leadId: string, unitId: string): Pr
     const ctx = await authorize(PERM.unit.hold.create);
 
     await prisma.$transaction(async (tx) => {
-      const unit = await tx.unit.findUnique({ where: { id: unitId }, select: { unitNumber: true, status: true } });
+      const unit = await tx.unit.findUnique({
+        where: { id: unitId },
+        select: { unitNumber: true, status: true, projectId: true },
+      });
       if (!unit) throw new Error("Unit not found.");
+      assertProjectAccess(ctx, unit.projectId);
       if (unit.status !== "AVAILABLE") throw new Error(`Unit ${unit.unitNumber} is not available.`);
+
+      // Claim it only if still available: a concurrent hold, block or booking wins.
+      const claimed = await tx.unit.updateMany({ where: { id: unitId, status: "AVAILABLE" }, data: { status: "HELD" } });
+      if (claimed.count === 0) throw new Error(`Unit ${unit.unitNumber} was just taken. Reload and pick another unit.`);
 
       const days = 2;
       await tx.unitHold.create({
@@ -270,9 +278,8 @@ export async function blockUnitForLeadAction(leadId: string, unitId: string): Pr
           isActive: true,
         },
       });
-      await tx.unit.update({ where: { id: unitId }, data: { status: "HELD" } });
       await recordAudit({
-        action: "UPDATE", entity: "Unit", entityId: unitId, userId: ctx.id,
+        action: "UPDATE", entity: "Unit", entityId: unitId, userId: ctx.id, projectId: unit.projectId,
         summary: `Blocked unit ${unit.unitNumber} for a lead`,
       });
     });

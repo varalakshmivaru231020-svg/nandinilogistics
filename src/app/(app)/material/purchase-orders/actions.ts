@@ -1,5 +1,7 @@
 "use server";
 
+import { assertUnchanged, staleMessage } from "@/lib/material/procurement";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -218,7 +220,7 @@ export async function updatePurchaseOrderAction(
  */
 type ApprovalLevel = "PM" | "ADMIN";
 
-async function approveAtLevel(id: string, level: ApprovalLevel, remarks: string) {
+async function approveAtLevel(id: string, level: ApprovalLevel, remarks: string, expectedUpdatedAt?: string) {
   const ctx = await authorize(
     level === "PM" ? PERM.material.purchaseOrder.approvePm : PERM.material.purchaseOrder.approveAdmin,
   );
@@ -226,6 +228,7 @@ async function approveAtLevel(id: string, level: ApprovalLevel, remarks: string)
   const po = await prisma.purchaseOrder.findUnique({ where: { id } });
   if (!po) throw new Error("Purchase order not found.");
   assertProjectAccess(ctx, po.projectId);
+  assertUnchanged(po.updatedAt, expectedUpdatedAt, po.poNo);
 
   const awaitingPm = ["DRAFT", "PENDING_APPROVAL", "PENDING_PM_APPROVAL"].includes(po.status);
   const awaitingAdmin = po.status === "PENDING_ADMIN_APPROVAL";
@@ -248,8 +251,10 @@ async function approveAtLevel(id: string, level: ApprovalLevel, remarks: string)
   assertWithinApprovalLimit(ctx, APPROVAL_SCOPE, Number(po.totalAmount));
 
   const now = new Date();
-  await prisma.purchaseOrder.update({
-    where: { id },
+  // Written only if nothing moved since the checks above: an edit or another
+  // approval landing in between wins, and this approval is refused.
+  const { count: approved } = await prisma.purchaseOrder.updateMany({
+    where: { id, status: po.status, updatedAt: po.updatedAt },
     data:
       level === "PM"
         ? { status: "PENDING_ADMIN_APPROVAL", pmApprovedById: ctx.id, pmApprovedAt: now }
@@ -260,6 +265,7 @@ async function approveAtLevel(id: string, level: ApprovalLevel, remarks: string)
             approvedById: ctx.id, approvedAt: now,
           },
   });
+  if (approved === 0) throw new Error(staleMessage(po.poNo));
 
   // Only a fully approved order marks its indents ordered.
   if (level === "ADMIN") {
@@ -297,12 +303,12 @@ async function approveAtLevel(id: string, level: ApprovalLevel, remarks: string)
   return null;
 }
 
-export async function approvePoPmAction(id: string, remarks = ""): Promise<ActionResult<null>> {
-  return runAction(() => approveAtLevel(id, "PM", remarks));
+export async function approvePoPmAction(id: string, remarks = "", expectedUpdatedAt?: string): Promise<ActionResult<null>> {
+  return runAction(() => approveAtLevel(id, "PM", remarks, expectedUpdatedAt));
 }
 
-export async function approvePoAdminAction(id: string, remarks = ""): Promise<ActionResult<null>> {
-  return runAction(() => approveAtLevel(id, "ADMIN", remarks));
+export async function approvePoAdminAction(id: string, remarks = "", expectedUpdatedAt?: string): Promise<ActionResult<null>> {
+  return runAction(() => approveAtLevel(id, "ADMIN", remarks, expectedUpdatedAt));
 }
 
 /**
@@ -310,7 +316,7 @@ export async function approvePoAdminAction(id: string, remarks = ""): Promise<Ac
  * approvals, per the design's own note. The previous approvals are cleared
  * rather than kept, because they applied to different numbers.
  */
-export async function revisePurchaseOrderAction(id: string, reason: string): Promise<ActionResult<{ revision: number }>> {
+export async function revisePurchaseOrderAction(id: string, reason: string, expectedUpdatedAt?: string): Promise<ActionResult<{ revision: number }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.material.purchaseOrder.revise);
 
@@ -329,10 +335,11 @@ export async function revisePurchaseOrderAction(id: string, reason: string): Pro
       );
     }
     if (!reason.trim()) throw new Error("A revision needs a reason.");
+    assertUnchanged(po.updatedAt, expectedUpdatedAt, po.poNo);
 
     const revision = po.revision + 1;
-    await prisma.purchaseOrder.update({
-      where: { id },
+    const { count: revised } = await prisma.purchaseOrder.updateMany({
+      where: { id, status: "APPROVED", updatedAt: po.updatedAt },
       data: {
         revision,
         status: "PENDING_PM_APPROVAL",
@@ -341,6 +348,7 @@ export async function revisePurchaseOrderAction(id: string, reason: string): Pro
         approvedById: null, approvedAt: null,
       },
     });
+    if (revised === 0) throw new Error(staleMessage(po.poNo));
 
     await recordAudit({
       action: "UPDATE", entity: "PurchaseOrder", entityId: id, userId: ctx.id,
@@ -357,6 +365,7 @@ export async function revisePurchaseOrderAction(id: string, reason: string): Pro
 export async function cancelPurchaseOrderAction(
   id: string,
   remarks: string,
+  expectedUpdatedAt?: string,
 ): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.material.purchaseOrder.cancel);
@@ -372,7 +381,14 @@ export async function cancelPurchaseOrderAction(
       throw new Error("Material has already been received against this PO, so it cannot be cancelled. Close it instead.");
     }
 
-    await prisma.purchaseOrder.update({ where: { id }, data: { status: "CANCELLED" } });
+    assertUnchanged(po.updatedAt, expectedUpdatedAt, po.poNo);
+    if (["CANCELLED", "CLOSED"].includes(po.status)) throw new Error(`${po.poNo} is already ${po.status.toLowerCase()}.`);
+
+    const { count: cancelled } = await prisma.purchaseOrder.updateMany({
+      where: { id, status: po.status, updatedAt: po.updatedAt },
+      data: { status: "CANCELLED" },
+    });
+    if (cancelled === 0) throw new Error(staleMessage(po.poNo));
     await recordAudit({
       action: "CANCEL", entity: "PurchaseOrder", entityId: id, userId: ctx.id, projectId: po.projectId,
       summary: `Cancelled purchase order ${po.poNo}: ${remarks}`,
@@ -383,14 +399,23 @@ export async function cancelPurchaseOrderAction(
   });
 }
 
-export async function closePurchaseOrderAction(id: string): Promise<ActionResult<null>> {
+export async function closePurchaseOrderAction(id: string, expectedUpdatedAt?: string): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.material.purchaseOrder.close);
     const po = await prisma.purchaseOrder.findUnique({ where: { id } });
     if (!po) throw new Error("Purchase order not found.");
     assertProjectAccess(ctx, po.projectId);
 
-    await prisma.purchaseOrder.update({ where: { id }, data: { status: "CLOSED" } });
+    assertUnchanged(po.updatedAt, expectedUpdatedAt, po.poNo);
+    if (!["APPROVED", "PARTIALLY_RECEIVED", "RECEIVED"].includes(po.status)) {
+      throw new Error(`${po.poNo} is ${po.status.replace(/_/g, " ").toLowerCase()} — only an approved order can be closed.`);
+    }
+
+    const { count: closed } = await prisma.purchaseOrder.updateMany({
+      where: { id, status: po.status, updatedAt: po.updatedAt },
+      data: { status: "CLOSED" },
+    });
+    if (closed === 0) throw new Error(staleMessage(po.poNo));
     await recordAudit({
       action: "UPDATE", entity: "PurchaseOrder", entityId: id, userId: ctx.id, projectId: po.projectId,
       summary: `Closed purchase order ${po.poNo} — no further receipts expected`,

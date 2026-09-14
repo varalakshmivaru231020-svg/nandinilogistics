@@ -16,7 +16,7 @@ import {
 } from "../actions";
 
 interface Po {
-  id: string; poNo: string; status: string; poDate: string; expectedDate: string | null;
+  id: string; poNo: string; status: string; updatedAt: string; poDate: string; expectedDate: string | null;
   approvedAt: string | null; subTotal: number; taxAmount: number; otherCharges: number;
   totalAmount: number; deliveryAddress: string | null; terms: string | null;
   projectName: string; projectCode: string; vendorName: string; vendorContact: string | null;
@@ -258,7 +258,7 @@ export function PoDetail({
 
               {["PARTIALLY_RECEIVED", "RECEIVED", "APPROVED"].includes(po.status) && can.close && (
                 <Button size="sm" variant="ghost" loading={busy}
-                  onClick={() => run(() => closePurchaseOrderAction(po.id), "Purchase order closed.")}>
+                  onClick={() => run(() => closePurchaseOrderAction(po.id, po.updatedAt), "Purchase order closed.")}>
                   Close purchase order
                 </Button>
               )}
@@ -375,8 +375,8 @@ export function PoDetail({
           onClose={() => setApproving(false)}
           onSubmit={async (remarks) => {
             const res = awaitingPm
-              ? await approvePoPmAction(po.id, remarks)
-              : await approvePoAdminAction(po.id, remarks);
+              ? await approvePoPmAction(po.id, remarks, po.updatedAt)
+              : await approvePoAdminAction(po.id, remarks, po.updatedAt);
             if (res.ok) {
               setApproving(false);
               setNotice(awaitingPm ? "Passed to the Admin level." : "Purchase order approved.");
@@ -396,7 +396,7 @@ export function PoDetail({
           required
           onClose={() => setCancelling(false)}
           onSubmit={async (remarks) => {
-            const res = await cancelPurchaseOrderAction(po.id, remarks);
+            const res = await cancelPurchaseOrderAction(po.id, remarks, po.updatedAt);
             if (res.ok) { setCancelling(false); setNotice("Purchase order cancelled."); router.refresh(); }
             return res.ok ? null : res.error;
           }}
