@@ -5,8 +5,11 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/db";
 import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
-import { recordAudit } from "@/lib/audit";
+import { diff, recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
+import { markAttendance } from "@/lib/hr/attendance-marking";
+import { editableEmployee, maskIdentityChanges } from "@/lib/hr/employee-audit";
+import { checkStatusChange, claimEmployeeStatus, statusLabel } from "@/lib/hr/employee-status";
 
 /**
  * The design makes name, mobile, photo and Aadhaar mandatory on an employee.
@@ -70,23 +73,62 @@ export async function updateEmployeeAction(id: string, formData: FormData): Prom
     const before = await prisma.employee.findUnique({ where: { id } });
     if (!before) throw new Error("Employee not found.");
 
-    await prisma.employee.update({
-      where: { id },
-      data: {
-        name: v.name,
-        mobile: v.mobile,
-        aadhaar: v.aadhaar,
-        pan: v.pan || null,
-        address: v.address || null,
-        altContact: v.altContact || null,
-        employmentTypeId: v.employmentTypeId,
-        designationId: v.designationId || null,
-      },
-    });
+    const data = {
+      name: v.name,
+      mobile: v.mobile,
+      aadhaar: v.aadhaar,
+      pan: v.pan || null,
+      address: v.address || null,
+      altContact: v.altContact || null,
+      employmentTypeId: v.employmentTypeId,
+      designationId: v.designationId || null,
+    };
+    await prisma.employee.update({ where: { id }, data });
+
+    // Every field the form changed; Aadhaar and PAN masked to their last four.
+    const changes = maskIdentityChanges(diff(editableEmployee(before), editableEmployee(data)));
     await recordAudit({
       action: "UPDATE", entity: "Employee", entityId: id, userId: ctx.id,
-      summary: `${v.name} updated`,
-      changes: { name: { from: before.name, to: v.name } },
+      summary: changes
+        ? `${v.name} updated — ${Object.keys(changes).join(", ")}`
+        : `${v.name} saved with no changes`,
+      changes,
+    });
+    revalidatePath("/hr");
+    return null;
+  });
+}
+
+/**
+ * Activates or deactivates an employee. Deactivating needs a reason. The write
+ * is claimed against the status that was read, so a concurrent change wins
+ * rather than being overwritten.
+ */
+export async function setEmployeeStatusAction(
+  id: string,
+  status: string,
+  reason: string,
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.hr.employee.update);
+    const before = await prisma.employee.findUnique({ where: { id }, select: { id: true, name: true, status: true } });
+    if (!before) throw new Error("Employee not found.");
+
+    const change = checkStatusChange(before.status, status, reason);
+    if (!change.ok) throw new Error(change.error);
+
+    const claimed = await claimEmployeeStatus(prisma, id, before.status, change.next);
+    if (!claimed) {
+      throw new Error(`${before.name}'s status was changed by someone else. Reload and try again.`);
+    }
+
+    await recordAudit({
+      action: "UPDATE", entity: "Employee", entityId: id, userId: ctx.id,
+      summary: `${before.name} marked ${statusLabel(change.next).toLowerCase()}${change.reason ? ` — ${change.reason}` : ""}`,
+      changes: {
+        status: { from: before.status, to: change.next },
+        ...(change.reason ? { reason: { from: null, to: change.reason } } : {}),
+      },
     });
     revalidatePath("/hr");
     return null;
@@ -161,13 +203,10 @@ export async function deleteEmploymentTypeAction(id: string): Promise<ActionResu
 
 /* -------------------------------- Attendance ------------------------------ */
 
-const STATUSES = ["PRESENT", "ABSENT", "HALF_DAY"] as const;
-type Status = (typeof STATUSES)[number];
-
 /**
  * Marking is idempotent on (employee, date): re-marking a day corrects it
- * rather than stacking a second row. That invariant lives on the unique index,
- * not only here.
+ * rather than stacking a second row. Inactive employees are refused inside
+ * `markAttendance()`, under a lock, and nothing is written for the batch.
  */
 export async function markAttendanceAction(
   attendanceOn: string,
@@ -176,6 +215,7 @@ export async function markAttendanceAction(
 ): Promise<ActionResult<{ marked: number }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.hr.attendance.mark);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(attendanceOn)) throw new Error("Pick a valid date.");
     const date = new Date(`${attendanceOn}T00:00:00.000Z`);
     if (Number.isNaN(date.getTime())) throw new Error("Pick a valid date.");
     if (date.getTime() > Date.now() + 86_400_000) {
@@ -183,37 +223,15 @@ export async function markAttendanceAction(
     }
     if (!marks.length) throw new Error("Nothing to mark.");
 
-    for (const m of marks) {
-      if (!STATUSES.includes(m.status as Status)) throw new Error(`Unknown status ${m.status}.`);
-    }
-
-    await prisma.$transaction(
-      marks.map((m) =>
-        prisma.attendanceEntry.upsert({
-          where: { employeeId_attendanceOn: { employeeId: m.employeeId, attendanceOn: date } },
-          create: {
-            employeeId: m.employeeId,
-            attendanceOn: date,
-            status: m.status as Status,
-            overtimeHours: m.status === "ABSENT" ? 0 : (m.overtimeHours ?? 0),
-            projectId: projectId || null,
-            markedById: ctx.id,
-          },
-          update: {
-            status: m.status as Status,
-            overtimeHours: m.status === "ABSENT" ? 0 : (m.overtimeHours ?? 0),
-            projectId: projectId || null,
-            markedById: ctx.id,
-          },
-        }),
-      ),
+    const marked = await prisma.$transaction((tx) =>
+      markAttendance(tx, { date, marks, projectId: projectId || null, markedById: ctx.id }),
     );
 
     await recordAudit({
       action: "UPDATE", entity: "AttendanceEntry", userId: ctx.id, projectId: projectId || undefined,
-      summary: `${marks.length} marked for ${attendanceOn}`,
+      summary: `${marked} marked for ${attendanceOn}`,
     });
     revalidatePath("/hr");
-    return { marked: marks.length };
+    return { marked };
   });
 }

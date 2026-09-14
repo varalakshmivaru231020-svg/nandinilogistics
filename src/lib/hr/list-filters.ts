@@ -22,15 +22,21 @@ export interface EmployeeListParams {
   type: string;
   /** Designation id, or "". */
   designation: string;
+  /** "ACTIVE", "INACTIVE", or "" for everyone. */
+  status: EmployeeStatusFilter;
 }
+
+export type EmployeeStatusFilter = "" | "ACTIVE" | "INACTIVE";
 
 export function readEmployeeListParams(source: ParamSource): EmployeeListParams {
   const type = read(source, "type");
   const designation = read(source, "designation");
+  const status = read(source, "status").toUpperCase();
   return {
     q: read(source, "q"),
     type: ID.test(type) ? type : "",
     designation: ID.test(designation) ? designation : "",
+    status: status === "ACTIVE" || status === "INACTIVE" ? status : "",
   };
 }
 
@@ -48,6 +54,10 @@ export function employeeListWhere(p: EmployeeListParams): Prisma.EmployeeWhereIn
       : {}),
     ...(p.type ? { employmentTypeId: p.type } : {}),
     ...(p.designation ? { designationId: p.designation } : {}),
+    // Anything that is not explicitly INACTIVE counts as active, so a legacy
+    // value never hides someone from both filters at once.
+    ...(p.status === "INACTIVE" ? { status: "INACTIVE" } : {}),
+    ...(p.status === "ACTIVE" ? { status: { not: "INACTIVE" } } : {}),
   };
 }
 
@@ -59,6 +69,7 @@ export function describeEmployeeFilters(
     p.q.trim() ? `Search "${p.q.trim()}"` : null,
     names.type ? `Type ${names.type}` : null,
     names.designation ? `Designation ${names.designation}` : null,
+    p.status === "ACTIVE" ? "Active only" : p.status === "INACTIVE" ? "Inactive only" : null,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : "All employees";
 }
