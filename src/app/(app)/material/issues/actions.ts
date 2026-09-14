@@ -9,6 +9,7 @@ import { recordAudit } from "@/lib/audit";
 import { nextDocumentNumber } from "@/lib/numbering";
 import { onHand, postStockMovement } from "@/lib/inventory";
 import { PERM } from "@/lib/permissions/codes";
+import { cancelIssue } from "@/lib/material/issue-cancel";
 
 const IssueSchema = z.object({
   projectId: z.string().min(1, "Project is required"),
@@ -124,6 +125,7 @@ export async function acknowledgeIssueAction(id: string): Promise<ActionResult<n
     const issue = await prisma.materialIssue.findUnique({ where: { id } });
     if (!issue) throw new Error("Issue slip not found.");
     assertProjectAccess(ctx, issue.projectId);
+    if (issue.cancelledAt) throw new Error("This issue slip is cancelled and cannot be acknowledged.");
     if (issue.acknowledgedAt) throw new Error("This issue slip is already acknowledged.");
 
     // Only the person it was issued to can sign for it.
@@ -131,10 +133,12 @@ export async function acknowledgeIssueAction(id: string): Promise<ActionResult<n
       throw new Error("Only the person this material was issued to can acknowledge it.");
     }
 
-    await prisma.materialIssue.update({
-      where: { id },
+    // Guarded, so a cancellation landing in between is not signed for.
+    const signed = await prisma.materialIssue.updateMany({
+      where: { id, cancelledAt: null, acknowledgedAt: null },
       data: { acknowledgedAt: new Date(), acknowledgedById: ctx.id },
     });
+    if (signed.count === 0) throw new Error("This issue slip was cancelled or acknowledged in the meantime.");
 
     await recordAudit({
       action: "APPROVE", entity: "MaterialIssue", entityId: id, userId: ctx.id, projectId: issue.projectId,
@@ -143,5 +147,42 @@ export async function acknowledgeIssueAction(id: string): Promise<ActionResult<n
 
     revalidatePath("/material/issues");
     return null;
+  });
+}
+
+/**
+ * Cancels an issue slip: stock still out on site goes back into the store at
+ * the issue rates. Refused while a return against it awaits a decision.
+ */
+export async function cancelIssueAction(
+  id: string,
+  reason: string,
+): Promise<ActionResult<{ issueNo: string; valuePutBack: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.material.issue.cancel);
+
+    const issue = await prisma.materialIssue.findUnique({ where: { id }, select: { projectId: true } });
+    if (!issue) throw new Error("Issue slip not found.");
+    assertProjectAccess(ctx, issue.projectId);
+
+    const result = await prisma.$transaction((tx) =>
+      cancelIssue(tx, { issueId: id, userId: ctx.id, reason: reason ?? "", now: new Date() }),
+    );
+
+    await recordAudit({
+      action: "CANCEL",
+      entity: "MaterialIssue",
+      entityId: id,
+      userId: ctx.id,
+      projectId: result.projectId,
+      summary:
+        `Cancelled ${result.issueNo}: ${result.linesPutBack} line(s) put back into stock worth ` +
+        `₹${result.valuePutBack.toLocaleString("en-IN")} — ${reason.trim()}`,
+    });
+
+    revalidatePath("/material/issues");
+    revalidatePath("/material/stock");
+    revalidatePath("/material/returns");
+    return { issueNo: result.issueNo, valuePutBack: result.valuePutBack };
   });
 }

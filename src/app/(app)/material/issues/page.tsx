@@ -23,7 +23,7 @@ export default async function IssuesPage({
   const raw = await searchParams;
   const params = readIssueListParams(raw);
   const query = toSearchParams(raw);
-  const filtered = Boolean(params.q || params.project || params.ack || params.from || params.to);
+  const filtered = Boolean(params.q || params.project || params.ack || params.status || params.from || params.to);
 
   const lookups = ctx.has(PERM.material.issue.create) ? await issueLookups(ctx) : null;
 
@@ -39,20 +39,23 @@ export default async function IssuesPage({
         workPackage: { select: { code: true, name: true } },
         issuedBy: { select: { name: true } },
         items: { include: { item: { select: { name: true, uom: { select: { code: true } } } } } },
+        _count: { select: { returns: { where: { status: "PENDING" } } } },
       },
     }),
     projectOptions(ctx),
   ]);
 
-  // Who each slip went to — issuedToId is a plain field, so resolve the names.
-  const recipientIds = [...new Set(issues.map((i) => i.issuedToId))];
-  const recipients = await prisma.user.findMany({
-    where: { id: { in: recipientIds } },
+  // Who each slip went to — and who cancelled it — are plain fields, so resolve the names.
+  const userIds = [
+    ...new Set(issues.flatMap((i) => [i.issuedToId, ...(i.cancelledById ? [i.cancelledById] : [])])),
+  ];
+  const people = await prisma.user.findMany({
+    where: { id: { in: userIds } },
     select: { id: true, name: true },
   });
-  const nameById = new Map(recipients.map((r) => [r.id, r.name]));
+  const nameById = new Map(people.map((r) => [r.id, r.name]));
 
-  const pendingAck = issues.filter((i) => !i.acknowledgedAt).length;
+  const pendingAck = issues.filter((i) => !i.acknowledgedAt && !i.cancelledAt).length;
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -76,6 +79,15 @@ export default async function IssuesPage({
         searchPlaceholder="Search issue, item, store, purpose…"
         filters={[
           { name: "project", label: "Projects", options: projects },
+          {
+            name: "status",
+            label: "Status",
+            allLabel: "Active and cancelled",
+            options: [
+              { value: "active", label: "Active" },
+              { value: "cancelled", label: "Cancelled" },
+            ],
+          },
           {
             name: "ack",
             label: "Acknowledgement",
@@ -110,6 +122,8 @@ export default async function IssuesPage({
           pendingAck={pendingAck}
           currentUserId={ctx.id}
           canAcknowledge={ctx.has(PERM.material.issue.acknowledge)}
+          canCancel={ctx.has(PERM.material.issue.cancel)}
+          canRaiseReturn={ctx.has(PERM.material.return.create)}
           canViewValue={ctx.has(PERM.material.stock.viewValuation)}
           issues={issues.map((i) => ({
             id: i.id,
@@ -124,11 +138,16 @@ export default async function IssuesPage({
             purpose: i.purpose,
             totalValue: Number(i.totalValue),
             acknowledgedAt: i.acknowledgedAt ? i.acknowledgedAt.toISOString() : null,
+            cancelledAt: i.cancelledAt ? i.cancelledAt.toISOString() : null,
+            cancelledByName: i.cancelledById ? (nameById.get(i.cancelledById) ?? null) : null,
+            cancelReason: i.cancelReason,
+            pendingReturns: i._count.returns,
             lines: i.items.map((l) => ({
               id: l.id,
               name: l.item.name,
               uom: l.item.uom.code,
               issuedQty: Number(l.issuedQty),
+              returnedQty: Number(l.returnedQty),
               rate: Number(l.rate),
               value: Number(l.value),
             })),

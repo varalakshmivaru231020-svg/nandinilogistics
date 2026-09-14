@@ -38,6 +38,7 @@ const ROUTES: Array<[string, string, string]> = [
   ["/api/material/invoices/export", "material.vendorInvoice.view", "material.vendorInvoice.export"],
   ["/api/material/payments/export", "material.vendorPayment.view", "material.vendorPayment.export"],
   ["/api/material/issues/export", "material.issue.view", "material.issue.export"],
+  ["/api/material/returns/export", "material.return.view", "material.return.export"],
   ["/api/material/transfers/export", "material.transfer.view", "material.transfer.export"],
   ["/api/material/stock/export", "material.stock.view", "material.stock.export"],
   ["/api/material/reorder/export", "material.reorder.view", "material.stock.export"],
