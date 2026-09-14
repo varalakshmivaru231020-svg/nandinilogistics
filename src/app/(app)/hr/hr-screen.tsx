@@ -2,18 +2,20 @@
 
 import * as React from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Download, Pencil, Plus, X } from "lucide-react";
+import { Pencil, Plus, UserCheck, UserX, X } from "lucide-react";
 
-import { Badge, Card, Field, Input, Select } from "@/components/ui/primitives";
+import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
+import type { AttendanceSummaryRow } from "@/lib/hr/attendance-report";
+import { isInactive, statusLabel } from "@/lib/hr/employee-status";
 import {
   createEmployeeAction, createEmploymentTypeAction, deleteEmployeeAction,
-  deleteEmploymentTypeAction, markAttendanceAction, updateEmployeeAction,
+  deleteEmploymentTypeAction, markAttendanceAction, setEmployeeStatusAction, updateEmployeeAction,
 } from "./actions";
 
 interface Employee {
@@ -21,11 +23,13 @@ interface Employee {
   aadhaar: string | null; pan: string | null; address: string | null;
   employmentTypeId: string; employmentType: string;
   designationId: string | null; designation: string | null;
+  status: string;
   documents: Array<{ id: string; kind: string; fileName: string; fileSize: number }>;
 }
 interface TypeRow { id: string; name: string; count: number; canDelete: boolean }
 interface Mark { employeeId: string; status: string; overtimeHours: number }
-interface ReportRow { employeeId: string; status: string; days: number; overtime: number }
+/** Someone who can be marked — active employees only. */
+interface MarkRow { id: string; code: string; name: string; employmentType: string; designation: string | null }
 
 /** The design's three marks, with its own colours. */
 const MARKS = [
@@ -41,12 +45,14 @@ const TABS = [
 ];
 
 export function HrScreen({
-  tab, date, from, to, employees, employmentTypes, designations, dayMarks, report, can,
+  tab, date, from, to, rangeError, employees, markable, employmentTypes, designations, dayMarks, report, can,
 }: {
   tab: string; date: string; from: string; to: string;
-  employees: Employee[]; employmentTypes: TypeRow[];
+  /** Why the report range was refused, or null. */
+  rangeError: string | null;
+  employees: Employee[]; markable: MarkRow[]; employmentTypes: TypeRow[];
   designations: Array<{ id: string; name: string }>;
-  dayMarks: Mark[]; report: ReportRow[];
+  dayMarks: Mark[]; report: AttendanceSummaryRow[];
   can: Record<string, boolean>;
 }) {
   const router = useRouter();
@@ -56,6 +62,8 @@ export function HrScreen({
   const setError = React.useCallback((m: string) => toast(m, "bad"), [toast]);
   const [editing, setEditing] = React.useState<Employee | "new" | null>(null);
   const [removing, setRemoving] = React.useState<Employee | null>(null);
+  const [statusTarget, setStatusTarget] = React.useState<Employee | null>(null);
+  const [statusReason, setStatusReason] = React.useState("");
   const [newType, setNewType] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
@@ -102,6 +110,24 @@ export function HrScreen({
     flash(`${removing.name} removed`);
   }
 
+  function openStatus(e: Employee) {
+    setStatusReason("");
+    setStatusTarget(e);
+  }
+
+  async function changeStatus() {
+    if (!statusTarget) return;
+    const next = isInactive(statusTarget.status) ? "ACTIVE" : "INACTIVE";
+    setBusy(true);
+    const res = await setEmployeeStatusAction(statusTarget.id, next, statusReason);
+    setBusy(false);
+    if (!res.ok) { setError(res.error); return; }
+    setStatusTarget(null);
+    flash(`${statusTarget.name} marked ${statusLabel(next).toLowerCase()}`);
+  }
+
+  const deactivating = statusTarget ? !isInactive(statusTarget.status) : false;
+
   return (
     <div className="animate-fade-up">
       {/* Tabs, underlined as the design draws them */}
@@ -137,12 +163,13 @@ export function HrScreen({
           onRemoveType={removeType}
           onEdit={setEditing}
           onRemove={setRemoving}
+          onStatus={openStatus}
         />
       )}
 
       {active === "mark" && can.viewAttendance && (
         <MarkTab
-          employees={employees}
+          employees={markable}
           date={date}
           marks={dayMarks}
           can={can}
@@ -154,10 +181,11 @@ export function HrScreen({
 
       {active === "report" && can.report && (
         <ReportTab
-          employees={employees}
           rows={report}
           from={from}
           to={to}
+          rangeError={rangeError}
+          params={params}
           can={can}
           onRange={(f, t) => setParam({ from: f, to: t })}
         />
@@ -190,6 +218,42 @@ export function HrScreen({
           attendance recorded cannot be deleted — the record has to stay.
         </p>
       </Modal>
+
+      <Modal
+        open={Boolean(statusTarget)}
+        onClose={() => setStatusTarget(null)}
+        title={deactivating ? "Deactivate employee?" : "Activate employee?"}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setStatusTarget(null)}>Cancel</Button>
+            <Button
+              variant={deactivating ? "danger" : "primary"}
+              onClick={changeStatus}
+              loading={busy}
+              disabled={deactivating && statusReason.trim().length < 3}
+            >
+              {deactivating ? "Deactivate" : "Activate"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-[12.5px] font-medium text-muted-600">
+            {deactivating
+              ? `${statusTarget?.name} will no longer appear in Mark Attendance. Attendance already recorded stays in the report.`
+              : `${statusTarget?.name} can be marked for attendance again.`}
+          </p>
+          <Field label="Reason" required={deactivating}>
+            <Textarea
+              value={statusReason}
+              onChange={(e) => setStatusReason(e.target.value)}
+              placeholder={deactivating ? "e.g. Left the company on 12 Sep" : "Optional"}
+              rows={3}
+            />
+          </Field>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -198,7 +262,7 @@ export function HrScreen({
 
 function StaffTab({
   employees, employmentTypes, designations, params, can, newType, busy,
-  onNewType, onAddType, onRemoveType, onEdit, onRemove,
+  onNewType, onAddType, onRemoveType, onEdit, onRemove, onStatus,
 }: {
   employees: Employee[]; employmentTypes: TypeRow[];
   designations: Array<{ id: string; name: string }>;
@@ -208,10 +272,11 @@ function StaffTab({
   onNewType: (v: string) => void;
   onAddType: () => void; onRemoveType: (t: TypeRow) => void;
   onEdit: (e: Employee | "new") => void; onRemove: (e: Employee) => void;
+  onStatus: (e: Employee) => void;
 }) {
   // The export carries only the employee filters, not the attendance tabs' dates.
   const exportParams = new URLSearchParams();
-  for (const k of ["q", "type", "designation"]) {
+  for (const k of ["q", "type", "designation", "status"]) {
     const v = params.get(k);
     if (v) exportParams.set(k, v);
   }
@@ -233,6 +298,15 @@ function StaffTab({
             label: "Designation",
             allLabel: "All designations",
             options: designations.map((d) => ({ value: d.id, label: d.name })),
+          },
+          {
+            name: "status",
+            label: "Status",
+            allLabel: "All statuses",
+            options: [
+              { value: "ACTIVE", label: "Active" },
+              { value: "INACTIVE", label: "Inactive" },
+            ],
           },
         ]}
       >
@@ -295,12 +369,12 @@ function StaffTab({
         <table className="w-full min-w-[820px] border-collapse">
           <thead>
             <tr className="bg-surface-sunken">
-              {["Employee", "Type", "Designation", "Mobile", "Aadhaar", "Documents", ""].map((h, i) => (
+              {["Employee", "Type", "Designation", "Mobile", "Aadhaar", "Documents", "Status", ""].map((h, i) => (
                 <th
                   key={h || i}
                   className={cn(
                     "border-b border-line-300 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
-                    i === 6 ? "text-right" : "text-left",
+                    i === 7 ? "text-right" : "text-left",
                   )}
                 >
                   {h}
@@ -311,14 +385,20 @@ function StaffTab({
           <tbody>
             {employees.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
+                <td colSpan={8} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
                   Nobody on record yet.
                 </td>
               </tr>
             ) : employees.map((e) => (
-              <tr key={e.id} className="border-b border-line-200 transition-colors last:border-0 hover:bg-surface-hover">
+              <tr
+                key={e.id}
+                className={cn(
+                  "border-b border-line-200 transition-colors last:border-0 hover:bg-surface-hover",
+                  isInactive(e.status) && "bg-surface-sunken/60",
+                )}
+              >
                 <td className="px-4 py-3">
-                  <p className="text-[12.5px] font-bold text-navy-950">{e.name}</p>
+                  <p className={cn("text-[12.5px] font-bold", isInactive(e.status) ? "text-muted-500" : "text-navy-950")}>{e.name}</p>
                   <p className="num text-[11px] font-medium text-muted-400">{e.code}</p>
                 </td>
                 <td className="px-4 py-3"><Badge tone="slate">{e.employmentType}</Badge></td>
@@ -332,8 +412,21 @@ function StaffTab({
                         {e.documents.map((d) => <Badge key={d.id} tone="muted">{d.kind}</Badge>)}
                       </span>}
                 </td>
+                <td className="px-4 py-3">
+                  <Badge tone={isInactive(e.status) ? "muted" : "good"}>{statusLabel(e.status)}</Badge>
+                </td>
                 <td className="px-4 py-3 text-right">
                   <span className="inline-flex gap-1">
+                    {can.update && (
+                      <button
+                        type="button"
+                        title={isInactive(e.status) ? "Activate" : "Deactivate"}
+                        onClick={() => onStatus(e)}
+                        className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-muted-400 transition-colors hover:bg-surface-hover hover:text-navy-900"
+                      >
+                        {isInactive(e.status) ? <UserCheck className="h-3.5 w-3.5" /> : <UserX className="h-3.5 w-3.5" />}
+                      </button>
+                    )}
                     {can.update && (
                       <button
                         type="button" title="Edit" onClick={() => onEdit(e)}
@@ -366,7 +459,7 @@ function StaffTab({
 function MarkTab({
   employees, date, marks, can, onDate, onDone, onError,
 }: {
-  employees: Employee[]; date: string; marks: Mark[]; can: Record<string, boolean>;
+  employees: MarkRow[]; date: string; marks: Mark[]; can: Record<string, boolean>;
   onDate: (v: string) => void; onDone: (m: string) => void; onError: (m: string) => void;
 }) {
   // Server marks are the starting point; local edits layer on top.
@@ -457,7 +550,7 @@ function MarkTab({
           <tbody>
             {employees.length === 0 ? (
               <tr><td colSpan={4} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
-                Add employees before marking attendance.
+                No active employees to mark. Inactive employees are not listed.
               </td></tr>
             ) : employees.map((e) => {
               const d = draft[e.id];
@@ -516,42 +609,21 @@ function MarkTab({
 /* --------------------------- Attendance report ----------------------------- */
 
 function ReportTab({
-  employees, rows, from, to, can, onRange,
+  rows, from, to, rangeError, params, can, onRange,
 }: {
-  employees: Employee[]; rows: ReportRow[]; from: string; to: string;
+  rows: AttendanceSummaryRow[]; from: string; to: string; rangeError: string | null;
+  /** The current query, for the export link. */
+  params: URLSearchParams;
   can: Record<string, boolean>; onRange: (f: string, t: string) => void;
 }) {
   const [f, setF] = React.useState(from);
   const [t, setT] = React.useState(to);
 
-  const byEmployee = employees.map((e) => {
-    const mine = rows.filter((r) => r.employeeId === e.id);
-    const get = (s: string) => mine.find((r) => r.status === s)?.days ?? 0;
-    const present = get("PRESENT");
-    const half = get("HALF_DAY");
-    return {
-      ...e,
-      present,
-      half,
-      absent: get("ABSENT"),
-      overtime: mine.reduce((s, r) => s + r.overtime, 0),
-      payable: present + half * 0.5,
-    };
-  });
-
-  function exportCsv() {
-    const header = ["Code", "Employee", "Type", "Designation", "Present", "Half day", "Absent", "Payable days", "Overtime (hrs)"];
-    const lines = byEmployee.map((r) =>
-      [r.code, r.name, r.employmentType, r.designation ?? "", r.present, r.half, r.absent, r.payable, r.overtime]
-        .map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","),
-    );
-    const csv = [header.join(","), ...lines].join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `attendance_${f}_to_${t}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  // The export takes the applied range (not unsaved edits) and the employee filters.
+  const exportParams = new URLSearchParams({ from, to });
+  for (const k of ["q", "type", "designation"]) {
+    const v = params.get(k);
+    if (v) exportParams.set(k, v);
   }
 
   return (
@@ -565,11 +637,19 @@ function ReportTab({
         </Field>
         <Button size="md" variant="secondary" onClick={() => onRange(f, t)}>Apply</Button>
         {can.exportReport && (
-          <Button size="md" variant="ghost" onClick={exportCsv}>
-            <Download className="mr-1.5 h-3.5 w-3.5" /> Export
-          </Button>
+          <ExportMenu
+            size="md"
+            href={(format) => exportHref("/api/hr/attendance/export", format, exportParams)}
+            disabled={Boolean(rangeError) || rows.length === 0}
+          />
         )}
       </div>
+
+      {rangeError && (
+        <div className="mb-3.5">
+          <Alert tone="error" title="Range not applied">{rangeError}</Alert>
+        </div>
+      )}
 
       <Card className="overflow-x-auto">
         <table className="w-full min-w-[760px] border-collapse">
@@ -584,14 +664,17 @@ function ReportTab({
             </tr>
           </thead>
           <tbody>
-            {byEmployee.length === 0 ? (
+            {rows.length === 0 ? (
               <tr><td colSpan={7} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
                 Nothing recorded in this range.
               </td></tr>
-            ) : byEmployee.map((r) => (
+            ) : rows.map((r) => (
               <tr key={r.id} className="border-b border-line-200 last:border-0">
                 <td className="px-4 py-2.5">
-                  <p className="text-[12.5px] font-bold text-navy-950">{r.name}</p>
+                  <p className="text-[12.5px] font-bold text-navy-950">
+                    {r.name}
+                    {isInactive(r.status) && <Badge tone="muted" className="ml-1.5">Inactive</Badge>}
+                  </p>
                   <p className="num text-[11px] font-medium text-muted-400">{r.code}</p>
                 </td>
                 <td className="px-4 py-2.5"><Badge tone="slate">{r.employmentType}</Badge></td>

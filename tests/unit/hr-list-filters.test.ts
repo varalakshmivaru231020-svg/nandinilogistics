@@ -26,13 +26,34 @@ describe("employee list filters", () => {
   });
 
   it("ignores malformed ids from a hand-edited URL", () => {
-    expect(readEmployeeListParams({ type: "x' OR '1", designation: "a/b" })).toEqual({ q: "", type: "", designation: "" });
+    expect(readEmployeeListParams({ type: "x' OR '1", designation: "a/b" })).toEqual({ q: "", type: "", designation: "", status: "" });
+  });
+
+  it("defaults to every status", () => {
+    expect(readEmployeeListParams({}).status).toBe("");
+    expect(employeeListWhere(readEmployeeListParams({ status: "all" }))).toEqual({});
+  });
+
+  it("filters by status, treating anything not INACTIVE as active", () => {
+    expect(employeeListWhere(readEmployeeListParams({ status: "INACTIVE" }))).toEqual({ status: "INACTIVE" });
+    expect(employeeListWhere(readEmployeeListParams({ status: "active" }))).toEqual({ status: { not: "INACTIVE" } });
+    expect(employeeListWhere(readEmployeeListParams(new URLSearchParams("status=ACTIVE&type=cltype1")))).toEqual({
+      employmentTypeId: "cltype1",
+      status: { not: "INACTIVE" },
+    });
+  });
+
+  it("ignores an unknown status", () => {
+    expect(readEmployeeListParams({ status: "SUSPENDED" }).status).toBe("");
+    expect(employeeListWhere(readEmployeeListParams({ status: "'; DROP" }))).toEqual({});
   });
 
   it("describes the filters", () => {
     expect(describeEmployeeFilters(readEmployeeListParams({}), { type: null, designation: null })).toBe("All employees");
     expect(describeEmployeeFilters(readEmployeeListParams({ q: "ram" }), { type: "Contract", designation: null }))
       .toBe('Search "ram" · Type Contract');
+    expect(describeEmployeeFilters(readEmployeeListParams({ status: "INACTIVE" }), { type: null, designation: null }))
+      .toBe("Inactive only");
   });
 
   it("masks identity numbers down to the last four", () => {

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { PageHeader } from "@/components/ui/primitives";
 import { employeeListWhere, maskId, readEmployeeListParams } from "@/lib/hr/list-filters";
+import { parseAttendanceRange } from "@/lib/hr/attendance-report";
+import { loadAttendanceReport } from "@/lib/hr/attendance-report-data";
 import { HrScreen } from "./hr-screen";
 
 export const metadata = { title: "Users & Attendance" };
@@ -12,26 +14,25 @@ export default async function WorkforcePage({
 }: {
   searchParams: Promise<{
     tab?: string; date?: string; from?: string; to?: string;
-    q?: string; type?: string; designation?: string;
+    q?: string; type?: string; designation?: string; status?: string;
   }>;
 }) {
   const ctx = await requirePermission(PERM.hr.employee.view);
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
   const raw = await searchParams;
-  const {
-    tab = "staff",
-    date = today,
-    from = new Date(now.getTime() - 6 * 86_400_000).toISOString().slice(0, 10),
-    to = today,
-  } = raw;
+  const { tab = "staff", date = today } = raw;
+  const range = parseAttendanceRange({ from: raw.from, to: raw.to }, today);
   const listParams = readEmployeeListParams(raw);
+  // Mark Attendance and the report narrow by search, type and designation only.
+  const peopleParams = { ...listParams, status: "" as const };
 
   const canIdentity = ctx.has(PERM.hr.employee.viewIdentity);
+  const canViewAttendance = ctx.has(PERM.hr.attendance.view);
+  const canReport = ctx.has(PERM.hr.attendance.tabReport);
 
   const [employees, employmentTypes, designations] = await Promise.all([
     prisma.employee.findMany({
-      // Search, employment type and designation — the same function the export uses.
+      // Search, employment type, designation and status — the same function the export uses.
       where: employeeListWhere(listParams),
       orderBy: { name: "asc" },
       include: {
@@ -47,29 +48,30 @@ export default async function WorkforcePage({
     prisma.designation.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
-  // The day being marked.
+  // The day being marked: active employees only, and only their marks — an
+  // inactive employee's earlier mark must not be re-submitted with the day.
   const markDate = new Date(`${date}T00:00:00.000Z`);
-  const dayEntries = ctx.has(PERM.hr.attendance.view)
-    ? await prisma.attendanceEntry.findMany({
-        where: { attendanceOn: markDate },
-        select: { employeeId: true, status: true, overtimeHours: true },
-      })
-    : [];
-
-  // The report range.
-  const reportRows = ctx.has(PERM.hr.attendance.tabReport)
-    ? await prisma.attendanceEntry.groupBy({
-        by: ["employeeId", "status"],
-        where: {
-          attendanceOn: {
-            gte: new Date(`${from}T00:00:00.000Z`),
-            lte: new Date(`${to}T00:00:00.000Z`),
+  const [markable, dayEntries] = canViewAttendance
+    ? await Promise.all([
+        prisma.employee.findMany({
+          where: employeeListWhere({ ...peopleParams, status: "ACTIVE" }),
+          orderBy: { name: "asc" },
+          select: {
+            id: true, employeeCode: true, name: true,
+            employmentType: { select: { name: true } },
+            designation: { select: { name: true } },
           },
-        },
-        _count: { _all: true },
-        _sum: { overtimeHours: true },
-      })
-    : [];
+        }),
+        Number.isNaN(markDate.getTime())
+          ? []
+          : prisma.attendanceEntry.findMany({
+              where: { attendanceOn: markDate, employee: { status: { not: "INACTIVE" } } },
+              select: { employeeId: true, status: true, overtimeHours: true },
+            }),
+      ])
+    : [[], []];
+
+  const report = canReport && range.ok ? await loadAttendanceReport(prisma, range, peopleParams) : [];
 
   return (
     <div className="mx-auto max-w-[1400px]">
@@ -80,8 +82,9 @@ export default async function WorkforcePage({
       <HrScreen
         tab={tab}
         date={date}
-        from={from}
-        to={to}
+        from={range.from}
+        to={range.to}
+        rangeError={range.ok ? null : range.error}
         employees={employees.map((e) => ({
           id: e.id,
           code: e.employeeCode,
@@ -95,7 +98,15 @@ export default async function WorkforcePage({
           employmentType: e.employmentType.name,
           designationId: e.designation?.id ?? null,
           designation: e.designation?.name ?? null,
+          status: e.status,
           documents: e.documents,
+        }))}
+        markable={markable.map((e) => ({
+          id: e.id,
+          code: e.employeeCode,
+          name: e.name,
+          employmentType: e.employmentType.name,
+          designation: e.designation?.name ?? null,
         }))}
         employmentTypes={employmentTypes.map((t) => ({
           id: t.id,
@@ -109,12 +120,7 @@ export default async function WorkforcePage({
           status: e.status,
           overtimeHours: Number(e.overtimeHours),
         }))}
-        report={reportRows.map((r) => ({
-          employeeId: r.employeeId,
-          status: r.status,
-          days: r._count._all,
-          overtime: Number(r._sum.overtimeHours ?? 0),
-        }))}
+        report={report}
         can={{
           create: ctx.has(PERM.hr.employee.create),
           update: ctx.has(PERM.hr.employee.update),
@@ -122,11 +128,11 @@ export default async function WorkforcePage({
           viewIdentity: canIdentity,
           manageTypes: ctx.has(PERM.hr.employmentType.create),
           deleteTypes: ctx.has(PERM.hr.employmentType.delete),
-          viewAttendance: ctx.has(PERM.hr.attendance.view),
+          viewAttendance: canViewAttendance,
           mark: ctx.has(PERM.hr.attendance.mark),
           markAll: ctx.has(PERM.hr.attendance.markAll),
-          report: ctx.has(PERM.hr.attendance.tabReport),
-          exportReport: ctx.has(PERM.hr.attendance.export),
+          report: canReport,
+          exportReport: canViewAttendance && ctx.has(PERM.hr.attendance.export),
           exportEmployees: ctx.has(PERM.hr.employee.export),
         }}
       />
