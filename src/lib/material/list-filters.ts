@@ -1,5 +1,5 @@
 import type {
-  GrnStatus, IndentStatus, Prisma, PurchaseOrderStatus, VendorInvoiceStatus,
+  GrnStatus, IndentStatus, MaterialReturnStatus, Prisma, PurchaseOrderStatus, VendorInvoiceStatus,
 } from "@prisma/client";
 
 import { dateCondition, parseReportFilters } from "@/lib/reports/filters";
@@ -275,10 +275,15 @@ export function paymentListWhere(scope: ProjectScope, p: PaymentListParams): Pri
 export const ACK_STATES = ["pending", "acknowledged"] as const;
 export type AckState = (typeof ACK_STATES)[number];
 
+/** Whether an issue slip stands or was cancelled (stock put back). */
+export const ISSUE_STATES = ["active", "cancelled"] as const;
+export type IssueState = (typeof ISSUE_STATES)[number];
+
 export interface IssueListParams extends DateRange {
   q: string;
   project: string | null;
   ack: AckState | null;
+  status: IssueState | null;
 }
 
 export function readIssueListParams(source: ParamSource): IssueListParams {
@@ -286,15 +291,21 @@ export function readIssueListParams(source: ParamSource): IssueListParams {
     q: readParam(source, "q"),
     project: readId(source, "project"),
     ack: readEnum(source, "ack", ACK_STATES),
+    status: readEnum(source, "status", ISSUE_STATES),
     ...readRange(source),
   };
 }
+
+export const issueStateWords = (status: IssueState | null) =>
+  status === "active" ? "Active" : status === "cancelled" ? "Cancelled" : null;
 
 export function issueListWhere(scope: ProjectScope, p: IssueListParams): Prisma.MaterialIssueWhereInput {
   return {
     ...withProject(scope, p.project),
     ...(p.ack === "pending" ? { acknowledgedAt: null } : {}),
     ...(p.ack === "acknowledged" ? { acknowledgedAt: { not: null } } : {}),
+    ...(p.status === "active" ? { cancelledAt: null } : {}),
+    ...(p.status === "cancelled" ? { cancelledAt: { not: null } } : {}),
     ...range("issueDate", p),
     ...(p.q
       ? {
@@ -305,6 +316,45 @@ export function issueListWhere(scope: ProjectScope, p: IssueListParams): Prisma.
             { issuedBy: { name: ci(p.q) } },
             { workPackage: { name: ci(p.q) } },
             { items: { some: { item: { name: ci(p.q) } } } },
+          ],
+        }
+      : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Material returns
+// ---------------------------------------------------------------------------
+
+export const RETURN_STATUSES = ["PENDING", "APPROVED", "REJECTED"] as const satisfies readonly MaterialReturnStatus[];
+
+export interface ReturnListParams extends DateRange {
+  q: string;
+  status: MaterialReturnStatus | null;
+  project: string | null;
+}
+
+export function readReturnListParams(source: ParamSource): ReturnListParams {
+  return {
+    q: readParam(source, "q"),
+    status: readEnum(source, "status", RETURN_STATUSES),
+    project: readId(source, "project"),
+    ...readRange(source),
+  };
+}
+
+export function returnListWhere(scope: ProjectScope, p: ReturnListParams): Prisma.MaterialReturnWhereInput {
+  return {
+    ...withProject(scope, p.project),
+    ...(p.status ? { status: p.status } : {}),
+    ...range("returnDate", p),
+    ...(p.q
+      ? {
+          OR: [
+            { returnNo: ci(p.q) },
+            { issue: { issueNo: ci(p.q) } },
+            { items: { some: { item: { name: ci(p.q) } } } },
+            { raisedBy: { name: ci(p.q) } },
           ],
         }
       : {}),

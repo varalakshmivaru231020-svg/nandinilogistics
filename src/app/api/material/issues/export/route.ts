@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
 import {
-  describeParts, issueListWhere, rangeWords, readIssueListParams, searchWords,
+  describeParts, issueListWhere, issueStateWords, rangeWords, readIssueListParams, searchWords,
 } from "@/lib/material/list-filters";
 import { projectLabel } from "@/lib/material/list-options";
 import { PERM } from "@/lib/permissions/codes";
@@ -45,6 +45,7 @@ export async function GET(request: Request) {
       searchWords(params.q),
       await projectLabel(params.project),
       params.ack === "pending" ? "Awaiting acknowledgement" : params.ack === "acknowledged" ? "Acknowledged" : null,
+      issueStateWords(params.status),
       rangeWords("Issued", params),
     ],
     "All issue slips in view",
@@ -62,6 +63,9 @@ export async function GET(request: Request) {
     { key: "lines", header: "Lines", align: "right", format: "number" },
     ...(showValue ? [{ key: "value", header: "Value", align: "right", format: "money" } satisfies ReportColumn] : []),
     { key: "acknowledgedAt", header: "Acknowledged on", format: "date" },
+    { key: "status", header: "Status" },
+    { key: "cancelledAt", header: "Cancelled on", format: "date" },
+    { key: "cancelReason", header: "Cancel reason" },
   ];
 
   return exportResponse({
@@ -84,6 +88,9 @@ export async function GET(request: Request) {
         lines: i._count.items,
         ...(showValue ? { value: Number(i.totalValue) } : {}),
         acknowledgedAt: i.acknowledgedAt,
+        status: i.cancelledAt ? "Cancelled" : "Active",
+        cancelledAt: i.cancelledAt,
+        cancelReason: i.cancelReason ?? "",
       })),
       summary: [{ label: "Issue slips", value: note }],
       emptyMessage: "No issue slips match these filters.",
