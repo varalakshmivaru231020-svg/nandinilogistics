@@ -12,6 +12,7 @@ import { cn, formatDate, money } from "@/lib/utils";
 import { formatResponse } from "@/lib/sales/assignment";
 import { addLeadNoteAction, blockUnitForLeadAction, releaseUnitForLeadAction } from "../actions";
 import { logFollowUpAction } from "../actions";
+import { EditLeadModal, type EditLeadValues } from "./lead-edit-modal";
 
 /* --------------------------------- Types --------------------------------- */
 
@@ -48,7 +49,7 @@ const CHANNEL_ICON: Record<string, string> = {
 
 export function LeadDetail({
   lead, stepper, timeline, followUps, notes, stageHistory, files, blocked, available,
-  towers, tower, tab, projectName, can, nowMs,
+  towers, tower, tab, projectName, edit, can, nowMs,
 }: {
   lead: Lead;
   stepper: Step[];
@@ -63,10 +64,18 @@ export function LeadDetail({
   tower: string;
   tab: string;
   projectName: string | null;
+  /** The edit form's values and lookups; null when the viewer may not edit this lead. */
+  edit: {
+    lead: EditLeadValues;
+    sources: Array<{ id: string; name: string }>;
+    projects: Array<{ id: string; name: string }>;
+    unitTypes: Array<{ id: string; name: string }>;
+  } | null;
   can: Record<string, boolean>;
   nowMs: number;
 }) {
   const router = useRouter();
+  const [editing, setEditing] = React.useState(false);
   const pathname = usePathname();
   const params = useSearchParams();
   const toast = useToast();
@@ -142,12 +151,23 @@ export function LeadDetail({
             <Mail className="mr-1.5 h-3.5 w-3.5" /> Send mail
           </Button>
         )}
-        {can.edit && (
-          <Button size="md" variant="secondary" onClick={() => router.push(`/sales/leads?edit=${lead.id}`)}>
+        {can.edit && edit && (
+          <Button size="md" variant="secondary" onClick={() => setEditing(true)}>
             <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
           </Button>
         )}
       </div>
+
+      {editing && edit && (
+        <EditLeadModal
+          lead={edit.lead}
+          sources={edit.sources}
+          projects={edit.projects}
+          unitTypes={edit.unitTypes}
+          onClose={() => setEditing(false)}
+          onSaved={(m) => { setEditing(false); toast(m); router.refresh(); }}
+        />
+      )}
 
       {/* ------------------------------ Stepper ------------------------------- */}
       <div className="mb-3.5 flex flex-wrap items-center gap-1.5 rounded-[13px] border border-line-400 bg-white px-4 py-3">

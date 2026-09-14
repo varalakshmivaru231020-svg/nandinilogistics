@@ -12,6 +12,8 @@ import { ImportFileError, parseUploadFrom } from "@/lib/import/parse";
 import { planLeadImport } from "@/lib/sales/lead-import";
 import { LeadSchema, phoneKey } from "@/lib/sales/lead-schema";
 import { captureLead, recordFirstResponse } from "@/lib/sales/lead-service";
+import { LeadEditError } from "@/lib/sales/lead-edit";
+import { applyLeadEdit } from "@/lib/sales/lead-edit-service";
 
 export async function createLeadAction(formData: FormData): Promise<ActionResult<{ id: string; duplicate: boolean }>> {
   return runAction(async () => {
@@ -41,6 +43,67 @@ export async function createLeadAction(formData: FormData): Promise<ActionResult
 
     revalidatePath("/sales/leads");
     return { id: lead.id, duplicate: Boolean(duplicateOf) };
+  });
+}
+
+/**
+ * Edits a captured lead's details. The rules — ownership, contact fields, a
+ * booked lead's identity, duplicate relinking, the optimistic check on
+ * updatedAt — are in lib/sales/lead-edit.ts; this checks the permission and
+ * records what happened.
+ *
+ * Stage, owner, lost reason and follow-ups are not editable here: each has its
+ * own action and its own history.
+ */
+export async function updateLeadAction(id: string, formData: FormData): Promise<ActionResult<{ changed: boolean }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.sales.lead.update);
+    const { updatedAt, ...fields } = Object.fromEntries(formData);
+
+    let outcome;
+    try {
+      outcome = await prisma.$transaction((tx) =>
+        applyLeadEdit(
+          tx,
+          id,
+          {
+            id: ctx.id,
+            canViewAll: ctx.has(PERM.sales.lead.viewAll),
+            canViewContact: ctx.has(PERM.sales.lead.viewContact),
+          },
+          fields,
+          typeof updatedAt === "string" ? updatedAt : null,
+        ),
+      );
+    } catch (err) {
+      if (err instanceof LeadEditError && err.kind === "forbidden") {
+        throw new PermissionError(
+          err.needs === "viewContact" ? PERM.sales.lead.viewContact : PERM.sales.lead.viewAll,
+          err.message,
+        );
+      }
+      throw err;
+    }
+    if (!outcome.updated) return { changed: false };
+
+    await recordAudit({
+      action: "UPDATE", entity: "Lead", entityId: id, userId: ctx.id,
+      summary: outcome.summary,
+      changes: outcome.changes,
+    });
+    for (const r of outcome.repointed) {
+      await recordAudit({
+        action: "UPDATE", entity: "Lead", entityId: r.id, userId: ctx.id,
+        summary: r.duplicateOfId
+          ? `Duplicate link on ${r.leadNo} moved — ${outcome.leadNo} changed its phone number`
+          : `${r.leadNo} is no longer marked a duplicate — ${outcome.leadNo} changed its phone number`,
+        changes: { duplicateOfId: { from: id, to: r.duplicateOfId } },
+      });
+    }
+
+    revalidatePath("/sales/leads");
+    revalidatePath(`/sales/leads/${id}`);
+    return { changed: true };
   });
 }
 

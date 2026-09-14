@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { maskPhone } from "@/lib/utils";
+import { dateInputValue, editRefusal, identityLocked } from "@/lib/sales/lead-edit";
 import { LeadDetail } from "./lead-detail";
 
 export const metadata = { title: "Lead" };
@@ -59,6 +60,30 @@ export default async function LeadDetailPage({
   if (!ctx.has(PERM.sales.lead.viewAll) && lead.ownerId !== ctx.id) notFound();
 
   const canContact = ctx.has(PERM.sales.lead.viewContact);
+
+  // Edit: the permission, and the same ownership rule the action enforces.
+  const canEdit = ctx.has(PERM.sales.lead.update) && editRefusal(
+    { id: ctx.id, canViewAll: ctx.has(PERM.sales.lead.viewAll), canViewContact: canContact },
+    lead,
+  ) === null;
+  // Lookups for the edit form. The lead's current choices are kept even if
+  // since deactivated, so opening the form never silently changes them.
+  const [editSources, editProjects, editUnitTypes] = canEdit
+    ? await Promise.all([
+        prisma.leadSource.findMany({
+          where: { OR: [{ status: "ACTIVE" }, { id: lead.sourceId }] },
+          select: { id: true, name: true }, orderBy: { name: "asc" },
+        }),
+        prisma.project.findMany({
+          where: { OR: [{ status: "ACTIVE" }, ...(lead.projectId ? [{ id: lead.projectId }] : [])] },
+          select: { id: true, name: true }, orderBy: { name: "asc" },
+        }),
+        prisma.unitType.findMany({
+          where: { OR: [{ status: "ACTIVE" }, ...(lead.unitTypeId ? [{ id: lead.unitTypeId }] : [])] },
+          select: { id: true, name: true }, orderBy: { name: "asc" },
+        }),
+      ])
+    : [[], [], []];
 
   // Timeline and stage history both come from the audit trail — the record of
   // what happened is the same record the audit viewer reads.
@@ -191,6 +216,29 @@ export default async function LeadDetailPage({
       tower={tower}
       tab={tab}
       projectName={lead.project?.name ?? null}
+      edit={canEdit ? {
+        lead: {
+          id: lead.id,
+          name: lead.name,
+          contact: canContact
+            ? { phone: lead.phone, altPhone: lead.altPhone ?? "", email: lead.email ?? "" }
+            : null,
+          maskedPhone: maskPhone(lead.phone),
+          sourceId: lead.sourceId,
+          projectId: lead.projectId ?? "",
+          unitTypeId: lead.unitTypeId ?? "",
+          budgetMin: lead.budgetMin === null ? "" : String(Number(lead.budgetMin)),
+          budgetMax: lead.budgetMax === null ? "" : String(Number(lead.budgetMax)),
+          requirement: lead.requirement ?? "",
+          nextActionDay: dateInputValue(lead.nextActionAt),
+          updatedAt: lead.updatedAt.toISOString(),
+          identityLocked: identityLocked({ state: lead.state, hasBooking: lead.bookings.length > 0 }),
+          closed: lead.state === "BOOKED" || lead.state === "LOST",
+        },
+        sources: editSources,
+        projects: editProjects,
+        unitTypes: editUnitTypes,
+      } : null}
       can={{
         tabTimeline: ctx.has(PERM.sales.lead.tabTimeline),
         tabFollowUps: ctx.has(PERM.sales.lead.tabFollowUps),
@@ -198,7 +246,7 @@ export default async function LeadDetailPage({
         tabStageHistory: ctx.has(PERM.sales.lead.tabStageHistory),
         tabFiles: ctx.has(PERM.sales.lead.tabFiles),
         tabFlats: ctx.has(PERM.sales.lead.tabFlats),
-        edit: ctx.has(PERM.sales.lead.update),
+        edit: canEdit,
         sendMail: ctx.has(PERM.sales.lead.sendMail),
         logFollowUp: ctx.has(PERM.sales.followUp.create),
         note: ctx.has(PERM.sales.lead.note),
