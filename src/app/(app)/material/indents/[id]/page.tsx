@@ -114,6 +114,7 @@ export default async function IndentDetailPage({ params }: { params: Promise<{ i
           stockCheck: ctx.has(PERM.material.indent.stockCheck),
           tabItems: ctx.has(PERM.material.indent.tabItems),
           tabApprovals: ctx.has(PERM.material.indent.tabApprovals),
+          print: ctx.has(PERM.material.indent.print),
           update:
             ctx.has(PERM.material.indent.update) &&
             mayEditIndentAs(indent, { id: ctx.id, hasViewAll: ctx.has(PERM.material.indent.viewAll) }),

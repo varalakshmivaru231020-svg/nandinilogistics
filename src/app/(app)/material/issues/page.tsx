@@ -124,6 +124,7 @@ export default async function IssuesPage({
           canAcknowledge={ctx.has(PERM.material.issue.acknowledge)}
           canCancel={ctx.has(PERM.material.issue.cancel)}
           canRaiseReturn={ctx.has(PERM.material.return.create)}
+          canPrint={ctx.has(PERM.material.issue.print)}
           canViewValue={ctx.has(PERM.material.stock.viewValuation)}
           issues={issues.map((i) => ({
             id: i.id,

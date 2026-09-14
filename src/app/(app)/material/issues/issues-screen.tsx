@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, Check, ChevronDown, Undo2 } from "lucide-react";
+import { Ban, Check, ChevronDown, Printer, Undo2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -25,7 +25,7 @@ interface Issue {
 }
 
 export function IssuesScreen({
-  issues, pendingAck, currentUserId, canAcknowledge, canCancel, canRaiseReturn, canViewValue,
+  issues, pendingAck, currentUserId, canAcknowledge, canCancel, canRaiseReturn, canViewValue, canPrint,
 }: {
   issues: Issue[];
   pendingAck: number;
@@ -34,6 +34,7 @@ export function IssuesScreen({
   canCancel: boolean;
   canRaiseReturn: boolean;
   canViewValue: boolean;
+  canPrint: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState<Set<string>>(new Set());
@@ -160,11 +161,22 @@ export function IssuesScreen({
                       </p>
                     )}
 
-                    {!cancelled && (
+                    {(canPrint || (!cancelled && (
                       (canRaiseReturn && outstanding > 0) || canCancel || (canAcknowledge && mine && !issue.acknowledgedAt)
-                    ) && (
+                    ))) && (
                       <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-line-200 pt-3">
-                        {canRaiseReturn && outstanding > 0 && (
+                        {canPrint && (
+                          <Link
+                            href={`/print/issues/${issue.id}`}
+                            target="_blank"
+                            rel="noopener"
+                            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line-400 px-3 text-xs font-medium text-navy-700 hover:bg-surface-hover"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                            Print slip
+                          </Link>
+                        )}
+                        {!cancelled && canRaiseReturn && outstanding > 0 && (
                           <Link
                             href={`/material/returns/new?issue=${issue.id}`}
                             className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line-400 px-3 text-xs font-medium text-navy-700 hover:bg-surface-hover"
@@ -173,13 +185,13 @@ export function IssuesScreen({
                             Raise return
                           </Link>
                         )}
-                        {canCancel && (
+                        {!cancelled && canCancel && (
                           <Button size="sm" variant="ghost" onClick={() => setCancelling(issue)}>
                             <Ban className="h-3.5 w-3.5" />
                             Cancel issue
                           </Button>
                         )}
-                        {canAcknowledge && mine && !issue.acknowledgedAt && (
+                        {!cancelled && canAcknowledge && mine && !issue.acknowledgedAt && (
                           <Button size="sm" variant="success" loading={busy === issue.id}
                             onClick={() => acknowledge(issue.id)}>
                             <Check className="h-3.5 w-3.5" />

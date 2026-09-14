@@ -174,10 +174,12 @@ export function CostSheetDetail({
               )}
 
               {can.print && (
-                <Button size="sm" variant="secondary" onClick={() => window.print()}>
-                  <Printer className="h-3.5 w-3.5" />
-                  Print
-                </Button>
+                <Link href={`/print/cost-sheets/${sheet.id}`} target="_blank" rel="noopener">
+                  <Button size="sm" variant="secondary" className="w-full">
+                    <Printer className="h-3.5 w-3.5" />
+                    Print
+                  </Button>
+                </Link>
               )}
             </div>
           </CardBody>
