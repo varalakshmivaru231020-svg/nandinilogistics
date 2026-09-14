@@ -2063,7 +2063,15 @@ model Receipt {
   mode        String    @default("NEFT")
   referenceNo String?
   bankId      String?
+  /// When the money was realised. Electronic modes clear on entry; a cheque or
+  /// DD clears when the bank confirms it.
   clearedAt   DateTime?
+  clearedById String?
+  /// A cheque or DD the bank returned. The amount stops counting towards the
+  /// booking and its demand; the receipt itself stays for the record.
+  bouncedAt    DateTime?
+  bouncedById  String?
+  bounceReason String?
   remarks     String?
   createdAt   DateTime  @default(now())
 

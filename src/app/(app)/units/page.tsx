@@ -142,6 +142,7 @@ export default async function UnitsPage({
   const rows: UnitRow[] = units.map((u) => {
     const locks = unitEditLocks({
       status: u.status, holds: u._count.holds, bookings: u._count.bookings, costSheets: u._count.costSheets,
+      priceItems: u._count.priceItems,
     });
     return {
       id: u.id,

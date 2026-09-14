@@ -55,7 +55,7 @@ export default async function DashboardPage() {
   }> = [];
 
   if (ctx.has(PERM.project.project.view)) {
-    const [active, lastMonth, agg] = await Promise.all([
+    const [active, lastMonth, agg, unitCount] = await Promise.all([
       prisma.project.count({ where: { status: "ACTIVE", ...projectScope } }),
       prisma.project.count({
         where: {
@@ -65,13 +65,16 @@ export default async function DashboardPage() {
         },
       }),
       prisma.project.aggregate({
-        _sum: { totalTowers: true, totalUnits: true },
+        _sum: { totalTowers: true },
         where: projectScope,
       }),
+      // Units actually set up (created or imported), not the planning figure
+      // typed on the project form — the same count the Projects page shows.
+      prisma.unit.count({ where: { project: projectScope } }),
     ]);
     const added = active - lastMonth;
     const towers = agg._sum.totalTowers ?? 0;
-    const units = agg._sum.totalUnits ?? 0;
+    const units = unitCount;
     kpis.push({
       label: "Active projects",
       value: String(active),

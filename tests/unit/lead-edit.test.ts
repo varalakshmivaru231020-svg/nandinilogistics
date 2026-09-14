@@ -242,3 +242,19 @@ describe("audit", () => {
     expect(editSummary("LD-0001", ["name"], 2)).toMatch(/2 other leads/);
   });
 });
+
+describe("dateInputValue reads the day as it is in India", () => {
+  it("shows a follow-up stored for early morning IST on that same day, not the day before", () => {
+    // 00:30 IST on 5 Oct 2026 is 19:00 UTC on 4 Oct.
+    expect(dateInputValue(new Date("2026-10-04T19:00:00.000Z"))).toBe("2026-10-05");
+  });
+
+  it("reads back a date typed in the app unchanged", () => {
+    // A date input stores yyyy-mm-dd as UTC midnight: 05:30 IST the same day.
+    expect(dateInputValue(new Date("2026-10-05"))).toBe("2026-10-05");
+  });
+
+  it("is blank when no follow-up is set", () => {
+    expect(dateInputValue(null)).toBe("");
+  });
+});

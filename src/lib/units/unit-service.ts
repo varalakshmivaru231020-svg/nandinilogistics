@@ -119,7 +119,7 @@ export async function updateUnit(tx: Tx, edit: UnitEdit, scope: ProjectScope) {
   await lockUnit(tx, edit.unitId);
   const unit = await tx.unit.findUnique({
     where: { id: edit.unitId },
-    include: { _count: { select: { holds: true, bookings: true, costSheets: true } } },
+    include: { _count: { select: { holds: true, bookings: true, costSheets: true, priceItems: true } } },
   });
   if (!unit) throw new UnitRuleError("This unit no longer exists.");
   if (unit.updatedAt.getTime() !== edit.expectedUpdatedAt.getTime()) throw new UnitRuleError(STALE);
@@ -146,6 +146,7 @@ export async function updateUnit(tx: Tx, edit: UnitEdit, scope: ProjectScope) {
     holds: unit._count.holds,
     bookings: unit._count.bookings,
     costSheets: unit._count.costSheets,
+    priceItems: unit._count.priceItems,
   });
 
   // What the edit asks for, parsed through the shared rules whether or not it is valid.

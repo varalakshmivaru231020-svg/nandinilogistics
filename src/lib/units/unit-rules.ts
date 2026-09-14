@@ -281,6 +281,8 @@ export interface UnitUsage {
   holds: number;
   bookings: number;
   costSheets: number;
+  /** Rates on a price list that name this unit: they price it off its area and floor. */
+  priceItems?: number;
 }
 
 /**
@@ -317,6 +319,7 @@ export function unitEditLocks(usage: UnitUsage): UnitEditLocks {
     usage.holds > 0 ? plural(usage.holds, "hold", "holds") : null,
     usage.costSheets > 0 ? plural(usage.costSheets, "cost sheet", "cost sheets") : null,
     usage.bookings > 0 ? plural(usage.bookings, "booking", "bookings") : null,
+    (usage.priceItems ?? 0) > 0 ? plural(usage.priceItems ?? 0, "price-list rate", "price-list rates") : null,
   ].filter(Boolean) as string[];
 
   let identityReason: string | null = null;

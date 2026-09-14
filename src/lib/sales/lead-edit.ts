@@ -94,8 +94,16 @@ export function identityLocked(lead: Pick<EditableLead, "state" | "hasBooking">)
  * UTC day, the same instant `new Date("YYYY-MM-DD")` gives back — so a date
  * left untouched in the form is recognised as unchanged and keeps its time.
  */
+/**
+ * A stored instant as the calendar day it falls on in India, for a date input.
+ * Reading it by UTC showed a follow-up set for early morning IST (00:00–05:30)
+ * as the day before. A date typed in the app is stored as UTC midnight, which
+ * is 05:30 IST on the same day, so those read back unchanged.
+ */
 export function dateInputValue(d: Date | null): string {
-  return d ? d.toISOString().slice(0, 10) : "";
+  if (!d) return "";
+  // en-CA formats as yyyy-mm-dd.
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
 const text = (v: unknown): string => (typeof v === "string" ? v.trim() : "");

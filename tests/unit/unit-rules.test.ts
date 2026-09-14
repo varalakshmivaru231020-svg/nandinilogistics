@@ -170,3 +170,20 @@ describe("checkUnitDeletable", () => {
     }
   });
 });
+
+describe("a price-list rate locks the unit's identity", () => {
+  const fresh = { status: "AVAILABLE" as const, holds: 0, bookings: 0, costSheets: 0 };
+
+  it("leaves identity editable with no rate against the unit", () => {
+    expect(unitEditLocks({ ...fresh, priceItems: 0 }).identityReason).toBeNull();
+  });
+
+  it("locks area, floor and number once a price list names the unit", () => {
+    const locks = unitEditLocks({ ...fresh, priceItems: 1 });
+    expect(locks.identityReason).toMatch(/a price-list rate/);
+    for (const f of ["carpetArea", "superBuiltUpArea", "floorNumber", "unitNumber"] as const) {
+      expect(locks.locked.has(f)).toBe(true);
+    }
+    expect(locks.locked.has("facing")).toBe(false);
+  });
+});

@@ -468,7 +468,10 @@ crud({
   entity: "collection receipt",
   group: G_SALES_BOOK,
   update: false,
-  extra: [["print", "Print receipt", "BUTTON"]],
+  extra: [
+    ["print", "Print receipt", "BUTTON"],
+    ["clear", "Mark cheque cleared or bounced", "BUTTON", "Confirms a cheque or DD with the bank, or records it bounced — which takes the amount back off the booking."],
+  ],
 });
 
 // ===========================================================================
