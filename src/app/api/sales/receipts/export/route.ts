@@ -4,13 +4,14 @@ import { PERM } from "@/lib/permissions/codes";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import type { ReportResult } from "@/lib/reports/types";
 import { describeReceiptFilters, readReceiptListParams, receiptListWhere } from "@/lib/sales/receipt-list";
+import { RECEIPT_STATUS_LABEL, receiptStatus } from "@/lib/sales/receipt-status";
 import { money } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Exports the Collection Receipts list — every receipt against a booking in the
- * caller's projects matching the screen's search, mode, project and date filters.
+ * caller's projects matching the screen's search, mode, status, project and date filters.
  */
 export async function GET(request: Request) {
   const gate = await exportGate(request, PERM.sales.receipt.view, PERM.sales.receipt.export);
@@ -37,7 +38,8 @@ export async function GET(request: Request) {
     },
   });
   const { rows, note } = capRows(found);
-  const total = rows.reduce((s, r) => s + Number(r.amount), 0);
+  // A bounced instrument brought nothing in, as on screen.
+  const total = rows.reduce((s, r) => (r.bouncedAt ? s : s + Number(r.amount)), 0);
 
   const result: ReportResult = {
     columns: [
@@ -52,6 +54,9 @@ export async function GET(request: Request) {
       { key: "mode", header: "Mode" },
       { key: "referenceNo", header: "Reference" },
       { key: "bank", header: "Bank" },
+      { key: "status", header: "Status" },
+      { key: "clearedAt", header: "Cleared on", format: "date" },
+      { key: "bounceReason", header: "Bounce reason" },
       { key: "amount", header: "Amount", align: "right", format: "money" },
       { key: "remarks", header: "Remarks" },
     ],
@@ -67,6 +72,9 @@ export async function GET(request: Request) {
       mode: r.mode,
       referenceNo: r.referenceNo ?? "",
       bank: r.bank?.name ?? "",
+      status: RECEIPT_STATUS_LABEL[receiptStatus(r)],
+      clearedAt: r.clearedAt,
+      bounceReason: r.bounceReason ?? "",
       amount: Number(r.amount),
       remarks: r.remarks ?? "",
     })),

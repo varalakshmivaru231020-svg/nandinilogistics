@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { IndianRupee } from "lucide-react";
+import { IndianRupee, Printer } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { projectScopeFilter } from "@/lib/rbac/context";
@@ -7,17 +7,29 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { toSearchParams } from "@/lib/sales/list-common";
 import { RECEIPT_MODES, readReceiptListParams, receiptListWhere } from "@/lib/sales/receipt-list";
+import {
+  RECEIPT_STATUS_LABEL, indiaDay, receiptStatus, type ReceiptStatus,
+} from "@/lib/sales/receipt-status";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { ListToolbar } from "@/components/list/list-toolbar";
-import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { Can } from "@/components/rbac/can";
+import { Badge, Card, EmptyState, PageHeader, type BadgeTone } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatDate, money, moneyShort } from "@/lib/utils";
+import { ReceiptClearanceControls } from "./receipt-clearance-controls";
 
 export const metadata = { title: "Collection Receipts" };
+
+const STATUS_TONE: Record<ReceiptStatus, BadgeTone> = {
+  CLEARED: "good",
+  PENDING_CLEARANCE: "warn",
+  BOUNCED: "bad",
+};
 
 type Row = {
   id: string; receiptNo: string; receiptDate: Date; amount: unknown;
   mode: string; referenceNo: string | null;
+  clearedAt: Date | null; bouncedAt: Date | null; bounceReason: string | null;
   booking: { id: string; bookingNo: string; unit: { unitNumber: string }; customer: { name: string }; project: { code: string } };
   demand: { milestone: string } | null;
   bank: { name: string } | null;
@@ -31,7 +43,9 @@ export default async function ReceiptsPage({
   const ctx = await requirePermission(PERM.sales.receipt.view);
   const raw = await searchParams;
   const params = readReceiptListParams(raw);
-  const filtered = Boolean(params.q || params.mode || params.project || params.from || params.to);
+  const filtered = Boolean(params.q || params.mode || params.status || params.project || params.from || params.to);
+  // "Today" is read once here, so the date picker's bounds match the server's.
+  const today = indiaDay(new Date());
 
   const [receipts, projects] = await Promise.all([
     prisma.receipt.findMany({
@@ -59,7 +73,8 @@ export default async function ReceiptsPage({
     }),
   ]);
 
-  const total = receipts.reduce((s, r) => s + Number(r.amount), 0);
+  // A bounced instrument brought nothing in.
+  const total = receipts.reduce((s, r) => (r.bouncedAt ? s : s + Number(r.amount)), 0);
 
   const columns: Column<Row>[] = [
     {
@@ -100,8 +115,62 @@ export default async function ReceiptsPage({
       ),
     },
     {
+      key: "status",
+      header: "Status",
+      align: "center",
+      render: (r) => {
+        const status = receiptStatus(r);
+        return (
+          <div className="text-center">
+            <Badge tone={STATUS_TONE[status]}>{RECEIPT_STATUS_LABEL[status]}</Badge>
+            {status === "BOUNCED" && r.bounceReason && (
+              <p className="mt-0.5 max-w-[14rem] truncate text-[10.5px] text-bad-600" title={r.bounceReason}>
+                {r.bounceReason}
+              </p>
+            )}
+            {status === "CLEARED" && r.clearedAt && (r.mode === "CHEQUE" || r.mode === "DD") && (
+              <p className="mt-0.5 text-[10.5px] text-muted-500">on {formatDate(r.clearedAt)}</p>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       key: "amount", header: "Amount", align: "right", className: "num",
-      render: (r) => <span className="font-medium text-good-700">{money(r.amount)}</span>,
+      render: (r) => (
+        <span className={r.bouncedAt ? "font-medium text-muted-400 line-through" : "font-medium text-good-700"}>
+          {money(r.amount)}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-2">
+          {receiptStatus(r) === "PENDING_CLEARANCE" && (
+            <ReceiptClearanceControls
+              receiptId={r.id}
+              receiptNo={r.receiptNo}
+              mode={r.mode}
+              amount={Number(r.amount)}
+              receiptDay={indiaDay(r.receiptDate)}
+              today={today}
+            />
+          )}
+          <Can I={PERM.sales.receipt.print}>
+            <Link
+              href={`/print/receipts/${r.id}`}
+              className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-600 hover:underline"
+              title={`Print ${r.receiptNo}`}
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Print
+            </Link>
+          </Can>
+        </div>
+      ),
     },
   ];
 
@@ -123,6 +192,16 @@ export default async function ReceiptsPage({
             label: "Mode",
             allLabel: "All modes",
             options: RECEIPT_MODES.map((m) => ({ value: m, label: m })),
+          },
+          {
+            name: "status",
+            label: "Status",
+            allLabel: "All statuses",
+            options: [
+              { value: "cleared", label: RECEIPT_STATUS_LABEL.CLEARED },
+              { value: "pending", label: RECEIPT_STATUS_LABEL.PENDING_CLEARANCE },
+              { value: "bounced", label: RECEIPT_STATUS_LABEL.BOUNCED },
+            ],
           },
           {
             name: "project",
@@ -147,7 +226,7 @@ export default async function ReceiptsPage({
             <EmptyState
               icon={<IndianRupee className="h-8 w-8" />}
               title="No receipts match"
-              description="Try a different search, mode, project or date range."
+              description="Try a different search, mode, status, project or date range."
             />
           ) : (
             <EmptyState

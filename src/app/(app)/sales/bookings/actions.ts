@@ -8,6 +8,7 @@ import { authorize, runAction, assertProjectAccess, type ActionResult } from "@/
 import { recordAudit } from "@/lib/audit";
 import { nextDocumentNumber } from "@/lib/numbering";
 import { buildPaymentSchedule } from "@/lib/sales/cost-sheet";
+import { clearsOnEntry } from "@/lib/sales/receipt-status";
 import { PERM } from "@/lib/permissions/codes";
 
 /* -------------------------------- Customers ------------------------------- */
@@ -348,6 +349,9 @@ export async function createReceiptAction(
       }
 
       const receiptNo = await nextDocumentNumber(tx, "RECEIPT", booking.projectId);
+      // Electronic and cash money is realised on entry; a cheque or DD waits
+      // for the bank and is cleared (or bounced) from the receipts list.
+      const clearedNow = clearsOnEntry(mode);
       await tx.receipt.create({
         data: {
           receiptNo,
@@ -357,6 +361,8 @@ export async function createReceiptAction(
           mode,
           referenceNo: referenceNo || null,
           bankId,
+          clearedAt: clearedNow ? new Date() : null,
+          clearedById: clearedNow ? ctx.id : null,
         },
       });
 
