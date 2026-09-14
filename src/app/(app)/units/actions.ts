@@ -1,16 +1,22 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { Prisma, UnitStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
-import { recordAudit } from "@/lib/audit";
+import { diff, recordAudit } from "@/lib/audit";
 import type { ImportPlan, ImportSummary } from "@/lib/import/columns";
 import { ImportFileError, parseUploadFrom } from "@/lib/import/parse";
 import { PERM } from "@/lib/permissions/codes";
 import type { AuthContext } from "@/lib/rbac/context";
-import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
+import { assertProjectAccess, authorize, PermissionError, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { writeUnitImport } from "@/lib/units/import-service";
 import { planUnitImport, unitKey } from "@/lib/units/unit-import";
+import { UNIT_STATUSES } from "@/lib/units/unit-list";
+import type { UnitDraft } from "@/lib/units/unit-rules";
+import {
+  changeUnitStatus, createUnit, deleteUnit, unitWriteErrorMessage, updateUnit,
+} from "@/lib/units/unit-service";
 
 async function planUnitUpload(ctx: AuthContext, formData: FormData) {
   let sheet;
@@ -102,5 +108,183 @@ export async function importUnitsAction(formData: FormData): Promise<ActionResul
       message: `Imported ${created} unit${created === 1 ? "" : "s"}` +
         (skipped ? `; ${skipped} row(s) with problems were skipped.` : "."),
     };
+  });
+}
+
+/* ------------------------------ Unit management ----------------------------- */
+
+const DRAFT_KEYS = [
+  "projectId", "blockId", "unitTypeId", "unitNumber", "floorNumber",
+  "carpetArea", "builtUpArea", "superBuiltUpArea", "facing", "plcTag", "parkingSlots",
+] as const satisfies ReadonlyArray<keyof UnitDraft>;
+
+/** Areas shown only to those who may see pricing inputs — as on the list and in the export. */
+const PRICED_AREA_KEYS = ["carpetArea", "builtUpArea"] as const;
+
+/** The fields the form actually sent. A disabled (locked) field is not sent, and keeps its stored value. */
+function sentFields(formData: FormData): Partial<UnitDraft> {
+  const out: Partial<UnitDraft> = {};
+  for (const key of DRAFT_KEYS) {
+    const v = formData.get(key);
+    if (typeof v === "string") out[key] = v;
+  }
+  return out;
+}
+
+/** Runs a unit write in a transaction, turning database refusals into words. */
+async function unitTransaction<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>, unitNumber?: string): Promise<T> {
+  try {
+    return await prisma.$transaction(fn);
+  } catch (err) {
+    const message = unitWriteErrorMessage(err, unitNumber);
+    if (message) throw new Error(message);
+    throw err;
+  }
+}
+
+function revalidateUnits() {
+  revalidatePath("/units");
+  revalidatePath("/units/board");
+}
+
+async function scopedUnit(ctx: Awaited<ReturnType<typeof authorize>>, unitId: string) {
+  const unit = await prisma.unit.findUnique({ where: { id: unitId }, select: { id: true, projectId: true, unitNumber: true } });
+  if (!unit) throw new Error("This unit no longer exists.");
+  assertProjectAccess(ctx, unit.projectId);
+  return unit;
+}
+
+/**
+ * Creates one unit, through the same rules as the import. Carpet area is
+ * required and hidden without unit.unit.viewPrice, so creating needs both.
+ */
+export async function createUnitAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.unit.unit.create, PERM.unit.unit.viewPrice);
+    const sent = sentFields(formData);
+    const draft: UnitDraft = Object.fromEntries(DRAFT_KEYS.map((k) => [k, sent[k] ?? ""])) as unknown as UnitDraft;
+    if (!draft.projectId) throw new Error("Project is required.");
+    assertProjectAccess(ctx, draft.projectId);
+
+    const unit = await unitTransaction((tx) => createUnit(tx, draft, ctx), draft.unitNumber.trim());
+
+    await recordAudit({
+      action: "CREATE",
+      entity: "Unit",
+      entityId: unit.id,
+      userId: ctx.id,
+      projectId: unit.projectId,
+      summary: `Created unit ${unit.unitNumber}`,
+      changes: diff({}, {
+        unitNumber: unit.unitNumber, blockId: unit.blockId, unitTypeId: unit.unitTypeId, floorNumber: unit.floorNumber,
+        carpetArea: Number(unit.carpetArea), builtUpArea: Number(unit.builtUpArea), superBuiltUpArea: Number(unit.superBuiltUpArea),
+        facing: unit.facing, plcTag: unit.plcTag, parkingSlots: unit.parkingSlots, status: unit.status,
+      }),
+    });
+
+    revalidateUnits();
+    return { id: unit.id };
+  });
+}
+
+/**
+ * Edits a unit. The form sends `updatedAt` as loaded; a unit changed since —
+ * by another edit, a hold or a booking — is refused rather than overwritten.
+ * Locked fields (see unitEditLocks) are refused if changed.
+ */
+export async function updateUnitAction(unitId: string, formData: FormData): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.unit.unit.update);
+    const current = await scopedUnit(ctx, unitId);
+
+    const changes = sentFields(formData);
+    if (!ctx.has(PERM.unit.unit.viewPrice) && PRICED_AREA_KEYS.some((k) => changes[k] !== undefined)) {
+      throw new PermissionError(PERM.unit.unit.viewPrice, "You cannot change carpet or built-up area without permission to see them.");
+    }
+
+    const stamp = formData.get("updatedAt");
+    const expectedUpdatedAt = new Date(typeof stamp === "string" ? stamp : "");
+    if (Number.isNaN(expectedUpdatedAt.getTime())) throw new Error("Reload the unit before editing it.");
+
+    const { before, after } = await unitTransaction(
+      (tx) => updateUnit(tx, { unitId, expectedUpdatedAt, changes }, ctx),
+      changes.unitNumber?.trim() ?? current.unitNumber,
+    );
+
+    const changed = diff({ ...before }, { ...after });
+    await recordAudit({
+      action: "UPDATE",
+      entity: "Unit",
+      entityId: unitId,
+      userId: ctx.id,
+      projectId: current.projectId,
+      summary: `Edited unit ${after.unitNumber}${changed ? ` — ${Object.keys(changed).join(", ")}` : " (no changes)"}`,
+      changes: changed,
+    });
+
+    revalidateUnits();
+    return null;
+  });
+}
+
+/**
+ * Blocks or unblocks a unit — the only statuses set by hand. `expected` is the
+ * status the user saw; if a hold or booking has moved the unit since, it wins.
+ */
+export async function changeUnitStatusAction(
+  unitId: string,
+  expected: UnitStatus,
+  to: UnitStatus,
+  reason: string,
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.unit.unit.changeStatus);
+    const known = UNIT_STATUSES as readonly string[];
+    if (!known.includes(expected) || !known.includes(to)) throw new Error("Unknown unit status.");
+    const current = await scopedUnit(ctx, unitId);
+
+    const note = (reason ?? "").trim();
+    const unit = await unitTransaction((tx) => changeUnitStatus(tx, { unitId, expected, to, reason: note }));
+
+    await recordAudit({
+      action: "UPDATE",
+      entity: "Unit",
+      entityId: unitId,
+      userId: ctx.id,
+      projectId: current.projectId,
+      summary: to === "BLOCKED"
+        ? `Blocked unit ${unit.unitNumber}: ${note}`
+        : `Unblocked unit ${unit.unitNumber}${note ? `: ${note}` : ""}`,
+      changes: { status: { from: expected, to } },
+    });
+
+    revalidateUnits();
+    return null;
+  });
+}
+
+/** Deletes an untouched unit. Anything with sales history is refused — block it instead. */
+export async function deleteUnitAction(unitId: string): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.unit.unit.delete);
+    const current = await scopedUnit(ctx, unitId);
+
+    const unit = await unitTransaction((tx) => deleteUnit(tx, unitId));
+
+    await recordAudit({
+      action: "DELETE",
+      entity: "Unit",
+      entityId: unitId,
+      userId: ctx.id,
+      projectId: current.projectId,
+      summary: `Deleted unit ${unit.unitNumber}`,
+      changes: diff(
+        { unitNumber: unit.unitNumber, status: unit.status, floorNumber: unit.floorNumber, superBuiltUpArea: Number(unit.superBuiltUpArea) },
+        {},
+      ),
+    });
+
+    revalidateUnits();
+    return null;
   });
 }
