@@ -35,7 +35,8 @@ export interface MovementInput {
   txnDate?: Date;
 }
 
-const INWARD: StockTxnType[] = ["GRN_IN", "RETURN_IN", "TRANSFER_IN"];
+// ISSUE_CANCEL puts back what a cancelled issue still had out on site.
+const INWARD: StockTxnType[] = ["GRN_IN", "RETURN_IN", "TRANSFER_IN", "ISSUE_CANCEL"];
 
 export function isInward(txnType: StockTxnType): boolean {
   return INWARD.includes(txnType);

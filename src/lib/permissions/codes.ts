@@ -3,7 +3,7 @@
  * Source: src/lib/permissions/registry.ts
  * Regenerate: pnpm perms:codegen
  *
- * 516 permission codes.
+ * 517 permission codes.
  */
 
 export const PERM = {
@@ -220,6 +220,7 @@ export const PERM = {
       "export": "material.issue.export",
       "acknowledge": "material.issue.acknowledge",
       "print": "material.issue.print",
+      "cancel": "material.issue.cancel",
     },
     "return": {
       "view": "material.return.view",

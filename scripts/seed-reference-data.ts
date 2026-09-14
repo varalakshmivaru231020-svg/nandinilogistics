@@ -14,7 +14,7 @@
  * "Residential Apartment" in production for a day for exactly that reason.
  */
 import { PrismaClient } from "@prisma/client";
-import { seedMasters } from "../prisma/masters-seed";
+import { ensureLaterNumberingSeries, seedMasters } from "../prisma/masters-seed";
 import { seedWorkforceAndKb } from "../prisma/workforce-seed";
 
 const prisma = new PrismaClient();
@@ -22,6 +22,8 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("\nSeeding reference data\n");
   await seedMasters(prisma);
+  const series = await ensureLaterNumberingSeries(prisma);
+  if (series) console.log(`  created ${series} number series for documents added since setup`);
   await seedWorkforceAndKb(prisma);
   console.log("\nDone.\n");
 }

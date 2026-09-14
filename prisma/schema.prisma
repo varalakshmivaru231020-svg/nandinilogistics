@@ -126,6 +126,8 @@ enum StockTxnType {
   TRANSFER_IN
   ADJUSTMENT
   SCRAP
+  /// A cancelled issue putting back what had not been returned, at the rate it left.
+  ISSUE_CANCEL
 }
 
 enum LeadState {
@@ -217,6 +219,8 @@ model User {
   @@index([status])
   @@index([departmentId])
   @@map("users")
+  materialReturnsRaised  MaterialReturn[] @relation("ReturnRaisedBy")
+  materialReturnsDecided MaterialReturn[] @relation("ReturnDecidedBy")
 }
 
 model Role {
@@ -582,6 +586,7 @@ model Item {
   @@index([categoryId])
   @@index([status])
   @@map("m_items")
+  materialReturnItems MaterialReturnItem[]
 }
 
 model TaxRate {
@@ -674,6 +679,7 @@ model Store {
 
   @@index([projectId])
   @@map("m_stores")
+  materialReturns MaterialReturn[]
 }
 
 model LeadSource {
@@ -863,6 +869,7 @@ model Project {
   @@index([status])
   @@index([projectManagerId])
   @@map("projects")
+  materialReturns MaterialReturn[]
 }
 
 model ProjectPhase {
@@ -1578,6 +1585,10 @@ model MaterialIssue {
   /// Issue slips are acknowledged on mobile by the receiving supervisor.
   acknowledgedAt   DateTime?
   acknowledgedById String?
+  /// Set when the issue is cancelled: stock still out on site goes back to the store.
+  cancelledAt      DateTime?
+  cancelledById    String?
+  cancelReason     String?
   totalValue       Decimal   @default(0) @db.Decimal(16, 2)
   remarks          String?
   createdAt        DateTime  @default(now())
@@ -1593,6 +1604,7 @@ model MaterialIssue {
 
   @@index([projectId])
   @@map("material_issues")
+  returns MaterialReturn[]
 }
 
 model MaterialIssueItem {
@@ -1610,6 +1622,7 @@ model MaterialIssueItem {
 
   @@index([issueId])
   @@map("material_issue_items")
+  returnItems MaterialReturnItem[]
 }
 
 model StockTransfer {
@@ -2060,4 +2073,62 @@ model Receipt {
 
   @@index([bookingId])
   @@map("receipts")
+}
+
+enum MaterialReturnStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Unused material coming back from site to the store it was issued from.
+/// Stock moves only when the return is approved (RETURN_IN, at the rate the
+/// material left), and never more than the issue line still has out.
+model MaterialReturn {
+  id           String               @id @default(cuid())
+  returnNo     String               @unique
+  projectId    String
+  storeId      String
+  issueId      String
+  status       MaterialReturnStatus @default(PENDING)
+  returnDate   DateTime             @default(now())
+  reason       String?
+  raisedById   String
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?
+  totalValue   Decimal              @default(0) @db.Decimal(16, 2)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  project   Project       @relation(fields: [projectId], references: [id])
+  store     Store         @relation(fields: [storeId], references: [id])
+  issue     MaterialIssue @relation(fields: [issueId], references: [id])
+  raisedBy  User          @relation("ReturnRaisedBy", fields: [raisedById], references: [id])
+  decidedBy User?         @relation("ReturnDecidedBy", fields: [decidedById], references: [id])
+  items     MaterialReturnItem[]
+
+  @@index([projectId, status])
+  @@index([issueId])
+  @@map("material_returns")
+}
+
+model MaterialReturnItem {
+  id          String  @id @default(cuid())
+  returnId    String
+  issueItemId String
+  itemId      String
+  quantity    Decimal @db.Decimal(14, 3)
+  rate        Decimal @default(0) @db.Decimal(14, 2)
+  value       Decimal @default(0) @db.Decimal(16, 2)
+  /// Good / Damaged — noted for the store; approved quantity returns to stock either way.
+  condition   String?
+  remarks     String?
+
+  materialReturn MaterialReturn    @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  issueItem      MaterialIssueItem @relation(fields: [issueItemId], references: [id])
+  item           Item              @relation(fields: [itemId], references: [id])
+
+  @@index([returnId])
+  @@map("material_return_items")
 }

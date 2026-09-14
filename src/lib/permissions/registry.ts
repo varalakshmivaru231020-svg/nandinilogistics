@@ -334,6 +334,7 @@ crud({
   extra: [
     ["acknowledge", "Acknowledge material received", "BUTTON", "Signed by the receiving supervisor, on mobile."],
     ["print", "Print issue slip", "BUTTON"],
+    ["cancel", "Cancel material issue", "BUTTON", "Puts back into the store whatever the issue still has out on site, at the rate it left. Not possible once a return is pending."],
   ],
 });
 

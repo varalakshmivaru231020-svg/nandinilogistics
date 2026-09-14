@@ -74,7 +74,8 @@ export async function runReport(
         }),
         prisma.materialIssue.groupBy({
           by: ["projectId"],
-          where: { ...scope, ...during("issueDate") },
+          // A cancelled issue put its stock back; it was never consumed.
+          where: { ...scope, ...during("issueDate"), cancelledAt: null },
           _sum: { totalValue: true },
         }),
       ]);
@@ -246,7 +247,7 @@ export async function runReport(
         }),
         prisma.materialIssueItem.groupBy({
           by: ["itemId"],
-          where: { issue: { ...scope, ...during("issueDate") } },
+          where: { issue: { ...scope, ...during("issueDate"), cancelledAt: null } },
           _sum: { issuedQty: true, value: true },
         }),
       ]);

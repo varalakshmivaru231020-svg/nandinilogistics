@@ -237,6 +237,7 @@ export const NUMBERING = [
   { documentKey: "GRN", prefix: "GRN", padding: 4 },
   { documentKey: "INVOICE", prefix: "INV", padding: 4 },
   { documentKey: "ISSUE", prefix: "ISS", padding: 4 },
+  { documentKey: "RETURN", prefix: "RET", padding: 4 },
   { documentKey: "TRANSFER", prefix: "TRF", padding: 4 },
   { documentKey: "LEAD", prefix: "LD", padding: 5 },
   { documentKey: "BOOKING", prefix: "BKG", padding: 4 },
@@ -378,4 +379,38 @@ export async function seedMasters(prisma: PrismaClient) {
   });
 
   console.log("  masters seeded");
+}
+
+/**
+ * Number series introduced after projects already existed. For each project
+ * that numbers the document a new series follows, create the new series in the
+ * same pattern — so a live project's material returns read "RET/NNS/2026-27/0001"
+ * rather than falling back to a timestamp. Idempotent; run by the reference seed.
+ */
+const LATER_SERIES: Array<{ documentKey: string; alongside: string; prefix: string; replaces: string }> = [
+  { documentKey: "RETURN", alongside: "ISSUE", prefix: "RET", replaces: "ISS" },
+];
+
+export async function ensureLaterNumberingSeries(prisma: PrismaClient) {
+  let created = 0;
+  for (const later of LATER_SERIES) {
+    const models = await prisma.numberingSeries.findMany({ where: { documentKey: later.alongside } });
+    for (const m of models) {
+      const exists = await prisma.numberingSeries.findFirst({
+        where: { documentKey: later.documentKey, projectId: m.projectId, fiscalYear: m.fiscalYear },
+      });
+      if (exists) continue;
+      await prisma.numberingSeries.create({
+        data: {
+          documentKey: later.documentKey,
+          projectId: m.projectId,
+          prefix: m.prefix.startsWith(later.replaces) ? later.prefix + m.prefix.slice(later.replaces.length) : later.prefix,
+          fiscalYear: m.fiscalYear,
+          padding: m.padding,
+        },
+      });
+      created += 1;
+    }
+  }
+  return created;
 }

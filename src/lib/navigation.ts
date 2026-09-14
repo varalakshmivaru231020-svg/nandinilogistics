@@ -85,6 +85,7 @@ export const NAVIGATION: NavSection[] = [
       { label: "Payments", href: "/material/payments", icon: "Banknote", permission: PERM.material.vendorPayment.view },
       { label: "Reorder Alerts", href: "/material/reorder", icon: "TriangleAlert", permission: PERM.material.reorder.view, badge: "reorder" },
       { label: "Material Issues", href: "/material/issues", icon: "ArrowLeftRight", permission: PERM.material.issue.view },
+      { label: "Material Returns", href: "/material/returns", icon: "Undo2", permission: PERM.material.return.view },
       { label: "Store Transfers", href: "/material/transfers", icon: "Truck", permission: PERM.material.transfer.view },
     ],
   },
