@@ -7,9 +7,11 @@ import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
 import { authorize, runAction, assertProjectAccess, PermissionError, type ActionResult } from "@/lib/rbac/guard";
-import { recordAudit } from "@/lib/audit";
+import { diff, recordAudit } from "@/lib/audit";
 import { nextDocumentNumber } from "@/lib/numbering";
 import { PERM } from "@/lib/permissions/codes";
+import { indentEstimatedValue, isIndentEditable, mayEditIndentAs } from "@/lib/material/procurement";
+import { applyIndentEdit } from "@/lib/material/procurement-edit";
 
 const APPROVAL_SCOPE = "material.indent";
 
@@ -29,6 +31,26 @@ const IndentSchema = z.object({
   items: z.array(ItemLineSchema).min(1, "Add at least one item"),
 });
 
+/** The project is fixed; rates are resolved on the server, not taken from the form. */
+const IndentEditSchema = z.object({
+  workPackageId: z.string().optional(),
+  requiredByDate: z.string().min(1, "Required-by date is needed"),
+  purpose: z.string().trim().optional(),
+  remarks: z.string().trim().optional(),
+  items: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        itemId: z.string().min(1),
+        requestedQty: z.coerce.number().positive("Quantity must be greater than zero"),
+        specification: z.string().trim().optional(),
+      }),
+    )
+    .min(1, "Add at least one item"),
+});
+
+export type IndentEditInput = z.infer<typeof IndentEditSchema>;
+
 export async function createIndentAction(
   input: z.infer<typeof IndentSchema>,
   submit: boolean,
@@ -42,7 +64,7 @@ export async function createIndentAction(
     assertProjectAccess(ctx, v.projectId);
     if (submit) await authorize(PERM.material.indent.submit);
 
-    const estimatedValue = v.items.reduce((sum, i) => sum + i.requestedQty * i.estimatedRate, 0);
+    const estimatedValue = indentEstimatedValue(v.items);
 
     const indent = await prisma.$transaction(async (tx) => {
       const indentNo = await nextDocumentNumber(tx, "INDENT", v.projectId);
@@ -80,6 +102,83 @@ export async function createIndentAction(
 
     revalidatePath("/material/indents");
     return { id: indent.id, indentNo: indent.indentNo };
+  });
+}
+
+/**
+ * Edits an indent before its first approval — a draft, or a submitted indent
+ * with no approval step recorded. Only its raiser, or someone who sees every
+ * indent, may do it. The state is checked here for the message and again as
+ * the condition on the write, so an approval that lands in between wins.
+ */
+export async function updateIndentAction(
+  id: string,
+  input: IndentEditInput,
+): Promise<ActionResult<{ id: string; estimatedValue: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.material.indent.update);
+    const parsed = IndentEditSchema.safeParse(input);
+    if (!parsed.success) throw new Error(parsed.error.issues[0].message);
+    const v = parsed.data;
+
+    const indent = await prisma.indent.findUnique({
+      where: { id },
+      include: { items: true, _count: { select: { approvals: true } } },
+    });
+    if (!indent) throw new Error("Indent not found.");
+    assertProjectAccess(ctx, indent.projectId);
+    if (!mayEditIndentAs(indent, { id: ctx.id, hasViewAll: ctx.has(PERM.material.indent.viewAll) })) {
+      throw new PermissionError(PERM.material.indent.viewAll, "You can only edit indents you raised.");
+    }
+    if (!isIndentEditable({ status: indent.status, approvalCount: indent._count.approvals })) {
+      throw new Error(
+        `${indent.indentNo} is ${indent.status.replace(/_/g, " ").toLowerCase()}` +
+          `${indent._count.approvals ? " with an approval step recorded" : ""} and can no longer be edited.`,
+      );
+    }
+
+    const requiredByDate = new Date(v.requiredByDate);
+    const result = await prisma.$transaction((tx) =>
+      applyIndentEdit(tx, id, {
+        workPackageId: v.workPackageId || null,
+        requiredByDate,
+        purpose: v.purpose || null,
+        remarks: v.remarks || null,
+        items: v.items.map((l) => ({ ...l, specification: l.specification || null })),
+      }),
+    );
+
+    const lineSummary = (l: { itemId: string; requestedQty: unknown; estimatedRate: unknown }) =>
+      `${l.itemId} × ${Number(l.requestedQty)} @ ${Number(l.estimatedRate)}`;
+
+    const before = {
+      workPackageId: indent.workPackageId,
+      requiredByDate: indent.requiredByDate.toISOString(),
+      purpose: indent.purpose,
+      remarks: indent.remarks,
+      estimatedValue: Number(indent.estimatedValue),
+      lines: indent.items.map(lineSummary),
+    };
+    const after = {
+      workPackageId: v.workPackageId || null,
+      requiredByDate: requiredByDate.toISOString(),
+      purpose: v.purpose || null,
+      remarks: v.remarks || null,
+      estimatedValue: result.estimatedValue,
+      lines: result.lines.map(lineSummary),
+    };
+
+    await recordAudit({
+      action: "UPDATE", entity: "Indent", entityId: id, userId: ctx.id, projectId: indent.projectId,
+      summary:
+        `Edited indent ${indent.indentNo} before approval — ₹${before.estimatedValue.toLocaleString("en-IN")} → ` +
+        `₹${result.estimatedValue.toLocaleString("en-IN")} (${result.lines.length} item line(s))`,
+      changes: diff(before, after),
+    });
+
+    revalidatePath("/material/indents");
+    revalidatePath(`/material/indents/${id}`);
+    return { id, estimatedValue: result.estimatedValue };
   });
 }
 

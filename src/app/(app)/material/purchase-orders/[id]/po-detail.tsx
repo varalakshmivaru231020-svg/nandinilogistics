@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, Check, PackagePlus, ReceiptText, XCircle } from "lucide-react";
+import { Ban, Check, PackagePlus, Pencil, Printer, ReceiptText, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -41,10 +41,12 @@ interface Invoice {
 }
 
 export function PoDetail({
-  po, items, receipts, invoices, can, approvalCeiling,
+  po, items, receipts, invoices, can, approvalCeiling, editable,
 }: {
   po: Po; items: PoLine[]; receipts: Receipt[]; invoices: Invoice[];
   can: Record<string, boolean>; approvalCeiling: number;
+  /** Nobody has approved it yet — decided on the server from the approval fields. */
+  editable: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = React.useState<string | null>(null);
@@ -212,6 +214,15 @@ export function PoDetail({
             </div>
 
             <div className="flex flex-col gap-2 border-t border-line-200 pt-3">
+              {editable && can.update && (
+                <Link href={`/material/purchase-orders/${po.id}/edit`}>
+                  <Button size="sm" variant="secondary" className="w-full">
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit order
+                  </Button>
+                </Link>
+              )}
+
               {awaitingApproval && mayApproveNow && (
                 <>
                   <Button size="sm" variant="success" onClick={() => setApproving(true)} disabled={aboveCeiling}>
@@ -250,6 +261,15 @@ export function PoDetail({
                   onClick={() => run(() => closePurchaseOrderAction(po.id), "Purchase order closed.")}>
                   Close purchase order
                 </Button>
+              )}
+
+              {can.print && (
+                <a href={`/print/purchase-orders/${po.id}`} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" variant="ghost" className="w-full">
+                    <Printer className="h-3.5 w-3.5" />
+                    Print
+                  </Button>
+                </a>
               )}
 
               {!["CANCELLED", "CLOSED"].includes(po.status) && can.cancel && (

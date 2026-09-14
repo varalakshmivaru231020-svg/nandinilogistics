@@ -166,7 +166,9 @@ export default async function PurchaseOrdersPage({
         <span className="inline-flex items-center gap-1.5">
           {canPrint && (
             <Link
-              href={`/material/purchase-orders/${p.id}?print=1`}
+              href={`/print/purchase-orders/${p.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
               title="Print"
               className="rounded-[7px] border border-line-400 px-2 py-1 text-[11px] font-bold text-muted-600 transition-colors hover:bg-surface-hover hover:text-navy-900"
             >

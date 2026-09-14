@@ -2,12 +2,13 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Send, Trash2 } from "lucide-react";
+import { Plus, Save, Send, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Alert, Card, CardBody, CardHeader, CardTitle, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { money } from "@/lib/utils";
-import { createIndentAction } from "../actions";
+import { indentEstimatedValue } from "@/lib/material/procurement";
+import { createIndentAction, updateIndentAction } from "../actions";
 
 interface ProjectOpt {
   id: string;
@@ -27,6 +28,11 @@ interface ItemOpt {
 
 interface Line {
   key: string;
+  /** Set for a line that already exists on the indent being edited. */
+  id?: string;
+  /** The item and rate the existing line was raised with — kept while the item is unchanged. */
+  originalItemId?: string;
+  originalRate?: string;
   itemId: string;
   requestedQty: string;
   estimatedRate: string;
@@ -43,21 +49,49 @@ function blankLine(): Line {
   };
 }
 
+/** An existing indent, not yet approved, being edited in place. */
+export interface IndentEditState {
+  indentId: string;
+  projectLabel: string;
+  workPackages: Array<{ id: string; code: string; name: string }>;
+  initial: {
+    workPackageId: string;
+    requiredByDate: string;
+    purpose: string;
+    remarks: string;
+    lines: Array<{ id: string; itemId: string; requestedQty: number; estimatedRate: number; specification: string }>;
+  };
+}
+
 export function IndentForm({
-  projects, items, canSubmit,
-}: { projects: ProjectOpt[]; items: ItemOpt[]; canSubmit: boolean }) {
+  projects, items, canSubmit, edit,
+}: { projects: ProjectOpt[]; items: ItemOpt[]; canSubmit: boolean; edit?: IndentEditState }) {
   const router = useRouter();
+  const init = edit?.initial;
   const [projectId, setProjectId] = React.useState(projects[0]?.id ?? "");
-  const [workPackageId, setWorkPackageId] = React.useState("");
-  const [requiredByDate, setRequiredByDate] = React.useState("");
-  const [purpose, setPurpose] = React.useState("");
-  const [remarks, setRemarks] = React.useState("");
-  const [lines, setLines] = React.useState<Line[]>([blankLine()]);
+  const [workPackageId, setWorkPackageId] = React.useState(init?.workPackageId ?? "");
+  const [requiredByDate, setRequiredByDate] = React.useState(init?.requiredByDate ?? "");
+  const [purpose, setPurpose] = React.useState(init?.purpose ?? "");
+  const [remarks, setRemarks] = React.useState(init?.remarks ?? "");
+  const [lines, setLines] = React.useState<Line[]>(() =>
+    init
+      ? init.lines.map((l) => ({
+          key: l.id,
+          id: l.id,
+          originalItemId: l.itemId,
+          originalRate: String(l.estimatedRate),
+          itemId: l.itemId,
+          requestedQty: String(l.requestedQty),
+          estimatedRate: String(l.estimatedRate),
+          specification: l.specification,
+        }))
+      : [blankLine()],
+  );
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
   const itemById = React.useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
-  const workPackages = projects.find((p) => p.id === projectId)?.workPackages ?? [];
+  const workPackages = edit ? edit.workPackages : projects.find((p) => p.id === projectId)?.workPackages ?? [];
 
   function updateLine(key: string, patch: Partial<Line>) {
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -65,28 +99,57 @@ export function IndentForm({
 
   function onItemChange(key: string, itemId: string) {
     const item = itemById.get(itemId);
-    updateLine(key, {
-      itemId,
-      // Pre-fill the standard rate so the indent carries a value from the start.
-      estimatedRate: item ? String(item.standardRate) : "",
-    });
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.key !== key) return l;
+        // Back to the line's own item: its original rate returns, as the server keeps it.
+        const rate = l.originalItemId && l.originalItemId === itemId
+          ? l.originalRate ?? ""
+          : item ? String(item.standardRate) : "";
+        return { ...l, itemId, estimatedRate: rate };
+      }),
+    );
   }
 
-  const total = lines.reduce(
-    (sum, l) => sum + (Number(l.requestedQty) || 0) * (Number(l.estimatedRate) || 0),
-    0,
+  const total = indentEstimatedValue(
+    lines.map((l) => ({ requestedQty: Number(l.requestedQty) || 0, estimatedRate: Number(l.estimatedRate) || 0 })),
   );
 
   async function save(submit: boolean) {
     setBusy(true);
     setError(null);
 
-    const payload = {
-      projectId,
+    const header = {
       workPackageId: workPackageId || undefined,
       requiredByDate,
       purpose: purpose || undefined,
       remarks: remarks || undefined,
+    };
+
+    if (edit) {
+      const res = await updateIndentAction(edit.indentId, {
+        ...header,
+        items: lines
+          .filter((l) => l.id || (l.itemId && Number(l.requestedQty) > 0))
+          .map((l) => ({
+            id: l.id,
+            itemId: l.itemId,
+            requestedQty: Number(l.requestedQty),
+            specification: l.specification || undefined,
+          })),
+      });
+      setBusy(false);
+      if (!res.ok) setError(res.error);
+      else {
+        router.push(`/material/indents/${edit.indentId}`);
+        router.refresh();
+      }
+      return;
+    }
+
+    const payload = {
+      projectId,
+      ...header,
       items: lines
         .filter((l) => l.itemId && Number(l.requestedQty) > 0)
         .map((l) => ({
@@ -112,10 +175,14 @@ export function IndentForm({
         <CardBody>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Project" required>
-              <Select value={projectId} onChange={(e) => { setProjectId(e.target.value); setWorkPackageId(""); }} required>
-                {projects.length === 0 && <option value="">No projects mapped to you</option>}
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
-              </Select>
+              {edit ? (
+                <Input value={edit.projectLabel} disabled readOnly />
+              ) : (
+                <Select value={projectId} onChange={(e) => { setProjectId(e.target.value); setWorkPackageId(""); }} required>
+                  {projects.length === 0 && <option value="">No projects mapped to you</option>}
+                  {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+                </Select>
+              )}
             </Field>
 
             <Field label="Work package" hint="Ties the spend back to the activity that caused it.">
@@ -149,6 +216,11 @@ export function IndentForm({
           </Button>
         </CardHeader>
         <CardBody className="space-y-3">
+          {edit && (
+            <p className="text-xs text-muted-500">
+              A line that keeps its item keeps the rate it was raised at; a new or changed item is valued at its standard rate.
+            </p>
+          )}
           {lines.map((line, idx) => {
             const item = itemById.get(line.itemId);
             const amount = (Number(line.requestedQty) || 0) * (Number(line.estimatedRate) || 0);
@@ -190,6 +262,8 @@ export function IndentForm({
                     <Input
                       type="number" step="any" min={0}
                       value={line.estimatedRate}
+                      readOnly={Boolean(edit)}
+                      disabled={Boolean(edit)}
                       onChange={(e) => updateLine(line.key, { estimatedRate: e.target.value })}
                     />
                   </Field>
@@ -220,14 +294,28 @@ export function IndentForm({
       </Card>
 
       <div className="flex justify-end gap-2">
-        <Button variant="secondary" onClick={() => save(false)} loading={busy} disabled={!projectId || !requiredByDate}>
-          Save as draft
-        </Button>
-        {canSubmit && (
-          <Button onClick={() => save(true)} loading={busy} disabled={!projectId || !requiredByDate}>
-            <Send className="h-3.5 w-3.5" />
-            Submit for approval
-          </Button>
+        {edit ? (
+          <>
+            <Button variant="secondary" onClick={() => router.push(`/material/indents/${edit.indentId}`)} disabled={busy}>
+              Discard changes
+            </Button>
+            <Button onClick={() => save(false)} loading={busy} disabled={!requiredByDate}>
+              <Save className="h-3.5 w-3.5" />
+              Save changes
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={() => save(false)} loading={busy} disabled={!projectId || !requiredByDate}>
+              Save as draft
+            </Button>
+            {canSubmit && (
+              <Button onClick={() => save(true)} loading={busy} disabled={!projectId || !requiredByDate}>
+                <Send className="h-3.5 w-3.5" />
+                Submit for approval
+              </Button>
+            )}
+          </>
         )}
       </div>
     </div>
