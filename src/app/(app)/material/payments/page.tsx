@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Banknote } from "lucide-react";
+import { Banknote, Printer } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
@@ -72,6 +72,22 @@ export default async function PaymentsPage({
       key: "amount", header: "Amount", align: "right", className: "num",
       render: (p) => <span className="font-medium text-navy-950">{money(p.amount)}</span>,
     },
+    ...(ctx.has(PERM.material.vendorPayment.print)
+      ? [{
+          key: "print", header: "", align: "right" as const,
+          render: (p: Row) => (
+            <Link
+              href={`/print/vendor-payments/${p.id}`}
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Voucher
+            </Link>
+          ),
+        }]
+      : []),
   ];
 
   return (

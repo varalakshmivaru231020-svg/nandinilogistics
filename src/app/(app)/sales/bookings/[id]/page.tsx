@@ -110,6 +110,8 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
           tabDemands: ctx.has(PERM.sales.booking.tabDemands),
           tabReceipts: ctx.has(PERM.sales.booking.tabReceipts),
           viewKyc: ctx.has(PERM.sales.customer.viewKyc),
+          print: ctx.has(PERM.sales.booking.print),
+          printDemand: ctx.has(PERM.sales.demand.view) && ctx.has(PERM.sales.demand.print),
         }}
       />
     </div>

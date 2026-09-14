@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Ban, Check, PackageSearch, Pencil, Send, ThumbsDown, X } from "lucide-react";
+import { Ban, Check, PackageSearch, Pencil, Printer, Send, ThumbsDown, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -270,6 +270,15 @@ export function IndentDetail({
                   <Button size="sm" variant="secondary" className="w-full">
                     <Pencil className="h-3.5 w-3.5" />
                     Edit indent
+                  </Button>
+                </Link>
+              )}
+
+              {can.print && (
+                <Link href={`/print/indents/${indent.id}`} target="_blank" rel="noopener">
+                  <Button size="sm" variant="secondary" className="w-full">
+                    <Printer className="h-3.5 w-3.5" />
+                    Print indent
                   </Button>
                 </Link>
               )}

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, FileSignature, IndianRupee, Send, Stamp } from "lucide-react";
+import { Ban, FileSignature, IndianRupee, Printer, Send, Stamp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -136,6 +136,17 @@ export function BookingDetail({
               </p>
             </div>
 
+            {can.print && (
+              <div className="border-t border-line-200 pt-3">
+                <Link href={`/print/bookings/${booking.id}`} target="_blank" rel="noopener">
+                  <Button size="sm" variant="secondary" className="w-full">
+                    <Printer className="h-3.5 w-3.5" />
+                    Print booking form
+                  </Button>
+                </Link>
+              </div>
+            )}
+
             {!cancelled && (
               <div className="flex flex-col gap-2 border-t border-line-200 pt-3">
                 {booking.status === "CONFIRMED" && can.agreement && (
@@ -198,6 +209,14 @@ export function BookingDetail({
                     <Badge tone={DEMAND_TONE[d.status] ?? "slate"}>{d.status.replace(/_/g, " ")}</Badge>
 
                     <div className="flex shrink-0 gap-1">
+                      {can.printDemand && (
+                        <Link href={`/print/demands/${d.id}`} target="_blank" rel="noopener" title={`Print demand letter ${d.demandNo}`}>
+                          <Button size="xs" variant="ghost">
+                            <Printer className="h-3 w-3" />
+                            Letter
+                          </Button>
+                        </Link>
+                      )}
                       {d.status === "PENDING" && can.raiseDemand && !cancelled && (
                         <Button size="xs" variant="secondary" loading={busy === d.id}
                           onClick={() => run(d.id, () => raiseDemandAction(d.id), `Demand ${d.demandNo} raised.`)}>
