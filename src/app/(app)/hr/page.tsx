@@ -132,7 +132,7 @@ export default async function WorkforcePage({
           mark: ctx.has(PERM.hr.attendance.mark),
           markAll: ctx.has(PERM.hr.attendance.markAll),
           report: canReport,
-          exportReport: canViewAttendance && ctx.has(PERM.hr.attendance.export),
+          exportReport: canViewAttendance && canReport && ctx.has(PERM.hr.attendance.export),
           exportEmployees: ctx.has(PERM.hr.employee.export),
         }}
       />

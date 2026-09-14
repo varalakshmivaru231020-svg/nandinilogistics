@@ -16,7 +16,14 @@ export const dynamic = "force-dynamic";
  * same function the screen uses. No identity numbers are exported.
  */
 export async function GET(request: Request) {
-  const gate = await exportGate(request, PERM.hr.attendance.view, PERM.hr.attendance.export);
+  const gate = await exportGate(
+    request,
+    PERM.hr.attendance.view,
+    // The report tab's own permission too: a download must not show a report
+    // the user cannot open on screen.
+    PERM.hr.attendance.tabReport,
+    PERM.hr.attendance.export,
+  );
   if (!gate.ok) return gate.response;
   const { params } = gate;
 
