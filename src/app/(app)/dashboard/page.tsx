@@ -280,15 +280,31 @@ export default async function DashboardPage() {
   const progressProjects = canProjects
     ? await prisma.project.findMany({
         where: { status: "ACTIVE", ...(ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } }) },
-        take: 4,
+        take: 3,
         select: {
-          id: true, name: true, code: true, targetDate: true,
+          id: true, name: true, targetDate: true,
           city: { select: { name: true } },
-          _count: { select: { units: true } },
-          activities: { select: { progressPct: true, status: true } },
+          activities: {
+            select: { progressPct: true, status: true, baselineEnd: true, plannedEnd: true, actualEnd: true },
+          },
         },
       })
     : [];
+
+  const projectSpend = new Map<string, number>(
+    showMoney && progressProjects.length > 0
+      ? (
+          await prisma.purchaseOrder.groupBy({
+            by: ["projectId"],
+            _sum: { totalAmount: true },
+            where: {
+              projectId: { in: progressProjects.map((p) => p.id) },
+              status: { notIn: ["CANCELLED", "DRAFT"] },
+            },
+          })
+        ).map((r) => [r.projectId, Number(r._sum.totalAmount ?? 0)] as const)
+      : [],
+  );
 
   const progress = progressProjects.map((p) => {
     const acts = p.activities;
@@ -296,10 +312,32 @@ export default async function DashboardPage() {
       ? Math.round(acts.reduce((s, a) => s + a.progressPct, 0) / acts.length)
       : 0;
     const done = acts.filter((a) => a.status === "COMPLETED").length;
+    // A project is late by its worst-slipping activity — the same measure the
+    // schedule's variance report reads, so the two screens never disagree.
+    const slip = acts.reduce((worst, a) => {
+      const finish = a.actualEnd ?? a.plannedEnd;
+      if (!a.baselineEnd || !finish) return worst;
+      return Math.max(worst, Math.round((finish.getTime() - a.baselineEnd.getTime()) / DAY));
+    }, 0);
+    const finishing = slip <= 0 && pct >= 80;
     return {
       name: p.city ? `${p.name} · ${p.city.name}` : p.name,
       pct,
-      meta: `${done} of ${acts.length} activities complete${p.targetDate ? ` · target ${formatDate(p.targetDate)}` : ""}`,
+      // Blue on track, amber once it slips, green when it is finishing.
+      bar: slip > 0
+        ? "linear-gradient(90deg,#E8A13A,#F2C063)"
+        : finishing
+          ? "linear-gradient(90deg,#1F9D66,#5BC8A2)"
+          : "linear-gradient(90deg,#0089C9,#5BC8F2)",
+      meta: [
+        showMoney ? `${moneyShort(projectSpend.get(p.id) ?? 0)} spent` : null,
+        finishing && p.targetDate
+          ? `finishing · handover ${formatDate(p.targetDate)}`
+          : `${done} of ${acts.length} activities complete`,
+        slip > 0 ? `+${slip} d slip` : finishing ? null : "on track",
+      ]
+        .filter(Boolean)
+        .join(" · "),
     };
   });
 
@@ -330,30 +368,51 @@ export default async function DashboardPage() {
   /* -------------------------------- Funnel -------------------------------- */
 
   const canFunnel = ctx.has(PERM.sales.lead.view);
-  const funnelOrder = ["NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED"] as const;
-  // The design's five funnel stages, under its own abbreviations.
-  const funnelLabels: Record<string, string> = {
-    NEW: "New", CONTACTED: "Contacted", SITE_VISIT_SCHEDULED: "Visit",
-    VISIT_DONE: "Visit", NEGOTIATION: "Nego.", BOOKED: "Booked",
-  };
+  /**
+   * The design's five funnel stages under its own abbreviations. A visit
+   * scheduled and a visit done are one bar, as they are one column on the
+   * board.
+   */
+  const funnelOrder = [
+    { key: "NEW", label: "New", states: ["NEW"], colour: "#5BC8F2" },
+    { key: "CONTACTED", label: "Contacted", states: ["CONTACTED"], colour: "#0089C9" },
+    { key: "VISIT", label: "Visit", states: ["SITE_VISIT_SCHEDULED", "VISIT_DONE"], colour: "#2F308C" },
+    { key: "NEGOTIATION", label: "Nego.", states: ["NEGOTIATION"], colour: "#191A5C" },
+    { key: "BOOKED", label: "Booked", states: ["BOOKED"], colour: "#1F9D66" },
+  ] as const;
 
-  /** Each stage's bar colour, taken from the design. */
-  const funnelColour: Record<string, string> = {
-    NEW: "#5BC8F2", CONTACTED: "#0089C9", SITE_VISIT_SCHEDULED: "#2F308C",
-    VISIT_DONE: "#2F308C", NEGOTIATION: "#191A5C", BOOKED: "#1F9D66",
-  };
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const mine = ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id };
 
-  const grouped = canFunnel
-    ? await prisma.lead.groupBy({
-        by: ["state"],
-        where: ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id },
-        _count: true,
-      })
-    : [];
+  // The card says "this month", so the funnel counts the leads that came in
+  // this month — and last month's, to say which way conversion moved.
+  const [grouped, lastMonth] = canFunnel
+    ? await Promise.all([
+        prisma.lead.groupBy({
+          by: ["state"],
+          where: { ...mine, createdAt: { gte: monthStart } },
+          _count: true,
+        }),
+        prisma.lead.groupBy({
+          by: ["state"],
+          where: { ...mine, createdAt: { gte: lastMonthStart, lt: monthStart } },
+          _count: true,
+        }),
+      ])
+    : [[], []];
   const counts = new Map<string, number>(grouped.map((g) => [g.state as string, g._count]));
-  const funnelMax = Math.max(1, ...funnelOrder.map((s) => counts.get(s) ?? 0));
+  const funnelCount = (stage: (typeof funnelOrder)[number]) =>
+    stage.states.reduce((n, state) => n + (counts.get(state) ?? 0), 0);
+  const funnelMax = Math.max(1, ...funnelOrder.map(funnelCount));
   const funnelTotal = grouped.reduce((s, g) => s + g._count, 0);
   const booked = counts.get("BOOKED") ?? 0;
+
+  const conversion = funnelTotal > 0 ? (booked / funnelTotal) * 100 : null;
+  const lastTotal = lastMonth.reduce((s, g) => s + g._count, 0);
+  const lastBooked = lastMonth.find((g) => g.state === "BOOKED")?._count ?? 0;
+  const conversionDelta =
+    conversion !== null && lastTotal > 0 ? conversion - (lastBooked / lastTotal) * 100 : null;
 
   const collections =
     canFunnel && showMoney
@@ -390,19 +449,19 @@ export default async function DashboardPage() {
     health.push({
       value: String(overdueTasks),
       label: "Overdue tasks · escalated",
-      tone: overdueTasks > 0 ? "bad" : "good",
+      tone: "bad",
     });
   }
   if (ctx.has(PERM.checklist.checklist.view)) {
     health.push({
       value: compliance === null ? "—" : `${compliance}%`,
       label: "Checklist compliance",
-      tone: compliance !== null && compliance >= 90 ? "good" : "warn",
+      tone: "good",
     });
     health.push({
       value: String(openFails),
       label: "Open snags (NC)",
-      tone: openFails > 0 ? "warn" : "good",
+      tone: "warn",
     });
   }
   if (ctx.has(PERM.task.task.view)) {
@@ -558,10 +617,7 @@ export default async function DashboardPage() {
                   <div className="h-[7px] overflow-hidden rounded-full bg-[#EDF0F8]">
                     <div
                       className="h-full rounded-full"
-                      style={{
-                        width: `${Math.max(2, p.pct)}%`,
-                        background: "linear-gradient(90deg,#0089C9,#2F308C)",
-                      }}
+                      style={{ width: `${p.pct}%`, background: p.bar }}
                     />
                   </div>
                   <div className="mt-1.5 text-[11px] font-medium text-muted-400">{p.meta}</div>
@@ -590,11 +646,13 @@ export default async function DashboardPage() {
                 >
                   <span className="h-2 w-2 shrink-0 rounded-full bg-bad-600" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[12.5px] font-semibold text-navy-900">{s.item}</div>
+                    <div className="truncate text-[12.5px] font-semibold text-navy-900">
+                      {s.item} · {s.uom.toLowerCase()}
+                    </div>
                     <div className="text-[11px] font-medium text-muted-400">{s.store}</div>
                   </div>
                   <div className="num text-[12px] font-bold text-bad-600">
-                    {qty(s.onhand, 2)} / {qty(s.level, 2)} {s.uom}
+                    {qty(s.onhand, 2)} / {qty(s.level, 2)}
                   </div>
                 </div>
               ))}
@@ -617,20 +675,17 @@ export default async function DashboardPage() {
             </div>
             <div className="flex h-[120px] items-end gap-2.5">
               {funnelOrder.map((stage) => {
-                const count = counts.get(stage) ?? 0;
-                const heightPct = Math.max(6, Math.round((count / funnelMax) * 100));
+                const count = funnelCount(stage);
+                const height = Math.max(8, Math.round((count / funnelMax) * 80));
                 return (
-                  <div key={stage} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
+                  <div key={stage.key} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
                     <div className="num text-[13px] font-bold text-navy-950">{count}</div>
                     <div
-                      className="w-full rounded-t-[6px]"
-                      style={{
-                        height: `${heightPct}%`,
-                        background: funnelColour[stage] ?? "#0089C9",
-                      }}
+                      className="w-full rounded-t-[7px] rounded-b-[3px]"
+                      style={{ height: `${height}px`, background: stage.colour }}
                     />
                     <div className="text-center text-[10px] font-semibold uppercase tracking-[.03em] text-muted-500">
-                      {funnelLabels[stage]}
+                      {stage.label}
                     </div>
                   </div>
                 );
@@ -638,10 +693,12 @@ export default async function DashboardPage() {
             </div>
             <div className="mt-3.5 flex flex-wrap justify-between gap-2 border-t border-[#F0F3FA] pt-3 text-[12px] font-semibold text-muted-600">
               <span>
-                Conversion{" "}
-                <span className="text-navy-950">
-                  {funnelTotal > 0 ? `${Math.round((booked / funnelTotal) * 100)}%` : "—"}
-                </span>
+                Conversion {conversion === null ? "—" : `${conversion.toFixed(1)}%`}
+                {conversionDelta !== null && Math.abs(conversionDelta) >= 0.05 && (
+                  <span className={cn("ml-1", conversionDelta > 0 ? "text-good-700" : "text-bad-600")}>
+                    {conversionDelta > 0 ? "▲" : "▼"} {Math.abs(conversionDelta).toFixed(1)}
+                  </span>
+                )}
               </span>
               {collections && (
                 <span>Collections {moneyShort(collections._sum.amount)} this month</span>
