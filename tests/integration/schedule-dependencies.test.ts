@@ -162,11 +162,13 @@ describe("schedule dependencies — the cascade, end to end", () => {
     await actAs("supervisor@nninfra.example");
     expect((await ext.requestExtensionAction(a.id, 5, "Monsoon")).ok).toBe(true);
     const request = await prisma.scheduleExtension.findFirstOrThrow({
-      where: { activityId: a.id, status: "PENDING" },
+      where: { activityId: a.id, status: "AWAITING_PM" },
     });
 
     await actAs("pm@nninfra.example");
-    expect((await ext.decideExtensionAction(request.id, true, "")).ok).toBe(true);
+    expect((await ext.decideExtensionPmAction(request.id, true, "")).ok).toBe(true);
+    await actAs("owner@nninfra.example");
+    expect((await ext.decideExtensionAdminAction(request.id, true, "", "Genuine")).ok).toBe(true);
 
     expect(dayOf((await reload(a.id)).plannedEnd)).toBe(15);
     expect(dayOf((await reload(b.id)).plannedStart)).toBe(15);

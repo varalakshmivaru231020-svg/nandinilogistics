@@ -202,7 +202,8 @@ model User {
   progressLogs           SiteProgressLog[]
   managedProjects        Project[]           @relation("ProjectManager")
   extensionsAsked        ScheduleExtension[] @relation("ExtensionRequestedBy")
-  extensionsDecided      ScheduleExtension[] @relation("ExtensionDecidedBy")
+  extensionsDecidedPm    ScheduleExtension[] @relation("ExtensionPmDecidedBy")
+  extensionsDecidedAdmin ScheduleExtension[] @relation("ExtensionAdminDecidedBy")
   leadNotes              LeadNote[]
   leadDocuments          LeadDocument[]
   employeeDocuments      EmployeeDocument[]
@@ -1117,17 +1118,25 @@ model ScheduleExtension {
   reason        String
   /// The finish date being asked for, derived at request time.
   requestedDate DateTime
-  /// PENDING | APPROVED | REJECTED
-  status        String    @default("PENDING")
+  /// AWAITING_PM | AWAITING_ADMIN | GRANTED | REFUSED
+  status        String    @default("AWAITING_PM")
   requestedById String
   requestedAt   DateTime  @default(now())
-  decidedById   String?
-  decidedAt     DateTime?
-  decisionNote  String?
+  /// The Project Manager's decision — the first of the two the design draws.
+  pmDecidedById String?
+  pmDecidedAt   DateTime?
+  pmRemark      String?
+  /// The Admin's: only this one moves the date.
+  adminDecidedById String?
+  adminDecidedAt   DateTime?
+  adminRemark      String?
+  /// The Admin's verdict on the delay — "Genuine" or "Avoidable".
+  performance      String?
 
   activity    ScheduleActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
   requestedBy User             @relation("ExtensionRequestedBy", fields: [requestedById], references: [id])
-  decidedBy   User?            @relation("ExtensionDecidedBy", fields: [decidedById], references: [id])
+  pmDecidedBy    User?         @relation("ExtensionPmDecidedBy", fields: [pmDecidedById], references: [id])
+  adminDecidedBy User?         @relation("ExtensionAdminDecidedBy", fields: [adminDecidedById], references: [id])
 
   @@index([activityId])
   @@index([status])

@@ -7,13 +7,15 @@ import { AlertTriangle, CalendarClock, Check, Diamond, Link2, X, Zap } from "luc
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, formatDateTime } from "@/lib/utils";
 import {
   addDependencyAction, completeActivityAction, createActivityAction,
   removeDependencyAction, startActivityAction, updateActivityProgressAction,
 } from "./actions";
 import { LINK_LABEL, LINK_TYPES, type LinkType } from "@/lib/schedule/engine";
-import { decideExtensionAction, requestExtensionAction } from "./extension-actions";
+import {
+  decideExtensionAdminAction, decideExtensionPmAction, requestExtensionAction,
+} from "./extension-actions";
 
 interface Activity {
   id: string; code: string; name: string; sequence: number; status: string;
@@ -33,8 +35,19 @@ interface Extension {
   id: string; activityCode: string; activityName: string;
   currentDate: string | null; requestedDays: number; requestedDate: string;
   reason: string; status: string; requestedBy: string; requestedAt: string;
-  decidedBy: string | null; decidedAt: string | null; decisionNote: string | null;
+  /** Where the activity sits, as the design's sub-line reads it. */
+  project: string | null; stage: string | null; projectManager: string | null;
+  requestedByRole: string | null;
+  pmDecidedBy: string | null; pmDecidedAt: string | null; pmRemark: string | null;
+  adminDecidedBy: string | null; adminDecidedAt: string | null; adminRemark: string | null;
+  performance: string | null;
 }
+
+/** The design's words for where a request has got to. */
+const EXT_STAGE: Record<string, { label: string; pill: string }> = {
+  AWAITING_PM: { label: "AWAITING PROJECT MANAGER", pill: "bg-[#E8A13A] text-white" },
+  AWAITING_ADMIN: { label: "AWAITING ADMIN", pill: "bg-[#6A46C8] text-white" },
+};
 
 const STATUS_TONE: Record<string, "muted" | "brand" | "good" | "bad"> = {
   NOT_STARTED: "muted", IN_PROGRESS: "brand", COMPLETED: "good", DELAYED: "bad",
@@ -69,7 +82,8 @@ export function ScheduleScreen({
   const [busy, setBusy] = React.useState<string | null>(null);
 
   const done = activities.filter((a) => a.status === "COMPLETED");
-  const pendingExt = extensions.filter((e) => e.status === "PENDING");
+  const pendingExt = extensions.filter((e) => e.status === "AWAITING_PM" || e.status === "AWAITING_ADMIN");
+  const decidedExt = extensions.filter((e) => e.status === "GRANTED" || e.status === "REFUSED");
 
   // The design's four tiles: completion, punctuality at each end, and what is
   // running late. Each ratio reads "n of m" so the denominator is visible.
@@ -153,15 +167,15 @@ export function ScheduleScreen({
                 type="button"
                 onClick={() => router.push(`/schedule?project=${activeProjectId}&tab=${key}`)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-[9px] border px-3.5 py-2 text-[12px] font-bold transition-colors",
+                  "flex items-center gap-[7px] rounded-full border px-[15px] py-[9px] text-[12px] font-semibold transition-colors",
                   tab === key
                     ? "border-brand-500 bg-brand-100 text-brand-700"
-                    : "border-line-400 bg-white text-muted-600 hover:border-brand-300",
+                    : "border-line-400 bg-white text-navy-500 hover:border-brand-300",
                 )}
               >
                 {label}
                 {key === "extensions" && pendingExt.length > 0 && (
-                  <span className="num rounded-full bg-warn-700 px-1.5 text-[10px] font-bold text-white">
+                  <span className="num grid h-[18px] min-w-[18px] place-items-center rounded-full bg-bad-600 px-1 text-[10px] font-bold text-white">
                     {pendingExt.length}
                   </span>
                 )}
@@ -343,69 +357,150 @@ export function ScheduleScreen({
       {/* ------------------------------ Extensions ----------------------------- */}
       {tab === "extensions" && can.viewExtensions && (
         <>
-          <Alert tone="info" title="How an extension works">
-            The site asks for more days and gives a reason; the Project Manager decides. Approving
-            moves the <strong>planned</strong> finish only — the baseline never moves, which is what
-            keeps the variance report honest.
-          </Alert>
+          <div className="overflow-hidden rounded-[13px] border border-line-400 bg-white">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-200 px-5 py-3.5">
+              <span className="font-display text-[13.5px] font-bold text-navy-950">Pending approvals</span>
+              <span className="text-[11.5px] font-semibold text-muted-600">
+                {pendingExt.length} {pendingExt.length === 1 ? "request" : "requests"} awaiting action
+              </span>
+            </div>
 
-          <div className="mt-3.5 flex flex-col gap-2.5">
-            {extensions.length === 0 && (
-              <Card><EmptyState title="No extension requests" description="Requests raised from the plan appear here." /></Card>
+            {pendingExt.length === 0 && (
+              <div className="px-7 py-7 text-center text-[12.5px] font-medium text-muted-400">
+                Nothing waiting — requests raised from the plan appear here.
+              </div>
             )}
-            {extensions.map((e) => (
-              <Card key={e.id} className={cn("px-5 py-4", e.status === "PENDING" && "border-warn-050 bg-warn-050/40")}>
-                <div className="flex flex-wrap items-start gap-x-5 gap-y-3">
-                  <div className="min-w-0 flex-[1_1_260px]">
+
+            {pendingExt.map((e) => {
+              const stage = EXT_STAGE[e.status];
+              const mine = e.status === "AWAITING_PM" ? can.approveExtension : can.approveExtensionAdmin;
+              return (
+                <div key={e.id} className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-line-100 px-5 py-4 last:border-0">
+                  <div className="min-w-[220px] flex-[1_1_240px]">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-display text-[14px] font-bold text-navy-950">
-                        {e.activityName}
+                      <span className="text-[13.5px] font-bold text-navy-950">{e.activityName}</span>
+                      <span className={cn("rounded-full px-[9px] py-[4px] text-[8.5px] font-extrabold uppercase tracking-[.07em]", stage.pill)}>
+                        {stage.label}
                       </span>
-                      <Badge tone={e.status === "PENDING" ? "warn" : e.status === "APPROVED" ? "good" : "bad"}>
-                        {e.status}
-                      </Badge>
                     </div>
-                    <p className="mt-1 text-[11.5px] font-medium text-muted-500">
-                      {e.activityCode} · asked by {e.requestedBy} on {formatDate(e.requestedAt)}
-                    </p>
-                    <p className="mt-1.5 text-[12.5px] font-medium text-navy-600">{e.reason}</p>
-                    {e.decidedBy && (
-                      <p className="mt-1.5 text-[11.5px] font-medium text-muted-500">
-                        {e.status === "APPROVED" ? "Approved" : "Refused"} by {e.decidedBy} on{" "}
-                        {formatDate(e.decidedAt)}
-                        {e.decisionNote && ` — ${e.decisionNote}`}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="min-w-[150px]">
-                    <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">CURRENT TARGET</div>
-                    <div className="text-[12.5px] font-semibold text-navy-600">{formatDate(e.currentDate)}</div>
-                  </div>
-                  <div className="min-w-[150px]">
-                    <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">REQUESTED</div>
-                    <div className="text-[12.5px] font-bold text-warn-700">
-                      {formatDate(e.requestedDate)}
-                      <span className="ml-1 text-[11px]">(+{e.requestedDays}d)</span>
+                    <div className="mt-0.5 text-[11.5px] font-medium text-muted-400">
+                      {[e.stage, e.project, e.projectManager ? `PM ${e.projectManager}` : null]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </div>
                   </div>
 
-                  {e.status === "PENDING" && can.approveExtension && (
-                    <div className="flex shrink-0 gap-1.5">
-                      <Button size="sm" variant="success" onClick={() => setDeciding(e)}>
-                        <Check className="h-3.5 w-3.5" />
-                        Decide
-                      </Button>
+                  <div className="min-w-[150px]">
+                    <div className="font-display text-[15px] font-extrabold text-warn-700">+{e.requestedDays} days</div>
+                    <div className="mt-0.5 text-[11.5px] font-medium text-muted-400">
+                      {formatDate(e.currentDate)} → {formatDate(e.requestedDate)}
                     </div>
-                  )}
-                  {e.status === "PENDING" && !can.approveExtension && (
-                    <span className="text-[11.5px] font-medium text-muted-500">
-                      Waiting on the Project Manager
-                    </span>
-                  )}
+                  </div>
+
+                  <div className="min-w-[220px] flex-[1_1_240px]">
+                    <div className="text-[12.5px] font-medium text-navy-900">{e.reason}</div>
+                    <div className="mt-0.5 text-[11.5px] font-medium text-muted-400">
+                      {[e.requestedBy, e.requestedByRole].filter(Boolean).join(" · ")} · {formatDateTime(e.requestedAt)}
+                    </div>
+                  </div>
+
+                  <div className="ml-auto max-w-[220px] text-right">
+                    {mine ? (
+                      <button
+                        type="button"
+                        onClick={() => setDeciding(e)}
+                        className="cursor-pointer rounded-[9px] bg-brand-500 px-4 py-2.5 text-[12.5px] font-bold text-white transition-colors hover:bg-brand-600"
+                      >
+                        {e.status === "AWAITING_PM" ? "PM decision" : "Admin decision"}
+                      </button>
+                    ) : null}
+                    <div className="mt-1.5 text-[11px] font-medium text-muted-400">
+                      {e.status === "AWAITING_PM"
+                        ? "Only the Project Manager can act on this request"
+                        : "Only the Admin can grant the revised date"}
+                    </div>
+                  </div>
                 </div>
-              </Card>
-            ))}
+              );
+            })}
+          </div>
+
+          <div className="mt-3.5 overflow-hidden rounded-[13px] border border-line-400 bg-white">
+            <div className="border-b border-line-200 px-5 py-3.5 font-display text-[13.5px] font-bold text-navy-950">
+              Decision history
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px] border-collapse">
+                <thead>
+                  <tr>
+                    {["Activity", "Days", "Reason", "PM remark", "Admin remark", "Result", "Performance"].map((h) => (
+                      <th
+                        key={h}
+                        className="border-b border-line-300 bg-surface-sunken px-3.5 py-[11px] text-left text-[10px] font-bold uppercase tracking-[.08em] text-muted-500"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {decidedExt.map((e) => (
+                    <tr key={e.id} className="hover:bg-surface-tint">
+                      <td className="border-b border-line-150 px-3.5 py-3">
+                        <div className="text-[12.5px] font-semibold text-navy-900">{e.activityName}</div>
+                        <div className="mt-0.5 text-[11px] font-medium text-muted-400">
+                          {[e.stage, e.projectManager ? `PM ${e.projectManager}` : null].filter(Boolean).join(" · ")}
+                        </div>
+                      </td>
+                      <td className="border-b border-line-150 px-3.5 py-3 text-[12.5px] font-bold text-warn-700">
+                        +{e.requestedDays} d
+                      </td>
+                      <td className="border-b border-line-150 px-3.5 py-3">
+                        <div className="text-[12.5px] font-medium text-navy-900">{e.reason}</div>
+                        <div className="mt-0.5 text-[11px] font-medium text-muted-400">
+                          {[e.requestedBy, e.requestedByRole].filter(Boolean).join(" · ")} · {formatDateTime(e.requestedAt)}
+                        </div>
+                      </td>
+                      <td className="border-b border-line-150 px-3.5 py-3 text-[12px] font-medium text-navy-600">
+                        {e.pmRemark || "—"}
+                      </td>
+                      <td className="border-b border-line-150 px-3.5 py-3 text-[12px] font-medium text-navy-600">
+                        {e.adminRemark || "—"}
+                      </td>
+                      <td className="border-b border-line-150 px-3.5 py-3">
+                        <span
+                          className={cn(
+                            "whitespace-nowrap rounded-full px-[10px] py-[5px] text-[10.5px] font-bold",
+                            e.status === "GRANTED" ? "bg-good-050 text-good-700" : "bg-bad-050 text-bad-700",
+                          )}
+                        >
+                          {e.status === "GRANTED" ? `Granted to ${formatDate(e.requestedDate)}` : "Refused"}
+                        </span>
+                      </td>
+                      <td className="border-b border-line-150 px-3.5 py-3">
+                        {e.performance ? (
+                          <span
+                            className={cn(
+                              "rounded-full px-[10px] py-[5px] text-[10.5px] font-bold",
+                              e.performance === "Genuine" ? "bg-good-050 text-good-700" : "bg-warn-050 text-warn-700",
+                            )}
+                          >
+                            {e.performance}
+                          </span>
+                        ) : (
+                          <span className="text-[12px] font-medium text-muted-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {decidedExt.length === 0 && (
+              <div className="px-7 py-7 text-center text-[12.5px] font-medium text-muted-400">
+                No decisions recorded yet.
+              </div>
+            )}
           </div>
         </>
       )}
@@ -671,23 +766,33 @@ function ExtensionModal({
 function DecideModal({
   request, onClose, onDone,
 }: { request: Extension; onClose: () => void; onDone: (m: string) => void }) {
+  const isAdmin = request.status === "AWAITING_ADMIN";
   const [note, setNote] = React.useState("");
+  const [performance, setPerformance] = React.useState<"Genuine" | "Avoidable">("Genuine");
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<"approve" | "reject" | null>(null);
 
   async function decide(approve: boolean) {
     setBusy(approve ? "approve" : "reject");
     setError(null);
-    const res = await decideExtensionAction(request.id, approve, note);
+    const res = isAdmin
+      ? await decideExtensionAdminAction(request.id, approve, note, performance)
+      : await decideExtensionPmAction(request.id, approve, note);
     setBusy(null);
-    if (!res.ok) setError(res.error);
-    else onDone(approve ? "Extension approved — planned finish moved." : "Extension refused.");
+    if (!res.ok) { setError(res.error); return; }
+    onDone(
+      approve
+        ? isAdmin
+          ? "Extension granted — planned finish moved."
+          : "Passed to the Admin for the revised date."
+        : "Extension refused.",
+    );
   }
 
   return (
     <Modal
       open onClose={onClose}
-      title={`Decide · ${request.activityName}`}
+      title={`${isAdmin ? "Admin decision" : "PM decision"} · ${request.activityName}`}
       description={`${request.requestedBy} asked for ${request.requestedDays} more day(s), moving ${formatDate(request.currentDate)} to ${formatDate(request.requestedDate)}.`}
       size="sm"
       footer={
@@ -699,7 +804,7 @@ function DecideModal({
           </Button>
           <Button variant="success" onClick={() => decide(true)} loading={busy === "approve"}>
             <Check className="h-3.5 w-3.5" />
-            Approve
+            {isAdmin ? "Grant" : "Pass to Admin"}
           </Button>
         </>
       }
@@ -711,8 +816,34 @@ function DecideModal({
             <AlertTriangle className="h-3 w-3" /> Reason given
           </p>
           <p className="mt-1 text-[12.5px] font-medium text-navy-600">{request.reason}</p>
+          {isAdmin && request.pmRemark && (
+            <p className="mt-2 text-[11.5px] font-medium text-muted-500">
+              PM · {request.pmDecidedBy}: {request.pmRemark}
+            </p>
+          )}
         </div>
-        <Field label="Decision note" hint="Required when refusing.">
+        {isAdmin && (
+          <Field label="Was the delay genuine?" hint="It is what the performance column reads.">
+            <div className="flex gap-1.5">
+              {(["Genuine", "Avoidable"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPerformance(p)}
+                  className={cn(
+                    "cursor-pointer rounded-[8px] border px-3.5 py-2 text-[12px] font-bold transition-colors",
+                    performance === p
+                      ? "border-brand-500 bg-brand-100 text-brand-700"
+                      : "border-line-400 bg-white text-navy-500 hover:border-brand-300",
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
+        <Field label="Remark" hint="Required when refusing.">
           <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
         </Field>
       </div>

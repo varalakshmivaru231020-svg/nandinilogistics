@@ -106,23 +106,30 @@ describe("schedule extension requests", () => {
 
   it("refuses a decision from someone who cannot approve", async () => {
     await actAs("supervisor@nninfra.example");
-    const req = await prisma.scheduleExtension.findFirstOrThrow({ where: { activityId, status: "PENDING" } });
-    const res = await ext.decideExtensionAction(req.id, true, "");
+    const req = await prisma.scheduleExtension.findFirstOrThrow({ where: { activityId, status: "AWAITING_PM" } });
+    const res = await ext.decideExtensionPmAction(req.id, true, "");
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.code).toBe("schedule.extension.approve");
   });
 
   it("requires a note when refusing", async () => {
     await actAs("pm@nninfra.example");
-    const req = await prisma.scheduleExtension.findFirstOrThrow({ where: { activityId, status: "PENDING" } });
-    const res = await ext.decideExtensionAction(req.id, false, "  ");
+    const req = await prisma.scheduleExtension.findFirstOrThrow({ where: { activityId, status: "AWAITING_PM" } });
+    const res = await ext.decideExtensionPmAction(req.id, false, "  ");
     expect(res.ok).toBe(false);
   });
 
-  it("moves the PLANNED finish when the PM approves", async () => {
+  it("moves the PLANNED finish once the PM passes it and the Admin grants it", async () => {
     await actAs("pm@nninfra.example");
-    const req = await prisma.scheduleExtension.findFirstOrThrow({ where: { activityId, status: "PENDING" } });
-    const res = await ext.decideExtensionAction(req.id, true, "Agreed, monsoon was exceptional");
+    const req = await prisma.scheduleExtension.findFirstOrThrow({ where: { activityId, status: "AWAITING_PM" } });
+    expect((await ext.decideExtensionPmAction(req.id, true, "Agreed, monsoon was exceptional")).ok).toBe(true);
+
+    // The PM's pass alone moves nothing.
+    const midway = await prisma.scheduleActivity.findUniqueOrThrow({ where: { id: activityId } });
+    expect(midway.plannedEnd?.toISOString()).toBe(plannedEnd.toISOString());
+
+    await actAs("owner@nninfra.example");
+    const res = await ext.decideExtensionAdminAction(req.id, true, "Granted", "Genuine");
     expect(res.ok).toBe(true);
 
     const a = await prisma.scheduleActivity.findUniqueOrThrow({ where: { id: activityId } });
@@ -136,20 +143,21 @@ describe("schedule extension requests", () => {
     expect(a.baselineEnd?.toISOString()).toBe(baselineEnd.toISOString());
   });
 
-  it("records who decided it, and when", async () => {
+  it("records both decisions, and the Admin's verdict on the delay", async () => {
     const req = await prisma.scheduleExtension.findFirstOrThrow({ where: { activityId } });
-    expect(req.status).toBe("APPROVED");
-    expect(req.decidedById).toBeTruthy();
-    expect(req.decidedAt).toBeTruthy();
-    expect(req.decisionNote).toMatch(/monsoon/i);
+    expect(req.status).toBe("GRANTED");
+    expect(req.pmDecidedById).toBeTruthy();
+    expect(req.pmRemark).toMatch(/monsoon/i);
+    expect(req.adminDecidedById).toBeTruthy();
+    expect(req.performance).toBe("Genuine");
   });
 
   it("will not decide the same request twice", async () => {
     await actAs("pm@nninfra.example");
     const req = await prisma.scheduleExtension.findFirstOrThrow({ where: { activityId } });
-    const res = await ext.decideExtensionAction(req.id, true, "again");
+    const res = await ext.decideExtensionPmAction(req.id, true, "again");
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toMatch(/already been decided/i);
+    if (!res.ok) expect(res.error).toMatch(/no longer waiting/i);
   });
 
   it("writes the decision to the audit trail", async () => {

@@ -59,7 +59,8 @@ export default async function SchedulePage({
           orderBy: { requestedAt: "desc" },
           include: {
             requestedBy: { select: { name: true } },
-            decidedBy: { select: { name: true } },
+            pmDecidedBy: { select: { name: true } },
+            adminDecidedBy: { select: { name: true } },
           },
         },
       },
@@ -72,9 +73,20 @@ export default async function SchedulePage({
           where: { activity: { projectId } },
           orderBy: [{ status: "asc" }, { requestedAt: "desc" }],
           include: {
-            activity: { select: { code: true, name: true, plannedEnd: true, baselineEnd: true } },
-            requestedBy: { select: { name: true } },
-            decidedBy: { select: { name: true } },
+            activity: {
+              select: {
+                code: true, name: true, plannedEnd: true, baselineEnd: true,
+                workPackage: {
+                  select: {
+                    name: true,
+                    phase: { select: { project: { select: { name: true, projectManager: { select: { name: true } } } } } },
+                  },
+                },
+              },
+            },
+            requestedBy: { select: { name: true, designation: { select: { name: true } } } },
+            pmDecidedBy: { select: { name: true } },
+            adminDecidedBy: { select: { name: true } },
           },
         })
       : Promise.resolve([]),
@@ -114,7 +126,7 @@ export default async function SchedulePage({
         groupId: a.workPackage?.id ?? "unassigned",
         groupName: a.workPackage ? `${a.workPackage.code} — ${a.workPackage.name}` : "Unassigned activities",
         phaseName: a.workPackage?.phase.name ?? null,
-        pendingExtension: a.extensions.some((e) => e.status === "PENDING"),
+        pendingExtension: a.extensions.some((e) => e.status === "AWAITING_PM" || e.status === "AWAITING_ADMIN"),
         predecessors: a.predecessors.map((d) => ({
           id: d.id, predecessorId: d.predecessorId, type: d.type, lagDays: d.lagDays,
           code: d.predecessor.code, name: d.predecessor.name,
@@ -131,9 +143,17 @@ export default async function SchedulePage({
         status: e.status,
         requestedBy: e.requestedBy.name,
         requestedAt: e.requestedAt.toISOString(),
-        decidedBy: e.decidedBy?.name ?? null,
-        decidedAt: e.decidedAt?.toISOString() ?? null,
-        decisionNote: e.decisionNote,
+        project: e.activity.workPackage?.phase.project.name ?? null,
+        stage: e.activity.workPackage?.name ?? null,
+        projectManager: e.activity.workPackage?.phase.project.projectManager?.name ?? null,
+        requestedByRole: e.requestedBy.designation?.name ?? null,
+        pmDecidedBy: e.pmDecidedBy?.name ?? null,
+        pmDecidedAt: e.pmDecidedAt?.toISOString() ?? null,
+        pmRemark: e.pmRemark,
+        adminDecidedBy: e.adminDecidedBy?.name ?? null,
+        adminDecidedAt: e.adminDecidedAt?.toISOString() ?? null,
+        adminRemark: e.adminRemark,
+        performance: e.performance,
       }))}
       can={{
         create: ctx.has(PERM.schedule.activity.create),
@@ -146,6 +166,7 @@ export default async function SchedulePage({
         viewExtensions: ctx.has(PERM.schedule.extension.view),
         requestExtension: ctx.has(PERM.schedule.extension.request),
         approveExtension: ctx.has(PERM.schedule.extension.approve),
+        approveExtensionAdmin: ctx.has(PERM.schedule.extension.approveAdmin),
         viewReports: ctx.has(PERM.schedule.report.view),
         startActivity: ctx.has(PERM.schedule.activity.start),
         completeActivity: ctx.has(PERM.schedule.activity.complete),
