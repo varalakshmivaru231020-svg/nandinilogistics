@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { LockOpen, TimerReset } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
-import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, Field, Select, Textarea } from "@/components/ui/primitives";
+import { Alert, Badge, Field, Textarea } from "@/components/ui/primitives";
 import { cn, formatDate, qty } from "@/lib/utils";
 import { extendHoldAction, releaseHoldAction } from "../../sales/cost-sheets/actions";
 import { ReserveDrawer } from "./reserve-drawer";
@@ -36,133 +35,210 @@ const STATUS_STYLE: Record<string, { cell: string; dot: string; label: string }>
   BLOCKED:    { cell: "border-bad-050 bg-bad-050 text-bad-600 hover:border-bad-600",         dot: "bg-bad-600",   label: "Blocked" },
 };
 
+/** The design's legend swatches: a tint with a stronger border. */
+const LEGEND: Record<string, string> = {
+  AVAILABLE: "border-[#77C39A] bg-good-050",
+  HELD: "border-[#E0B26A] bg-warn-050",
+  BOOKED: "border-[#6FB6DE] bg-brand-100",
+};
+
 export function BoardGrid({
-  projects, activeProjectId, blocks, statusCounts, customers, can, nowMs, projectType,
+  projects, activeProjectId, blocks, customers, can, nowMs, projectType, priceList,
 }: {
   nowMs: number;
   projects: Array<{ id: string; name: string; code: string }>;
   activeProjectId: string;
   blocks: Block[];
-  statusCounts: Array<{ status: string; count: number }>;
   /** Villa and plotted projects have clusters, not towers, as the design names them. */
   projectType: string | null;
   /** Who a unit can be held or booked for, as the design's drawer lists them. */
   customers: Array<{ id: string; name: string; phone: string }>;
+  /** The line the design prints under the tower's figures. */
+  priceList: { version: string; effectiveFrom: string } | null;
   can: Record<string, boolean>;
 }) {
   const router = useRouter();
+  const [blockId, setBlockId] = React.useState(blocks[0]?.id ?? "");
+  const [status, setStatus] = React.useState("all");
+  const [type, setType] = React.useState("all");
   const [selected, setSelected] = React.useState<Unit | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
 
-  const total = statusCounts.reduce((s, c) => s + c.count, 0);
+  const block = blocks.find((b) => b.id === blockId) ?? blocks[0] ?? null;
+  const project = projects.find((p) => p.id === activeProjectId);
   // The design writes "Cluster A" for a villa project and "Tower A" otherwise.
   const blockWord = /villa|plot/i.test(projectType ?? "") ? "Cluster" : "Tower";
+  const blockName = (b: Block) =>
+    /^(tower|cluster|block)\b/i.test(b.name) ? b.name : `${blockWord} ${b.name}`;
+
+  const types = [...new Set(blocks.flatMap((b) => b.units.map((u) => u.unitTypeName).filter(Boolean)))] as string[];
+
+  const units = block?.units ?? [];
+  const shown = units.filter(
+    (u) =>
+      (status === "all" || u.status === status) &&
+      (type === "all" || u.unitTypeName === type),
+  );
+
+  const floors = new Map<number, Unit[]>();
+  for (const u of shown) floors.set(u.floorNumber, [...(floors.get(u.floorNumber) ?? []), u]);
+  const rows = [...floors.entries()].sort((a, b) => b[0] - a[0]);
+
+  const count = (s: string) => units.filter((u) => u.status === s).length;
 
   return (
-    <div className="space-y-4">
-      {error && <Alert tone="error">{error}</Alert>}
-      {notice && !error && <Alert tone="success">{notice}</Alert>}
+    <div>
+      {error && <div className="mb-3"><Alert tone="error">{error}</Alert></div>}
+      {notice && !error && <div className="mb-3"><Alert tone="success">{notice}</Alert></div>}
 
-      <Card>
-        <CardBody className="flex flex-wrap items-center gap-x-6 gap-y-2 py-3">
-          {Object.entries(STATUS_STYLE).map(([status, style]) => {
-            const count = statusCounts.find((s) => s.status === status)?.count ?? 0;
-            const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-            return (
-              <div key={status} className="flex items-center gap-2">
-                <span className={cn("h-2.5 w-2.5 rounded-full", style.dot)} />
-                <span className="text-xs text-muted-600">{style.label}</span>
-                <span className="num text-xs font-semibold text-navy-950">{count}</span>
-                <span className="text-[11px] text-muted-400">({pct}%)</span>
-              </div>
-            );
-          })}
-
-          <div className="ml-auto flex items-center gap-3">
-            {projects.length > 1 && (
-              <Select
-                value={activeProjectId}
-                onChange={(e) => router.push(`/units/board?project=${e.target.value}`)}
-                className="w-52"
-              >
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
-            )}
-            <span className="text-xs text-muted-500">
-              <span className="num font-semibold text-navy-950">{total}</span> units
-            </span>
+      <div className="grid items-start gap-3.5 [grid-template-columns:1fr_320px] max-xl:[grid-template-columns:1fr]">
+        <div>
+          {/* Projects, and the design's three-colour legend */}
+          <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-[7px]">
+              {projects.map((p) => (
+                <Chip
+                  key={p.id}
+                  picked={p.id === activeProjectId}
+                  onClick={() => router.push(`/units/board?project=${p.id}`)}
+                >
+                  {p.name}
+                </Chip>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-muted-600">
+              {(["AVAILABLE", "HELD", "BOOKED"] as const).map((s) => (
+                <span key={s} className="flex items-center gap-[5px]">
+                  <span className={cn("inline-block h-[11px] w-[11px] rounded-[4px] border", LEGEND[s])} />
+                  {STATUS_STYLE[s].label}
+                </span>
+              ))}
+            </div>
           </div>
-        </CardBody>
-      </Card>
 
-      {blocks.map((block) => {
-        const floors = new Map<number, Unit[]>();
-        for (const u of block.units) floors.set(u.floorNumber, [...(floors.get(u.floorNumber) ?? []), u]);
-        const sorted = [...floors.entries()].sort((a, b) => b[0] - a[0]);
+          {/* Towers, status and type */}
+          <div className="mb-3 flex flex-wrap items-center gap-[7px]">
+            {blocks.map((b) => (
+              <Chip key={b.id} picked={b.id === block?.id} onClick={() => { setBlockId(b.id); setSelected(null); }}>
+                {blockName(b)}
+              </Chip>
+            ))}
 
-        return (
-          <Card key={block.id}>
-            <CardHeader>
-              <CardTitle>
-                {/^(tower|cluster|block)\b/i.test(block.name) ? block.name : `${blockWord} ${block.name}`}
-              </CardTitle>
-              <div className="flex items-center gap-2">
-                <Badge tone="slate">{block.units.length} units</Badge>
-                <Badge tone="good">
-                  {block.units.filter((u) => u.status === "AVAILABLE").length} available
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardBody className="scroll-thin overflow-x-auto">
-              <div className="min-w-max space-y-1.5">
-                {sorted.map(([floor, units]) => (
-                  <div key={floor} className="flex items-center gap-2">
-                    <div className="w-16 shrink-0 text-right text-xs font-medium text-muted-400">
-                      Floor {floor}
-                    </div>
-                    <div className="flex gap-1.5">
-                      {units.map((u) => {
-                        const style = STATUS_STYLE[u.status] ?? STATUS_STYLE.AVAILABLE;
-                        return (
-                          <button
-                            key={u.id}
-                            type="button"
-                            onClick={() => setSelected(u)}
-                            title={`${u.unitNumber} · ${u.unitTypeName ?? ""} · ${style.label}`}
-                            className={cn(
-                              "flex w-24 flex-col rounded border px-2 py-1.5 text-left transition",
-                              style.cell,
-                            )}
-                          >
-                            <span className="text-xs font-semibold leading-tight">{u.unitNumber}</span>
-                            <span className="text-[10px] leading-tight opacity-75">
-                              {u.unitTypeCode ?? "—"}
-                              {can.viewPrice && ` · ${qty(u.superBuiltUpArea, 0)}`}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+            <span className="mx-1.5 h-[22px] w-px bg-line-400" />
+            <span className="text-[11px] font-semibold text-muted-400">Status</span>
+            {[["all", "All"], ["AVAILABLE", "Available"], ["HELD", "Held"], ["BOOKED", "Booked"]].map(([key, label]) => (
+              <Chip key={key} picked={status === key} onClick={() => setStatus(key)}>{label}</Chip>
+            ))}
+
+            {types.length > 0 && (
+              <>
+                <span className="mx-1.5 h-[22px] w-px bg-line-400" />
+                <span className="text-[11px] font-semibold text-muted-400">Type</span>
+                <Chip picked={type === "all"} onClick={() => setType("all")}>All</Chip>
+                {types.map((t) => (
+                  <Chip key={t} picked={type === t} onClick={() => setType(t)}>{t}</Chip>
                 ))}
-              </div>
-            </CardBody>
-          </Card>
-        );
-      })}
+              </>
+            )}
+          </div>
 
-      {selected && (
-        <UnitPanel
-          unit={selected}
-          customers={customers}
-          can={can}
-          onClose={() => setSelected(null)}
-          nowMs={nowMs}
-          onDone={(m) => { setSelected(null); setNotice(m); setError(null); router.refresh(); }}
-          onError={(e) => { setError(e); setNotice(null); }}
-        />
+          <div className="rounded-[13px] border border-line-400 bg-white p-4">
+            {rows.map(([floor, floorUnits]) => (
+              <div
+                key={floor}
+                className="mb-2 grid items-center gap-2 [grid-template-columns:44px_repeat(4,1fr)]"
+              >
+                <div className="text-center text-[11px] font-bold text-muted-400">Fl {floor}</div>
+                {floorUnits.map((u) => {
+                  const style = STATUS_STYLE[u.status] ?? STATUS_STYLE.AVAILABLE;
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => setSelected(u)}
+                      className={cn(
+                        "flex flex-col items-start rounded-[9px] border px-3 py-2 text-left transition-transform hover:-translate-y-px hover:shadow-[0_5px_14px_rgba(25,26,92,.13)]",
+                        style.cell,
+                      )}
+                    >
+                      <span className="text-[11.5px] font-bold">{u.unitNumber}</span>
+                      <span className="text-[9.5px] font-medium opacity-75">{u.unitTypeName ?? "—"}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+            {rows.length === 0 && (
+              <p className="py-10 text-center text-[12.5px] font-medium text-muted-400">
+                No units match these filters
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* The design's right rail */}
+        <div className="flex flex-col gap-3.5">
+          <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
+            <p className="mb-3 font-display text-[13px] font-bold text-navy-950">
+              {project?.name}{block ? ` · ${blockName(block)}` : ""}
+            </p>
+            <div className="grid grid-cols-2 gap-[9px]">
+              <Stat value={count("AVAILABLE")} label="Available" className="bg-good-050 text-good-700" />
+              <Stat value={count("HELD")} label="On hold" className="bg-warn-050 text-warn-700" />
+              <Stat value={count("BOOKED")} label="Booked" className="bg-brand-100 text-brand-700" />
+            </div>
+            {priceList && (
+              <p className="mt-3 text-[11.5px] font-medium text-muted-400">
+                Price list {priceList.version} · effective {formatDate(priceList.effectiveFrom)} · holds released manually
+              </p>
+            )}
+          </div>
+
+          {selected ? (
+            <UnitPanel
+              unit={selected}
+              customers={customers}
+              can={can}
+              onClose={() => setSelected(null)}
+              nowMs={nowMs}
+              onDone={(m) => { setSelected(null); setNotice(m); setError(null); router.refresh(); }}
+              onError={(e) => { setError(e); setNotice(null); }}
+            />
+          ) : (
+            <div className="rounded-[13px] border border-dashed border-[#C6CFE8] px-5 py-7 text-center text-[12px] font-medium text-muted-500">
+              Select a unit on the board to view details, hold or book it
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The design's filter chip. */
+function Chip({ children, picked, onClick }: { children: React.ReactNode; picked: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-[13px] py-[7px] text-[11.5px] font-semibold transition-colors",
+        picked
+          ? "border-brand-500 bg-brand-100 text-brand-700"
+          : "border-line-400 bg-white text-navy-600 hover:border-brand-500",
       )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Stat({ value, label, className }: { value: number; label: string; className: string }) {
+  return (
+    <div className={cn("rounded-[11px] px-3 py-2.5", className)}>
+      <div className="num font-display text-[18px] font-extrabold">{value}</div>
+      <div className="mt-0.5 text-[10.5px] font-semibold opacity-75">{label}</div>
     </div>
   );
 }
@@ -196,14 +272,29 @@ function UnitPanel({
   }
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title={`Unit ${unit.unitNumber}`}
-      description={`${unit.unitTypeName ?? "—"} · floor ${unit.floorNumber} · ${style.label}`}
-      size="sm"
-    >
-      <div className="space-y-4">
+    <div className="overflow-hidden rounded-[13px] border border-line-400 bg-white">
+      {/* The design's navy header on the selected unit */}
+      <div
+        className="flex items-center justify-between gap-2 px-[18px] py-[15px]"
+        style={{ background: "linear-gradient(150deg,#191A5C,#2F308C)" }}
+      >
+        <div className="min-w-0">
+          <p className="font-display text-[15px] font-bold text-white">Unit {unit.unitNumber}</p>
+          <p className="mt-0.5 text-[11px] font-medium text-[#9AA0D6]">
+            {unit.unitTypeName ?? "—"} · {qty(unit.superBuiltUpArea, 0)} sq ft · {style.label}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="shrink-0 rounded-[7px] bg-white/15 px-2 py-1 text-[12px] font-semibold text-white hover:bg-white/25"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="space-y-4 px-[18px] py-3.5">
         {error && <Alert tone="error">{error}</Alert>}
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
@@ -299,6 +390,6 @@ function UnitPanel({
           />
         )}
       </div>
-    </Modal>
+    </div>
   );
 }

@@ -42,7 +42,7 @@ export default async function AvailabilityBoardPage({
     );
   }
 
-  const [blocks, statusCounts, customers] = await Promise.all([
+  const [blocks, priceList, customers] = await Promise.all([
     prisma.block.findMany({
       where: { projectId },
       orderBy: { code: "asc" },
@@ -60,7 +60,12 @@ export default async function AvailabilityBoardPage({
         },
       },
     }),
-    prisma.unit.groupBy({ by: ["status"], where: { projectId }, _count: true }),
+    // The design prints the live price list under the tower's figures.
+    prisma.priceList.findFirst({
+      where: { projectId, status: "ACTIVE" },
+      orderBy: { effectiveFrom: "desc" },
+      select: { version: true, effectiveFrom: true },
+    }),
     ctx.has(PERM.unit.hold.create) || ctx.has(PERM.sales.booking.create)
       ? prisma.customer.findMany({
           orderBy: { name: "asc" },
@@ -102,7 +107,11 @@ export default async function AvailabilityBoardPage({
       <BoardGrid
         projects={projects}
         activeProjectId={projectId}
-        statusCounts={statusCounts.map((s) => ({ status: s.status, count: s._count }))}
+        priceList={
+          priceList
+            ? { version: `v${priceList.version}`, effectiveFrom: priceList.effectiveFrom.toISOString() }
+            : null
+        }
         projectType={projects.find((p) => p.id === projectId)?.projectType?.name ?? null}
         blocks={blocks.map((b) => ({
           id: b.id,
