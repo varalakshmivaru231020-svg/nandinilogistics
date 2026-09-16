@@ -113,12 +113,9 @@ export function VendorForm({
       }
       subtitle="Vendor code is generated automatically. Only vendor name and mobile number are mandatory."
       actions={
-        <>
-          <DetailAction tone="plain" onClick={() => router.push("/material/vendors")}>Cancel</DetailAction>
-          <DetailAction tone="primary" disabled={!ready || busy} onClick={save}>
+        <DetailAction tone="primary" disabled={!ready || busy} onClick={save}>
             {vendor ? "Save vendor" : "Create vendor"}
           </DetailAction>
-        </>
       }
     >
       {error && <div className="mb-3.5"><Alert tone="error">{error}</Alert></div>}

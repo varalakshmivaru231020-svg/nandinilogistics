@@ -90,12 +90,9 @@ export function ItemForm({
       }
       subtitle="Item code is generated automatically from the item name."
       actions={
-        <>
-          <DetailAction tone="plain" onClick={() => router.push("/material/stock")}>Cancel</DetailAction>
-          <DetailAction tone="primary" disabled={!ready || busy} onClick={save}>
+        <DetailAction tone="primary" disabled={!ready || busy} onClick={save}>
             {item ? "Save item" : "Create item"}
           </DetailAction>
-        </>
       }
     >
       {error && <div className="mb-3.5"><Alert tone="error">{error}</Alert></div>}

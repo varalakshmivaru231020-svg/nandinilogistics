@@ -34,6 +34,8 @@ export async function poLookups(ctx: AuthContext) {
         id: true, code: true, name: true, standardRate: true,
         uom: { select: { name: true } },
         taxRate: { select: { percentage: true } },
+        // What the store is holding, as the design's picker reads it.
+        stockBalances: { select: { quantity: true } },
       },
     }),
     // Approved indents with a purchase shortfall still to be ordered.
@@ -57,6 +59,7 @@ export async function poLookups(ctx: AuthContext) {
       code: i.code,
       name: i.name,
       uom: i.uom.name,
+      onHand: i.stockBalances.reduce((n, b) => n + Number(b.quantity), 0),
       standardRate: Number(i.standardRate),
       taxPct: i.taxRate ? Number(i.taxRate.percentage) : 0,
     })),

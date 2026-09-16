@@ -4,12 +4,12 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Alert } from "@/components/ui/primitives";
 import { DetailAction, DetailScreen, PanelCard } from "@/components/shell/detail-screen";
-import { cn, money } from "@/lib/utils";
+import { cn, money, qty } from "@/lib/utils";
 import { poTotals, priceLine } from "@/lib/material/procurement";
 import { createPurchaseOrderAction, updatePurchaseOrderAction } from "../actions";
 
 interface ItemOpt {
-  id: string; code: string; name: string; uom: string; standardRate: number; taxPct: number;
+  id: string; code: string; name: string; uom: string; onHand: number; standardRate: number; taxPct: number;
 }
 
 interface Line {
@@ -332,7 +332,7 @@ export function PoForm({
                 <span className="min-w-0 flex-1">
                   <span className="block text-[12.5px] font-semibold text-navy-900">{i.name}</span>
                   <span className="mt-0.5 block text-[11px] font-medium text-muted-400">
-                    {i.code} · {money(i.standardRate)} standard rate
+                    {i.code} · {qty(i.onHand, 3)} {i.uom} in stock
                   </span>
                 </span>
                 <span className="shrink-0 text-[11.5px] font-bold text-brand-700">+ Add</span>

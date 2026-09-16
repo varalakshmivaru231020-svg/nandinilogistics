@@ -51,6 +51,7 @@ export default async function EditPoPage({ params }: { params: Promise<{ id: str
         select: {
           id: true, code: true, name: true, standardRate: true,
           uom: { select: { name: true } }, taxRate: { select: { percentage: true } },
+          stockBalances: { select: { quantity: true } },
         },
       })
     : [];
@@ -58,6 +59,7 @@ export default async function EditPoPage({ params }: { params: Promise<{ id: str
     ...lookups.items,
     ...missingItems.map((i) => ({
       id: i.id, code: i.code, name: i.name, uom: i.uom.name,
+      onHand: i.stockBalances.reduce((n, b) => n + Number(b.quantity), 0),
       standardRate: Number(i.standardRate), taxPct: i.taxRate ? Number(i.taxRate.percentage) : 0,
     })),
   ];
