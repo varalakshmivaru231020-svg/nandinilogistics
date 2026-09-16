@@ -36,7 +36,7 @@ export async function returnableIssues(ctx: AuthContext, preselect: string | nul
     store: { select: { name: true } },
     items: {
       include: {
-        item: { select: { name: true, uom: { select: { code: true } } } },
+        item: { select: { name: true, uom: { select: { name: true } } } },
         returnItems: {
           where: { materialReturn: { status: "PENDING" as const } },
           select: { quantity: true },
@@ -79,7 +79,7 @@ export async function returnableIssues(ctx: AuthContext, preselect: string | nul
         return {
           issueItemId: l.id,
           name: l.item.name,
-          uom: l.item.uom.code,
+          uom: l.item.uom.name,
           ...line,
           returnable: returnableQty(line),
           rate: Number(l.rate),

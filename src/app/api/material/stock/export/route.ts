@@ -27,7 +27,7 @@ export async function GET(request: Request) {
       item: {
         select: {
           code: true, name: true, reorderLevel: true,
-          uom: { select: { code: true } },
+          uom: { select: { name: true } },
           category: { select: { name: true } },
         },
       },
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
             code: b.item.code,
             name: b.item.name,
             category: b.item.category.name,
-            uom: b.item.uom.code,
+            uom: b.item.uom.name,
             store: b.store.name,
             quantity: Number(b.quantity),
             reorderLevel: Number(b.item.reorderLevel),

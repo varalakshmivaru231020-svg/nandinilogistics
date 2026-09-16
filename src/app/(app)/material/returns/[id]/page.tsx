@@ -30,7 +30,7 @@ export default async function ReturnDetailPage({ params }: { params: Promise<{ i
       decidedBy: { select: { name: true } },
       items: {
         include: {
-          item: { select: { code: true, name: true, uom: { select: { code: true } } } },
+          item: { select: { code: true, name: true, uom: { select: { name: true } } } },
           issueItem: { select: { issuedQty: true, returnedQty: true } },
         },
       },
@@ -80,7 +80,7 @@ export default async function ReturnDetailPage({ params }: { params: Promise<{ i
           id: l.id,
           code: l.item.code,
           name: l.item.name,
-          uom: l.item.uom.code,
+          uom: l.item.uom.name,
           quantity: Number(l.quantity),
           issuedQty: Number(l.issueItem.issuedQty),
           returnedQty: Number(l.issueItem.returnedQty),

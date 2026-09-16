@@ -255,7 +255,7 @@ export async function runReport(
       const itemIds = [...new Set([...indented, ...ordered, ...issued].map((r) => r.itemId))];
       const items = await prisma.item.findMany({
         where: { id: { in: itemIds } },
-        select: { id: true, code: true, name: true, uom: { select: { code: true } } },
+        select: { id: true, code: true, name: true, uom: { select: { name: true } } },
       });
       const itemBy = new Map(items.map((i) => [i.id, i]));
 
@@ -272,7 +272,7 @@ export async function runReport(
           const consumed = num(issBy.get(id)?.issuedQty);
           return {
             item: `${item.code} — ${item.name}`,
-            uom: item.uom.code,
+            uom: item.uom.name,
             indented: approved,
             ordered: orderedQty,
             received: num(ordBy.get(id)?.receivedQty),
@@ -314,7 +314,7 @@ export async function runReport(
             : {}),
         },
         include: {
-          item: { select: { code: true, name: true, reorderLevel: true, uom: { select: { code: true } } } },
+          item: { select: { code: true, name: true, reorderLevel: true, uom: { select: { name: true } } } },
           store: { select: { name: true } },
         },
         orderBy: [{ store: { name: "asc" } }, { item: { name: "asc" } }],
@@ -323,7 +323,7 @@ export async function runReport(
       const rows = balances.map((b) => ({
         store: b.store.name,
         item: `${b.item.code} — ${b.item.name}`,
-        uom: b.item.uom.code,
+        uom: b.item.uom.name,
         quantity: num(b.quantity),
         reorderLevel: num(b.item.reorderLevel),
         avgRate: num(b.avgRate),

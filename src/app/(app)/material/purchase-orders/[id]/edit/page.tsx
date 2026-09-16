@@ -50,14 +50,14 @@ export default async function EditPoPage({ params }: { params: Promise<{ id: str
         where: { id: { in: missingItemIds } },
         select: {
           id: true, code: true, name: true, standardRate: true,
-          uom: { select: { code: true } }, taxRate: { select: { percentage: true } },
+          uom: { select: { name: true } }, taxRate: { select: { percentage: true } },
         },
       })
     : [];
   const items = [
     ...lookups.items,
     ...missingItems.map((i) => ({
-      id: i.id, code: i.code, name: i.name, uom: i.uom.code,
+      id: i.id, code: i.code, name: i.name, uom: i.uom.name,
       standardRate: Number(i.standardRate), taxPct: i.taxRate ? Number(i.taxRate.percentage) : 0,
     })),
   ];

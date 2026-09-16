@@ -17,7 +17,6 @@ type StockRow = {
   code: string;
   name: string;
   uom: string;
-  uomName: string;
   quantity: number;
   reorderLevel: number;
 };
@@ -61,8 +60,7 @@ export default async function StockPage({
       id: b.itemId,
       code: b.item.code,
       name: b.item.name,
-      uom: b.item.uom.code,
-      uomName: b.item.uom.name,
+      uom: b.item.uom.name,
       quantity: 0,
       reorderLevel: Number(b.item.reorderLevel),
     };
@@ -101,7 +99,7 @@ export default async function StockPage({
     {
       key: "unit",
       header: "Unit",
-      render: (b) => <span className="text-[12px] font-medium text-muted-600">{b.uomName}</span>,
+      render: (b) => <span className="text-[12px] font-medium text-muted-600">{b.uom}</span>,
     },
     {
       key: "qty",

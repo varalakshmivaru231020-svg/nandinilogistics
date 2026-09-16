@@ -41,7 +41,7 @@ export default async function PoDetailPage({
       adminApprovedBy: { select: { name: true } },
       items: {
         include: {
-          item: { select: { code: true, name: true, uom: { select: { code: true } } } },
+          item: { select: { code: true, name: true, uom: { select: { name: true } } } },
           indent: { select: { indentNo: true } },
         },
       },
@@ -50,7 +50,7 @@ export default async function PoDetailPage({
         orderBy: { grnDate: "desc" },
         include: {
           receivedBy: { select: { name: true } },
-          items: { include: { item: { select: { name: true, uom: { select: { code: true } } } } } },
+          items: { include: { item: { select: { name: true, uom: { select: { name: true } } } } } },
           _count: { select: { items: true } },
         },
       },
@@ -142,12 +142,12 @@ export default async function PoDetailPage({
           id: l.id,
           code: l.item.code,
           name: l.item.name,
-          qty: `${qty(ordered, 3)} ${l.item.uom.code}`,
+          qty: `${qty(ordered, 3)} ${l.item.uom.name}`,
           rate: canSeeRate ? money(Number(l.rate)) : "—",
           amount: canSeeRate ? moneyShort(Number(l.amount)) : "—",
-          ordered: `${qty(ordered, 3)} ${l.item.uom.code}`,
-          received: `${qty(received, 3)} ${l.item.uom.code}`,
-          pending: `${qty(pending, 3)} ${l.item.uom.code}`,
+          ordered: `${qty(ordered, 3)} ${l.item.uom.name}`,
+          received: `${qty(received, 3)} ${l.item.uom.name}`,
+          pending: `${qty(pending, 3)} ${l.item.uom.name}`,
           pct,
           state: (pending === 0 ? "Fulfilled" : received > 0 ? "Part received" : "Not received") as
             | "Fulfilled" | "Part received" | "Not received",
@@ -177,7 +177,7 @@ export default async function PoDetailPage({
           matchTone: match.tone,
           lines: g.items.map((i) => {
             const rej = Number(i.rejectedQty);
-            return `${i.item.name} — ${qty(Number(i.receivedQty), 3)} ${i.item.uom.code}${rej ? ` (${qty(rej, 3)} rejected)` : ""}`;
+            return `${i.item.name} — ${qty(Number(i.receivedQty), 3)} ${i.item.uom.name}${rej ? ` (${qty(rej, 3)} rejected)` : ""}`;
           }),
         };
       })}

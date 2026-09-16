@@ -34,7 +34,7 @@ export async function issueLookups(ctx: AuthContext) {
   // Only items that actually have stock can be issued.
   const balances = await prisma.stockBalance.findMany({
     where: { quantity: { gt: 0 } },
-    include: { item: { select: { id: true, code: true, name: true, uom: { select: { code: true } } } } },
+    include: { item: { select: { id: true, code: true, name: true, uom: { select: { name: true } } } } },
   });
 
   return {
@@ -55,7 +55,7 @@ export async function issueLookups(ctx: AuthContext) {
       storeId: b.storeId,
       code: b.item.code,
       name: b.item.name,
-      uom: b.item.uom.code,
+      uom: b.item.uom.name,
       available: Number(b.quantity),
       avgRate: Number(b.avgRate),
     })),

@@ -36,7 +36,7 @@ export default async function NewGrnPage({
           vendor: { select: { name: true } },
           project: { select: { id: true, code: true, name: true } },
           items: {
-            include: { item: { select: { id: true, code: true, name: true, uom: { select: { code: true } } } } },
+            include: { item: { select: { id: true, code: true, name: true, uom: { select: { name: true } } } } },
           },
         },
       })
@@ -78,7 +78,7 @@ export default async function NewGrnPage({
         itemId: l.item.id,
         code: l.item.code,
         name: l.item.name,
-        uom: l.item.uom.code,
+        uom: l.item.uom.name,
         orderedQty: Number(l.orderedQty),
         alreadyReceived: Number(l.receivedQty),
         rate: Number(l.rate),

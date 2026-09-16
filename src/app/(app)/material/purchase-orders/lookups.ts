@@ -32,7 +32,7 @@ export async function poLookups(ctx: AuthContext) {
       orderBy: { name: "asc" },
       select: {
         id: true, code: true, name: true, standardRate: true,
-        uom: { select: { code: true } },
+        uom: { select: { name: true } },
         taxRate: { select: { percentage: true } },
       },
     }),
@@ -56,7 +56,7 @@ export async function poLookups(ctx: AuthContext) {
       id: i.id,
       code: i.code,
       name: i.name,
-      uom: i.uom.code,
+      uom: i.uom.name,
       standardRate: Number(i.standardRate),
       taxPct: i.taxRate ? Number(i.taxRate.percentage) : 0,
     })),

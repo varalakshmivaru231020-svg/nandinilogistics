@@ -29,7 +29,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
           items: {
             select: {
               orderedQty: true,
-              item: { select: { name: true, uom: { select: { code: true } } } },
+              item: { select: { name: true, uom: { select: { name: true } } } },
             },
           },
           grns: { select: { grnDate: true } },
@@ -90,7 +90,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
           poNo: p.poNo,
           status: p.status,
           items: first
-            ? `${first.item.name} · ${qty(Number(first.orderedQty), 3)} ${first.item.uom.code}${p.items.length > 1 ? ` +${p.items.length - 1} more` : ""}`
+            ? `${first.item.name} · ${qty(Number(first.orderedQty), 3)} ${first.item.uom.name}${p.items.length > 1 ? ` +${p.items.length - 1} more` : ""}`
             : "No lines",
           value: moneyShort(Number(p.totalAmount)),
         };

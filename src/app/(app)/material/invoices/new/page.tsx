@@ -38,7 +38,7 @@ export default async function NewInvoicePage({
         include: {
           vendor: { select: { name: true, gstin: true } },
           project: { select: { code: true, name: true } },
-          items: { include: { item: { select: { id: true, code: true, name: true, uom: { select: { code: true } } } } } },
+          items: { include: { item: { select: { id: true, code: true, name: true, uom: { select: { name: true } } } } } },
           grns: { where: { status: "POSTED" }, include: { items: true } },
         },
       })
@@ -115,7 +115,7 @@ export default async function NewInvoicePage({
             itemId: l.item.id,
             code: l.item.code,
             name: l.item.name,
-            uom: l.item.uom.code,
+            uom: l.item.uom.name,
             orderedQty: Number(l.orderedQty),
             receivedQty: receivedByItem.get(l.item.id) ?? 0,
             poRate: Number(l.rate),

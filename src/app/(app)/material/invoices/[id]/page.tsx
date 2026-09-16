@@ -25,7 +25,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       purchaseOrder: {
         select: { id: true, poNo: true, projectId: true, project: { select: { code: true } } },
       },
-      items: { include: { item: { select: { code: true, name: true, uom: { select: { code: true } } } } } },
+      items: { include: { item: { select: { code: true, name: true, uom: { select: { name: true } } } } } },
       payments: { orderBy: { paymentDate: "desc" } },
     },
   });
@@ -82,7 +82,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           id: l.id,
           code: l.item.code,
           name: l.item.name,
-          uom: l.item.uom.code,
+          uom: l.item.uom.name,
           invoicedQty: Number(l.invoicedQty),
           rate: Number(l.rate),
           taxPct: Number(l.taxPct),

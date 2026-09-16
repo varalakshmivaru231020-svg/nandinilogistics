@@ -150,7 +150,7 @@ export default async function ProcurementPage({
           take: 60,
           include: {
             category: { select: { name: true } },
-            uom: { select: { code: true } },
+            uom: { select: { name: true } },
             stockBalances: { select: { quantity: true } },
           },
         })
@@ -239,7 +239,7 @@ export default async function ProcurementPage({
         code: i.code,
         name: i.name,
         category: i.category.name,
-        uom: i.uom.code,
+        uom: i.uom.name,
         reorderLevel: Number(i.reorderLevel),
         standardRate: Number(i.standardRate),
         onHand: i.stockBalances.reduce((s, b) => s + Number(b.quantity), 0),

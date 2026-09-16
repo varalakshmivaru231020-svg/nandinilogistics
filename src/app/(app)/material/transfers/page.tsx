@@ -34,7 +34,7 @@ export default async function TransfersPage({
       include: {
         fromStore: { select: { name: true } },
         toStore: { select: { name: true } },
-        items: { include: { item: { select: { name: true, uom: { select: { code: true } } } } } },
+        items: { include: { item: { select: { name: true, uom: { select: { name: true } } } } } },
       },
     }),
     prisma.store.findMany({
@@ -45,7 +45,7 @@ export default async function TransfersPage({
     storeOptions(),
     prisma.stockBalance.findMany({
       where: { quantity: { gt: 0 } },
-      include: { item: { select: { id: true, code: true, name: true, uom: { select: { code: true } } } } },
+      include: { item: { select: { id: true, code: true, name: true, uom: { select: { name: true } } } } },
     }),
   ]);
 
@@ -87,7 +87,7 @@ export default async function TransfersPage({
           items: t.items.map((i) => ({
             id: i.id,
             name: i.item.name,
-            uom: i.item.uom.code,
+            uom: i.item.uom.name,
             quantity: Number(i.quantity),
             receivedQty: Number(i.receivedQty),
           })),
@@ -98,7 +98,7 @@ export default async function TransfersPage({
           storeId: b.storeId,
           code: b.item.code,
           name: b.item.name,
-          uom: b.item.uom.code,
+          uom: b.item.uom.name,
           available: Number(b.quantity),
         }))}
         can={{

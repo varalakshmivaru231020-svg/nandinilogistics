@@ -34,7 +34,7 @@ export default async function PrintIndentPage({ params }: { params: Promise<{ id
       project: { select: { code: true, name: true, company: { select: LETTERHEAD_COMPANY_SELECT } } },
       workPackage: { select: { code: true, name: true } },
       raisedBy: { select: { name: true } },
-      items: { include: { item: { select: { code: true, name: true, uom: { select: { code: true } } } } } },
+      items: { include: { item: { select: { code: true, name: true, uom: { select: { name: true } } } } } },
       approvals: { orderBy: { approvedAt: "asc" }, include: { approvedBy: { select: { name: true } } } },
     },
   });
@@ -54,7 +54,7 @@ export default async function PrintIndentPage({ params }: { params: Promise<{ id
     id: l.id,
     code: l.item.code,
     name: l.item.name,
-    uom: l.item.uom.code,
+    uom: l.item.uom.name,
     specification: l.specification,
     requestedQty: Number(l.requestedQty),
     approvedQty: l.approvedQty === null ? null : Number(l.approvedQty),

@@ -37,7 +37,7 @@ export default async function IssuesPage({
         project: { select: { code: true } },
         workPackage: { select: { code: true, name: true } },
         issuedBy: { select: { name: true } },
-        items: { include: { item: { select: { name: true, uom: { select: { code: true } } } } } },
+        items: { include: { item: { select: { name: true, uom: { select: { name: true } } } } } },
         _count: { select: { returns: { where: { status: "PENDING" } } } },
       },
     }),
@@ -144,7 +144,7 @@ export default async function IssuesPage({
             lines: i.items.map((l) => ({
               id: l.id,
               name: l.item.name,
-              uom: l.item.uom.code,
+              uom: l.item.uom.name,
               issuedQty: Number(l.issuedQty),
               returnedQty: Number(l.returnedQty),
               rate: Number(l.rate),

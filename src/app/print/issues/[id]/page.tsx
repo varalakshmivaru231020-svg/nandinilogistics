@@ -34,7 +34,7 @@ export default async function PrintIssueSlipPage({ params }: { params: Promise<{
       workPackage: { select: { code: true, name: true } },
       issuedBy: { select: { name: true } },
       items: {
-        include: { item: { select: { code: true, name: true, uom: { select: { code: true } } } } },
+        include: { item: { select: { code: true, name: true, uom: { select: { name: true } } } } },
       },
     },
   });
@@ -53,7 +53,7 @@ export default async function PrintIssueSlipPage({ params }: { params: Promise<{
     id: l.id,
     code: l.item.code,
     name: l.item.name,
-    uom: l.item.uom.code,
+    uom: l.item.uom.name,
     remarks: l.remarks,
     issuedQty: Number(l.issuedQty),
     returnedQty: Number(l.returnedQty),

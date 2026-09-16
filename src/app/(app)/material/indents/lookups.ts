@@ -26,7 +26,7 @@ export async function indentLookups(ctx: AuthContext) {
       select: {
         id: true, code: true, name: true,
         standardRate: true,
-        uom: { select: { code: true } },
+        uom: { select: { name: true } },
         category: { select: { name: true } },
       },
     }),
@@ -46,7 +46,7 @@ export async function indentLookups(ctx: AuthContext) {
       id: i.id,
       code: i.code,
       name: i.name,
-      uom: i.uom.code,
+      uom: i.uom.name,
       category: i.category.name,
       standardRate: Number(i.standardRate),
       onHand: onHand.get(i.id) ?? 0,

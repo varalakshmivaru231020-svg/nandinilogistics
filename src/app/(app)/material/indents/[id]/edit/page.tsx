@@ -54,14 +54,14 @@ export default async function EditIndentPage({ params }: { params: Promise<{ id:
         where: { id: { in: missingIds } },
         select: {
           id: true, code: true, name: true, standardRate: true,
-          uom: { select: { code: true } }, category: { select: { name: true } },
+          uom: { select: { name: true } }, category: { select: { name: true } },
         },
       })
     : [];
   const items = [
     ...activeItems,
     ...missing.map((i) => ({
-      id: i.id, code: i.code, name: i.name, uom: i.uom.code,
+      id: i.id, code: i.code, name: i.name, uom: i.uom.name,
       category: i.category.name, standardRate: Number(i.standardRate), onHand: 0,
     })),
   ];
