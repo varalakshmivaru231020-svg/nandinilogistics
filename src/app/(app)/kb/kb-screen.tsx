@@ -2,13 +2,13 @@
 
 import * as React from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { ArrowLeft, Pencil, X } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { Badge, Card, Field, Input, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { FileChip } from "@/components/ui/file-tag";
 import {
   createArticleAction, deleteArticleAction, toggleArticlePublishedAction, updateArticleAction,
@@ -91,9 +91,14 @@ export function KbScreen({
               {open.author} · updated {formatDate(open.updatedAt)}
             </p>
           </div>
+          {can.publish && (
+            <Button size="md" variant="secondary" onClick={() => togglePublish(open)}>
+              {open.isPublished ? "Unpublish" : "Publish"}
+            </Button>
+          )}
           {can.update && (
-            <Button size="md" variant="secondary" onClick={() => setEditing(open)}>
-              <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+            <Button size="md" onClick={() => setEditing(open)}>
+              ✎ Edit
             </Button>
           )}
         </div>
@@ -165,10 +170,6 @@ export function KbScreen({
           <p className="font-display text-[15px] font-bold text-navy-950">
             {query ? "Nothing matches that search." : "The knowledge base is empty."}
           </p>
-          <p className="mx-auto mt-1.5 max-w-md text-[12px] font-medium text-muted-600">
-            Guides, SOPs, safety inductions and sales material live here so everyone
-            works from the same approved version.
-          </p>
         </Card>
       ) : (
         <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(330px,1fr))]">
@@ -185,56 +186,49 @@ export function KbScreen({
                 {!a.isPublished && <Badge tone="warn">Draft</Badge>}
               </div>
 
-              {a.category && <span className="mt-1.5"><Badge tone="slate">{a.category}</Badge></span>}
-
-              <p className="mt-2 line-clamp-3 flex-1 text-[12px] font-medium leading-relaxed text-muted-600">
+              <p className="mt-[7px] line-clamp-4 flex-1 text-[12.5px] font-medium leading-relaxed text-navy-500">
                 {a.summary ?? a.body.slice(0, 180)}
               </p>
 
               {a.attachments.length > 0 && (
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
-                  {a.attachments.slice(0, 3).map((f) => (
+                  {a.attachments.map((f) => (
                     <FileChip key={f.id} fileName={f.fileName} />
                   ))}
-                  {a.attachments.length > 3 && (
-                    <span className="self-center text-[11px] font-semibold text-muted-400">
-                      +{a.attachments.length - 3}
-                    </span>
-                  )}
                 </div>
               )}
 
-              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line-200 pt-2.5">
-                <span className="text-[11px] font-medium text-muted-500">
-                  {a.attachments.length} attachment{a.attachments.length === 1 ? "" : "s"} · {a.author} · {formatDate(a.updatedAt)}
-                </span>
-                <span className="ml-auto flex gap-1">
-                  {can.publish && (
-                    <button
-                      type="button"
-                      onClick={() => togglePublish(a)}
-                      className="rounded-[7px] px-2 py-1 text-[11px] font-bold text-muted-500 transition-colors hover:bg-surface-hover hover:text-navy-900"
-                    >
-                      {a.isPublished ? "Unpublish" : "Publish"}
-                    </button>
-                  )}
-                  {can.update && (
-                    <button
-                      type="button" title="Edit" onClick={() => setEditing(a)}
-                      className="grid h-[24px] w-[24px] place-items-center rounded-[7px] text-muted-400 transition-colors hover:bg-surface-hover hover:text-navy-900"
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </button>
-                  )}
-                  {can.remove && (
-                    <button
-                      type="button" title="Delete" onClick={() => setRemoving(a)}
-                      className="grid h-[24px] w-[24px] place-items-center rounded-[7px] text-muted-400 transition-colors hover:bg-bad-050 hover:text-bad-600"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  )}
-                </span>
+              <p className="mt-[11px] text-[11px] font-semibold text-muted-400">
+                {a.attachments.length} attachment{a.attachments.length === 1 ? "" : "s"} · {a.author} ·{" "}
+                {formatDateTime(a.updatedAt)}
+              </p>
+
+              <div className="mt-[13px] flex gap-[7px]">
+                <button
+                  type="button"
+                  onClick={() => setParam({ open: a.id })}
+                  className="flex-1 rounded-[8px] border border-line-400 bg-white py-2 text-[11.5px] font-bold text-brand-700 transition-colors hover:border-brand-500 hover:bg-brand-100"
+                >
+                  View
+                </button>
+                {can.update && (
+                  <button
+                    type="button"
+                    onClick={() => setEditing(a)}
+                    className="rounded-[8px] border border-line-400 bg-white px-[13px] py-2 text-[11.5px] font-semibold text-navy-500 transition-colors hover:border-brand-500 hover:text-brand-700"
+                  >
+                    Edit
+                  </button>
+                )}
+                {can.remove && (
+                  <button
+                    type="button"
+                    onClick={() => setRemoving(a)}
+                    className="rounded-[8px] border border-bad-100 bg-bad-050 px-[13px] py-2 text-[11.5px] font-semibold text-bad-700 transition-colors hover:brightness-95"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </Card>
           ))}

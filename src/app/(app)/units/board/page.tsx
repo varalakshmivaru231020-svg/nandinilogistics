@@ -8,7 +8,7 @@ import { expireStaleHolds } from "@/lib/sales/service";
 import { BoardGrid } from "./board-grid";
 import { UnitSetup } from "./unit-setup";
 
-export const metadata = { title: "Availability Board" };
+export const metadata = { title: "Available Flats · Unit Inventory" };
 
 export default async function AvailabilityBoardPage({
   searchParams,
@@ -34,7 +34,7 @@ export default async function AvailabilityBoardPage({
   if (!projectId) {
     return (
       <div>
-        <PageHeader title="Availability Board" />
+        <PageHeader title="Available Flats · Unit Inventory" />
         <Card>
           <EmptyState title="No projects available to you" description="You are not mapped to any project yet." />
         </Card>
