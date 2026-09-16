@@ -417,7 +417,7 @@ export default async function DashboardPage() {
             weekday: "long", day: "numeric", month: "long", year: "numeric",
           })}
         </div>
-        <div className="text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">
+        <div className="text-[11.5px] font-semibold uppercase tracking-[.05em] text-brand-500">
           Last sync just now
         </div>
       </div>

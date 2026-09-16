@@ -5,7 +5,7 @@ import { Database } from "lucide-react";
 import { requireAuth } from "@/lib/rbac/guard";
 import { masterGroups, masterPerm, MASTERS } from "@/lib/masters/registry";
 import { delegate } from "@/lib/masters/service";
-import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { Card, EmptyState } from "@/components/ui/primitives";
 import { PERM } from "@/lib/permissions/codes";
 import { cn } from "@/lib/utils";
 
@@ -84,11 +84,6 @@ export default async function MastersIndexPage({
 
   return (
     <div className="mx-auto max-w-[1400px]">
-      <PageHeader
-        title="Masters & Users"
-        description="The reference data every other module reads from, and the people and limits that govern it."
-      />
-
       {sections.length === 0 ? (
         <Card>
           <EmptyState
