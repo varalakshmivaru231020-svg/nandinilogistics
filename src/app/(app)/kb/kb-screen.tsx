@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { ArrowLeft, Pencil, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, Pencil, X } from "lucide-react";
 
 import { Badge, Card, Field, Input, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
@@ -21,9 +21,14 @@ interface Article {
 }
 
 export function KbScreen({
-  query, openId, articles, can,
+  query, openId, articles, totalArticles, can,
 }: {
-  query: string; openId: string | null; articles: Article[]; can: Record<string, boolean>;
+  query: string;
+  openId: string | null;
+  articles: Article[];
+  /** Every article, so the design's "N of M articles" can be shown. */
+  totalArticles: number;
+  can: Record<string, boolean>;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -132,22 +137,25 @@ export function KbScreen({
   /* -------------------------------- Library -------------------------------- */
   return (
     <div className="animate-fade-up">
-      <div className="mb-3.5 flex flex-wrap items-center gap-2.5">
+      <div className="mb-3.5 flex flex-wrap items-center gap-3">
         <form
-          className="relative min-w-[220px] flex-1"
+          className="w-[280px] max-w-full"
           onSubmit={(e) => { e.preventDefault(); setParam({ q: q || undefined }); }}
         >
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-500" />
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search the knowledge base…"
-            className="pl-9"
+            placeholder="Search articles…"
+            className="bg-white"
           />
         </form>
+        <span className="text-[12px] font-semibold text-muted-600">
+          {articles.length} of {totalArticles} articles
+        </span>
+        <div className="flex-1" />
         {can.create && (
           <Button size="md" onClick={() => setEditing("new")}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> New article
+            + New article
           </Button>
         )}
       </div>
@@ -163,7 +171,7 @@ export function KbScreen({
           </p>
         </Card>
       ) : (
-        <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
+        <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(330px,1fr))]">
           {articles.map((a) => (
             <Card key={a.id} className="flex flex-col px-4 py-4 transition-shadow hover:shadow-[0_6px_18px_rgba(25,26,92,.08)]">
               <div className="flex flex-wrap items-start gap-2">

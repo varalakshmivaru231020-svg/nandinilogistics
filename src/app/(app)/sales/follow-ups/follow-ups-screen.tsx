@@ -88,7 +88,6 @@ export function FollowUpsScreen({
     const b = bucketOf(r.dueAt, nowMs);
     grouped.set(b, [...(grouped.get(b) ?? []), r]);
   }
-  const overdueCount = grouped.get("overdue")?.length ?? 0;
 
   return (
     <div className="animate-fade-up mx-auto max-w-[1400px]">
@@ -97,10 +96,7 @@ export function FollowUpsScreen({
       {/* Header */}
       <div className="mb-3.5 flex flex-wrap items-center gap-3">
         <p className="text-[13px] font-medium text-muted-600">
-          {rows.length} scheduled · every call and site visit across all leads
-          {overdueCount > 0 && (
-            <span className="ml-2 font-bold text-bad-600">{overdueCount} overdue</span>
-          )}
+          {rows.length} shown · every scheduled call and site visit across all leads
         </p>
         <div className="flex-1" />
         <div className="flex gap-1.5">
@@ -126,7 +122,7 @@ export function FollowUpsScreen({
           )}
         </div>
         <Link href="/sales/leads">
-          <Button size="md">Open leads</Button>
+          <Button size="md">+ New follow-up</Button>
         </Link>
       </div>
 
@@ -135,19 +131,17 @@ export function FollowUpsScreen({
         <Input
           defaultValue={query}
           placeholder="Search lead, purpose, remarks…"
-          className="w-[280px] bg-white"
+          className="w-[280px]"
           onKeyDown={(e) => {
             if (e.key === "Enter") setParam({ q: (e.target as HTMLInputElement).value });
           }}
         />
-        <Select value={typeFilter} onChange={(e) => setParam({ type: e.target.value })} className="w-auto min-w-[150px] bg-white">
+        <Select value={typeFilter} onChange={(e) => setParam({ type: e.target.value })} className="w-auto min-w-[150px]">
           <option value="all">All types</option>
           {Object.entries(CHANNEL_LABEL).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
           ))}
         </Select>
-        <div className="flex-1" />
-        <span className="text-[11.5px] font-semibold text-muted-600">{rows.length} shown</span>
       </div>
 
       {/* --------------------------------- Grid -------------------------------- */}

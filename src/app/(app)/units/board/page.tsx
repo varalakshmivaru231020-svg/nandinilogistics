@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
@@ -72,10 +74,17 @@ export default async function AvailabilityBoardPage({
 
   return (
     <div className="mx-auto max-w-7xl">
-      <PageHeader
-        title="Availability Board"
-        description="The single source of truth on what is actually available to sell, readable at a glance."
-      />
+      {/* The design opens this screen with one button, right-aligned. */}
+      {ctx.has(PERM.unit.unit.create) && (
+        <div className="mb-3.5 flex justify-end">
+          <Link
+            href="/units"
+            className="rounded-[9px] bg-brand-500 px-4 py-2.5 text-[12.5px] font-bold text-white transition-colors hover:bg-brand-600"
+          >
+            + Create units
+          </Link>
+        </div>
+      )}
 
       <BoardGrid
         projects={projects}
