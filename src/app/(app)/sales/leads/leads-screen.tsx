@@ -57,6 +57,11 @@ interface Lead {
 
 type Lookup = Array<{ id: string; name: string; code?: string }>;
 
+/** A row of Masters → Lead Settings: what the capture form asks, and how. */
+export interface LeadField {
+  id: string; fieldKey: string; label: string; type: string; required: boolean; isSystem: boolean;
+}
+
 /**
  * The design's follow-up block: OVERDUE, TODAY or UPCOMING, each with its own
  * tint and a left border in its colour.
@@ -97,10 +102,11 @@ function followUp(nextActionAt: string | null, nowMs: number, state?: string) {
 }
 
 export function LeadsScreen({
-  leads, sources, lostReasons, projects, unitTypes, can,
+  leads, sources, lostReasons, projects, unitTypes, formFields, can,
   query, stateFilter, sourceFilter, followUpFilter, view, nowMs,
   totalLeads, openLeads,
 }: {
+  formFields: LeadField[];
   leads: Lead[];
   /** Every lead in the actor's scope, and those still open — for the header. */
   totalLeads: number;
@@ -441,6 +447,7 @@ export function LeadsScreen({
           sources={sources}
           projects={projects}
           unitTypes={unitTypes}
+          formFields={formFields}
           onClose={() => setCreating(false)}
           onSaved={(m) => { setCreating(false); setNotice(m); router.refresh(); }}
         />
@@ -481,9 +488,11 @@ export function LeadsScreen({
 /* ------------------------------- Modals ---------------------------------- */
 
 function NewLeadModal({
-  sources, projects, unitTypes, onClose, onSaved,
+  sources, projects, unitTypes, formFields, onClose, onSaved,
 }: {
   sources: Lookup; projects: Lookup; unitTypes: Lookup;
+  /** What Masters → Lead Settings says this form asks, in its order. */
+  formFields: LeadField[];
   onClose: () => void; onSaved: (m: string) => void;
 }) {
   const [error, setError] = React.useState<string | null>(null);
@@ -514,37 +523,88 @@ function NewLeadModal({
       <form id="lead-form" onSubmit={onSubmit} className="space-y-3.5">
         {error && <Alert tone="error">{error}</Alert>}
 
-        <Field label="Name" required><Input name="name" required /></Field>
-        <Field label="Mobile number" required><Input name="phone" type="tel" required /></Field>
-        <Field label="Source" required>
-          <Select name="sourceId" required defaultValue="">
-            <option value="">Select…</option>
-            {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </Select>
-        </Field>
-        <Field label="Email"><Input name="email" type="email" /></Field>
-        <Field label="Budget"><Input name="budgetMax" type="number" min={0} step="any" /></Field>
-        <Field label="Interested in">
-          <Select name="unitTypeId" defaultValue="">
-            <option value="">Any unit type</option>
-            {unitTypes.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </Select>
-        </Field>
-        <Field label="Preferred project">
-          <Select name="projectId" defaultValue="">
-            <option value="">— Not specified —</option>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </Select>
-        </Field>
-        <Field label="Requirement notes">
-          <Textarea name="requirement" rows={2} placeholder="Type here…" />
-        </Field>
-        <Field label="Site visit planned?">
-          <label className="flex items-center gap-2 text-[12.5px] font-medium text-navy-900">
-            <input type="checkbox" name="siteVisitPlanned" className="h-4 w-4 accent-[#0089C9]" />
-            Yes
-          </label>
-        </Field>
+        {formFields.map((f) => {
+          if (!f.isSystem) {
+            return (
+              <Field key={f.id} label={f.label} required={f.required}>
+                {f.type === "DESCRIPTION" ? (
+                  <Textarea name={`custom:${f.id}`} rows={2} required={f.required} placeholder="Type here…" />
+                ) : f.type === "CHECKBOX" ? (
+                  <label className="flex items-center gap-2 text-[12.5px] font-medium text-navy-900">
+                    <input type="checkbox" name={`custom:${f.id}`} className="h-4 w-4 accent-[#0089C9]" />
+                    Yes
+                  </label>
+                ) : (
+                  <Input
+                    name={`custom:${f.id}`}
+                    required={f.required}
+                    type={
+                      f.type === "NUMBER" ? "number"
+                        : f.type === "DATE" ? "date"
+                          : f.type === "EMAIL" ? "email"
+                            : f.type === "PHONE" ? "tel"
+                              : "text"
+                    }
+                  />
+                )}
+              </Field>
+            );
+          }
+          switch (f.fieldKey) {
+            case "name":
+              return <Field key={f.id} label={f.label} required={f.required}><Input name="name" required={f.required} /></Field>;
+            case "phone":
+              return <Field key={f.id} label={f.label} required={f.required}><Input name="phone" type="tel" required={f.required} /></Field>;
+            case "sourceId":
+              return (
+                <Field key={f.id} label={f.label} required={f.required}>
+                  <Select name="sourceId" required={f.required} defaultValue="">
+                    <option value="">Select…</option>
+                    {sources.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </Select>
+                </Field>
+              );
+            case "email":
+              return <Field key={f.id} label={f.label} required={f.required}><Input name="email" type="email" required={f.required} /></Field>;
+            case "budgetMax":
+              return <Field key={f.id} label={f.label} required={f.required}><Input name="budgetMax" type="number" min={0} step="any" required={f.required} /></Field>;
+            case "unitTypeId":
+              return (
+                <Field key={f.id} label={f.label} required={f.required}>
+                  <Select name="unitTypeId" required={f.required} defaultValue="">
+                    <option value="">Any unit type</option>
+                    {unitTypes.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </Select>
+                </Field>
+              );
+            case "projectId":
+              return (
+                <Field key={f.id} label={f.label} required={f.required}>
+                  <Select name="projectId" required={f.required} defaultValue="">
+                    <option value="">— Not specified —</option>
+                    {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </Select>
+                </Field>
+              );
+            case "requirement":
+              return (
+                <Field key={f.id} label={f.label} required={f.required}>
+                  <Textarea name="requirement" rows={2} required={f.required} placeholder="Type here…" />
+                </Field>
+              );
+            case "siteVisitPlanned":
+              return (
+                <Field key={f.id} label={f.label} required={f.required}>
+                  <label className="flex items-center gap-2 text-[12.5px] font-medium text-navy-900">
+                    <input type="checkbox" name="siteVisitPlanned" className="h-4 w-4 accent-[#0089C9]" />
+                    Yes
+                  </label>
+                </Field>
+              );
+            default:
+              return null;
+          }
+        })}
       </form>
     </Modal>
   );

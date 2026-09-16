@@ -67,6 +67,8 @@ export async function chooseLeadOwner(
 
 export interface CaptureLeadInput extends LeadInput {
   unitTypeId: string | null;
+  /** Answers to the custom fields Lead Settings adds to the form, by field id. */
+  customFields?: Record<string, string> | null;
   /** An owner chosen by someone allowed to assign; when absent the assignment rule decides. */
   ownerId?: string | null;
   /**
@@ -125,6 +127,9 @@ export async function captureLead(
       budgetMax: input.budgetMax ?? null,
       nextActionAt: input.nextActionAt ? new Date(input.nextActionAt) : null,
       unitTypeId: input.unitTypeId,
+      customFields: input.customFields && Object.keys(input.customFields).length
+        ? input.customFields
+        : undefined,
       // Captured with a visit already planned: the lead opens on that stage.
       ...(input.siteVisitPlanned ? { state: "SITE_VISIT_SCHEDULED" as const } : {}),
       duplicateOfId: duplicateOf?.id ?? null,

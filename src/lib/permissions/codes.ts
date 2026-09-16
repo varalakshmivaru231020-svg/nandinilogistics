@@ -3,7 +3,7 @@
  * Source: src/lib/permissions/registry.ts
  * Regenerate: pnpm perms:codegen
  *
- * 519 permission codes.
+ * 526 permission codes.
  */
 
 export const PERM = {
@@ -533,6 +533,15 @@ export const PERM = {
       "toggleStatus": "masters.lostReason.toggleStatus",
       "export": "masters.lostReason.export",
       "import": "masters.lostReason.import",
+    },
+    "leadField": {
+      "view": "masters.leadField.view",
+      "create": "masters.leadField.create",
+      "update": "masters.leadField.update",
+      "delete": "masters.leadField.delete",
+      "toggleStatus": "masters.leadField.toggleStatus",
+      "export": "masters.leadField.export",
+      "import": "masters.leadField.import",
     },
     "chargeHead": {
       "view": "masters.chargeHead.view",

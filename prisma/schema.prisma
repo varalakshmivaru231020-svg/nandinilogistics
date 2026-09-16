@@ -1112,20 +1112,20 @@ model ScheduleTemplate {
 }
 
 model ScheduleExtension {
-  id            String    @id @default(cuid())
-  activityId    String
-  requestedDays Int
-  reason        String
+  id               String    @id @default(cuid())
+  activityId       String
+  requestedDays    Int
+  reason           String
   /// The finish date being asked for, derived at request time.
-  requestedDate DateTime
+  requestedDate    DateTime
   /// AWAITING_PM | AWAITING_ADMIN | GRANTED | REFUSED
-  status        String    @default("AWAITING_PM")
-  requestedById String
-  requestedAt   DateTime  @default(now())
+  status           String    @default("AWAITING_PM")
+  requestedById    String
+  requestedAt      DateTime  @default(now())
   /// The Project Manager's decision — the first of the two the design draws.
-  pmDecidedById String?
-  pmDecidedAt   DateTime?
-  pmRemark      String?
+  pmDecidedById    String?
+  pmDecidedAt      DateTime?
+  pmRemark         String?
   /// The Admin's: only this one moves the date.
   adminDecidedById String?
   adminDecidedAt   DateTime?
@@ -1133,10 +1133,10 @@ model ScheduleExtension {
   /// The Admin's verdict on the delay — "Genuine" or "Avoidable".
   performance      String?
 
-  activity    ScheduleActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  requestedBy User             @relation("ExtensionRequestedBy", fields: [requestedById], references: [id])
-  pmDecidedBy    User?         @relation("ExtensionPmDecidedBy", fields: [pmDecidedById], references: [id])
-  adminDecidedBy User?         @relation("ExtensionAdminDecidedBy", fields: [adminDecidedById], references: [id])
+  activity       ScheduleActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  requestedBy    User             @relation("ExtensionRequestedBy", fields: [requestedById], references: [id])
+  pmDecidedBy    User?            @relation("ExtensionPmDecidedBy", fields: [pmDecidedById], references: [id])
+  adminDecidedBy User?            @relation("ExtensionAdminDecidedBy", fields: [adminDecidedById], references: [id])
 
   @@index([activityId])
   @@index([status])
@@ -1693,6 +1693,36 @@ model StockTransferItem {
 // MODULE 06 — LEAD MANAGEMENT & SALES CRM
 // ---------------------------------------------------------------------------
 
+/// What the Capture-lead form asks. The nine system fields map to columns on
+/// the lead itself; anything added here is stored in Lead.customFields.
+enum LeadFieldType {
+  TEXT
+  PHONE
+  EMAIL
+  NUMBER
+  DROPDOWN
+  DESCRIPTION
+  CHECKBOX
+  DATE
+}
+
+model LeadFormField {
+  id        String        @id @default(cuid())
+  /// What the form posts under. A system field carries the name the lead
+  /// schema already knows; a custom one carries its own id.
+  fieldKey  String        @unique
+  label     String
+  type      LeadFieldType @default(TEXT)
+  required  Boolean       @default(false)
+  /// A system field is part of the lead record and cannot be removed.
+  isSystem  Boolean       @default(false)
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@map("m_lead_form_fields")
+}
+
 model Lead {
   id                String    @id @default(cuid())
   leadNo            String    @unique
@@ -1722,6 +1752,9 @@ model Lead {
   nextActionAt      DateTime?
   lostReasonId      String?
   lostNotes         String?
+  /// Answers to the custom fields configured in Masters → Lead Settings, keyed
+  /// by field id. The nine system fields live in columns of their own.
+  customFields      Json?
   score             Int       @default(0)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

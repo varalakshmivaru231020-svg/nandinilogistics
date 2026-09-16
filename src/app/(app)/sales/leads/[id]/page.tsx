@@ -93,6 +93,17 @@ export default async function LeadDetailPage({
       ])
     : [[], [], []];
 
+  // Whatever Lead Settings added to the form, answered, and in the order the
+  // form asks it.
+  const answers = (lead.customFields ?? {}) as Record<string, string>;
+  const customFieldRows = Object.keys(answers).length
+    ? (await prisma.leadFormField.findMany({
+        where: { id: { in: Object.keys(answers) } },
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, label: true },
+      })).map((f) => ({ label: f.label, value: answers[f.id] }))
+    : [];
+
   // Timeline and stage history both come from the audit trail — the record of
   // what happened is the same record the audit viewer reads.
   const audit = await prisma.auditLog.findMany({
@@ -166,6 +177,7 @@ export default async function LeadDetailPage({
         nextActionAt: lead.nextActionAt?.toISOString() ?? null,
         unitTypeName: lead.unitType?.name ?? null,
         // A site visit is planned when one is on the calendar ahead.
+        customFields: customFieldRows,
         siteVisitPlanned: (() => {
           const visit = lead.followUps.find(
             (f) => f.channel === "SITE_VISIT" && f.nextActionAt && f.nextActionAt.getTime() >= now.getTime(),

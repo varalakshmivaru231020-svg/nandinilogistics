@@ -6,7 +6,7 @@ import { cn, moneyShort } from "@/lib/utils";
 import { ListNote } from "@/components/list/list-note";
 import Link from "next/link";
 
-import { ChipEditor, NewApprovalLimit, NewMasterRecord, NewUser } from "./masters-forms";
+import { ChipEditor, LeadFieldEditor, NewApprovalLimit, NewMasterRecord, NewUser } from "./masters-forms";
 
 export const metadata = { title: "Masters & Users" };
 
@@ -35,20 +35,6 @@ const STAGES = [
   ["BOOKED", "Booked", true],
   ["LOST", "Lost", true],
 ] as const;
-
-/** The fields the capture-lead form is built from. */
-/** Exactly the fields the Capture-lead form asks, in its order. */
-const LEAD_FIELDS: Array<[label: string, type: string, required: boolean]> = [
-  ["Name", "Text", true],
-  ["Mobile number", "Phone", true],
-  ["Source", "Dropdown", true],
-  ["Email", "Email", false],
-  ["Budget", "Number", false],
-  ["Interested in", "Dropdown", false],
-  ["Preferred project", "Dropdown", false],
-  ["Requirement notes", "Description", false],
-  ["Site visit planned?", "Checkbox", false],
-];
 
 export default async function MastersPage({
   searchParams,
@@ -133,7 +119,16 @@ export default async function MastersPage({
         {active.key === "tax" && <TaxAndUom />}
         {active.key === "users" && <Users />}
         {active.key === "limits" && <Limits />}
-        {active.key === "leadcfg" && <LeadSettings tab={tab ?? "fields"} canEdit={ctx.has(PERM.masters.lostReason.create)} canDelete={ctx.has(PERM.masters.lostReason.delete)} />}
+        {active.key === "leadcfg" && (
+          <LeadSettings
+            tab={tab ?? "fields"}
+            canEdit={ctx.has(PERM.masters.lostReason.create)}
+            canDelete={ctx.has(PERM.masters.lostReason.delete)}
+            canEditFields={ctx.has(PERM.masters.leadField.update)}
+            canAddField={ctx.has(PERM.masters.leadField.create)}
+            canDeleteField={ctx.has(PERM.masters.leadField.delete)}
+          />
+        )}
         {active.key === "workforce" && (
           <Workforce
             canEdit={ctx.has(PERM.masters.designation.create)}
@@ -345,7 +340,12 @@ const LEAD_TABS = [
   { key: "reasons", label: "Lost Reasons" },
 ];
 
-async function LeadSettings({ tab, canEdit, canDelete }: { tab: string; canEdit: boolean; canDelete: boolean }) {
+async function LeadSettings({
+  tab, canEdit, canDelete, canEditFields, canAddField, canDeleteField,
+}: {
+  tab: string; canEdit: boolean; canDelete: boolean;
+  canEditFields: boolean; canAddField: boolean; canDeleteField: boolean;
+}) {
   const reasons =
     tab === "reasons"
       ? await prisma.lostReason.findMany({
@@ -354,6 +354,26 @@ async function LeadSettings({ tab, canEdit, canDelete }: { tab: string; canEdit:
           select: { id: true, name: true, _count: { select: { leads: true } } },
         })
       : [];
+
+  // The design shows what a dropdown will offer, so the list reads as the form
+  // will: the sources, the unit types and the projects it is built from.
+  const [fields, sources, unitTypes, projects] = tab === "fields"
+    ? await Promise.all([
+        prisma.leadFormField.findMany({ orderBy: { sortOrder: "asc" } }),
+        prisma.leadSource.findMany({ where: { status: "ACTIVE" }, select: { name: true }, orderBy: { name: "asc" } }),
+        prisma.unitType.findMany({ where: { status: "ACTIVE" }, select: { name: true }, orderBy: { name: "asc" } }),
+        prisma.project.findMany({ select: { name: true }, orderBy: { name: "asc" } }),
+      ])
+    : [[], [], [], []];
+
+  const optionsFor = (key: string) =>
+    key === "sourceId"
+      ? sources.map((o) => o.name).join(", ")
+      : key === "unitTypeId"
+        ? unitTypes.map((o) => o.name).join(", ")
+        : key === "projectId"
+          ? projects.map((o) => o.name).join(", ")
+          : null;
 
   return (
     <div>
@@ -380,22 +400,21 @@ async function LeadSettings({ tab, canEdit, canDelete }: { tab: string; canEdit:
             Lead form fields
           </p>
           <p className="mb-2.5 text-[11.5px] font-medium text-muted-400">
-            These fields build the Capture-lead form
+            Click the type or mandatory pill to change it · these fields build the Capture-lead form
           </p>
-          {LEAD_FIELDS.map(([label, type, required]) => (
-            <div key={label} className="flex items-center gap-[9px] border-b border-line-200 py-[9px] last:border-0">
-              <span className="flex-1 text-[13px] font-semibold text-navy-900">{label}</span>
-              <span className="text-[11px] font-medium text-muted-400">{type}</span>
-              <span
-                className={cn(
-                  "rounded-full px-2.5 py-1 text-[10.5px] font-bold",
-                  required ? "bg-brand-100 text-brand-700" : "bg-surface-field text-muted-600",
-                )}
-              >
-                {required ? "Mandatory" : "Optional"}
-              </span>
-            </div>
-          ))}
+          <LeadFieldEditor
+            canEdit={canEditFields}
+            canAdd={canAddField}
+            canDelete={canDeleteField}
+            fields={fields.map((f) => ({
+              id: f.id,
+              label: f.label,
+              type: f.type,
+              required: f.required,
+              isSystem: f.isSystem,
+              options: optionsFor(f.fieldKey) || null,
+            }))}
+          />
         </div>
       )}
 

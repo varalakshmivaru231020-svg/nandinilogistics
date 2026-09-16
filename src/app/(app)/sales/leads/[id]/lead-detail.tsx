@@ -26,6 +26,8 @@ interface Lead {
   unitTypeName: string | null;
   /** "Yes · 12 Sep 2026" when a site visit is on the calendar. */
   siteVisitPlanned: string | null;
+  /** Whatever Lead Settings adds to the form, in the order it asks. */
+  customFields: Array<{ label: string; value: string }>;
   budgetMin: number | null; budgetMax: number | null;
   nextActionAt: string | null; lostReason: string | null; lostNotes: string | null;
   createdAt: string;
@@ -137,6 +139,7 @@ export function LeadDetail({
     ["Preferred project", lead.projectName ?? "—"],
     ["Requirement notes", lead.requirement || "—"],
     ["Site visit planned?", lead.siteVisitPlanned ?? "—"],
+    ...lead.customFields.map((f) => [f.label, f.value] as [string, string]),
   ];
 
   return (

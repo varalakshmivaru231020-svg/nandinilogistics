@@ -7,7 +7,7 @@ import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
 import Link from "next/link";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
-import { cn, moneyShort } from "@/lib/utils";
+import { cn, moneyShort, phone } from "@/lib/utils";
 
 export const metadata = { title: "Vendors" };
 
@@ -126,7 +126,7 @@ export default async function VendorsPage({
                     </Badge>
                   </div>
                   <p className="mt-[3px] text-[11.5px] font-medium text-muted-500">
-                    {[v.contactPerson, v.phone].filter(Boolean).join(" · ") || "No contact recorded"}
+                    {[v.contactPerson, v.phone && phone(v.phone)].filter(Boolean).join(" · ") || "No contact recorded"}
                   </p>
                   {v.email && <p className="text-[11.5px] font-medium text-muted-400">{v.email}</p>}
                 </div>

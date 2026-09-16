@@ -20,7 +20,7 @@ export default async function LeadsPage({
   // Shared with the export, so a download holds exactly what this screen shows.
   const where = leadListWhere(ownership, { q, state, source, fu }, now);
 
-  const [leads, stageCounts, sources, lostReasons, projects, unitTypes] = await Promise.all([
+  const [leads, stageCounts, sources, lostReasons, projects, unitTypes, formFields] = await Promise.all([
     prisma.lead.findMany({
       where,
       orderBy: [{ nextActionAt: "asc" }, { createdAt: "desc" }],
@@ -38,6 +38,8 @@ export default async function LeadsPage({
     prisma.lostReason.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.project.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
     prisma.unitType.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    // The Capture-lead form is whatever Masters → Lead Settings says it is.
+    prisma.leadFormField.findMany({ orderBy: { sortOrder: "asc" } }),
   ]);
 
   // The design's header counts: how many leads there are in all, and how many
@@ -53,6 +55,10 @@ export default async function LeadsPage({
         totalLeads={totalLeads}
         openLeads={openLeads}
         unitTypes={unitTypes}
+        formFields={formFields.map((f) => ({
+          id: f.id, fieldKey: f.fieldKey, label: f.label,
+          type: f.type, required: f.required, isSystem: f.isSystem,
+        }))}
         query={q}
         stateFilter={state}
         sourceFilter={source}

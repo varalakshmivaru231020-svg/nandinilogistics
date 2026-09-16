@@ -533,6 +533,7 @@ const MASTER_RESOURCES: Array<[resource: string, entity: string, group: string]>
   ["store", "store", "Masters · Material"],
   ["leadSource", "lead source", "Masters · Sales"],
   ["lostReason", "lost reason", "Masters · Sales"],
+  ["leadField", "lead form field", "Masters · Sales"],
   ["chargeHead", "charge head", "Masters · Sales"],
   ["bank", "bank", "Masters · Sales"],
   ["numberingSeries", "numbering series", "Masters · System"],

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { moneyShort, qty } from "@/lib/utils";
+import { moneyShort, phone, qty } from "@/lib/utils";
 import { VendorDetail } from "./vendor-detail";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -71,7 +71,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
       }}
       rows={[
         { k: "Contact person", v: dash(vendor.contactPerson) },
-        { k: "Mobile", v: dash(vendor.phone) },
+        { k: "Mobile", v: vendor.phone ? phone(vendor.phone) : "—" },
         { k: "Email", v: dash(vendor.email) },
         { k: "Supply categories", v: vendor.categories.map((c) => c.category.name).join(" · ") || "—" },
         { k: "GSTIN", v: dash(vendor.gstin) },

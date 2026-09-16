@@ -21,13 +21,37 @@ export async function createLeadAction(formData: FormData): Promise<ActionResult
     const parsed = LeadSchema.safeParse(Object.fromEntries(formData));
     if (!parsed.success) throw new Error(parsed.error.issues[0].message);
 
+    // Whatever Lead Settings added to the form comes back under "custom:<id>",
+    // and a field marked mandatory there is mandatory here.
+    const configured = await prisma.leadFormField.findMany({ orderBy: { sortOrder: "asc" } });
+    const customFields: Record<string, string> = {};
+    for (const field of configured.filter((f) => !f.isSystem)) {
+      const raw = formData.get(`custom:${field.id}`);
+      const value = field.type === "CHECKBOX" ? (raw === "on" ? "Yes" : "") : String(raw ?? "").trim();
+      if (!value) {
+        if (field.required) throw new Error(`${field.label} is required.`);
+        continue;
+      }
+      customFields[field.id] = value;
+    }
+    // A system field the settings made mandatory is checked the same way.
+    for (const field of configured.filter((f) => f.isSystem && f.required)) {
+      const raw = formData.get(field.fieldKey);
+      const given = field.type === "CHECKBOX" ? raw === "on" : String(raw ?? "").trim().length > 0;
+      if (!given) throw new Error(`${field.label} is required.`);
+    }
+
     // The organisation's assignment rule decides who owns the lead: manual keeps
     // it with whoever captured it; round-robin and project-wise hand it on.
     const { mode } = await getSetting(prisma, "sales.leadAssignment");
     const { lead, auto, duplicateOf } = await prisma.$transaction((tx) =>
       captureLead(
         tx,
-        { ...parsed.data, unitTypeId: String(formData.get("unitTypeId") ?? "") || null },
+        {
+          ...parsed.data,
+          unitTypeId: String(formData.get("unitTypeId") ?? "") || null,
+          customFields,
+        },
         ctx.id,
         mode,
         new Date(),

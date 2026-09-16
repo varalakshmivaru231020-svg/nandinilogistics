@@ -9,6 +9,8 @@ import { ImportFileError, parseUploadFrom } from "@/lib/import/parse";
 import { planMasterImport } from "@/lib/masters/import";
 import { getMaster, masterPerm } from "@/lib/masters/registry";
 import { buildSchema, delegate, loadOptions, recordLabel, toPrismaData } from "@/lib/masters/service";
+import { prisma } from "@/lib/db";
+import { PERM } from "@/lib/permissions/codes";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -242,5 +244,108 @@ export async function importMastersAction(
         `Imported ${created} ${created === 1 ? def.singular : def.label.toLowerCase()}` +
         (skipped ? `; ${skipped} row(s) with problems were skipped.` : "."),
     };
+  });
+}
+
+/* ---------------------------- Lead form fields ----------------------------- */
+
+const LEAD_FIELD_TYPES = [
+  "TEXT", "PHONE", "EMAIL", "NUMBER", "DROPDOWN", "DESCRIPTION", "CHECKBOX", "DATE",
+] as const;
+
+type LeadFieldType = (typeof LEAD_FIELD_TYPES)[number];
+
+/**
+ * The Capture-lead form is configuration: Lead Settings owns which fields it
+ * asks, what each one is, and whether it is mandatory. The nine system fields
+ * map to columns on the lead, so their type and their place are fixed — only
+ * whether they are mandatory can change.
+ */
+export async function addLeadFieldAction(
+  label: string,
+  type: string,
+  required: boolean,
+): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.masters.leadField.create);
+    const name = label.trim();
+    if (name.length < 2) throw new Error("Give the field a name.");
+    if (!LEAD_FIELD_TYPES.includes(type as LeadFieldType)) throw new Error("Unknown field type.");
+
+    const last = await prisma.leadFormField.findFirst({ orderBy: { sortOrder: "desc" } });
+    const field = await prisma.leadFormField.create({
+      data: {
+        fieldKey: `custom_${Date.now().toString(36)}`,
+        label: name,
+        type: type as LeadFieldType,
+        required,
+        isSystem: false,
+        sortOrder: (last?.sortOrder ?? 0) + 1,
+      },
+    });
+
+    await recordAudit({
+      action: "CREATE", entity: "LeadFormField", entityId: field.id, userId: ctx.id,
+      summary: `Added lead form field ${name}`,
+    });
+    revalidatePath("/masters");
+    revalidatePath("/sales/leads");
+    return { id: field.id };
+  });
+}
+
+export async function updateLeadFieldAction(
+  id: string,
+  patch: { type?: string; required?: boolean; label?: string },
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.masters.leadField.update);
+    const field = await prisma.leadFormField.findUnique({ where: { id } });
+    if (!field) throw new Error("Field not found.");
+
+    if (patch.type && !LEAD_FIELD_TYPES.includes(patch.type as LeadFieldType)) {
+      throw new Error("Unknown field type.");
+    }
+    // A system field answers a column of its own; changing its type would make
+    // the form ask for something the lead cannot hold.
+    if (field.isSystem && (patch.type || patch.label)) {
+      throw new Error("A system field keeps its name and its type.");
+    }
+
+    const updated = await prisma.leadFormField.update({
+      where: { id },
+      data: {
+        ...(patch.type ? { type: patch.type as LeadFieldType } : {}),
+        ...(patch.label ? { label: patch.label.trim() } : {}),
+        ...(patch.required === undefined ? {} : { required: patch.required }),
+      },
+    });
+
+    await recordAudit({
+      action: "UPDATE", entity: "LeadFormField", entityId: id, userId: ctx.id,
+      summary: `Updated lead form field ${updated.label}`,
+      changes: diff(field, updated, ["type", "required", "label"]),
+    });
+    revalidatePath("/masters");
+    revalidatePath("/sales/leads");
+    return null;
+  });
+}
+
+export async function deleteLeadFieldAction(id: string): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.masters.leadField.delete);
+    const field = await prisma.leadFormField.findUnique({ where: { id } });
+    if (!field) throw new Error("Field not found.");
+    if (field.isSystem) throw new Error("A system field cannot be removed — the lead record needs it.");
+
+    await prisma.leadFormField.delete({ where: { id } });
+    await recordAudit({
+      action: "DELETE", entity: "LeadFormField", entityId: id, userId: ctx.id,
+      summary: `Removed lead form field ${field.label}`,
+    });
+    revalidatePath("/masters");
+    revalidatePath("/sales/leads");
+    return null;
   });
 }

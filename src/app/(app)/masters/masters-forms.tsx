@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Field, Input, Select } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
-import { createMasterAction, deleteMasterAction } from "./actions";
+import { cn } from "@/lib/utils";
+import {
+  addLeadFieldAction, createMasterAction, deleteLeadFieldAction, deleteMasterAction,
+  updateLeadFieldAction,
+} from "./actions";
 import { createUserAction, upsertApprovalLimitAction } from "@/app/(app)/admin/actions";
 import { createEmploymentTypeAction, deleteEmploymentTypeAction } from "@/app/(app)/hr/actions";
 
@@ -265,6 +269,162 @@ export function ChipEditor({
             className="w-[210px]"
           />
           <Button onClick={add} loading={busy} disabled={!value.trim()}>{addLabel}</Button>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* --------------------------- Lead form fields ------------------------------ */
+
+export interface LeadFieldRow {
+  id: string;
+  label: string;
+  type: string;
+  required: boolean;
+  isSystem: boolean;
+  /** What a dropdown offers, when the field is one — shown as the design shows it. */
+  options: string | null;
+}
+
+const LEAD_FIELD_TYPES = [
+  ["TEXT", "Text"], ["PHONE", "Phone"], ["EMAIL", "Email"], ["NUMBER", "Number"],
+  ["DROPDOWN", "Dropdown"], ["DESCRIPTION", "Description"], ["CHECKBOX", "Checkbox"], ["DATE", "Date"],
+] as const;
+
+const FIELD_SELECT =
+  "rounded-[8px] border border-line-400 bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-navy-600 outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:bg-surface-field disabled:text-muted-400";
+
+/**
+ * The design's Lead Settings: click a field's type or its mandatory pill to
+ * change it, remove one that is not a system field, and add your own at the
+ * bottom. What this list says is what the Capture-lead form asks.
+ */
+export function LeadFieldEditor({
+  fields, canEdit, canAdd, canDelete,
+}: {
+  fields: LeadFieldRow[];
+  canEdit: boolean;
+  canAdd: boolean;
+  canDelete: boolean;
+}) {
+  const router = useRouter();
+  const toast = useToast();
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [label, setLabel] = React.useState("");
+  const [type, setType] = React.useState("TEXT");
+  const [required, setRequired] = React.useState(false);
+
+  async function patch(id: string, next: { type?: string; required?: boolean }) {
+    setBusy(id);
+    const res = await updateLeadFieldAction(id, next);
+    setBusy(null);
+    if (!res.ok) { toast(res.error, "bad"); return; }
+    router.refresh();
+  }
+
+  async function remove(id: string) {
+    setBusy(id);
+    const res = await deleteLeadFieldAction(id);
+    setBusy(null);
+    if (!res.ok) { toast(res.error, "bad"); return; }
+    router.refresh();
+  }
+
+  async function add() {
+    const name = label.trim();
+    if (!name) return;
+    setBusy("new");
+    const res = await addLeadFieldAction(name, type, required);
+    setBusy(null);
+    if (!res.ok) { toast(res.error, "bad"); return; }
+    setLabel("");
+    setType("TEXT");
+    setRequired(false);
+    router.refresh();
+  }
+
+  return (
+    <>
+      {fields.map((f) => (
+        <div key={f.id} className="flex flex-wrap items-center gap-[9px] border-b border-line-200 py-[9px] last:border-0">
+          <span className="flex items-center gap-2 text-[13px] font-semibold text-navy-900">
+            {f.label}
+            {f.isSystem && (
+              <span className="rounded-full bg-surface-hover px-2 py-[3px] text-[8.5px] font-bold tracking-[.07em] text-navy-800">
+                SYSTEM
+              </span>
+            )}
+          </span>
+          <span className="flex-1" />
+          {f.options && (
+            <span className="max-w-[240px] truncate text-[11px] font-medium text-muted-400" title={f.options}>
+              {f.options}
+            </span>
+          )}
+          <select
+            value={f.type}
+            disabled={!canEdit || f.isSystem || busy === f.id}
+            onChange={(e) => patch(f.id, { type: e.target.value })}
+            className={FIELD_SELECT}
+          >
+            {LEAD_FIELD_TYPES.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
+          </select>
+          <button
+            type="button"
+            disabled={!canEdit || busy === f.id}
+            onClick={() => patch(f.id, { required: !f.required })}
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[10.5px] font-bold transition-colors",
+              canEdit ? "cursor-pointer" : "cursor-default",
+              f.required ? "bg-bad-050 text-bad-700" : "bg-surface-field text-muted-600",
+            )}
+          >
+            {f.required ? "Mandatory" : "Optional"}
+          </button>
+          {canDelete && !f.isSystem && (
+            <button
+              type="button"
+              disabled={busy === f.id}
+              onClick={() => remove(f.id)}
+              aria-label={`Remove ${f.label}`}
+              className="cursor-pointer px-1 text-[13px] font-bold text-muted-400 transition-colors hover:text-bad-600"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      ))}
+
+      {canAdd && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="New field label"
+            className="min-w-[180px] flex-1 rounded-[9px] border border-line-400 bg-white px-3 py-2 text-[12.5px] font-medium text-navy-900 outline-none focus:border-brand-500"
+          />
+          <select value={type} onChange={(e) => setType(e.target.value)} className={cn(FIELD_SELECT, "py-2")}>
+            {LEAD_FIELD_TYPES.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
+          </select>
+          <button
+            type="button"
+            onClick={() => setRequired((r) => !r)}
+            className={cn(
+              "cursor-pointer rounded-full px-2.5 py-1 text-[10.5px] font-bold",
+              required ? "bg-bad-050 text-bad-700" : "bg-surface-field text-muted-600",
+            )}
+          >
+            {required ? "Mandatory" : "Optional"}
+          </button>
+          <button
+            type="button"
+            disabled={busy === "new"}
+            onClick={add}
+            className="cursor-pointer rounded-[9px] bg-brand-500 px-3.5 py-2 text-[12px] font-bold text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
+          >
+            + Add field
+          </button>
         </div>
       )}
     </>
