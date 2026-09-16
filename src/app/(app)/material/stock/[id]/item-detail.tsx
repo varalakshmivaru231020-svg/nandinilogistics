@@ -68,7 +68,7 @@ export function ItemDetail({
       ? "bg-[linear-gradient(90deg,#D8494A,#E8827F)]"
       : item.flag === "ORDER SOON"
         ? "bg-[linear-gradient(90deg,#E8A13A,#F2C063)]"
-        : "bg-[linear-gradient(90deg,#1F9D66,#5BC8A2)]";
+        : "bg-[linear-gradient(90deg,#0089C9,#5BC8F2)]";
 
   async function remove() {
     setBusy(true);

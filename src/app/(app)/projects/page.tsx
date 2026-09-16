@@ -51,7 +51,7 @@ export default async function ProjectsPage({
         projectType: { select: { name: true } },
         city: { select: { name: true } },
         projectManager: { select: { name: true } },
-        activities: { select: { progressPct: true } },
+        activities: { select: { status: true } },
         _count: { select: { units: true, phases: true, team: true } },
       },
     }),
@@ -105,8 +105,12 @@ export default async function ProjectsPage({
             </thead>
             <tbody>
               {projects.map((p, i) => {
+                // Progress is how much of the plan is closed, the same measure the
+                // schedule's own category bars use.
                 const pct = p.activities.length
-                  ? Math.round(p.activities.reduce((s, a) => s + a.progressPct, 0) / p.activities.length)
+                  ? Math.round(
+                      (p.activities.filter((a) => a.status === "COMPLETED").length / p.activities.length) * 100,
+                    )
                   : 0;
                 return (
                   <tr key={p.id} className="border-b border-[#F0F3FA] last:border-0 hover:bg-surface-tint">
@@ -157,8 +161,8 @@ export default async function ProjectsPage({
                           <div
                             className="h-full rounded-full"
                             style={{
-                              width: `${Math.max(2, pct)}%`,
-                              background: "linear-gradient(90deg,#0089C9,#2F308C)",
+                              width: `${pct}%`,
+                              background: "linear-gradient(90deg,#0089C9,#5BC8F2)",
                             }}
                           />
                         </div>

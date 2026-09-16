@@ -285,7 +285,7 @@ export default async function DashboardPage() {
           id: true, name: true, targetDate: true,
           city: { select: { name: true } },
           activities: {
-            select: { progressPct: true, status: true, baselineEnd: true, plannedEnd: true, actualEnd: true },
+            select: { status: true, baselineEnd: true, plannedEnd: true, actualEnd: true },
           },
         },
       })
@@ -308,10 +308,8 @@ export default async function DashboardPage() {
 
   const progress = progressProjects.map((p) => {
     const acts = p.activities;
-    const pct = acts.length
-      ? Math.round(acts.reduce((s, a) => s + a.progressPct, 0) / acts.length)
-      : 0;
     const done = acts.filter((a) => a.status === "COMPLETED").length;
+    const pct = acts.length ? Math.round((done / acts.length) * 100) : 0;
     // A project is late by its worst-slipping activity — the same measure the
     // schedule's variance report reads, so the two screens never disagree.
     const slip = acts.reduce((worst, a) => {

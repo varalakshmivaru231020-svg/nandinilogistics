@@ -32,7 +32,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
 
   const item = await prisma.item.findUnique({
     where: { id },
-    include: { uom: { select: { code: true } }, category: { select: { id: true, name: true } } },
+    include: { uom: { select: { name: true } }, category: { select: { id: true, name: true } } },
   });
   if (!item) notFound();
 
@@ -75,7 +75,8 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
     : [];
   const nameById = new Map(people.map((p) => [p.id, p.name]));
 
-  const unit = item.uom.code;
+  // The design names the unit in full on this screen — "Bags", not "BAG".
+  const unit = item.uom.name;
   const onHand = Number(balances._sum.quantity ?? 0);
   const reorder = Number(item.reorderLevel);
   const low = reorder > 0 && onHand < reorder;

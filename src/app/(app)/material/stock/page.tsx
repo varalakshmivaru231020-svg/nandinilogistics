@@ -17,6 +17,7 @@ type StockRow = {
   code: string;
   name: string;
   uom: string;
+  uomName: string;
   quantity: number;
   reorderLevel: number;
 };
@@ -43,7 +44,7 @@ export default async function StockPage({
         item: {
           select: {
             code: true, name: true, reorderLevel: true,
-            uom: { select: { code: true } },
+            uom: { select: { code: true, name: true } },
             category: { select: { name: true } },
           },
         },
@@ -61,6 +62,7 @@ export default async function StockPage({
       code: b.item.code,
       name: b.item.name,
       uom: b.item.uom.code,
+      uomName: b.item.uom.name,
       quantity: 0,
       reorderLevel: Number(b.item.reorderLevel),
     };
@@ -99,7 +101,7 @@ export default async function StockPage({
     {
       key: "unit",
       header: "Unit",
-      render: (b) => <span className="text-[12px] font-medium text-muted-600">{b.uom}</span>,
+      render: (b) => <span className="text-[12px] font-medium text-muted-600">{b.uomName}</span>,
     },
     {
       key: "qty",
@@ -111,14 +113,18 @@ export default async function StockPage({
         const reorder = b.reorderLevel;
         const state = stockState(onHand, reorder);
         // The bar reads against the reorder level, which is what "enough" means
-        // for this item — a full bar is 125% of it, where the design stops worrying.
-        const pct = reorder > 0 ? Math.min(100, Math.round((onHand / (reorder * 1.25)) * 100)) : 100;
+        // for this item — a full bar is 150% of it, where the design stops worrying.
+        const pct = reorder > 0 ? Math.min(100, Math.round((onHand / (reorder * 1.5)) * 100)) : 100;
         return (
           <div>
             <span
               className={cn(
-                "text-[12.5px] font-bold",
-                state.tone === "bad" ? "text-bad-600" : "text-navy-900",
+                "font-display text-[13px] font-extrabold",
+                state.tone === "bad"
+                  ? "text-bad-700"
+                  : state.tone === "warn"
+                    ? "text-warn-700"
+                    : "text-good-700",
               )}
             >
               {qty(b.quantity, 3)}
@@ -127,9 +133,13 @@ export default async function StockPage({
               <div
                 className={cn(
                   "h-full rounded-full",
-                  state.tone === "bad" ? "bg-bad-600" : state.tone === "warn" ? "bg-warn-700" : "bg-good-600",
+                  state.tone === "bad"
+                    ? "bg-[linear-gradient(90deg,#D8494A,#E8827F)]"
+                    : state.tone === "warn"
+                      ? "bg-[linear-gradient(90deg,#E8A13A,#F2C063)]"
+                      : "bg-[linear-gradient(90deg,#0089C9,#5BC8F2)]",
                 )}
-                style={{ width: `${Math.max(3, pct)}%` }}
+                style={{ width: `${pct}%` }}
               />
             </div>
           </div>

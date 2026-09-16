@@ -42,7 +42,7 @@ export default async function SchedulePage({
     );
   }
 
-  const [activities, delayReasons, extensions] = await Promise.all([
+  const [activities, extensions] = await Promise.all([
     prisma.scheduleActivity.findMany({
       where: { projectId },
       orderBy: [{ sequence: "asc" }, { plannedStart: "asc" }],
@@ -64,9 +64,6 @@ export default async function SchedulePage({
           },
         },
       },
-    }),
-    prisma.delayReason.findMany({
-      where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" },
     }),
     ctx.has(PERM.schedule.extension.view)
       ? prisma.scheduleExtension.findMany({
@@ -105,7 +102,6 @@ export default async function SchedulePage({
       workPackages={active.phases.flatMap((ph) =>
         ph.workPackages.map((w) => ({ id: w.id, code: w.code, name: w.name, phase: ph.name })),
       )}
-      delayReasons={delayReasons}
       activities={activities.map((a) => ({
         id: a.id,
         code: a.code,
@@ -127,6 +123,16 @@ export default async function SchedulePage({
         groupName: a.workPackage ? `${a.workPackage.code} — ${a.workPackage.name}` : "Unassigned activities",
         phaseName: a.workPackage?.phase.name ?? null,
         pendingExtension: a.extensions.some((e) => e.status === "AWAITING_PM" || e.status === "AWAITING_ADMIN"),
+        // The design prints the extension history under the activity's name.
+        extensions: a.extensions.map((e) => ({
+          id: e.id,
+          days: e.requestedDays,
+          reason: e.reason,
+          status: e.status,
+          newEnd: e.requestedDate.toISOString(),
+          performance: e.performance,
+          decidedBy: e.adminDecidedBy?.name ?? e.pmDecidedBy?.name ?? null,
+        })),
         predecessors: a.predecessors.map((d) => ({
           id: d.id, predecessorId: d.predecessorId, type: d.type, lagDays: d.lagDays,
           code: d.predecessor.code, name: d.predecessor.name,

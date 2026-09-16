@@ -425,7 +425,12 @@ export function ChecklistsScreen({
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-[#EDF0F8]">
                     <div
-                      className={cn("h-full rounded-full", r.score >= 90 ? "bg-good-600" : r.score >= 75 ? "bg-warn-700" : "bg-bad-600")}
+                      className={cn(
+                        "h-full rounded-full",
+                        r.score < 80
+                          ? "bg-[linear-gradient(90deg,#D8494A,#E8827F)]"
+                          : "bg-[linear-gradient(90deg,#0089C9,#5BC8F2)]",
+                      )}
                       style={{ width: `${r.score}%` }}
                     />
                   </div>

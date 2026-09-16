@@ -2,17 +2,13 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CalendarClock, Check, Diamond, Link2, X, Zap } from "lucide-react";
+import { AlertTriangle, Check, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
-import {
-  addDependencyAction, completeActivityAction, createActivityAction,
-  removeDependencyAction, startActivityAction, updateActivityProgressAction,
-} from "./actions";
-import { LINK_LABEL, LINK_TYPES, type LinkType } from "@/lib/schedule/engine";
+import { completeActivityAction, createActivityAction, startActivityAction } from "./actions";
 import {
   decideExtensionAdminAction, decideExtensionPmAction, requestExtensionAction,
 } from "./extension-actions";
@@ -26,6 +22,10 @@ interface Activity {
   delayReason: string | null; delayNotes: string | null;
   groupId: string; groupName: string; phaseName: string | null;
   pendingExtension: boolean;
+  extensions: Array<{
+    id: string; days: number; reason: string; status: string;
+    newEnd: string; performance: string | null; decidedBy: string | null;
+  }>;
   predecessors: Array<{
     id: string; predecessorId: string; type: string; lagDays: number; code: string; name: string;
   }>;
@@ -55,9 +55,75 @@ const STATUS_TONE: Record<string, "muted" | "brand" | "good" | "bad"> = {
 
 const DAY = 86_400_000;
 
+/** The design's pill: one shape, coloured by what it says. */
+const PILL = "inline-block whitespace-nowrap rounded-full px-2.5 py-[5px] text-[10.5px] font-bold";
+
+/**
+ * The design reads an activity's state off the facts — started, finished — and
+ * leaves lateness to the flag and the verdicts beside it.
+ */
+function activityState(a: Activity) {
+  if (a.status === "COMPLETED") return "Completed";
+  return a.actualStart ? "In progress" : "Not started";
+}
+
+const STATE_PILL: Record<string, string> = {
+  Completed: "bg-good-050 text-good-700",
+  "In progress": "bg-brand-100 text-brand-700",
+  "Not started": "bg-surface-field text-navy-500",
+};
+
+/** Midnight of the day an instant falls in, so dates compare as dates. */
+const dayOf = (v: string | null | undefined) =>
+  v ? Math.floor(new Date(v).getTime() / DAY) * DAY : null;
+
+/** Inclusive length of a span, in days — the design counts both ends. */
+function spanDays(from: string | null, to: string | null): number {
+  const a = dayOf(from), b = dayOf(to);
+  return a !== null && b !== null ? Math.round((b - a) / DAY) + 1 : 0;
+}
+
+/** The distance between two dates, signed, as the variance columns read it. */
+function gapDays(from: string | null, to: string | null): number | null {
+  const a = dayOf(from), b = dayOf(to);
+  return a !== null && b !== null ? Math.round((b - a) / DAY) : null;
+}
+
+const firstDate = (list: Array<string | null>) =>
+  list.filter(Boolean).sort()[0] ?? null;
+const lastDate = (list: Array<string | null>) =>
+  list.filter(Boolean).sort().at(-1) ?? null;
+
+/**
+ * What the design measures against: the baseline is the plan, the planned date
+ * is where approved extensions have moved the finish to, and the actual dates
+ * are what happened.
+ */
+function metrics(a: Activity, todayMs: number) {
+  const ps = a.baselineStart ?? a.plannedStart;
+  const pe = a.baselineEnd ?? a.plannedEnd;
+  const re = a.plannedEnd ?? pe;
+  const finished = a.status === "COMPLETED";
+  const reMs = dayOf(re);
+  const psMs = dayOf(ps);
+  return {
+    ps, pe, re,
+    ext: Math.max(0, gapDays(pe, re) ?? 0),
+    planDays: spanDays(ps, pe),
+    startVar: gapDays(ps, a.actualStart),
+    revVar: gapDays(re, a.actualEnd),
+    onStart: Boolean(a.actualStart) && (gapDays(ps, a.actualStart) ?? 1) <= 0,
+    onDone: finished && Boolean(a.actualEnd) && (gapDays(re, a.actualEnd) ?? 1) <= 0,
+    overdue: !finished && reMs !== null && reMs < todayMs,
+    dueToday: !finished && reMs === todayMs,
+    startToday: !a.actualStart && psMs === todayMs,
+    startDue: !a.actualStart && psMs !== null && psMs < todayMs,
+  };
+}
+
 export function ScheduleScreen({
   projects, activeProjectId, projectManager, tab, reportTab, activities, extensions,
-  workPackages, delayReasons, can, nowMs,
+  workPackages, can, nowMs,
 }: {
   projects: Array<{ id: string; name: string; code: string }>;
   activeProjectId: string;
@@ -67,19 +133,20 @@ export function ScheduleScreen({
   activities: Activity[];
   extensions: Extension[];
   workPackages: Array<{ id: string; code: string; name: string; phase: string }>;
-  delayReasons: Array<{ id: string; name: string }>;
   can: Record<string, boolean>;
   nowMs: number;
 }) {
   const router = useRouter();
-  const [adding, setAdding] = React.useState(false);
-  const [updating, setUpdating] = React.useState<Activity | null>(null);
+  const [adding, setAdding] = React.useState<string | null>(null);
   const [extending, setExtending] = React.useState<Activity | null>(null);
   const [deciding, setDeciding] = React.useState<Extension | null>(null);
-  const [linking, setLinking] = React.useState<Activity | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
+
+  // "Today" is fixed once, from the clock the page read, so every row agrees.
+  const todayMs = Math.floor(nowMs / DAY) * DAY;
+  const todayIso = new Date(todayMs).toISOString();
 
   const done = activities.filter((a) => a.status === "COMPLETED");
   const pendingExt = extensions.filter((e) => e.status === "AWAITING_PM" || e.status === "AWAITING_ADMIN");
@@ -133,15 +200,6 @@ export function ScheduleScreen({
     router.refresh();
   }
 
-
-
-  function slipDays(a: Activity): number {
-    if (!a.baselineEnd) return 0;
-    const compare = a.actualEnd ?? a.plannedEnd;
-    if (!compare) return 0;
-    return Math.round((new Date(compare).getTime() - new Date(a.baselineEnd).getTime()) / DAY);
-  }
-
   return (
     <div className="animate-fade-up">
       {error && <div className="mb-3"><Alert tone="error">{error}</Alert></div>}
@@ -154,7 +212,7 @@ export function ScheduleScreen({
           onChange={(e) => router.push(`/schedule?project=${e.target.value}&tab=${tab}`)}
           className="w-auto min-w-[220px] bg-white font-bold"
         >
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </Select>
 
         <div className="flex flex-wrap gap-1.5">
@@ -185,7 +243,7 @@ export function ScheduleScreen({
 
         <div className="flex-1" />
         {tab === "plan" && can.create && (
-          <Button size="lg" onClick={() => setAdding(true)}>
+          <Button size="lg" onClick={() => setAdding("")}>
 + Main category
           </Button>
         )}
@@ -212,143 +270,237 @@ export function ScheduleScreen({
             </Card>
           ) : (
             <div className="flex flex-col gap-3">
-              {[...groups.entries()].map(([id, g]) => (
-                <Card key={id} className="overflow-hidden">
-                  <div className="flex flex-wrap items-center gap-x-[18px] gap-y-3 border-b border-line-300 bg-surface-sunken px-5 py-3.5">
-                    <div className="min-w-0 flex-[1_1_210px]">
-                      <div className="font-display text-[15px] font-bold text-navy-950">{g.name}</div>
-                      <div className="mt-0.5 text-[11px] font-medium text-muted-400">
-                        {g.phase ? `${g.phase} · ` : ""}PM {projectManager ?? "unassigned"}
+              {[...groups.entries()].map(([id, g]) => {
+                const doneN = g.items.filter((a) => a.status === "COMPLETED").length;
+                const allDone = g.items.length > 0 && doneN === g.items.length;
+                const running = g.items.some((a) => a.actualStart && a.status !== "COMPLETED");
+                const state = allDone ? "Completed" : running || doneN ? "In progress" : "Not started";
+                const pct = g.items.length ? Math.round((doneN / g.items.length) * 100) : 0;
+                const ms = g.items.map((a) => metrics(a, todayMs));
+                const ps = firstDate(ms.map((m) => m.ps));
+                const pe = lastDate(ms.map((m) => m.re));
+                const as = firstDate(g.items.map((a) => a.actualStart));
+                const ae = allDone ? lastDate(g.items.map((a) => a.actualEnd)) : null;
+                return (
+                  <Card key={id} className="overflow-hidden">
+                    <div className="flex flex-wrap items-center gap-x-[18px] gap-y-3 border-b border-line-300 bg-surface-sunken px-5 py-[15px]">
+                      <div className="min-w-0 flex-[1_1_210px]">
+                        <div className="flex flex-wrap items-center gap-[9px]">
+                          <span className="font-display text-[15px] font-bold text-navy-950">{g.name}</span>
+                          <span className={cn(PILL, STATE_PILL[state])}>{state}</span>
+                        </div>
+                        <div className="mt-0.5 text-[11px] font-medium text-muted-400">
+                          Main category · PM {projectManager ?? "unassigned"}
+                        </div>
                       </div>
+                      <div className="min-w-[150px]">
+                        <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">PLANNED</div>
+                        <div className="mt-[3px] text-[12px] font-semibold text-navy-900">
+                          {formatDate(ps)} → {formatDate(pe)}
+                        </div>
+                        <div className="text-[11px] font-semibold text-muted-600">{spanDays(ps, pe)} days</div>
+                      </div>
+                      <div className="min-w-[150px]">
+                        <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">ACTUAL</div>
+                        <div className="mt-[3px] text-[12px] font-semibold text-navy-900">
+                          {as ? `${formatDate(as)} → ${ae ? formatDate(ae) : "running"}` : "not started"}
+                        </div>
+                        <div className="text-[11px] font-semibold text-muted-600">
+                          {ae ? `${spanDays(as, ae)} days` : as ? `${spanDays(as, todayIso)} days so far` : "—"}
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-[1_1_190px]">
+                        <div className="text-[12px] font-bold text-brand-700">
+                          {pct}% · {doneN} of {g.items.length} sub-activities complete
+                        </div>
+                        <div className="mt-[7px] h-[7px] max-w-[220px] overflow-hidden rounded-full bg-[#EEF1F8]">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${pct}%`,
+                              background: allDone
+                                ? "linear-gradient(90deg,#1F9D66,#5BC8A2)"
+                                : "linear-gradient(90deg,#0089C9,#5BC8F2)",
+                            }}
+                          />
+                        </div>
+                        <div className="mt-[5px] text-[10.5px] font-medium text-[#A8AEC8]">
+                          {allDone
+                            ? "Auto-completed — every sub-activity is closed"
+                            : "Completes automatically when all sub-activities are closed"}
+                        </div>
+                      </div>
+                      {can.create && (
+                        <button
+                          type="button"
+                          onClick={() => setAdding(id)}
+                          className="ml-auto shrink-0 cursor-pointer whitespace-nowrap rounded-[8px] border border-line-400 bg-white px-[13px] py-[9px] text-[11.5px] font-bold text-brand-700 transition-colors hover:border-brand-500 hover:bg-brand-100"
+                        >
+                          + Sub-activity
+                        </button>
+                      )}
                     </div>
-                    {(() => {
-                      const closed = g.items.filter((a) => a.status === "COMPLETED").length;
-                      const pct = Math.round(
-                        g.items.reduce((sum, a) => sum + a.progressPct, 0) / g.items.length,
-                      );
-                      const starts = g.items.map((a) => a.plannedStart).filter(Boolean) as string[];
-                      const ends = g.items.map((a) => a.plannedEnd).filter(Boolean) as string[];
-                      const from = starts.sort()[0];
-                      const to = ends.sort().at(-1);
-                      return (
-                        <>
-                          <div className="min-w-[150px]">
-                            <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">PLANNED</div>
-                            <div className="text-[12.5px] font-semibold text-navy-900">
-                              {from ? formatDate(from) : "—"} → {to ? formatDate(to) : "—"}
-                            </div>
-                          </div>
-                          <div className="min-w-[200px] flex-1">
-                            <div className="text-[12.5px] font-bold text-brand-700">
-                              {pct}% · {closed} of {g.items.length} sub-activities complete
-                            </div>
-                            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#EDF0F8]">
-                              <div
-                                className="h-full rounded-full bg-brand-500"
-                                style={{ width: `${Math.max(2, pct)}%` }}
-                              />
-                            </div>
-                            <div className="mt-1 text-[11px] font-medium text-muted-400">
-                              Completes automatically when all sub-activities are closed
-                            </div>
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
 
-                  <ul className="divide-y divide-line-100">
-                    {g.items.map((a) => {
-                      const slip = slipDays(a);
-                      return (
-                        <li key={a.id} className={cn("px-5 py-3", a.status === "DELAYED" && "bg-bad-050/40")}>
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                            <div className="min-w-0 flex-[1_1_240px]">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                {a.isMilestone && <Diamond className="h-3 w-3 fill-warn-700 text-warn-700" />}
-                                <span className="text-[13px] font-semibold text-navy-900">{a.name}</span>
-                                {a.isCriticalPath && can.viewCriticalPath && (
-                                  <Zap className="h-3 w-3 fill-warn-700 text-warn-700" />
-                                )}
-                                {a.pendingExtension && <Badge tone="warn">extension pending</Badge>}
-                              </div>
-                              <div className="mt-0.5 text-[11px] font-medium text-muted-400">
-                                {a.code}
-                                {a.delayReason && ` · delay: ${a.delayReason}`}
-                              </div>
-                            </div>
-
-                            {can.viewBaseline && (
-                              <div className="min-w-[132px]">
-                                <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">BASELINE</div>
-                                <div className="text-[11.5px] font-medium text-navy-500">
-                                  {formatDate(a.baselineStart)} – {formatDate(a.baselineEnd)}
-                                </div>
-                              </div>
+                    <div className="overflow-x-auto">
+                      {g.items.map((a) => {
+                        const m = metrics(a, todayMs);
+                        const state = activityState(a);
+                        const flag = m.overdue
+                          ? { text: "OVERDUE", bg: "bg-bad-600" }
+                          : m.dueToday
+                            ? { text: "DUE TODAY", bg: "bg-[#E8A13A]" }
+                            : m.startToday
+                              ? { text: "START TODAY", bg: "bg-brand-500" }
+                              : m.startDue && state === "Not started"
+                                ? { text: "START OVERDUE", bg: "bg-bad-600" }
+                                : null;
+                        const pending = a.extensions.find(
+                          (e) => e.status === "AWAITING_PM" || e.status === "AWAITING_ADMIN",
+                        );
+                        return (
+                          <div
+                            key={a.id}
+                            className={cn(
+                              "grid min-w-[1150px] grid-cols-[minmax(200px,1.5fr)_190px_150px_190px_minmax(180px,1fr)_210px] items-center gap-3 border-b border-[#F2F5FB] py-[13px] pl-11 pr-5 last:border-0",
+                              m.overdue && "bg-[#FEF7F7]",
                             )}
-                            <div className="min-w-[132px]">
-                              <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">PLANNED</div>
-                              <div className={cn("text-[11.5px] font-medium", slip > 0 ? "text-warn-700" : "text-navy-500")}>
-                                {formatDate(a.plannedStart)} – {formatDate(a.plannedEnd)}
-                                {slip > 0 && <span className="ml-1 font-bold">+{slip}d</span>}
+                          >
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-[12.5px] font-semibold text-navy-900">{a.name}</span>
+                                {flag && (
+                                  <span
+                                    className={cn(
+                                      "inline-flex rounded-full px-[9px] py-1 text-[8.5px] font-extrabold tracking-[.07em] text-white",
+                                      flag.bg,
+                                    )}
+                                  >
+                                    {flag.text}
+                                  </span>
+                                )}
                               </div>
+                              <div className="mt-[5px]">
+                                <span className={cn(PILL, STATE_PILL[state])}>{state}</span>
+                              </div>
+                              {a.extensions.map((x) => (
+                                <div key={x.id} className="mt-1.5">
+                                  <div className="text-[11px] font-medium text-navy-500">
+                                    +{x.days} d · {x.reason}
+                                  </div>
+                                  <span
+                                    className={cn(
+                                      PILL,
+                                      x.status === "GRANTED"
+                                        ? x.performance === "Avoidable"
+                                          ? "bg-warn-050 text-warn-700"
+                                          : "bg-good-050 text-good-700"
+                                        : x.status === "REFUSED"
+                                          ? "bg-bad-050 text-bad-700"
+                                          : "bg-surface-field text-navy-500",
+                                    )}
+                                  >
+                                    {x.status === "GRANTED"
+                                      ? `Granted to ${formatDate(x.newEnd)}${x.performance ? ` · ${x.performance}` : ""}${x.decidedBy ? ` · ${x.decidedBy}` : ""}`
+                                      : x.status === "REFUSED"
+                                        ? `Refused${x.decidedBy ? ` by ${x.decidedBy}` : ""}`
+                                        : "Pending approval"}
+                                  </span>
+                                </div>
+                              ))}
                             </div>
-                            <div className="min-w-[132px]">
-                              <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">ACTUAL</div>
-                              <div className="text-[11.5px] font-medium text-navy-500">
-                                {a.actualStart ? `${formatDate(a.actualStart)} – ${formatDate(a.actualEnd)}` : "not started"}
+
+                            <div>
+                              <div className="text-[10px] font-semibold text-muted-400">PLANNED</div>
+                              <div className="mt-0.5 text-[12px] font-semibold text-navy-900">
+                                {formatDate(m.ps)} → {formatDate(m.pe)}
+                              </div>
+                              <div className="text-[11px] font-semibold text-muted-600">{m.planDays} days</div>
+                            </div>
+
+                            <div>
+                              <div className="text-[10px] font-semibold text-warn-700">REVISED</div>
+                              <div className="mt-0.5 text-[12px] font-semibold text-warn-800">
+                                {m.ext > 0 ? `${formatDate(m.re)}  (+${m.ext} d)` : "—"}
                               </div>
                             </div>
 
-                            <div className="w-[132px]">
-                              <div className="mb-1 flex justify-between">
-                                <span className="num text-[11.5px] font-bold text-navy-600">{a.progressPct}%</span>
-                                <Badge tone={STATUS_TONE[a.status] ?? "muted"}>{a.status.replace(/_/g, " ")}</Badge>
+                            <div>
+                              <div className="text-[10px] font-semibold text-muted-400">ACTUAL</div>
+                              <div className="mt-0.5 text-[12px] font-semibold text-navy-900">
+                                {a.actualStart
+                                  ? `${formatDate(a.actualStart)} → ${a.actualEnd ? formatDate(a.actualEnd) : "running"}`
+                                  : "—"}
                               </div>
-                              <div className="h-[6px] overflow-hidden rounded-full bg-[#EDF0F8]">
-                                <div
-                                  className={cn("h-full rounded-full", a.status === "DELAYED" ? "bg-bad-600" : "bg-brand-500")}
-                                  style={{ width: `${Math.max(2, a.progressPct)}%` }}
-                                />
+                              <div className="text-[11px] font-semibold text-muted-600">
+                                {a.actualEnd
+                                  ? `${spanDays(a.actualStart, a.actualEnd)} days`
+                                  : a.actualStart
+                                    ? `${spanDays(a.actualStart, todayIso)} days so far`
+                                    : "—"}
                               </div>
                             </div>
 
-                            <div className="flex shrink-0 gap-1">
-                              {/* The design's one-click row actions, before the fuller dialog. */}
+                            <div className="flex flex-col items-start gap-[5px]">
+                              {a.actualStart && (
+                                <span
+                                  className={cn(PILL, m.onStart ? "bg-good-050 text-good-700" : "bg-warn-050 text-warn-700")}
+                                >
+                                  {m.onStart ? "✓ On-time start" : `▲ Late start ${m.startVar} d`}
+                                </span>
+                              )}
+                              {a.status === "COMPLETED" && (
+                                <span
+                                  className={cn(PILL, m.onDone ? "bg-good-050 text-good-700" : "bg-bad-050 text-bad-700")}
+                                >
+                                  {m.onDone ? "✓ On-time completion" : `▲ Late by ${m.revVar} d`}
+                                </span>
+                              )}
+                              {pending && (
+                                <span className={cn(PILL, "bg-warn-050 text-warn-700")}>
+                                  Extension +{pending.days} d · awaiting{" "}
+                                  {pending.status === "AWAITING_PM" ? "PM" : "Admin"}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap justify-end gap-[7px]">
                               {can.startActivity && !a.actualStart && a.status !== "COMPLETED" && (
-                                <Button size="xs" variant="secondary" loading={busy === `start:${a.id}`} onClick={() => quickStart(a)}>
+                                <button
+                                  type="button"
+                                  disabled={busy === `start:${a.id}`}
+                                  onClick={() => quickStart(a)}
+                                  className="cursor-pointer whitespace-nowrap rounded-[8px] bg-brand-500 px-3.5 py-[9px] text-[11.5px] font-bold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
+                                >
                                   ▶ Start
-                                </Button>
+                                </button>
                               )}
-                              {can.completeActivity && a.status !== "COMPLETED" && (
-                                <Button size="xs" variant="success" loading={busy === `done:${a.id}`} onClick={() => quickComplete(a)}>
+                              {can.completeActivity && a.status !== "COMPLETED" && a.actualStart && (
+                                <button
+                                  type="button"
+                                  disabled={busy === `done:${a.id}`}
+                                  onClick={() => quickComplete(a)}
+                                  className="cursor-pointer whitespace-nowrap rounded-[8px] bg-good-600 px-3.5 py-[9px] text-[11.5px] font-bold text-white transition-colors hover:bg-good-700 disabled:opacity-60"
+                                >
                                   ✓ Completed
-                                </Button>
+                                </button>
                               )}
-                              {can.updateProgress && (
-                                <Button size="xs" variant="secondary" onClick={() => setUpdating(a)}>Progress</Button>
-                              )}
-                              {can.requestExtension && !a.pendingExtension && a.status !== "COMPLETED" && (
-                                <Button size="xs" variant="ghost" onClick={() => setExtending(a)}>
-                                  <CalendarClock className="h-3 w-3" />
-                                </Button>
-                              )}
-                              {can.manageDependencies && (
-                                <Button size="xs" variant="plain" title="Dependencies" onClick={() => setLinking(a)}>
-                                  <Link2 className="h-3 w-3" />
-                                  {a.predecessors.length > 0 && (
-                                    <span className="num text-[10px] font-bold">{a.predecessors.length}</span>
-                                  )}
-                                </Button>
+                              {can.requestExtension && !pending && a.status !== "COMPLETED" && (
+                                <button
+                                  type="button"
+                                  onClick={() => setExtending(a)}
+                                  className="cursor-pointer whitespace-nowrap rounded-[8px] border border-[#F3DDBB] bg-warn-050 px-[13px] py-[9px] text-[11.5px] font-bold text-warn-800 transition-colors hover:bg-[#F8E6C8]"
+                                >
+                                  ⏱ Extension
+                                </button>
                               )}
                             </div>
                           </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </Card>
-              ))}
+                        );
+                      })}
+                    </div>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </>
@@ -516,21 +668,13 @@ export function ScheduleScreen({
         />
       )}
 
-      {adding && (
+      {adding !== null && (
         <ActivityModal
           projectId={activeProjectId}
           workPackages={workPackages}
-          onClose={() => setAdding(false)}
-          onDone={(m) => { setAdding(false); setNotice(m); router.refresh(); }}
-        />
-      )}
-      {updating && (
-        <ProgressModal
-          activity={updating}
-          delayReasons={delayReasons}
-          nowMs={nowMs}
-          onClose={() => setUpdating(null)}
-          onDone={(m) => { setUpdating(null); setNotice(m); router.refresh(); }}
+          defaultWorkPackageId={adding}
+          onClose={() => setAdding(null)}
+          onDone={(m) => { setAdding(null); setNotice(m); router.refresh(); }}
         />
       )}
       {extending && (
@@ -538,14 +682,6 @@ export function ScheduleScreen({
           activity={extending}
           onClose={() => setExtending(null)}
           onDone={(m) => { setExtending(null); setNotice(m); router.refresh(); }}
-        />
-      )}
-      {linking && (
-        <DependencyModal
-          activity={linking}
-          candidates={activities.filter((x) => x.id !== linking.id)}
-          onClose={() => setLinking(null)}
-          onDone={(m) => { setLinking(null); setNotice(m); router.refresh(); }}
         />
       )}
       {deciding && (
@@ -562,10 +698,12 @@ export function ScheduleScreen({
 /* -------------------------------- Modals ---------------------------------- */
 
 function ActivityModal({
-  projectId, workPackages, onClose, onDone,
+  projectId, workPackages, defaultWorkPackageId, onClose, onDone,
 }: {
   projectId: string;
   workPackages: Array<{ id: string; code: string; name: string; phase: string }>;
+  /** The category the design opened this from, already chosen. */
+  defaultWorkPackageId: string;
   onClose: () => void; onDone: (m: string) => void;
 }) {
   const [error, setError] = React.useState<string | null>(null);
@@ -604,7 +742,7 @@ function ActivityModal({
             <Input name="name" required placeholder="Slab casting — 7th floor" />
           </Field>
           <Field label="Main category" className="sm:col-span-2" hint="Groups the activity in the plan.">
-            <Select name="workPackageId" defaultValue="">
+            <Select name="workPackageId" defaultValue={defaultWorkPackageId}>
               <option value="">— Unassigned —</option>
               {workPackages.map((w) => (
                 <option key={w.id} value={w.id}>{w.phase} · {w.code} — {w.name}</option>
@@ -621,86 +759,6 @@ function ActivityModal({
           </Field>
         </div>
       </form>
-    </Modal>
-  );
-}
-
-function ProgressModal({
-  activity, delayReasons, nowMs, onClose, onDone,
-}: {
-  activity: Activity;
-  delayReasons: Array<{ id: string; name: string }>;
-  nowMs: number;
-  onClose: () => void; onDone: (m: string) => void;
-}) {
-  const [progress, setProgress] = React.useState(String(activity.progressPct));
-  const [actualStart, setActualStart] = React.useState(activity.actualStart?.slice(0, 10) ?? "");
-  const [actualEnd, setActualEnd] = React.useState(activity.actualEnd?.slice(0, 10) ?? "");
-  const [delayReasonId, setDelayReasonId] = React.useState("");
-  const [delayNotes, setDelayNotes] = React.useState(activity.delayNotes ?? "");
-  const [error, setError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  const plannedEnd = activity.plannedEnd ? new Date(activity.plannedEnd).getTime() : null;
-  const pct = Number(progress) || 0;
-  const finishing = actualEnd ? new Date(actualEnd).getTime() : pct >= 100 ? nowMs : null;
-  const late =
-    plannedEnd !== null &&
-    ((finishing !== null && finishing > plannedEnd) || (finishing === null && pct < 100 && nowMs > plannedEnd));
-  const needsReason = late && !activity.delayReason && !delayReasonId;
-
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    const res = await updateActivityProgressAction(
-      activity.id, pct, actualStart || null, actualEnd || null, delayReasonId || null, delayNotes,
-    );
-    setBusy(false);
-    if (!res.ok) setError(res.error);
-    else onDone(`${activity.code} updated to ${pct}%.`);
-  }
-
-  return (
-    <Modal
-      open onClose={onClose} title={`Progress — ${activity.name}`}
-      description={`Planned ${formatDate(activity.plannedStart)} – ${formatDate(activity.plannedEnd)}`}
-      size="sm"
-      footer={
-        <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} loading={busy} disabled={needsReason}>Save progress</Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        {error && <Alert tone="error">{error}</Alert>}
-        {late && (
-          <Alert tone="warn" title="This activity has slipped">
-            A delay reason is required before the update can be saved — that is what makes the
-            variance report meaningful.
-          </Alert>
-        )}
-        <Field label="Progress (%)" required>
-          <Input type="number" min={0} max={100} value={progress} onChange={(e) => setProgress(e.target.value)} className="num text-right" />
-        </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Actual start"><Input type="date" value={actualStart} onChange={(e) => setActualStart(e.target.value)} /></Field>
-          <Field label="Actual finish"><Input type="date" value={actualEnd} onChange={(e) => setActualEnd(e.target.value)} /></Field>
-        </div>
-        {(late || activity.delayReason) && (
-          <>
-            <Field label="Delay reason" required={needsReason}>
-              <Select value={delayReasonId} onChange={(e) => setDelayReasonId(e.target.value)}>
-                <option value="">{activity.delayReason ? `Keep: ${activity.delayReason}` : "Select a reason…"}</option>
-                {delayReasons.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </Select>
-            </Field>
-            <Field label="Delay notes">
-              <Textarea value={delayNotes} onChange={(e) => setDelayNotes(e.target.value)} rows={2} />
-            </Field>
-          </>
-        )}
-      </div>
     </Modal>
   );
 }
@@ -1013,123 +1071,5 @@ function ScheduleReports({
         </div>
       )}
     </div>
-  );
-}
-
-/* ------------------------------ Dependencies ------------------------------ */
-
-/**
- * What an activity waits on. Adding a link reschedules the project straight
- * away, so the message says what moved rather than leaving it to be noticed.
- */
-function DependencyModal({
-  activity, candidates, onClose, onDone,
-}: {
-  activity: Activity;
-  candidates: Activity[];
-  onClose: () => void;
-  onDone: (m: string) => void;
-}) {
-  const [predecessorId, setPredecessorId] = React.useState("");
-  const [type, setType] = React.useState<LinkType>("FS");
-  const [lag, setLag] = React.useState("0");
-  const [busy, setBusy] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-
-  const linked = new Set(activity.predecessors.map((p) => p.predecessorId));
-  const options = candidates.filter((c) => !linked.has(c.id));
-  const moved = (n: number) => (n > 0 ? ` ${n} downstream activit${n === 1 ? "y" : "ies"} moved.` : "");
-
-  async function add() {
-    setBusy("add");
-    setError(null);
-    const res = await addDependencyAction(activity.id, predecessorId, type, Number(lag));
-    setBusy(null);
-    if (!res.ok) { setError(res.error); return; }
-    const chosen = options.find((o) => o.id === predecessorId);
-    onDone(`${activity.code} now waits on ${chosen?.code ?? "that activity"}.${moved(res.data.shifted)}`);
-  }
-
-  async function remove(dependencyId: string, code: string) {
-    setBusy(dependencyId);
-    setError(null);
-    const res = await removeDependencyAction(dependencyId);
-    setBusy(null);
-    if (!res.ok) { setError(res.error); return; }
-    onDone(`${activity.code} no longer waits on ${code}.`);
-  }
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={`Dependencies · ${activity.code}`}
-      description="What this activity waits on. When any of them slips, this moves — and so does everything after it."
-      size="md"
-    >
-      {error && <Alert tone="error">{error}</Alert>}
-
-      <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">Waits on</p>
-      {activity.predecessors.length === 0 ? (
-        <p className="mb-4 text-[12.5px] font-medium text-muted-500">
-          Nothing — this activity starts on its own planned date.
-        </p>
-      ) : (
-        <ul className="mb-4 space-y-1.5">
-          {activity.predecessors.map((p) => (
-            <li key={p.id} className="flex items-center gap-2 rounded-[9px] border border-line-300 px-3 py-2">
-              <span className="num shrink-0 text-[11px] font-bold text-muted-500">{p.code}</span>
-              <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-navy-900">{p.name}</span>
-              <Badge tone="slate">
-                {LINK_LABEL[p.type as LinkType] ?? p.type}
-                {p.lagDays ? ` · ${p.lagDays > 0 ? "+" : ""}${p.lagDays}d` : ""}
-              </Badge>
-              <button
-                type="button"
-                title="Remove link"
-                disabled={busy !== null}
-                onClick={() => remove(p.id, p.code)}
-                className="grid h-[24px] w-[24px] shrink-0 place-items-center rounded-[7px] text-muted-400 transition-colors hover:bg-bad-050 hover:text-bad-600 disabled:opacity-40"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <p className="mb-2 text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">Add a link</p>
-      {options.length === 0 ? (
-        <p className="text-[12.5px] font-medium text-muted-500">
-          Every other activity in this project is already linked.
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_160px_96px]">
-          <Field label="Waits on">
-            <Select value={predecessorId} onChange={(e) => setPredecessorId(e.target.value)}>
-              <option value="">Choose an activity…</option>
-              {options.map((c) => (
-                <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Link">
-            <Select value={type} onChange={(e) => setType(e.target.value as LinkType)}>
-              {LINK_TYPES.map((t) => <option key={t} value={t}>{LINK_LABEL[t]}</option>)}
-            </Select>
-          </Field>
-          <Field label="Lag (days)">
-            <Input type="number" step={1} value={lag} onChange={(e) => setLag(e.target.value)} />
-          </Field>
-        </div>
-      )}
-
-      <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>Close</Button>
-        <Button onClick={add} loading={busy === "add"} disabled={!predecessorId || busy !== null}>
-          Add link
-        </Button>
-      </div>
-    </Modal>
   );
 }
