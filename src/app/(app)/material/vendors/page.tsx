@@ -90,7 +90,6 @@ export default async function VendorsPage({
         <Card>
           <EmptyState
             title={filtered ? "No vendors match these filters" : "No vendors yet"}
-            description="Vendors are created under Masters → Vendors; their performance appears here."
           />
         </Card>
       ) : (

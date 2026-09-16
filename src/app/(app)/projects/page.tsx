@@ -74,13 +74,6 @@ export default async function ProjectsPage({
           <EmptyState
             icon={<Building2 className="h-8 w-8" />}
             title={filtered ? "No projects match" : "No projects yet"}
-            description={
-              filtered
-                ? "Nothing matches this search and status. Clear the filters to see every project."
-                : ctx.canAccessAllProjects
-                ? "Create the first project — every task, indent, purchase order and unit hangs off one."
-                : "You are not mapped to any project yet. An administrator can map you from Administration → Users."
-            }
           />
         </Card>
       ) : (

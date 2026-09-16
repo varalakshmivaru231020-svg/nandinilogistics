@@ -189,7 +189,6 @@ export default async function StockPage({
         <Card>
           <EmptyState
             title={filtered ? "No stock matches these filters" : "No stock recorded yet"}
-            description="Stock enters the ledger when a goods receipt is posted."
           />
         </Card>
       ) : (
