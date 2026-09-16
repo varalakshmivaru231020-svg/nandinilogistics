@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { grnMatch } from "@/lib/material/list-filters";
 import { deliveryLabel } from "@/lib/material/po-display";
-import { formatDateTime, money, qty } from "@/lib/utils";
+import { formatDateTime, moneyShort, qty } from "@/lib/utils";
 import { GrnDetail } from "./grn-detail";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -34,7 +34,7 @@ export default async function GrnDetailPage({ params }: { params: Promise<{ id: 
       },
       items: {
         include: {
-          item: { select: { code: true, name: true, uom: { select: { code: true } } } },
+          item: { select: { code: true, name: true, uom: { select: { name: true } } } },
           poItem: { select: { orderedQty: true } },
         },
       },
@@ -57,7 +57,7 @@ export default async function GrnDetailPage({ params }: { params: Promise<{ id: 
   const short = grn.items.reduce((s, i) => s + Number(i.shortQty), 0);
   const match = grnMatch(grn.status, rejected, short, invoice ? 1 : 0);
 
-  const uom = grn.items[0]?.item.uom.code ?? "";
+  const uom = grn.items[0]?.item.uom.name ?? "";
   const refs = [
     ...new Set(
       [
@@ -81,7 +81,7 @@ export default async function GrnDetailPage({ params }: { params: Promise<{ id: 
         receiver: grn.receivedBy.name,
         match: match.label,
         matchTone: match.tone,
-        poValue: canSeeRate ? money(Number(grn.purchaseOrder.totalAmount)) : "—",
+        poValue: canSeeRate ? moneyShort(Number(grn.purchaseOrder.totalAmount)) : "—",
         poDelivery: deliveryLabel(
           grn.purchaseOrder.expectedDate,
           grn.purchaseOrder.status,
@@ -107,7 +107,7 @@ export default async function GrnDetailPage({ params }: { params: Promise<{ id: 
         const ordered = Number(l.poItem?.orderedQty ?? 0);
         const rej = Number(l.rejectedQty);
         const sh = Number(l.shortQty);
-        const unit = l.item.uom.code;
+        const unit = l.item.uom.name;
         return {
           id: l.id,
           code: l.item.code,

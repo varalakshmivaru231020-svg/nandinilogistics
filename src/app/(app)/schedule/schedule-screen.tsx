@@ -6,7 +6,7 @@ import { AlertTriangle, Check, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { Alert, Card, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
 import { completeActivityAction, createActivityAction, startActivityAction } from "./actions";
 import {
@@ -47,10 +47,6 @@ interface Extension {
 const EXT_STAGE: Record<string, { label: string; pill: string }> = {
   AWAITING_PM: { label: "AWAITING PROJECT MANAGER", pill: "bg-[#E8A13A] text-white" },
   AWAITING_ADMIN: { label: "AWAITING ADMIN", pill: "bg-[#6A46C8] text-white" },
-};
-
-const STATUS_TONE: Record<string, "muted" | "brand" | "good" | "bad"> = {
-  NOT_STARTED: "muted", IN_PROGRESS: "brand", COMPLETED: "good", DELAYED: "bad",
 };
 
 const DAY = 86_400_000;
@@ -661,9 +657,9 @@ export function ScheduleScreen({
       {tab === "reports" && can.viewReports && (
         <ScheduleReports
           activities={activities}
-          extensions={extensions}
           reportTab={reportTab}
           projectId={activeProjectId}
+          projectManager={projectManager}
           nowMs={nowMs}
         />
       )}
@@ -912,52 +908,64 @@ function DecideModal({
 /* ------------------------------ Schedule reports --------------------------- */
 
 /**
- * The design's Reports tab: a plan report (baseline against actual, activity by
- * activity) and a performance report (how the slip is distributed). Both read
- * the activities already on screen, so what the report says and what the plan
- * shows can never disagree.
+ * The design's Reports tab: schedule against actual, activity by activity, and
+ * how the Project Manager fared. Both read the activities already on screen, so
+ * what the report says and what the plan shows can never disagree.
  */
 function ScheduleReports({
-  activities, extensions, reportTab, projectId, nowMs,
+  activities, reportTab, projectId, projectManager, nowMs,
 }: {
   activities: Activity[];
-  extensions: Extension[];
   reportTab: "plan" | "performance";
   projectId: string;
+  projectManager: string | null;
   nowMs: number;
 }) {
   const router = useRouter();
+  const todayMs = Math.floor(nowMs / DAY) * DAY;
+  const todayIso = new Date(todayMs).toISOString();
 
-  const rows = activities.map((a) => {
-    const baseline = a.baselineEnd ? new Date(a.baselineEnd).getTime() : null;
-    const finish = a.actualEnd
-      ? new Date(a.actualEnd).getTime()
-      : a.plannedEnd
-        ? new Date(a.plannedEnd).getTime()
-        : null;
-    const slipDays = baseline !== null && finish !== null ? Math.round((finish - baseline) / DAY) : null;
-    const overdue = !a.actualEnd && a.plannedEnd !== null && new Date(a.plannedEnd).getTime() < nowMs;
-    return { ...a, slipDays, overdue };
-  });
+  const rows = activities.map((a) => ({ a, m: metrics(a, todayMs) }));
 
-  const slipped = rows.filter((r) => (r.slipDays ?? 0) > 0);
-  const onTime = rows.filter((r) => r.actualEnd && (r.slipDays ?? 0) <= 0);
-  const worst = [...slipped].sort((a, b) => (b.slipDays ?? 0) - (a.slipDays ?? 0)).slice(0, 8);
-  const totalSlip = slipped.reduce((s, r) => s + (r.slipDays ?? 0), 0);
+  const plannedDays = rows.reduce((n, r) => n + r.m.planDays, 0);
+  const actualDays = rows
+    .filter((r) => r.a.actualEnd)
+    .reduce((n, r) => n + spanDays(r.a.actualStart, r.a.actualEnd), 0);
+  const grantedDays = rows.reduce((n, r) => n + r.m.ext, 0);
+  const slipDays = rows
+    .filter((r) => r.a.actualEnd)
+    .reduce((n, r) => n + Math.max(0, r.m.revVar ?? 0), 0);
+
+  // One project, one Project Manager — the design scores them on how the plan
+  // was kept, with genuine extensions excused and avoidable ones charged for.
+  const started = rows.filter((r) => r.a.actualStart);
+  const finished = rows.filter((r) => r.a.status === "COMPLETED");
+  const onStart = started.filter((r) => r.m.onStart).length;
+  const onDone = finished.filter((r) => r.m.onDone).length;
+  const granted = activities.flatMap((a) => a.extensions.filter((e) => e.status === "GRANTED"));
+  const genuine = granted.filter((e) => e.performance !== "Avoidable").length;
+  const avoidable = granted.filter((e) => e.performance === "Avoidable").length;
+  const base = started.length + finished.length
+    ? Math.round(((onStart + onDone) / (started.length + finished.length)) * 100)
+    : 0;
+  const score = Math.max(0, base - avoidable * 10);
+
+  const TH_R = "border-b border-line-300 bg-surface-sunken px-[13px] py-[11px] text-[10px] font-bold uppercase tracking-[.08em] text-muted-500 whitespace-nowrap";
+  const TD_R = "border-b border-[#F0F3FA] px-[13px] py-3 text-[12px] font-semibold text-navy-600";
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        {([["plan", "Plan vs actual"], ["performance", "Performance"]] as const).map(([key, label]) => (
+      <div className="mb-3.5 flex flex-wrap gap-1.5">
+        {([["plan", "Schedule vs actual"], ["performance", "Project Manager performance"]] as const).map(([key, label]) => (
           <button
             key={key}
             type="button"
             onClick={() => router.push(`/schedule?project=${projectId}&tab=reports&report=${key}`)}
             className={cn(
-              "rounded-[9px] border px-3.5 py-2 text-[12px] font-bold transition-colors",
+              "cursor-pointer rounded-full border px-[15px] py-[9px] text-[12px] font-semibold transition-colors",
               reportTab === key
                 ? "border-brand-500 bg-brand-100 text-brand-700"
-                : "border-line-400 bg-white text-muted-600 hover:bg-surface-hover",
+                : "border-line-400 bg-white text-navy-500 hover:border-brand-500",
             )}
           >
             {label}
@@ -966,108 +974,197 @@ function ScheduleReports({
       </div>
 
       {reportTab === "plan" ? (
-        <Card className="overflow-x-auto">
-          <table className="w-full min-w-[820px] border-collapse">
-            <thead>
-              <tr className="bg-surface-sunken">
-                {["Activity", "Baseline finish", "Planned finish", "Actual finish", "Progress", "Slip", "Status"].map((h, i) => (
-                  <th
-                    key={h}
-                    className={cn(
-                      "border-b border-line-300 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
-                      i >= 4 ? "text-right" : "text-left",
-                    )}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-12 text-center text-[12px] font-medium text-muted-500">
-                  No activities on this schedule yet.
-                </td></tr>
-              ) : rows.map((r) => (
-                <tr key={r.id} className="border-b border-line-200 last:border-0">
-                  <td className="px-4 py-3">
-                    <p className="text-[12.5px] font-bold text-navy-950">{r.name}</p>
-                    <p className="num text-[11px] font-medium text-muted-400">{r.code}</p>
-                  </td>
-                  <td className="px-4 py-3 text-[12px] font-medium text-muted-600">{formatDate(r.baselineEnd)}</td>
-                  <td className="px-4 py-3 text-[12px] font-medium text-muted-600">{formatDate(r.plannedEnd)}</td>
-                  <td className="px-4 py-3 text-[12px] font-medium text-muted-600">
-                    {r.actualEnd ? formatDate(r.actualEnd) : "—"}
-                  </td>
-                  <td className="num px-4 py-3 text-right text-[12px] font-bold text-navy-900">{r.progressPct}%</td>
-                  <td className={cn(
-                    "num px-4 py-3 text-right text-[12px] font-bold",
-                    (r.slipDays ?? 0) > 0 ? "text-bad-600" : (r.slipDays ?? 0) < 0 ? "text-good-700" : "text-muted-500",
-                  )}>
-                    {r.slipDays === null ? "—" : r.slipDays > 0 ? `+${r.slipDays}d` : `${r.slipDays}d`}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Badge tone={r.overdue ? "bad" : STATUS_TONE[r.status] ?? "muted"}>
-                      {r.overdue ? "OVERDUE" : r.status.replace(/_/g, " ")}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      ) : (
-        <div className="space-y-3.5">
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
-            {[
-              { l: "Activities", v: String(rows.length) },
-              { l: "Finished on time", v: String(onTime.length) },
-              { l: "Slipped", v: String(slipped.length) },
-              { l: "Total slip", v: `${totalSlip}d` },
-              { l: "Extensions approved", v: String(extensions.filter((e) => e.status === "APPROVED").length) },
-            ].map((k) => (
-              <Card key={k.l} className="px-4 py-3.5">
-                <p className="text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">{k.l}</p>
-                <p className="num mt-1 font-display text-[22px] font-bold text-navy-950">{k.v}</p>
-              </Card>
-            ))}
+        <div>
+          <div className="mb-3.5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+            <div className="rounded-[12px] border border-line-400 bg-white px-4 py-3.5">
+              <div className="font-display text-[18px] font-extrabold text-navy-950">{plannedDays} d</div>
+              <div className="mt-[3px] text-[11.5px] font-semibold text-muted-600">Planned duration · all activities</div>
+            </div>
+            <div className="rounded-[12px] border border-line-400 bg-white px-4 py-3.5">
+              <div className="font-display text-[18px] font-extrabold text-navy-950">{actualDays} d</div>
+              <div className="mt-[3px] text-[11.5px] font-semibold text-muted-600">Actual duration · completed only</div>
+            </div>
+            <div className="rounded-[12px] border border-[#F3DDBB] bg-warn-050 px-4 py-3.5">
+              <div className="font-display text-[18px] font-extrabold text-warn-800">+{grantedDays} d</div>
+              <div className="mt-[3px] text-[11.5px] font-semibold text-warn-800 opacity-85">Extensions granted by Admin</div>
+            </div>
+            <div className="rounded-[12px] border border-line-400 bg-white px-4 py-3.5">
+              <div className={cn("font-display text-[18px] font-extrabold", slipDays ? "text-bad-700" : "text-good-700")}>
+                {slipDays ? `+${slipDays} d` : "nil"}
+              </div>
+              <div className="mt-[3px] text-[11.5px] font-semibold text-muted-600">Slippage against revised dates</div>
+            </div>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Where the time went</CardTitle>
-              <span className="text-xs text-muted-500">The activities carrying the slip, worst first.</span>
-            </CardHeader>
-            <CardBody className="p-0">
-              {worst.length === 0 ? (
-                <p className="px-4 py-12 text-center text-[12px] font-medium text-muted-500">
-                  Nothing has slipped against baseline.
-                </p>
-              ) : (
-                <ul className="divide-y divide-line-200">
-                  {worst.map((r) => (
-                    <li key={r.id} className="flex items-center gap-3 px-4 py-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[12.5px] font-bold text-navy-950">{r.name}</p>
-                        <p className="text-[11px] font-medium text-muted-500">
-                          baseline {formatDate(r.baselineEnd)} → {r.actualEnd ? "finished" : "now planned"} {formatDate(r.actualEnd ?? r.plannedEnd)}
-                        </p>
-                      </div>
-                      <div className="h-1.5 w-[140px] shrink-0 overflow-hidden rounded-full bg-line-300">
-                        <div
-                          className="h-full rounded-full bg-bad-600"
-                          style={{ width: `${Math.min(100, ((r.slipDays ?? 0) / Math.max(1, worst[0].slipDays ?? 1)) * 100)}%` }}
-                        />
-                      </div>
-                      <span className="num w-[52px] shrink-0 text-right text-[12px] font-bold text-bad-600">
-                        +{r.slipDays}d
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardBody>
-          </Card>
+          <div className="overflow-hidden rounded-[13px] border border-line-400 bg-white">
+            <div className="border-b border-line-200 px-5 py-3.5 font-display text-[13.5px] font-bold text-navy-950">
+              Schedule vs actual completion
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1280px] border-collapse">
+                <thead>
+                  <tr>
+                    {[
+                      ["Activity", "left"], ["Plan start", "left"], ["Plan end", "left"], ["Days", "right"],
+                      ["Revised end", "left"], ["Ext", "right"], ["Actual start", "left"], ["Actual end", "left"],
+                      ["Actual days", "right"], ["Difference", "right"], ["On time start", "center"],
+                      ["On time done", "center"], ["Remarks", "left"],
+                    ].map(([h, align]) => (
+                      <th key={h} className={cn(TH_R, `text-${align}`)}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={13} className="px-4 py-12 text-center text-[12px] font-medium text-muted-500">
+                        No activities on this schedule yet.
+                      </td>
+                    </tr>
+                  ) : rows.map(({ a, m }) => {
+                    const diff = a.actualEnd ? m.revVar : null;
+                    const state = activityState(a);
+                    return (
+                      <tr key={a.id} className="hover:bg-surface-tint">
+                        <td className={cn(TD_R, "whitespace-normal")}>
+                          <div className="text-[12.5px] font-bold text-navy-950">{a.name}</div>
+                          <div className="mt-0.5 text-[11px] font-medium text-muted-400">{a.groupName}</div>
+                          <div className="mt-1"><span className={cn(PILL, STATE_PILL[state])}>{state}</span></div>
+                        </td>
+                        <td className={TD_R}>{formatDate(m.ps)}</td>
+                        <td className={TD_R}>{formatDate(m.pe)}</td>
+                        <td className={cn(TD_R, "num text-right font-bold")}>{m.planDays}</td>
+                        <td className={cn(TD_R, "text-warn-800")}>{m.ext ? formatDate(m.re) : "—"}</td>
+                        <td className={cn(TD_R, "num text-right font-bold text-warn-800")}>{m.ext ? `+${m.ext}` : "—"}</td>
+                        <td className={TD_R}>{a.actualStart ? formatDate(a.actualStart) : "—"}</td>
+                        <td className={TD_R}>{a.actualEnd ? formatDate(a.actualEnd) : "—"}</td>
+                        <td className={cn(TD_R, "num text-right font-bold")}>
+                          {a.actualEnd
+                            ? spanDays(a.actualStart, a.actualEnd)
+                            : a.actualStart
+                              ? `${spanDays(a.actualStart, todayIso)}*`
+                              : "—"}
+                        </td>
+                        <td
+                          className={cn(
+                            TD_R, "num text-right font-bold",
+                            diff === null ? "text-muted-400" : diff > 0 ? "text-bad-700" : "text-good-700",
+                          )}
+                        >
+                          {diff === null ? "—" : diff > 0 ? `+${diff} d` : diff === 0 ? "on time" : `${diff} d`}
+                        </td>
+                        <td
+                          className={cn(
+                            TD_R, "text-center text-[13px] font-extrabold",
+                            !a.actualStart ? "text-[#C6CFE8]" : m.onStart ? "text-good-700" : "text-bad-700",
+                          )}
+                        >
+                          {!a.actualStart ? "—" : m.onStart ? "✓" : "✗"}
+                        </td>
+                        <td
+                          className={cn(
+                            TD_R, "text-center text-[13px] font-extrabold",
+                            a.status !== "COMPLETED" ? "text-[#C6CFE8]" : m.onDone ? "text-good-700" : "text-bad-700",
+                          )}
+                        >
+                          {a.status !== "COMPLETED" ? "—" : m.onDone ? "✓" : "✗"}
+                        </td>
+                        <td className={cn(TD_R, "max-w-[230px] whitespace-normal text-[11.5px] font-medium text-muted-400")}>
+                          {a.extensions.length ? a.extensions.map((e) => e.reason).join(" · ") : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="border-t border-line-200 bg-surface-sunken px-5 py-3 text-[11.5px] font-medium text-muted-400">
+              Difference is measured against the revised (Admin-approved) target date. An asterisk marks
+              activities still running.
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))]">
+            <div className="rounded-[13px] border border-line-400 bg-white px-[19px] py-[17px]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-display text-[14.5px] font-bold text-navy-950">
+                    {projectManager ?? "Unassigned"}
+                  </div>
+                  <div className="mt-0.5 text-[11px] font-medium text-muted-400">
+                    {activities.length} activities scheduled
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div
+                    className={cn(
+                      "font-display text-[19px] font-extrabold",
+                      score >= 85 ? "text-good-700" : score >= 70 ? "text-warn-700" : "text-bad-700",
+                    )}
+                  >
+                    {score}
+                  </div>
+                  <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">SCORE</div>
+                </div>
+              </div>
+              <div className="mt-[7px] h-2 overflow-hidden rounded-full bg-[#EEF1F8]">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${score}%`,
+                    background: score >= 85
+                      ? "linear-gradient(90deg,#1F9D66,#5BC8A2)"
+                      : score >= 70
+                        ? "linear-gradient(90deg,#E8A13A,#F2C063)"
+                        : "linear-gradient(90deg,#D8494A,#E8827F)",
+                  }}
+                />
+              </div>
+              <div className="mt-3.5 grid grid-cols-2 gap-[11px]">
+                <div className="rounded-[9px] border border-line-200 bg-surface-tint px-3 py-2.5">
+                  <div className="font-display text-[14px] font-bold text-good-700">
+                    {started.length ? Math.round((onStart / started.length) * 100) : 0}%
+                  </div>
+                  <div className="mt-0.5 text-[10.5px] font-semibold text-muted-600">
+                    On-time start · {onStart} of {started.length}
+                  </div>
+                </div>
+                <div className="rounded-[9px] border border-line-200 bg-surface-tint px-3 py-2.5">
+                  <div className="font-display text-[14px] font-bold text-brand-700">
+                    {finished.length ? Math.round((onDone / finished.length) * 100) : 0}%
+                  </div>
+                  <div className="mt-0.5 text-[10.5px] font-semibold text-muted-600">
+                    On-time completion · {onDone} of {finished.length}
+                  </div>
+                </div>
+                <div className="rounded-[9px] border border-[#C4E8D4] bg-good-050 px-3 py-2.5">
+                  <div className="font-display text-[14px] font-bold text-good-700">{genuine}</div>
+                  <div className="mt-0.5 text-[10.5px] font-semibold text-good-700 opacity-85">
+                    Genuine extensions · excluded
+                  </div>
+                </div>
+                <div className="rounded-[9px] border border-[#F3DDBB] bg-warn-050 px-3 py-2.5">
+                  <div className="font-display text-[14px] font-bold text-warn-800">
+                    {avoidable} ({avoidable ? `−${avoidable * 10}` : "—"})
+                  </div>
+                  <div className="mt-0.5 text-[10.5px] font-semibold text-warn-800 opacity-85">
+                    Avoidable extensions
+                  </div>
+                </div>
+              </div>
+              <div className="mt-[11px] text-[11px] font-medium text-[#A8AEC8]">
+                {avoidable
+                  ? `${avoidable} avoidable extension${avoidable === 1 ? "" : "s"} counted against the score`
+                  : "No avoidable extensions — genuine delays excluded"}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 rounded-[12px] border border-[#DDE4F3] bg-[#EFF3FB] px-[17px] py-3.5 text-[12px] font-medium text-[#2F308C]">
+            On-time start and on-time completion are scored equally. Extensions the Admin marked
+            “Genuine” are excluded; each “Avoidable” extension costs 10 points.
+          </div>
         </div>
       )}
     </div>
