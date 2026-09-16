@@ -14,16 +14,29 @@ import { poLookups } from "./lookups";
 import { NewPoDrawer } from "./new-po-drawer";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
-import { cn, formatDate, money } from "@/lib/utils";
+import { cn, formatDate, moneyShort, qty } from "@/lib/utils";
 
 export const metadata = { title: "Purchase Orders" };
 
 const PAGE_SIZE = 30;
 
-const STATUS_TONE: Record<string, "slate" | "warn" | "good" | "brand" | "navy" | "bad"> = {
+/** The design writes each state in words. */
+const STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Draft",
+  PENDING_APPROVAL: "Pending approval",
+  PENDING_PM_APPROVAL: "Pending PM approval",
+  PENDING_ADMIN_APPROVAL: "Pending admin approval",
+  APPROVED: "Approved · sent to vendor",
+  PARTIALLY_RECEIVED: "Partially received",
+  RECEIVED: "Received",
+  CLOSED: "Closed · matched",
+  CANCELLED: "Cancelled",
+};
+
+const STATUS_TONE: Record<string, "slate" | "warn" | "good" | "brand" | "violet" | "bad"> = {
   DRAFT: "slate", PENDING_APPROVAL: "warn",
-  PENDING_PM_APPROVAL: "warn", PENDING_ADMIN_APPROVAL: "navy", APPROVED: "good",
-  PARTIALLY_RECEIVED: "brand", RECEIVED: "navy", CLOSED: "slate", CANCELLED: "bad",
+  PENDING_PM_APPROVAL: "warn", PENDING_ADMIN_APPROVAL: "violet", APPROVED: "brand",
+  PARTIALLY_RECEIVED: "warn", RECEIVED: "good", CLOSED: "good", CANCELLED: "bad",
 };
 
 type PoRow = {
@@ -33,7 +46,7 @@ type PoRow = {
   createdBy: { name: string };
   pmApprovedBy: { name: string } | null;
   adminApprovedBy: { name: string } | null;
-  items: Array<{ orderedQty: unknown; receivedQty: unknown }>;
+  items: Array<{ orderedQty: unknown; receivedQty: unknown; item: { name: string; uom: { code: string } } }>;
   _count: { items: number; grns: number };
 };
 
@@ -43,6 +56,8 @@ export default async function PurchaseOrdersPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const ctx = await requirePermission(PERM.material.purchaseOrder.view);
+  // Read once, so every row ages against the same instant.
+  const nowMs = new Date().getTime();
   const canPrint = ctx.has(PERM.material.purchaseOrder.print);
 
   const lookups = ctx.has(PERM.material.purchaseOrder.create) ? await poLookups(ctx) : null;
@@ -66,7 +81,7 @@ export default async function PurchaseOrdersPage({
         createdBy: { select: { name: true } },
         pmApprovedBy: { select: { name: true } },
         adminApprovedBy: { select: { name: true } },
-        items: { select: { orderedQty: true, receivedQty: true } },
+        items: { select: { orderedQty: true, receivedQty: true, item: { select: { name: true, uom: { select: { code: true } } } } } },
         _count: { select: { items: true, grns: true } },
       },
     }),
@@ -109,11 +124,18 @@ export default async function PurchaseOrdersPage({
     {
       key: "items",
       header: "Items",
-      render: (p) => (
-        <span className="text-[12px] font-medium text-muted-600">
-          {p._count.items} line{p._count.items === 1 ? "" : "s"}
-        </span>
-      ),
+      render: (p) => {
+        const first = p.items[0];
+        const more = p._count.items - 1;
+        return (
+          <span className="text-[12.5px] font-medium text-navy-500">
+            {first
+              ? `${first.item.name} · ${qty(first.orderedQty, 3)} ${first.item.uom.code}`
+              : "—"}
+            {more > 0 && <span className="text-muted-400"> +{more}</span>}
+          </span>
+        );
+      },
     },
     {
       key: "value",
@@ -121,7 +143,7 @@ export default async function PurchaseOrdersPage({
       align: "right",
       className: "num",
       visible: showRate,
-      render: (p) => <span className="text-[12.5px] font-bold text-navy-950">{money(p.totalAmount)}</span>,
+      render: (p) => <span className="text-[12.5px] font-bold text-navy-950">{moneyShort(p.totalAmount)}</span>,
     },
     {
       key: "delivery",
@@ -129,10 +151,9 @@ export default async function PurchaseOrdersPage({
       render: (p) => {
         if (!p.expectedDate) return <span className="text-[12px] text-muted-400">—</span>;
         const done = ["RECEIVED", "CLOSED"].includes(p.status);
-        const late = new Date(p.expectedDate) < new Date() && !done && p.status !== "CANCELLED";
-        const ordered = p.items.reduce((s, i) => s + Number(i.orderedQty), 0);
-        const received = p.items.reduce((s, i) => s + Number(i.receivedQty), 0);
-        const pct = ordered > 0 ? Math.round((received / ordered) * 100) : 0;
+        const late = new Date(p.expectedDate).getTime() < nowMs && !done && p.status !== "CANCELLED";
+        const day = new Date(p.expectedDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+        const lateDays = Math.floor((nowMs - new Date(p.expectedDate).getTime()) / 86_400_000);
         return (
           <span
             className={cn(
@@ -140,9 +161,7 @@ export default async function PurchaseOrdersPage({
               late ? "text-bad-600" : done ? "text-good-700" : "text-navy-600",
             )}
           >
-            {formatDate(p.expectedDate)}
-            {late && " · overdue"}
-            <span className="num block text-[11px] font-medium text-muted-400">{pct}% received</span>
+            {done ? `Received ${day}` : late ? `Late by ${lateDays} day${lateDays === 1 ? "" : "s"}` : `Due ${day}`}
           </span>
         );
       },
@@ -151,7 +170,7 @@ export default async function PurchaseOrdersPage({
       key: "status",
       header: "Status",
       align: "center",
-      render: (p) => <Badge tone={STATUS_TONE[p.status] ?? "slate"}>{p.status.replace(/_/g, " ")}</Badge>,
+      render: (p) => <Badge tone={STATUS_TONE[p.status] ?? "slate"}>{STATUS_LABEL[p.status] ?? p.status}</Badge>,
     },
     {
       key: "actions",
@@ -172,7 +191,7 @@ export default async function PurchaseOrdersPage({
           )}
           <Link
             href={`/material/purchase-orders/${p.id}`}
-            className="rounded-[7px] border border-line-400 px-2.5 py-1 text-[11px] font-bold text-brand-700 transition-colors hover:bg-surface-hover"
+            className="rounded-[7px] bg-brand-500 px-[11px] py-1.5 text-[10.5px] font-bold text-white transition-colors hover:bg-brand-600"
           >
             View
           </Link>
