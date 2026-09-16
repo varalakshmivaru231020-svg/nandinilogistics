@@ -731,7 +731,7 @@ function ExtensionModal({
     <Modal
       open onClose={onClose}
       title={`Request extension · ${activity.name}`}
-      description={`Current target ${formatDate(base)} — the request goes to the Project Manager. The baseline does not move.`}
+      description={`Current target ${formatDate(base)} — the request goes to the Project Manager first, then to Admin for the revised date. The baseline does not move.`}
       size="sm"
       footer={
         <>

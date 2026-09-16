@@ -66,7 +66,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
         initials,
         active: vendor.status === "ACTIVE",
         rating: vendor.rating ? vendor.rating.toFixed(1) : "—",
-        onTime: delivered.length ? `${Math.round((onTime / delivered.length) * 100)}%` : "—",
+        onTime: delivered.length ? `${Math.round((onTime / delivered.length) * 100)}%` : null,
         spend: moneyShort(spend),
       }}
       rows={[

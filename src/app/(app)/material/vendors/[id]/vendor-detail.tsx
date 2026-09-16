@@ -18,7 +18,7 @@ export function VendorDetail({
 }: {
   vendor: {
     id: string; name: string; code: string; initials: string;
-    active: boolean; rating: string; onTime: string; spend: string;
+    active: boolean; rating: string; onTime: string | null; spend: string;
   };
   rows: Array<{ k: string; v: string }>;
   orders: Array<{ id: string; poNo: string; status: string; items: string; value: string }>;
@@ -60,7 +60,11 @@ export function VendorDetail({
           <SoftPill tone={vendor.active ? "good" : "warn"}>{vendor.active ? "Active" : "Inactive"}</SoftPill>
         </>
       }
-      subtitle={`Rating ${vendor.rating} · ${vendor.onTime} on-time · ${vendor.spend} spend to date`}
+      subtitle={
+        `Rating ${vendor.rating} · ` +
+        (vendor.onTime ? `${vendor.onTime} on-time · ` : "on-time not measured yet · ") +
+        `${vendor.spend} spend to date`
+      }
       actions={
         <>
           {can.raisePo && (

@@ -2,7 +2,7 @@ import { requireAuth } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { Card, EmptyState } from "@/components/ui/primitives";
-import { cn, money, moneyShort } from "@/lib/utils";
+import { cn, moneyShort } from "@/lib/utils";
 import { ListNote } from "@/components/list/list-note";
 import Link from "next/link";
 
@@ -37,16 +37,17 @@ const STAGES = [
 ] as const;
 
 /** The fields the capture-lead form is built from. */
+/** Exactly the fields the Capture-lead form asks, in its order. */
 const LEAD_FIELDS: Array<[label: string, type: string, required: boolean]> = [
   ["Name", "Text", true],
-  ["Mobile", "Phone", true],
-  ["Email", "Email", false],
+  ["Mobile number", "Phone", true],
   ["Source", "Dropdown", true],
-  ["Project", "Dropdown", false],
-  ["Unit type", "Dropdown", false],
-  ["Requirement", "Text", false],
+  ["Email", "Email", false],
   ["Budget", "Number", false],
-  ["Next follow-up", "Date", false],
+  ["Interested in", "Dropdown", false],
+  ["Preferred project", "Dropdown", false],
+  ["Requirement notes", "Description", false],
+  ["Site visit planned?", "Checkbox", false],
 ];
 
 export default async function MastersPage({
@@ -293,9 +294,13 @@ async function Users() {
 
 /* -------------------------------- Limits ---------------------------------- */
 
+/** The design names each limit in words, not by its scope key. */
 const LIMIT_DOC: Record<string, string> = {
   "material.indent": "Requirement Indent",
   "material.po": "Purchase Order",
+  "material.vendorPayment": "Vendor Payment",
+  "sales.discount": "Sales Discount",
+  "sales.bookingCancellation": "Booking Cancellation",
 };
 
 async function Limits() {
@@ -318,7 +323,7 @@ async function Limits() {
           >
             <p className="text-[13px] font-semibold text-navy-900">{LIMIT_DOC[l.scope] ?? l.scope}</p>
             <p className="text-[12.5px] font-medium text-navy-500">
-              {l.role?.name ?? l.user?.name} approves up to {money(Number(l.maxValue))}
+              {l.role?.name ?? l.user?.name} approves up to {moneyShort(Number(l.maxValue))}
             </p>
             <p className="text-[12.5px] font-bold text-navy-950">Above → Owner / Admin</p>
           </div>
