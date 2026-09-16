@@ -1,17 +1,19 @@
-import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { redirect } from "next/navigation";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { fulfilLines } from "@/lib/material/indent-lines";
 import { indentFulfilment } from "@/lib/material/indent-fulfilment";
-import { PageHeader } from "@/components/ui/primitives";
-import { IssueForm, type FromIndent } from "./issue-form";
+import { IssueForm } from "./issue-form";
 import { issueLookups } from "../lookups";
 
 export const metadata = { title: "Issue Material" };
 
+/**
+ * Material is issued against an indent, as the design does it — the screen is
+ * only reachable from one, and sends anyone else back to the indent list.
+ */
 export default async function NewIssuePage({
   searchParams,
 }: {
@@ -19,60 +21,55 @@ export default async function NewIssuePage({
 }) {
   const ctx = await requirePermission(PERM.material.issue.create);
   const { indent: indentId } = await searchParams;
+  if (!indentId) redirect("/material/indents");
 
-  const { projects, stores, recipients, stock } = await issueLookups(ctx);
+  const indent = await prisma.indent.findUnique({
+    where: { id: indentId },
+    include: {
+      project: { select: { name: true } },
+      workPackage: { select: { name: true } },
+      items: { include: { item: { select: { code: true, name: true, uom: { select: { code: true } } } } } },
+    },
+  });
+  if (!indent) redirect("/material/indents");
+  if (!ctx.canAccessAllProjects && !ctx.projectIds.includes(indent.projectId)) {
+    redirect(`/forbidden?code=${encodeURIComponent(PERM.project.project.accessAll)}`);
+  }
 
-  // Raised from an indent: the lines come pre-filled with what the store can
-  // actually hand over today, which is what the indent screen promised.
-  let fromIndent: FromIndent | null = null;
-  if (indentId) {
-    const indent = await prisma.indent.findUnique({
-      where: { id: indentId },
-      include: {
-        items: { include: { item: { select: { uom: { select: { code: true } } } } } },
-      },
-    });
-    if (indent && (ctx.canAccessAllProjects || ctx.projectIds.includes(indent.projectId))) {
-      const fulfil = indentFulfilment((await fulfilLines([indent])).get(indent.id) ?? []).lines;
-      fromIndent = {
+  const { stores, recipients, stock } = await issueLookups(ctx);
+  const fulfil = indentFulfilment((await fulfilLines([indent])).get(indent.id) ?? []).lines;
+
+  const lines = indent.items
+    .map((l, i) => ({
+      itemId: l.itemId,
+      code: l.item.code,
+      name: l.item.name,
+      uom: l.item.uom.code,
+      required: fulfil[i]?.required ?? Number(l.approvedQty ?? l.requestedQty),
+      onHand: fulfil[i]?.onHand ?? 0,
+      pending: fulfil[i]?.pending ?? 0,
+      canIssue: fulfil[i]?.canIssue ?? 0,
+    }))
+    .filter((l) => l.pending > 0);
+
+  if (lines.length === 0) redirect(`/material/indents/${indent.id}`);
+
+  return (
+    <IssueForm
+      stores={stores}
+      recipients={recipients}
+      stock={stock}
+      issuedByName={ctx.name}
+      fromIndent={{
         id: indent.id,
         indentNo: indent.indentNo,
         projectId: indent.projectId,
+        projectName: indent.project.name,
+        activity: indent.workPackage?.name ?? indent.purpose,
         workPackageId: indent.workPackageId,
         purpose: indent.purpose,
-        lines: indent.items
-          .map((l, i) => ({ itemId: l.itemId, quantity: fulfil[i]?.canIssue ?? 0 }))
-          .filter((l) => l.quantity > 0),
-      };
-    }
-  }
-
-  return (
-    <div className="mx-auto max-w-5xl">
-      <PageHeader
-        title="Issue material"
-        description={
-          fromIndent
-            ? `Against ${fromIndent.indentNo} — pre-filled with the quantity the store can hand over today.`
-            : "Moves stock out of the store and onto a work package, valued at the store's weighted-average rate."
-        }
-        breadcrumb={
-          <span className="flex items-center gap-1">
-            <Link href="/material/issues" className="hover:text-brand-600">Material Issues</Link>
-            <ChevronRight className="h-3 w-3" />
-            <span>New</span>
-          </span>
-        }
-      />
-
-      <IssueForm
-        projects={projects}
-        stores={stores}
-        recipients={recipients}
-        stock={stock}
-        canViewValue={ctx.has(PERM.material.stock.viewValuation)}
-        fromIndent={fromIndent}
-      />
-    </div>
+        lines,
+      }}
+    />
   );
 }

@@ -2,11 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, Plus, Trash2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, Field, Input, Select, Textarea } from "@/components/ui/primitives";
-import { money, qty } from "@/lib/utils";
+import { Alert } from "@/components/ui/primitives";
+import { DetailAction, DetailScreen } from "@/components/shell/detail-screen";
+import { cn, qty } from "@/lib/utils";
 import { createIssueAction } from "../actions";
 
 interface StockRow {
@@ -14,241 +13,237 @@ interface StockRow {
   uom: string; available: number; avgRate: number;
 }
 
-interface Line {
-  key: string;
-  itemId: string;
-  issuedQty: string;
-}
-
-function blankLine(): Line {
-  return { key: Math.random().toString(36).slice(2), itemId: "", issuedQty: "" };
-}
-
 /** What an indent hands the form when the issue is raised from one. */
 export interface FromIndent {
   id: string;
   indentNo: string;
   projectId: string;
+  projectName: string;
+  activity: string | null;
   workPackageId: string | null;
   purpose: string | null;
-  lines: Array<{ itemId: string; quantity: number }>;
+  lines: Array<{
+    itemId: string; code: string; name: string; uom: string;
+    required: number; onHand: number; pending: number; canIssue: number;
+  }>;
 }
 
+const LABEL = "text-[11px] font-semibold text-navy-600";
+const REQUIRED = <span className="text-bad-600">*</span>;
+const FIELD =
+  "mt-1.5 w-full rounded-[9px] border border-line-400 bg-surface-sunken px-3 py-2.5 text-[12.5px] font-medium text-navy-900 outline-none transition-colors focus:border-brand-500 focus:bg-white";
+
+/**
+ * The design's issue screen: who is taking the material, and how much of each
+ * pending line goes out now — pre-filled with the most the store can hand over.
+ */
 export function IssueForm({
-  projects, stores, recipients, stock, canViewValue, fromIndent,
+  stores, recipients, stock, fromIndent, issuedByName,
 }: {
-  projects: Array<{ id: string; name: string; code: string; workPackages: Array<{ id: string; code: string; name: string }> }>;
   stores: Array<{ id: string; name: string; projectId: string | null }>;
   recipients: Array<{ id: string; name: string; designation: string | null }>;
   stock: StockRow[];
-  canViewValue: boolean;
-  fromIndent?: FromIndent | null;
+  fromIndent: FromIndent;
+  /** The store person doing the handover — the signed-in user. */
+  issuedByName: string;
 }) {
   const router = useRouter();
-  const [projectId, setProjectId] = React.useState(fromIndent?.projectId ?? projects[0]?.id ?? "");
-  const [workPackageId, setWorkPackageId] = React.useState(fromIndent?.workPackageId ?? "");
   const [issuedToId, setIssuedToId] = React.useState("");
-  const [purpose, setPurpose] = React.useState(fromIndent?.purpose ?? "");
   const [remarks, setRemarks] = React.useState("");
-  const [lines, setLines] = React.useState<Line[]>(
-    fromIndent?.lines.length
-      ? fromIndent.lines.map((l) => ({ ...blankLine(), itemId: l.itemId, issuedQty: String(l.quantity) }))
-      : [blankLine()],
+  const [amounts, setAmounts] = React.useState<Record<string, string>>(() =>
+    Object.fromEntries(fromIndent.lines.map((l) => [l.itemId, l.canIssue > 0 ? String(l.canIssue) : ""])),
   );
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
-  // Stores serving the chosen project, plus any central store.
-  const availableStores = React.useMemo(
-    () => stores.filter((s) => s.projectId === projectId || s.projectId === null),
-    [stores, projectId],
-  );
-  // The user's explicit pick, which may go stale when the project changes.
-  const [storePick, setStorePick] = React.useState("");
-
-  // Derived, so changing project silently falls back to a valid store rather
-  // than round-tripping through an effect.
+  // The store serving this project, else the central one.
   const storeId =
-    storePick && availableStores.some((s) => s.id === storePick)
-      ? storePick
-      : (availableStores[0]?.id ?? "");
-  const setStoreId = setStorePick;
+    stores.find((s) => s.projectId === fromIndent.projectId)?.id ??
+    stores.find((s) => s.projectId === null)?.id ??
+    stores[0]?.id ??
+    "";
 
   const stockInStore = React.useMemo(
-    () => stock.filter((s) => s.storeId === storeId),
+    () => new Map(stock.filter((s) => s.storeId === storeId).map((s) => [s.itemId, s])),
     [stock, storeId],
   );
-  const stockByItem = React.useMemo(
-    () => new Map(stockInStore.map((s) => [s.itemId, s])),
-    [stockInStore],
-  );
 
-  const workPackages = projects.find((p) => p.id === projectId)?.workPackages ?? [];
-
-  const rows = lines.map((l) => {
-    const s = stockByItem.get(l.itemId);
-    const requested = Number(l.issuedQty) || 0;
-    const over = s ? requested > s.available + 0.0001 : false;
-    const value = s ? requested * s.avgRate : 0;
-    return { l, s, requested, over, value };
+  const rows = fromIndent.lines.map((l) => {
+    const value = Number(amounts[l.itemId]) || 0;
+    const inStore = stockInStore.get(l.itemId)?.available ?? l.onHand;
+    const max = Math.min(inStore, l.pending);
+    return { line: l, value, max, over: value > max + 0.0001 };
   });
 
-  const totalValue = rows.reduce((sum, r) => sum + r.value, 0);
+  const issuing = rows.filter((r) => r.value > 0);
+  const total = issuing.reduce((s, r) => s + r.value, 0);
   const hasError = rows.some((r) => r.over);
-  const ready =
-    projectId && storeId && issuedToId && rows.some((r) => r.l.itemId && r.requested > 0) && !hasError;
 
   async function save() {
     setBusy(true);
     setError(null);
     const res = await createIssueAction({
-      projectId,
+      projectId: fromIndent.projectId,
       storeId,
-      workPackageId: workPackageId || undefined,
-      indentId: fromIndent?.id,
+      workPackageId: fromIndent.workPackageId || undefined,
+      indentId: fromIndent.id,
       issuedToId,
-      purpose: purpose || undefined,
+      purpose: fromIndent.purpose || undefined,
       remarks: remarks || undefined,
-      items: rows
-        .filter((r) => r.l.itemId && r.requested > 0)
-        .map((r) => ({ itemId: r.l.itemId, issuedQty: r.requested })),
+      items: issuing.map((r) => ({ itemId: r.line.itemId, issuedQty: r.value })),
     });
     setBusy(false);
     if (!res.ok) setError(res.error);
-    else router.push(fromIndent ? `/material/indents/${fromIndent.id}` : "/material/issues");
+    else router.push(`/material/indents/${fromIndent.id}`);
   }
 
+  const ready = Boolean(issuedToId) && issuing.length > 0 && !hasError && Boolean(storeId);
+
   return (
-    <div className="space-y-4">
-      {error && <Alert tone="error">{error}</Alert>}
+    <DetailScreen
+      backHref={`/material/indents/${fromIndent.id}`}
+      title="Issue material to project"
+      pills={
+        <span className="rounded-full bg-surface-field px-[10px] py-[5px] text-[10.5px] font-bold text-navy-500">
+          {fromIndent.indentNo}
+        </span>
+      }
+      subtitle={`${fromIndent.projectName}${fromIndent.activity ? ` · ${fromIndent.activity}` : ""} — issuing reduces store stock and closes the indent line by line.`}
+      actions={
+        <DetailAction tone="success" disabled={!ready || busy} onClick={save}>
+          ↗ Confirm issue
+        </DetailAction>
+      }
+    >
+      {error && <div className="mb-3.5"><Alert tone="error">{error}</Alert></div>}
 
-      <Card>
-        <CardHeader><CardTitle>Issue</CardTitle></CardHeader>
-        <CardBody>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Project" required>
-              <Select value={projectId} onChange={(e) => { setProjectId(e.target.value); setWorkPackageId(""); }}>
-                {projects.length === 0 && <option value="">No projects mapped to you</option>}
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
-              </Select>
-            </Field>
-
-            <Field label="Issue from store" required>
-              <Select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-                {availableStores.length === 0 && <option value="">No store for this project</option>}
-                {availableStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </Select>
-            </Field>
-
-            <Field label="Issued to" required hint="They acknowledge receipt on the mobile app.">
-              <Select value={issuedToId} onChange={(e) => setIssuedToId(e.target.value)}>
-                <option value="">Select…</option>
-                {recipients.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}{r.designation ? ` — ${r.designation}` : ""}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="Work package" hint="Ties consumption back to the activity.">
-              <Select value={workPackageId} onChange={(e) => setWorkPackageId(e.target.value)}>
-                <option value="">— Not specified —</option>
-                {workPackages.map((w) => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
-              </Select>
-            </Field>
-
-            <Field label="Purpose" className="sm:col-span-2">
-              <Input value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Slab casting — 7th floor" />
-            </Field>
-
-            <Field label="Remarks" className="sm:col-span-2">
-              <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2} />
-            </Field>
-          </div>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Items</CardTitle>
-          <Button variant="secondary" size="sm" onClick={() => setLines((l) => [...l, blankLine()])}>
-            <Plus className="h-3.5 w-3.5" />
-            Add line
-          </Button>
-        </CardHeader>
-        <CardBody className="space-y-3">
-          {stockInStore.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-500">
-              This store has no stock on hand. Post a goods receipt first.
-            </p>
-          ) : (
-            <>
-              {rows.map(({ l, s, over, value }, idx) => (
-                <div key={l.key} className={`rounded-md border p-3 ${over ? "border-bad-600 bg-bad-050" : "border-line-400"}`}>
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-500">Line {idx + 1}</span>
-                    {lines.length > 1 && (
-                      <button type="button"
-                        onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}
-                        className="rounded p-1 text-muted-400 hover:bg-bad-050 hover:text-bad-600">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-12">
-                    <Field label="Item" required className="sm:col-span-6">
-                      <Select value={l.itemId}
-                        onChange={(e) => setLines((ls) => ls.map((x) => x.key === l.key ? { ...x, itemId: e.target.value } : x))}>
-                        <option value="">Select an item in stock…</option>
-                        {stockInStore.map((si) => (
-                          <option key={si.itemId} value={si.itemId}>
-                            {si.code} — {si.name} ({qty(si.available, 3)} {si.uom} available)
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-
-                    <Field label={`Quantity${s ? ` (${s.uom})` : ""}`} required className="sm:col-span-3">
-                      <Input type="number" step="any" min={0} className="num text-right"
-                        value={l.issuedQty}
-                        onChange={(e) => setLines((ls) => ls.map((x) => x.key === l.key ? { ...x, issuedQty: e.target.value } : x))} />
-                    </Field>
-
-                    <Field label={canViewValue ? "Value" : "Available"} className="sm:col-span-3">
-                      <div className="num flex h-9 items-center justify-end rounded-md bg-surface-sunken px-3 text-sm text-navy-600">
-                        {canViewValue ? money(value) : s ? qty(s.available, 3) : "—"}
-                      </div>
-                    </Field>
-                  </div>
-
-                  {over && s && (
-                    <p className="mt-2 text-xs text-bad-600">
-                      Only {qty(s.available, 3)} {s.uom} in this store.
-                    </p>
-                  )}
-                </div>
+      <div className="max-w-[820px] rounded-[13px] border border-line-400 bg-white px-5 py-[18px]">
+        <div className="mb-3 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+          Handover details
+        </div>
+        <div className="grid gap-3.5 sm:grid-cols-2">
+          <label className="block">
+            <span className={LABEL}>Issued to · site person {REQUIRED}</span>
+            <select value={issuedToId} onChange={(e) => setIssuedToId(e.target.value)} className={FIELD}>
+              <option value="">Who is taking it?</option>
+              {recipients.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}{r.designation ? ` · ${r.designation}` : ""}
+                </option>
               ))}
-
-              {canViewValue && (
-                <div className="flex items-center justify-end gap-3 border-t border-line-400 pt-3">
-                  <span className="text-sm text-muted-500">Consumption value</span>
-                  <span className="num text-lg font-semibold text-navy-950">{money(totalValue)}</span>
-                </div>
-              )}
-            </>
-          )}
-        </CardBody>
-      </Card>
-
-      <div className="flex items-center justify-end gap-2">
-        {hasError && <Badge tone="bad">Reduce the highlighted quantities</Badge>}
-        <Button onClick={save} loading={busy} disabled={!ready}>
-          <ArrowLeftRight className="h-3.5 w-3.5" />
-          Issue material
-        </Button>
+            </select>
+          </label>
+          <label className="block">
+            <span className={LABEL}>Issued by · store</span>
+            <input value={issuedByName} readOnly className={cn(FIELD, "cursor-default")} />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className={LABEL}>Remarks</span>
+            <textarea
+              rows={3}
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              placeholder="e.g. loaded on hoist, acknowledged on mobile…"
+              className={cn(FIELD, "resize-y")}
+            />
+          </label>
+        </div>
       </div>
-    </div>
+
+      <div className="mt-3.5 overflow-hidden rounded-[13px] border border-line-400 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-200 px-5 py-3.5">
+          <span className="font-display text-[13.5px] font-bold text-navy-950">Quantity to issue</span>
+          <span className="text-[11.5px] font-medium text-muted-600">
+            Pre-filled with the most that can be issued from current stock — adjust as needed
+          </span>
+        </div>
+
+        {rows.map(({ line, value, max, over }) => {
+          const effect =
+            value <= 0
+              ? { text: "Nothing goes out on this line", tone: "bg-surface-field text-navy-500" }
+              : value >= line.pending
+                ? { text: "Closes this line", tone: "bg-good-050 text-good-700" }
+                : { text: "Part issue · balance stays open", tone: "bg-warn-050 text-warn-700" };
+          return (
+            <div
+              key={line.itemId}
+              className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-line-100 px-5 py-4 last:border-0"
+            >
+              <div className="min-w-[160px] flex-[1_1_180px]">
+                <div className="text-[12.5px] font-semibold text-navy-900">{line.name}</div>
+                <div className="mt-0.5 text-[11px] font-medium text-muted-400">{line.code}</div>
+              </div>
+              <div className="w-[90px]">
+                <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">Required</div>
+                <div className="mt-1 text-[12.5px] font-bold text-navy-950">{qty(line.required, 3)} {line.uom}</div>
+              </div>
+              <div className="w-[90px]">
+                <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">In stock</div>
+                <div className="mt-1 text-[12.5px] font-semibold text-navy-600">{qty(line.onHand, 3)} {line.uom}</div>
+              </div>
+              <div className="w-[90px]">
+                <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">Pending</div>
+                <div className="mt-1 text-[12.5px] font-bold text-warn-700">{qty(line.pending, 3)} {line.uom}</div>
+              </div>
+              <div className="w-[150px]">
+                <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-good-700">Issue now</div>
+                <input
+                  value={amounts[line.itemId] ?? ""}
+                  onChange={(e) =>
+                    setAmounts((a) => ({ ...a, [line.itemId]: e.target.value.replace(/[^\d.]/g, "") }))
+                  }
+                  placeholder="0"
+                  className={cn(FIELD, "py-2", over && "border-bad-600 bg-bad-050")}
+                />
+                <div className="mt-1.5 flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setAmounts((a) => ({ ...a, [line.itemId]: String(max) }))}
+                    className="cursor-pointer rounded-[7px] bg-good-050 px-2 py-1 text-[10.5px] font-semibold text-good-700"
+                  >
+                    max {qty(max, 3)} {line.uom}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAmounts((a) => ({ ...a, [line.itemId]: "" }))}
+                    className="cursor-pointer rounded-[7px] border border-line-400 px-2 py-1 text-[10.5px] font-semibold text-muted-600"
+                  >
+                    clear
+                  </button>
+                </div>
+              </div>
+              <div className="min-w-[170px] flex-1">
+                <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">Effect</div>
+                <div className="mt-1">
+                  <span className={cn("inline-flex rounded-full px-[10px] py-[5px] text-[10.5px] font-bold", effect.tone)}>
+                    {effect.text}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        <div className="flex flex-wrap justify-end gap-[34px] bg-surface-sunken px-5 py-4">
+          <div className="text-right">
+            <div className="text-[10.5px] font-semibold uppercase tracking-[.07em] text-muted-400">Lines issuing</div>
+            <div className="mt-[3px] text-[14px] font-bold text-navy-600">
+              {issuing.length} {issuing.length === 1 ? "line" : "lines"}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10.5px] font-semibold uppercase tracking-[.07em] text-good-700">Total quantity</div>
+            <div className="mt-[3px] font-display text-[20px] font-extrabold text-good-700">{qty(total, 3)}</div>
+          </div>
+        </div>
+      </div>
+
+      {hasError && (
+        <div className="mt-3.5">
+          <Alert tone="error">A line is issuing more than the store holds or the indent still needs.</Alert>
+        </div>
+      )}
+    </DetailScreen>
   );
 }

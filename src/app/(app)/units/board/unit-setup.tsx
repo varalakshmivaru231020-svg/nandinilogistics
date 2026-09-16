@@ -91,7 +91,7 @@ export function UnitSetup({
         <div className="min-w-0 flex-1">
           <p className="font-display text-[19px] font-bold text-navy-950">Create units</p>
           <p className="mt-0.5 text-[12px] font-medium text-muted-500">
-            Tap any flat to edit its number &amp; configuration
+            Tap any flat to edit its number &amp; configuration · use the − / + on a row for floor-wise changes
           </p>
         </div>
         <Button
@@ -227,34 +227,32 @@ export function UnitSetup({
               const flats = planned.filter((p) => p.floor === floor);
               return (
                 <div key={floor} className="flex items-center gap-2.5">
-                  <span className="num w-10 shrink-0 text-center text-[11px] font-bold text-muted-400">
-                    {floor}F
-                  </span>
+                  <span className="num w-10 shrink-0 text-[11px] font-bold text-muted-400">Fl {floor}</span>
+                  <div className="grid flex-1 gap-2 [grid-template-columns:repeat(auto-fit,minmax(120px,1fr))]">
+                    {flats.map((f) => {
+                      const type = unitTypes.find((t) => t.id === f.unitTypeId)?.name ?? "Unassigned";
+                      return (
+                        <button
+                          key={f.key}
+                          type="button"
+                          onClick={() => setEditing(f.key === editing ? null : f.key)}
+                          className={cn(
+                            "rounded-[9px] border px-2.5 py-2 text-center text-[11.5px] font-bold transition-colors",
+                            f.key === editing
+                              ? "border-brand-500 bg-brand-100 text-brand-700"
+                              : cn(TYPE_TONE(type), "hover:border-brand-500"),
+                          )}
+                        >
+                          <span className="num">{f.number}</span> · {type}
+                        </button>
+                      );
+                    })}
+                  </div>
                   <Stepper
                     small
                     value={count}
                     onChange={(n) => setPerFloor((p) => ({ ...p, [floor]: Math.max(0, Math.min(12, n)) }))}
                   />
-                  <div className="flex flex-wrap gap-1.5">
-                    {flats.map((f) => (
-                      <button
-                        key={f.key}
-                        type="button"
-                        onClick={() => setEditing(f.key === editing ? null : f.key)}
-                        className={cn(
-                          "flex min-w-[64px] flex-col items-start rounded-[9px] border px-2.5 py-1.5 text-left",
-                          f.key === editing
-                            ? "border-brand-500 bg-brand-100"
-                            : "border-line-400 bg-surface-sunken hover:border-brand-500",
-                        )}
-                      >
-                        <span className="num text-[11.5px] font-bold text-navy-900">{f.number}</span>
-                        <span className="text-[9.5px] font-medium text-muted-500">
-                          {unitTypes.find((t) => t.id === f.unitTypeId)?.name ?? "Unassigned"}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
                 </div>
               );
             })}
@@ -263,6 +261,19 @@ export function UnitSetup({
       </div>
     </div>
   );
+}
+
+/**
+ * The design colours a planned flat by its configuration, so a floor's mix can
+ * be read at a glance.
+ */
+function TYPE_TONE(type: string): string {
+  const key = type.toLowerCase();
+  if (key.includes("1 bhk")) return "border-[#BFE0F2] bg-brand-100 text-brand-700";
+  if (key.includes("2 bhk")) return "border-[#C4E8D4] bg-good-050 text-good-700";
+  if (key.includes("3 bhk")) return "border-[#D7CDF3] bg-[#EFE9FC] text-[#6A46C8]";
+  if (key.includes("4 bhk") || key.includes("villa")) return "border-[#F3DDBB] bg-warn-050 text-warn-700";
+  return "border-line-400 bg-surface-sunken text-navy-600";
 }
 
 function Stepper({

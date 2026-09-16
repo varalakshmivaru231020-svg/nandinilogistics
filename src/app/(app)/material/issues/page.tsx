@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ArrowLeftRight } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
@@ -7,8 +8,6 @@ import { issueListWhere, readIssueListParams, toSearchParams } from "@/lib/mater
 import { projectOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
-import { issueLookups } from "./lookups";
-import { NewIssueDrawer } from "./new-issue-drawer";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { IssuesScreen } from "./issues-screen";
 
@@ -25,7 +24,7 @@ export default async function IssuesPage({
   const query = toSearchParams(raw);
   const filtered = Boolean(params.q || params.project || params.ack || params.status || params.from || params.to);
 
-  const lookups = ctx.has(PERM.material.issue.create) ? await issueLookups(ctx) : null;
+  const canCreate = ctx.has(PERM.material.issue.create);
 
   const [issues, projects] = await Promise.all([
     prisma.materialIssue.findMany({
@@ -63,14 +62,13 @@ export default async function IssuesPage({
         title="Material Issues"
         description="Store to supervisor, valued at the weighted-average rate and acknowledged by whoever receives it."
         actions={
-          lookups ? (
-            <NewIssueDrawer
-              projects={lookups.projects}
-              stores={lookups.stores}
-              recipients={lookups.recipients}
-              stock={lookups.stock}
-              canViewValue={ctx.has(PERM.material.stock.viewValuation)}
-            />
+          canCreate ? (
+            <Link
+              href="/material/indents"
+              className="rounded-[9px] bg-brand-500 px-[15px] py-[9px] text-[12px] font-bold text-white transition-colors hover:bg-brand-600"
+            >
+              Issue against an indent
+            </Link>
           ) : null
         }
       />
