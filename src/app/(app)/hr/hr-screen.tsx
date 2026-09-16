@@ -13,8 +13,8 @@ import { cn } from "@/lib/utils";
 import type { AttendanceSummaryRow } from "@/lib/hr/attendance-report";
 import { isInactive, statusLabel } from "@/lib/hr/employee-status";
 import {
-  createEmployeeAction, createEmploymentTypeAction, deleteEmployeeAction,
-  deleteEmploymentTypeAction, markAttendanceAction, setEmployeeStatusAction, updateEmployeeAction,
+  createEmployeeAction, deleteEmployeeAction,
+  markAttendanceAction, setEmployeeStatusAction, updateEmployeeAction,
 } from "./actions";
 
 interface Employee {
@@ -63,7 +63,6 @@ export function HrScreen({
   const [removing, setRemoving] = React.useState<Employee | null>(null);
   const [statusTarget, setStatusTarget] = React.useState<Employee | null>(null);
   const [statusReason, setStatusReason] = React.useState("");
-  const [newType, setNewType] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
   function setParam(next: Record<string, string | undefined>) {
@@ -82,21 +81,6 @@ export function HrScreen({
   function flash(message: string) {
     toast(message);
     router.refresh();
-  }
-
-  async function addType() {
-    setBusy(true);
-    const res = await createEmploymentTypeAction(newType);
-    setBusy(false);
-    if (!res.ok) { setError(res.error); return; }
-    setNewType("");
-    flash("Employment type added");
-  }
-
-  async function removeType(t: TypeRow) {
-    const res = await deleteEmploymentTypeAction(t.id);
-    if (!res.ok) { setError(res.error); return; }
-    flash(`${t.name} removed`);
   }
 
   async function removeEmployee() {
@@ -151,13 +135,7 @@ export function HrScreen({
       {active === "staff" && (
         <StaffTab
           employees={employees}
-          employmentTypes={employmentTypes}
           can={can}
-          newType={newType}
-          busy={busy}
-          onNewType={setNewType}
-          onAddType={addType}
-          onRemoveType={removeType}
           onEdit={setEditing}
           onRemove={setRemoving}
           onStatus={openStatus}
@@ -258,13 +236,10 @@ export function HrScreen({
 /* -------------------------------- Employees -------------------------------- */
 
 function StaffTab({
-  employees, employmentTypes, can, newType, busy,
-  onNewType, onAddType, onRemoveType, onEdit, onRemove, onStatus,
+  employees, can, onEdit, onRemove, onStatus,
 }: {
-  employees: Employee[]; employmentTypes: TypeRow[];
-  can: Record<string, boolean>; newType: string; busy: boolean;
-  onNewType: (v: string) => void;
-  onAddType: () => void; onRemoveType: (t: TypeRow) => void;
+  employees: Employee[];
+  can: Record<string, boolean>;
   onEdit: (e: Employee | "new") => void; onRemove: (e: Employee) => void;
   onStatus: (e: Employee) => void;
 }) {
@@ -281,45 +256,6 @@ function StaffTab({
           </Button>
         )}
       </div>
-
-      {/* Employment types — configurable, as the design's chips */}
-      <Card className="mb-3.5 px-4 py-3.5">
-        <p className="text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">Employment types</p>
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {employmentTypes.map((t) => (
-            <span
-              key={t.id}
-              className="inline-flex items-center gap-1.5 rounded-full bg-surface-field px-3 py-1.5 text-[11.5px] font-bold text-navy-600 ring-1 ring-inset ring-line-400"
-            >
-              {t.name}
-              <span className="num opacity-60">{t.count}</span>
-              {can.deleteTypes && t.canDelete && (
-                <button
-                  type="button"
-                  title="Remove"
-                  onClick={() => onRemoveType(t)}
-                  className="grid h-[15px] w-[15px] place-items-center rounded-full text-muted-400 transition-colors hover:bg-bad-050 hover:text-bad-600"
-                >
-                  <X className="h-2.5 w-2.5" />
-                </button>
-              )}
-            </span>
-          ))}
-          {can.manageTypes && (
-            <span className="inline-flex items-center gap-1.5">
-              <Input
-                value={newType}
-                onChange={(e) => onNewType(e.target.value)}
-                placeholder="Add a type"
-                className="h-8 w-[150px] text-[11.5px]"
-              />
-              <Button size="xs" variant="secondary" onClick={onAddType} loading={busy} disabled={!newType.trim()}>
-                + Add
-              </Button>
-            </span>
-          )}
-        </div>
-      </Card>
 
       <Card className="overflow-x-auto">
         <table className="w-full min-w-[820px] border-collapse">

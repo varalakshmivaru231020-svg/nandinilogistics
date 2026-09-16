@@ -1,169 +1,483 @@
-import Link from "next/link";
-import * as Icons from "lucide-react";
-import { Database } from "lucide-react";
-
 import { requireAuth } from "@/lib/rbac/guard";
-import { masterGroups, masterPerm, MASTERS } from "@/lib/masters/registry";
-import { delegate } from "@/lib/masters/service";
-import { Card, EmptyState } from "@/components/ui/primitives";
+import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { cn } from "@/lib/utils";
+import { Card, EmptyState } from "@/components/ui/primitives";
+import { cn, money, moneyShort } from "@/lib/utils";
+import { ListNote } from "@/components/list/list-note";
+import Link from "next/link";
+
+import { ChipEditor, NewApprovalLimit, NewMasterRecord, NewUser } from "./masters-forms";
 
 export const metadata = { title: "Masters & Users" };
 
 /**
- * The design lays this screen out as two panes: a "Master data" rail on the
- * left and the chosen section's content beside it. The sections are the
- * registry's own groups plus the three destinations that are not masters —
- * Users & Roles, Approval Limits and Workforce Setup — which the design keeps
- * on this screen rather than elsewhere.
+ * The design's Masters screen: a 230px rail of six sections, and the chosen
+ * section beside it. Users & Roles, Approval Limits, Lead Settings and
+ * Workforce Setup live here, as the design draws them — not on screens of
+ * their own.
  */
-interface Destination {
-  key: string;
-  label: string;
-  href: string;
-  description: string;
-  icon: string;
-  show: boolean;
-}
+const SECTIONS = [
+  { key: "stores", label: "Store Master", add: "+ New store" },
+  { key: "tax", label: "Tax & UOM", add: "+ New unit" },
+  { key: "users", label: "Users & Roles", add: "+ New user" },
+  { key: "limits", label: "Approval Limits", add: "+ New limit" },
+  { key: "leadcfg", label: "Lead Settings", add: null },
+  { key: "workforce", label: "Workforce Setup", add: null },
+] as const;
 
-export default async function MastersIndexPage({
+/** The stages the pipeline moves through, in order. */
+const STAGES = [
+  ["NEW", "New", true],
+  ["CONTACTED", "Contacted", false],
+  ["SITE_VISIT_SCHEDULED", "Site visit scheduled", false],
+  ["VISIT_DONE", "Visit done", false],
+  ["NEGOTIATION", "Negotiation", false],
+  ["BOOKED", "Booked", true],
+  ["LOST", "Lost", true],
+] as const;
+
+/** The fields the capture-lead form is built from. */
+const LEAD_FIELDS: Array<[label: string, type: string, required: boolean]> = [
+  ["Name", "Text", true],
+  ["Mobile", "Phone", true],
+  ["Email", "Email", false],
+  ["Source", "Dropdown", true],
+  ["Project", "Dropdown", false],
+  ["Unit type", "Dropdown", false],
+  ["Requirement", "Text", false],
+  ["Budget", "Number", false],
+  ["Next follow-up", "Date", false],
+];
+
+export default async function MastersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ section?: string }>;
+  searchParams: Promise<{ section?: string; tab?: string }>;
 }) {
   const ctx = await requireAuth();
-  const { section } = await searchParams;
+  const { section, tab } = await searchParams;
 
-  const allowed = MASTERS.filter((m) => ctx.has(masterPerm(m, "view")));
+  const may: Record<string, boolean> = {
+    stores: ctx.has(PERM.masters.store.view),
+    tax: ctx.has(PERM.masters.taxRate.view) || ctx.has(PERM.masters.uom.view),
+    users: ctx.has(PERM.admin.user.view),
+    limits: ctx.has(PERM.admin.approvalLimit.view),
+    leadcfg: ctx.has(PERM.masters.lostReason.view),
+    workforce: ctx.has(PERM.masters.designation.view),
+  };
 
-  const groups = masterGroups()
-    .map((g) => ({ ...g, masters: g.masters.filter((m) => allowed.includes(m)) }))
-    .filter((g) => g.masters.length > 0);
-
-  const destinations: Destination[] = [
-    {
-      key: "users", label: "Users & Roles", href: "/admin/users", icon: "Users",
-      description: "Who signs in, and what each role may do.",
-      show: ctx.has(PERM.admin.user.view),
-    },
-    {
-      key: "limits", label: "Approval Limits", href: "/admin/approval-limits", icon: "SlidersHorizontal",
-      description: "The value ceilings that decide which approval level applies.",
-      show: ctx.has(PERM.admin.approvalLimit.view),
-    },
-    {
-      key: "workforce", label: "Workforce Setup", href: "/hr", icon: "HardHat",
-      description: "Employment types, designations and the people on site.",
-      show: ctx.has(PERM.hr.employee.view),
-    },
-  ].filter((d) => d.show);
-
-  const sections = [
-    ...groups.map((g) => ({ key: g.group.toLowerCase(), label: g.group })),
-    ...destinations.map((d) => ({ key: d.key, label: d.label })),
-  ];
-
+  const sections = SECTIONS.filter((s) => may[s.key]);
   const active = sections.find((s) => s.key === section) ?? sections[0];
-  const activeGroup = groups.find((g) => g.group.toLowerCase() === active?.key);
-  const activeDestination = destinations.find((d) => d.key === active?.key);
 
-  // Row counts, so the section tells you what is actually configured.
-  const counts = new Map<string, number>();
-  if (activeGroup) {
-    await Promise.all(
-      activeGroup.masters.map(async (m) => {
-        try {
-          counts.set(m.key, await delegate(m).count());
-        } catch {
-          counts.set(m.key, 0);
-        }
-      }),
+  if (!active) {
+    return (
+      <Card>
+        <EmptyState
+          title="Nothing here is available to you"
+          description="Your role does not include view access to any master."
+        />
+      </Card>
     );
   }
 
+  const roles =
+    active.key === "users" || active.key === "limits"
+      ? await prisma.role.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } })
+      : [];
+
   return (
-    <div className="mx-auto max-w-[1400px]">
-      {sections.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={<Database className="h-8 w-8" />}
-            title="Nothing here is available to you"
-            description="Your role does not include view access to any master. Ask an administrator to grant it."
+    <div className="mx-auto grid max-w-[1400px] items-start gap-3.5 [grid-template-columns:230px_1fr] max-lg:[grid-template-columns:1fr]">
+      {/* The design's rail */}
+      <nav className="rounded-[13px] border border-line-400 bg-white p-[9px]">
+        <p className="px-[11px] pb-[7px] pt-[9px] text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+          Master data
+        </p>
+        {sections.map((s) => (
+          <Link
+            key={s.key}
+            href={`/masters?section=${s.key}`}
+            className={cn(
+              "block rounded-[9px] px-[11px] py-2.5 text-[12.5px] transition-colors",
+              s.key === active.key
+                ? "font-bold text-white"
+                : "font-semibold text-navy-500 hover:bg-surface-hover",
+            )}
+            style={
+              s.key === active.key
+                ? { background: "linear-gradient(140deg,#0089C9,#2F308C)" }
+                : undefined
+            }
+          >
+            {s.label}
+          </Link>
+        ))}
+      </nav>
+
+      <div className="min-w-0">
+        <div className="mb-[13px] flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-[15px] font-bold text-navy-950">{active.label}</h2>
+          {active.key === "stores" && ctx.has(PERM.masters.store.create) && (
+            <NewMasterRecord masterKey="stores" label="+ New store" title="New store" />
+          )}
+          {active.key === "tax" && ctx.has(PERM.masters.uom.create) && (
+            <NewMasterRecord masterKey="uoms" label="+ New unit" title="New unit of measure" />
+          )}
+          {active.key === "users" && ctx.has(PERM.admin.user.create) && <NewUser roles={roles} />}
+          {active.key === "limits" && ctx.has(PERM.admin.approvalLimit.create) && (
+            <NewApprovalLimit roles={roles} />
+          )}
+        </div>
+
+        {active.key === "stores" && <Stores />}
+        {active.key === "tax" && <TaxAndUom />}
+        {active.key === "users" && <Users />}
+        {active.key === "limits" && <Limits />}
+        {active.key === "leadcfg" && <LeadSettings tab={tab ?? "fields"} canEdit={ctx.has(PERM.masters.lostReason.create)} canDelete={ctx.has(PERM.masters.lostReason.delete)} />}
+        {active.key === "workforce" && (
+          <Workforce
+            canEdit={ctx.has(PERM.masters.designation.create)}
+            canDelete={ctx.has(PERM.masters.designation.delete)}
           />
-        </Card>
-      ) : (
-        <div className="flex flex-wrap items-start gap-3.5">
-          {/* The design's left rail */}
-          <nav className="min-w-[190px] flex-[0_1_220px] rounded-[13px] border border-line-400 bg-white p-2.5">
-            <p className="px-2.5 pb-2 pt-2 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
-              Master data
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------- Stores --------------------------------- */
+
+async function Stores() {
+  const stores = await prisma.store.findMany({
+    where: { status: "ACTIVE" },
+    orderBy: { name: "asc" },
+    select: {
+      id: true, name: true, addressLine: true,
+      project: { select: { name: true } },
+      stockBalances: { select: { value: true } },
+    },
+  });
+
+  return (
+    <div className="grid gap-3 [grid-template-columns:repeat(3,1fr)] max-md:[grid-template-columns:1fr]">
+      {stores.map((s) => {
+        const value = s.stockBalances.reduce((n, b) => n + Number(b.value), 0);
+        return (
+          <div key={s.id} className="rounded-[13px] border border-line-400 bg-white px-[18px] py-[17px]">
+            <p className="font-display text-[13.5px] font-bold text-navy-950">{s.name}</p>
+            <p className="mt-[3px] text-[11.5px] font-medium text-muted-400">
+              {s.project?.name ?? "Central"}{s.addressLine ? ` · ${s.addressLine}` : ""}
             </p>
-            {sections.map((s) => (
-              <Link
-                key={s.key}
-                href={`/masters?section=${s.key}`}
+            <div className="mt-[13px] flex gap-3.5">
+              <div>
+                <p className="num font-display text-[16px] font-extrabold text-brand-500">
+                  {s.stockBalances.length}
+                </p>
+                <p className="text-[10px] font-semibold text-muted-400">SKUs</p>
+              </div>
+              <div>
+                <p className="num font-display text-[16px] font-extrabold text-brand-500">
+                  {moneyShort(value)}
+                </p>
+                <p className="text-[10px] font-semibold text-muted-400">Valuation</p>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ------------------------------ Tax and UOM ------------------------------- */
+
+async function TaxAndUom() {
+  const [taxes, uoms] = await Promise.all([
+    prisma.taxRate.findMany({ where: { status: "ACTIVE" }, orderBy: { percentage: "asc" }, select: { id: true, name: true, percentage: true } }),
+    prisma.uom.findMany({ where: { status: "ACTIVE" }, orderBy: { code: "asc" }, select: { id: true, code: true } }),
+  ]);
+
+  return (
+    <div className="grid items-start gap-3.5 [grid-template-columns:1fr_1fr] max-md:[grid-template-columns:1fr]">
+      <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
+        <p className="mb-[11px] font-display text-[13px] font-bold text-navy-950">GST slabs</p>
+        {taxes.map((t) => (
+          <div key={t.id} className="flex justify-between border-b border-line-200 py-2 text-[12.5px] font-medium text-navy-500 last:border-0">
+            <span>{t.name}</span>
+            <span className="num font-bold text-navy-950">{Number(t.percentage)}%</span>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
+        <p className="mb-[11px] font-display text-[13px] font-bold text-navy-950">Units of measure</p>
+        <div className="flex flex-wrap gap-[7px]">
+          {uoms.map((u) => (
+            <span key={u.id} className="rounded-full border border-line-400 bg-surface-field px-3 py-1.5 text-[11.5px] font-semibold text-navy-600">
+              {u.code}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* --------------------------------- Users ---------------------------------- */
+
+async function Users() {
+  const users = await prisma.user.findMany({
+    orderBy: { name: "asc" },
+    select: {
+      id: true, name: true, email: true, status: true,
+      roles: { select: { role: { select: { name: true } } } },
+      projectAccess: { select: { project: { select: { name: true } } } },
+    },
+  });
+
+  return (
+    <>
+      <div className="overflow-x-auto rounded-[13px] border border-line-400 bg-white">
+        {users.map((u) => (
+          <div
+            key={u.id}
+            className="grid items-center gap-3 border-b border-line-200 px-[18px] py-[13px] last:border-0 hover:bg-surface-tint [grid-template-columns:1.4fr_1fr_1.2fr_100px]"
+          >
+            <div className="flex items-center gap-[11px]">
+              <span
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-[12px] font-bold text-white"
+                style={{ background: "linear-gradient(140deg,#0089C9,#2F308C)" }}
+              >
+                {u.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-[13px] font-semibold text-navy-900">{u.name}</p>
+                <p className="truncate text-[11px] font-medium text-muted-400">{u.email}</p>
+              </div>
+            </div>
+            <span className="w-fit rounded-full bg-brand-100 px-2.5 py-1 text-[11px] font-bold text-brand-700">
+              {u.roles[0]?.role.name ?? "No role"}
+            </span>
+            <p className="text-[11.5px] font-medium text-navy-500">
+              {u.projectAccess.length === 0
+                ? "All projects"
+                : u.projectAccess.map((p) => p.project.name).join(" · ")}
+            </p>
+            <span
+              className={cn(
+                "w-fit rounded-full px-2.5 py-1 text-[11px] font-bold",
+                u.status === "ACTIVE" ? "bg-good-050 text-good-700" : "bg-warn-050 text-warn-700",
+              )}
+            >
+              {u.status === "ACTIVE" ? "Active" : "Inactive"}
+            </span>
+          </div>
+        ))}
+      </div>
+      <ListNote>
+        Every user belongs to exactly one role and is mapped to specific projects — access follows
+        the mapping.
+      </ListNote>
+    </>
+  );
+}
+
+/* -------------------------------- Limits ---------------------------------- */
+
+const LIMIT_DOC: Record<string, string> = {
+  "material.indent": "Requirement Indent",
+  "material.po": "Purchase Order",
+};
+
+async function Limits() {
+  const limits = await prisma.approvalLimit.findMany({
+    orderBy: { scope: "asc" },
+    select: {
+      id: true, scope: true, maxValue: true,
+      role: { select: { name: true } },
+      user: { select: { name: true } },
+    },
+  });
+
+  return (
+    <>
+      <div className="overflow-x-auto rounded-[13px] border border-line-400 bg-white">
+        {limits.map((l) => (
+          <div
+            key={l.id}
+            className="grid items-center gap-3 border-b border-line-200 px-[18px] py-[14px] last:border-0 [grid-template-columns:1.2fr_1fr_1fr]"
+          >
+            <p className="text-[13px] font-semibold text-navy-900">{LIMIT_DOC[l.scope] ?? l.scope}</p>
+            <p className="text-[12.5px] font-medium text-navy-500">
+              {l.role?.name ?? l.user?.name} approves up to {money(Number(l.maxValue))}
+            </p>
+            <p className="text-[12.5px] font-bold text-navy-950">Above → Owner / Admin</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 rounded-[11px] border border-[#DDE4F3] bg-surface-hover px-4 py-3 text-[12px] font-semibold text-navy-800">
+        Below the configured limit the second approval level is skipped automatically. Limits are
+        editable here without code changes.
+      </div>
+    </>
+  );
+}
+
+/* ----------------------------- Lead settings ------------------------------ */
+
+const LEAD_TABS = [
+  { key: "fields", label: "Form Fields" },
+  { key: "stages", label: "Pipeline Stages" },
+  { key: "reasons", label: "Lost Reasons" },
+];
+
+async function LeadSettings({ tab, canEdit, canDelete }: { tab: string; canEdit: boolean; canDelete: boolean }) {
+  const reasons =
+    tab === "reasons"
+      ? await prisma.lostReason.findMany({
+          where: { status: "ACTIVE" },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, _count: { select: { leads: true } } },
+        })
+      : [];
+
+  return (
+    <div>
+      <div className="mb-3.5 flex gap-5 border-b border-line-400">
+        {LEAD_TABS.map((t) => (
+          <Link
+            key={t.key}
+            href={`/masters?section=leadcfg&tab=${t.key}`}
+            className={cn(
+              "border-b-[2.5px] px-1 py-2.5 text-[13px]",
+              t.key === tab
+                ? "border-brand-500 font-bold text-navy-950"
+                : "border-transparent font-semibold text-muted-600 hover:text-navy-950",
+            )}
+          >
+            {t.label}
+          </Link>
+        ))}
+      </div>
+
+      {tab === "fields" && (
+        <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
+          <p className="mb-[5px] text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+            Lead form fields
+          </p>
+          <p className="mb-2.5 text-[11.5px] font-medium text-muted-400">
+            These fields build the Capture-lead form
+          </p>
+          {LEAD_FIELDS.map(([label, type, required]) => (
+            <div key={label} className="flex items-center gap-[9px] border-b border-line-200 py-[9px] last:border-0">
+              <span className="flex-1 text-[13px] font-semibold text-navy-900">{label}</span>
+              <span className="text-[11px] font-medium text-muted-400">{type}</span>
+              <span
                 className={cn(
-                  "block rounded-[9px] px-2.5 py-2 text-[12.5px] transition-colors",
-                  s.key === active?.key
-                    ? "bg-brand-100 font-bold text-brand-700"
-                    : "font-semibold text-navy-500 hover:bg-surface-hover hover:text-navy-950",
+                  "rounded-full px-2.5 py-1 text-[10.5px] font-bold",
+                  required ? "bg-brand-100 text-brand-700" : "bg-surface-field text-muted-600",
                 )}
               >
-                {s.label}
-              </Link>
-            ))}
-          </nav>
-
-          {/* Content for the chosen section */}
-          <div className="min-w-[280px] flex-[1_1_420px]">
-            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-display text-[15px] font-bold text-navy-950">{active?.label}</h2>
+                {required ? "Mandatory" : "Optional"}
+              </span>
             </div>
-
-            {activeDestination ? (
-              <Card className="px-4 py-4">
-                <p className="text-[12.5px] font-medium text-muted-600">{activeDestination.description}</p>
-                <Link
-                  href={activeDestination.href}
-                  className="mt-3 inline-flex items-center rounded-[9px] bg-brand-500 px-4 py-2 text-[12.5px] font-bold text-white transition-colors hover:bg-brand-600"
-                >
-                  Open {activeDestination.label}
-                </Link>
-              </Card>
-            ) : (
-              <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]">
-                {activeGroup?.masters.map((m) => {
-                  const Icon =
-                    (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[m.icon] ??
-                    Database;
-                  return (
-                    <Link
-                      key={m.key}
-                      href={`/masters/${m.key}`}
-                      className="group rounded-[13px] border border-line-400 bg-white px-4 py-3.5 transition-shadow hover:shadow-[0_6px_18px_rgba(25,26,92,.08)]"
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-brand-100 text-brand-700">
-                          <Icon className="h-4 w-4" />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-[13px] font-bold text-navy-950 transition-colors group-hover:text-brand-700">
-                            {m.label}
-                          </span>
-                          <span className="num block text-[11px] font-medium text-muted-400">
-                            {counts.get(m.key) ?? 0} record{(counts.get(m.key) ?? 0) === 1 ? "" : "s"}
-                          </span>
-                        </span>
-                      </span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          ))}
         </div>
       )}
+
+      {tab === "stages" && (
+        <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
+          <p className="mb-[5px] text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+            Pipeline stages
+          </p>
+          <p className="mb-2.5 text-[11.5px] font-medium text-muted-400">
+            New, Booked and Lost are defaults · custom stages sit between New and Booked
+          </p>
+          {STAGES.map(([key, label, fixed]) => (
+            <div key={key} className="flex items-center gap-[9px] border-b border-line-200 py-[7px] last:border-0">
+              <span className="w-[210px] text-[12.5px] font-semibold text-navy-900">{label}</span>
+              {fixed && (
+                <span className="rounded-full bg-surface-hover px-2 py-[3px] text-[8.5px] font-bold tracking-[.07em] text-navy-800">
+                  DEFAULT
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "reasons" && (
+        <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
+          <p className="mb-[11px] text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+            Lost reasons · shown as the dropdown when a lead is marked Lost
+          </p>
+          <ChipEditor
+            kind={{ master: "lost-reasons" }}
+            canAdd={canEdit}
+            canDelete={canDelete}
+            placeholder="New lost reason"
+            addLabel="+ Add reason"
+            chips={reasons.map((r) => ({ id: r.id, label: r.name, canDelete: r._count.leads === 0 }))}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------- Workforce -------------------------------- */
+
+async function Workforce({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean }) {
+  const [types, designations] = await Promise.all([
+    prisma.employmentType.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, _count: { select: { employees: true } } },
+    }),
+    prisma.designation.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, _count: { select: { employees: true, users: true } } },
+    }),
+  ]);
+
+  return (
+    <div className="flex flex-col gap-3.5">
+      <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
+        <p className="mb-[5px] text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+          Employment types
+        </p>
+        <p className="mb-[11px] text-[11.5px] font-medium text-muted-400">
+          Used on every employee record · a type in use cannot be removed
+        </p>
+        <ChipEditor
+          kind={{ employmentType: true }}
+          canAdd={canEdit}
+          canDelete={canDelete}
+          placeholder="New employment type"
+          addLabel="+ Add type"
+          chips={types.map((t) => ({
+            id: t.id, label: t.name, count: t._count.employees, canDelete: t._count.employees === 0,
+          }))}
+        />
+      </div>
+
+      <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
+        <p className="mb-[5px] text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+          Designations
+        </p>
+        <p className="mb-[11px] text-[11.5px] font-medium text-muted-400">
+          Feeds the Designation dropdown on the employee form
+        </p>
+        <ChipEditor
+          kind={{ master: "designations" }}
+          canAdd={canEdit}
+          canDelete={canDelete}
+          placeholder="New designation"
+          addLabel="+ Add designation"
+          chips={designations.map((d) => ({
+            id: d.id, label: d.name, canDelete: d._count.employees === 0 && d._count.users === 0,
+          }))}
+        />
+      </div>
     </div>
   );
 }
