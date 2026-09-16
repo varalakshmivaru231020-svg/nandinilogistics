@@ -11,10 +11,19 @@ import { NewProjectButton } from "./new-project-button";
 
 export const metadata = { title: "Project Management" };
 
-const STATUS_TONE = {
-  PLANNING: "brand", ACTIVE: "good", ON_HOLD: "warn",
-  COMPLETED: "navy", CANCELLED: "bad",
+/** The design writes Ongoing · Planned · On Hold · Completed. */
+const STATUS_LABEL = {
+  PLANNING: "Planned", ACTIVE: "Ongoing", ON_HOLD: "On Hold",
+  COMPLETED: "Completed", CANCELLED: "Cancelled",
 } as const;
+
+const STATUS_TONE = {
+  PLANNING: "violet", ACTIVE: "brand", ON_HOLD: "warn",
+  COMPLETED: "good", CANCELLED: "bad",
+} as const;
+
+/** The design tints each manager's initials from a four-colour palette. */
+const AVATAR_COLOURS = ["#0089C9", "#2F308C", "#1F9D66", "#E8A13A"];
 
 function initials(name: string) {
   return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -95,7 +104,7 @@ export default async function ProjectsPage({
               </tr>
             </thead>
             <tbody>
-              {projects.map((p) => {
+              {projects.map((p, i) => {
                 const pct = p.activities.length
                   ? Math.round(p.activities.reduce((s, a) => s + a.progressPct, 0) / p.activities.length)
                   : 0;
@@ -129,8 +138,8 @@ export default async function ProjectsPage({
                       {p.projectManager ? (
                         <div className="flex items-center gap-2">
                           <span
-                            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[10px] font-bold text-white"
-                            style={{ background: "linear-gradient(140deg,#0089C9,#2F308C)" }}
+                            className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full text-[10px] font-bold text-white"
+                            style={{ background: AVATAR_COLOURS[i % AVATAR_COLOURS.length] }}
                           >
                             {initials(p.projectManager.name)}
                           </span>
@@ -157,7 +166,7 @@ export default async function ProjectsPage({
                       </div>
                     </td>
                     <td className="px-4 py-3.5">
-                      <Badge tone={STATUS_TONE[p.status]}>{p.status.replace("_", " ")}</Badge>
+                      <Badge tone={STATUS_TONE[p.status]}>{STATUS_LABEL[p.status]}</Badge>
                     </td>
                     <td className="px-4 py-3.5" />
                   </tr>

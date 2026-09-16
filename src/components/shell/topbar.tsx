@@ -41,7 +41,7 @@ export function Topbar({
     .join("")
     .toUpperCase();
 
-  const roleLabel = (perms.roles[0]?.name ?? "No role").toUpperCase();
+  const roleLabel = perms.roles[0]?.name ?? "No role";
 
   return (
     <header className="sticky top-0 z-20 flex h-[62px] shrink-0 items-center gap-4 border-b border-line-400 bg-white px-6">

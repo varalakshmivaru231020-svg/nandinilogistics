@@ -12,7 +12,7 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { Card, CardBody, CardHeader, CardSubtitle, CardTitle, Panel, PanelHeader, StatLabel, StatValue } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
-import { cn, formatDate, money, moneyShort, qty } from "@/lib/utils";
+import { cn, formatDate, moneyShort, qty } from "@/lib/utils";
 import { ApprovalQueue, type QueueRow } from "./approval-queue";
 
 export const metadata = { title: "Dashboard" };
@@ -146,7 +146,7 @@ export default async function DashboardPage() {
     const prev = Number(lastMonthTotal._sum?.amount ?? 0);
     const change = prev > 0 ? Math.round(((now - prev) / prev) * 100) : null;
     kpis.push({
-      label: `Collections · ${today.toLocaleDateString("en-IN", { month: "short" })}`,
+      label: `Collections · ${today.toLocaleDateString("en-GB", { month: "short" })}`,
       value: moneyShort(now),
       delta: change === null ? "—" : change >= 0 ? `▲ ${change}%` : `▼ ${Math.abs(change)}%`,
       deltaTone: change !== null && change < 0 ? "bad" : "good",
@@ -184,7 +184,7 @@ export default async function DashboardPage() {
 
   const schAlertCards = [
     {
-      label: "Starting today",
+      label: "To start",
       count: startingToday.length,
       items: startingToday.map((a) => ({
         txt: a.name,
@@ -200,7 +200,7 @@ export default async function DashboardPage() {
       })),
     },
     {
-      label: "Past approved date",
+      label: "Overdue",
       count: overdue.length,
       items: overdue.map((a) => ({
         txt: a.name,
@@ -229,8 +229,8 @@ export default async function DashboardPage() {
         id: i.id, kind: "INDENT", type: "Indent",
         title: i.purpose ?? `Material indent ${i.indentNo}`,
         ref: i.indentNo, project: i.project.code, by: i.raisedBy.name,
-        value: showMoney ? money(i.estimatedValue) : "—",
-        age: `${age.text} waiting`, ageDays: age.days,
+        value: showMoney ? moneyShort(i.estimatedValue) : "—",
+        age: age.text, ageDays: age.days,
         href: `/material/indents/${i.id}`, level,
         canApprove: ctx.has(
           level === "PM" ? PERM.material.indent.approvePm : PERM.material.indent.approveAdmin,
@@ -258,8 +258,8 @@ export default async function DashboardPage() {
         id: p.id, kind: "PO", type: "Purchase order",
         title: `${p.vendor.name} — ${p.poNo}`,
         ref: p.poNo, project: p.project.code, by: p.createdBy.name,
-        value: showMoney ? money(p.totalAmount) : "—",
-        age: `${age.text} waiting`, ageDays: age.days,
+        value: showMoney ? moneyShort(p.totalAmount) : "—",
+        age: age.text, ageDays: age.days,
         href: `/material/purchase-orders/${p.id}`,
         // Which of the two levels this order is actually waiting on.
         level: p.status === "PENDING_ADMIN_APPROVAL" ? "ADMIN" : "PM",
@@ -283,6 +283,7 @@ export default async function DashboardPage() {
         take: 4,
         select: {
           id: true, name: true, code: true, targetDate: true,
+          city: { select: { name: true } },
           _count: { select: { units: true } },
           activities: { select: { progressPct: true, status: true } },
         },
@@ -296,7 +297,7 @@ export default async function DashboardPage() {
       : 0;
     const done = acts.filter((a) => a.status === "COMPLETED").length;
     return {
-      name: p.name,
+      name: p.city ? `${p.name} · ${p.city.name}` : p.name,
       pct,
       meta: `${done} of ${acts.length} activities complete${p.targetDate ? ` · target ${formatDate(p.targetDate)}` : ""}`,
     };
@@ -365,27 +366,51 @@ export default async function DashboardPage() {
   /* --------------------------- Execution health ---------------------------- */
 
   const health: Array<{ value: string; label: string; tone: string }> = [];
-  if (canSchedule) {
-    const [delayed, onTrack] = await Promise.all([
-      prisma.scheduleActivity.count({ where: { ...scope, status: "DELAYED" } }),
-      prisma.scheduleActivity.count({ where: { ...scope, status: { in: ["IN_PROGRESS", "COMPLETED"] } } }),
-    ]);
-    health.push(
-      { value: String(delayed), label: "Activities delayed", tone: delayed > 0 ? "bad" : "good" },
-      { value: String(onTrack), label: "On track or done", tone: "good" },
-    );
+  const [overdueTasks, closedTasks, withEvidence, runs, openFails] = await Promise.all([
+    ctx.has(PERM.task.task.view)
+      ? prisma.task.count({ where: { status: { not: "APPROVED" }, dueDate: { lt: today } } })
+      : Promise.resolve(0),
+    ctx.has(PERM.task.task.view) ? prisma.task.count({ where: { status: "APPROVED" } }) : Promise.resolve(0),
+    ctx.has(PERM.task.task.view)
+      ? prisma.task.count({ where: { status: "APPROVED", evidence: { not: null } } })
+      : Promise.resolve(0),
+    ctx.has(PERM.checklist.checklist.view)
+      ? prisma.checklistRun.findMany({ select: { score: true } })
+      : Promise.resolve([]),
+    ctx.has(PERM.checklist.checklist.view)
+      ? prisma.checklistRun.count({ where: { result: "FAIL", state: "OPEN" } })
+      : Promise.resolve(0),
+  ]);
+
+  const compliance = runs.length
+    ? Math.round((runs.reduce((n, r) => n + r.score, 0) / runs.length) * 10) / 10
+    : null;
+
+  if (ctx.has(PERM.task.task.view)) {
+    health.push({
+      value: String(overdueTasks),
+      label: "Overdue tasks · escalated",
+      tone: overdueTasks > 0 ? "bad" : "good",
+    });
   }
-  if (ctx.has(PERM.material.grn.view)) {
-    const [posted, mismatched] = await Promise.all([
-      prisma.grn.count({ where: { status: "POSTED" } }),
-      ctx.has(PERM.material.vendorInvoice.view)
-        ? prisma.vendorInvoice.count({ where: { status: "MISMATCH" } })
-        : Promise.resolve(0),
-    ]);
-    health.push(
-      { value: String(posted), label: "Receipts posted", tone: "brand" },
-      { value: String(mismatched), label: "Invoices blocked", tone: mismatched > 0 ? "bad" : "good" },
-    );
+  if (ctx.has(PERM.checklist.checklist.view)) {
+    health.push({
+      value: compliance === null ? "—" : `${compliance}%`,
+      label: "Checklist compliance",
+      tone: compliance !== null && compliance >= 90 ? "good" : "warn",
+    });
+    health.push({
+      value: String(openFails),
+      label: "Open snags (NC)",
+      tone: openFails > 0 ? "warn" : "good",
+    });
+  }
+  if (ctx.has(PERM.task.task.view)) {
+    health.push({
+      value: closedTasks === 0 ? "—" : `${Math.round((withEvidence / closedTasks) * 100)}%`,
+      label: "Photo evidence on closure",
+      tone: "navy",
+    });
   }
 
   const healthTone: Record<string, string> = {
@@ -439,20 +464,20 @@ export default async function DashboardPage() {
                     {k.icon}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <StatValue>{k.value}</StatValue>
+                <StatValue>{k.value}</StatValue>
+                <div className="flex flex-wrap items-center gap-[7px]">
                   {k.delta && (
                     <span
                       className={cn(
-                        "rounded-full px-[9px] py-[3px] text-[10.5px] font-bold",
+                        "rounded-full px-[10px] py-[5px] text-[10.5px] font-bold",
                         deltaTone[k.deltaTone],
                       )}
                     >
                       {k.delta}
                     </span>
                   )}
+                  {k.sub && <span className="text-[11.5px] font-medium text-muted-400">{k.sub}</span>}
                 </div>
-                {k.sub && <p className="text-[11.5px] font-medium text-muted-400">{k.sub}</p>}
               </div>
             );
             return <div key={k.label}>{tile}</div>;
@@ -471,7 +496,7 @@ export default async function DashboardPage() {
               </CardSubtitle>
             </div>
             <Link href="/schedule">
-              <Button size="sm" variant="secondary">Open schedule</Button>
+              <Button size="sm" variant="secondary">Open schedule →</Button>
             </Link>
           </CardHeader>
           <div className="grid gap-3 px-[18px] py-[15px] [grid-template-columns:repeat(auto-fit,minmax(250px,1fr))]">

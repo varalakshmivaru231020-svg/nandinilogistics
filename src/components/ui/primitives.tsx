@@ -67,13 +67,15 @@ export function PanelHeader({ className, ...props }: React.HTMLAttributes<HTMLDi
 /* --------------------------------- Badge --------------------------------- */
 
 const BADGE_TONES = {
-  slate: "bg-surface-field text-navy-600 ring-line-400",
-  brand: "bg-brand-100 text-brand-700 ring-brand-100",
-  navy: "bg-navy-950 text-brand-300 ring-navy-950",
-  good: "bg-good-050 text-good-700 ring-good-050",
-  warn: "bg-warn-050 text-warn-700 ring-warn-050",
-  bad: "bg-bad-050 text-bad-600 ring-bad-050",
-  muted: "bg-surface-tint text-muted-600 ring-line-300",
+  slate: "bg-surface-field text-navy-600",
+  brand: "bg-brand-100 text-brand-700",
+  navy: "bg-navy-950 text-brand-300",
+  good: "bg-good-050 text-good-700",
+  warn: "bg-warn-050 text-warn-700",
+  bad: "bg-bad-050 text-bad-700",
+  muted: "bg-surface-tint text-muted-600",
+  /** The design's "Planned" violet. */
+  violet: "bg-[#EFE9FC] text-[#6A46C8]",
 } as const;
 
 export type BadgeTone = keyof typeof BADGE_TONES;
@@ -86,7 +88,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-[11px] py-[4px] text-[11px] font-bold ring-1 ring-inset",
+        "inline-flex items-center whitespace-nowrap rounded-full px-[10px] py-[5px] text-[10.5px] font-bold",
         BADGE_TONES[tone],
         className,
       )}

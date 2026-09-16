@@ -1,7 +1,6 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { projectScopeFilter } from "@/lib/rbac/context";
 import { TasksScreen } from "./tasks-screen";
 
 export const metadata = { title: "Task Management" };
@@ -14,8 +13,10 @@ export default async function TasksPage({
   const ctx = await requirePermission(PERM.task.task.view);
   const { filter = "All" } = await searchParams;
 
-  const scope = projectScopeFilter(ctx);
-  const where = { OR: [scope, { projectId: null }] };
+  // A task without a project belongs to everyone who can see tasks at all.
+  const where = ctx.canAccessAllProjects
+    ? {}
+    : { OR: [{ projectId: { in: ctx.projectIds } }, { projectId: null }] };
 
   const [tasks, projects, people] = await Promise.all([
     prisma.task.findMany({

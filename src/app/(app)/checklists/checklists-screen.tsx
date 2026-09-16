@@ -90,7 +90,8 @@ export function ChecklistsScreen({
           ))}
         </div>
         <p className="min-w-0 flex-1 text-[11.5px] font-medium text-muted-600">
-          {categories.length} categories · {categories.reduce((n, c) => n + c.count, 0)} checklists in the library
+          {categories.length} categories · {categories.reduce((n, c) => n + c.count, 0)} checklists ·
+          defined once at organisation level and reused across every project
         </p>
       </div>
 
@@ -117,14 +118,23 @@ export function ChecklistsScreen({
                 type="button"
                 onClick={() => go({ tab, category: c.id })}
                 className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-[9px] px-[11px] py-2.5 text-left transition-colors",
-                  c.id === activeCategoryId ? "bg-surface-hover" : "hover:bg-surface-hover",
+                  "flex w-full items-center justify-between gap-2 rounded-[9px] border px-[11px] py-2.5 text-left transition-colors",
+                  c.id === activeCategoryId
+                    ? "border-brand-500 bg-brand-100"
+                    : "border-transparent hover:bg-surface-hover",
                 )}
               >
-                <span className={cn("text-[12.5px]", c.id === activeCategoryId ? "font-bold text-navy-950" : "font-semibold text-navy-500")}>
+                <span className={cn("text-[12.5px]", c.id === activeCategoryId ? "font-bold text-brand-700" : "font-semibold text-navy-600")}>
                   {c.name}
                 </span>
-                <span className="num text-[11px] font-semibold text-muted-400">{c.count}</span>
+                <span
+                  className={cn(
+                    "num rounded-full px-2 py-[3px] text-[10.5px] font-bold",
+                    c.id === activeCategoryId ? "bg-[#CBE5F5] text-brand-700" : "bg-surface-field text-muted-500",
+                  )}
+                >
+                  {c.count}
+                </span>
               </button>
             ))}
             {categories.length === 0 && (
@@ -287,15 +297,39 @@ export function ChecklistsScreen({
                 </div>
 
                 <div className="px-[18px] py-3">
+                  {can.update && (
+                    <div className="mb-3 flex gap-2">
+                      <Input
+                        value={newPoint}
+                        onChange={(e) => setNewPoint(e.target.value)}
+                        placeholder="Add the next checkpoint — it takes the next sequence number"
+                        className="flex-1 bg-white"
+                      />
+                      <Button
+                        loading={busy}
+                        disabled={!newPoint.trim()}
+                        onClick={async () => {
+                          await run(() => addCheckpointAction(activeList.id, newPoint, true), "Checkpoint added");
+                          setNewPoint("");
+                        }}
+                      >
+                        + Add checkpoint
+                      </Button>
+                    </div>
+                  )}
+
                   {checkpoints.length === 0 && (
-                    <p className="py-6 text-center text-[12px] font-medium text-muted-300">
-                      No checkpoints yet
+                    <p className="px-5 py-[30px] text-center text-[12.5px] font-medium text-muted-400">
+                      No checkpoints yet. Add them in the order the inspector should follow on site —
+                      the sequence number is what appears on the mobile form.
                     </p>
                   )}
 
                   {checkpoints.map((p, i) => (
-                    <div key={p.id} className="flex items-center gap-2.5 border-b border-line-200 py-2.5 last:border-0">
-                      <span className="num w-5 shrink-0 text-[11px] font-bold text-muted-400">{i + 1}</span>
+                    <div key={p.id} className="flex items-center gap-[11px] border-b border-line-200 py-3 last:border-0">
+                      <span className="num shrink-0 rounded-[8px] bg-brand-100 px-[9px] py-1.5 font-display text-[12px] font-extrabold text-brand-700">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
                       {editingPoint === p.id ? (
                         <form
                           className="flex flex-1 items-center gap-2"
@@ -321,8 +355,8 @@ export function ChecklistsScreen({
                               type="button"
                               onClick={() => run(() => updateCheckpointAction(p.id, { isMandatory: !p.isMandatory }), "Checkpoint updated")}
                               className={cn(
-                                "rounded-full px-2.5 py-1 text-[10.5px] font-bold",
-                                p.isMandatory ? "bg-bad-050 text-bad-700" : "bg-surface-hover text-navy-500",
+                                "rounded-full px-2 py-[3px] text-[8.5px] font-extrabold uppercase tracking-[.07em] text-white",
+                                p.isMandatory ? "bg-bad-600" : "bg-muted-400",
                               )}
                             >
                               {p.isMandatory ? "Mandatory" : "Optional"}
@@ -349,26 +383,6 @@ export function ChecklistsScreen({
                     </div>
                   ))}
 
-                  {can.update && (
-                    <div className="mt-3 flex gap-2">
-                      <Input
-                        value={newPoint}
-                        onChange={(e) => setNewPoint(e.target.value)}
-                        placeholder="New checkpoint"
-                        className="flex-1"
-                      />
-                      <Button
-                        loading={busy}
-                        disabled={!newPoint.trim()}
-                        onClick={async () => {
-                          await run(() => addCheckpointAction(activeList.id, newPoint, true), "Checkpoint added");
-                          setNewPoint("");
-                        }}
-                      >
-                        + Add checkpoint
-                      </Button>
-                    </div>
-                  )}
                 </div>
               </>
             ) : (

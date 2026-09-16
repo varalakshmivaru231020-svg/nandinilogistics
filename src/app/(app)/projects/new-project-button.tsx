@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, X } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerStep } from "@/components/ui/drawer";
@@ -71,8 +71,7 @@ export function NewProjectButton({
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
-        <Plus className="h-3.5 w-3.5" />
-        New project
++ New project
       </Button>
 
       {open && (

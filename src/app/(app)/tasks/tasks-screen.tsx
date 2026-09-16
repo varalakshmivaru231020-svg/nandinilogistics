@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, Input } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { ListNote } from "@/components/list/list-note";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { advanceLabel, STATUS_LABEL } from "@/lib/tasks/flow";
 import {
   advanceTaskAction, advanceTasksAction, assignTaskAction, createTaskAction,
@@ -35,11 +35,11 @@ type Lookup = Array<{ id: string; name?: string; code?: string }>;
 const FILTERS = ["All", "Open", "In Progress", "Submitted", "Overdue"];
 
 const STATUS_PILL: Record<TaskStatus, string> = {
-  OPEN: "bg-surface-hover text-navy-800",
+  OPEN: "bg-[#EEF1F9] text-[#4A5077]",
   IN_PROGRESS: "bg-brand-100 text-brand-700",
-  SUBMITTED: "bg-warn-050 text-warn-800",
+  SUBMITTED: "bg-[#EFE9FC] text-[#6A46C8]",
   APPROVED: "bg-good-050 text-good-700",
-  REOPENED: "bg-bad-050 text-bad-700",
+  REOPENED: "bg-[#FDEEE7] text-[#C05621]",
 };
 
 const PRIORITY_PILL: Record<TaskPriority, string> = {
@@ -52,6 +52,11 @@ const PRIORITIES: TaskPriority[] = ["HIGH", "MEDIUM", "LOW"];
 const PRIORITY_LABEL: Record<TaskPriority, string> = { HIGH: "High", MEDIUM: "Medium", LOW: "Low" };
 
 const COLUMNS = ["Task", "Location", "Assignee", "Due", "Priority", "Evidence", "Status", "Actions"];
+
+/** The design's short due date: "04 Sep". */
+function dueLabel(iso: string) {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
 
 function isOverdue(task: Task, nowMs: number) {
   if (!task.dueDate || task.status === "APPROVED") return false;
@@ -254,7 +259,7 @@ export function TasksScreen({
                         overdue ? "rounded-[7px] bg-bad-050 px-[9px] py-1 text-bad-600" : "text-navy-600",
                       )}
                     >
-                      {t.dueDate ? formatDate(t.dueDate) : "—"}
+                      {t.dueDate ? dueLabel(t.dueDate) : "—"}
                       {overdue && " · overdue"}
                     </span>
                   </td>

@@ -44,6 +44,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }
   }
 
+  if (ctx.has(PERM.task.task.view)) {
+    badges.tasks = await prisma.task.count({ where: { status: { not: "APPROVED" } } });
+  }
+
   if (ctx.has(PERM.sales.followUp.view)) {
     badges.followUpDue = await prisma.lead.count({
       where: {
