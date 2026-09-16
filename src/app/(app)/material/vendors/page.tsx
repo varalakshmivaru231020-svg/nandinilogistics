@@ -5,10 +5,7 @@ import { onTimeStats, readVendorListParams, vendorListWhere } from "@/lib/materi
 import { categoryOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
-import { loadOptions } from "@/lib/masters/service";
-import { MASTERS } from "@/lib/masters/registry";
 import Link from "next/link";
-import { NewMasterButton } from "@/app/(app)/masters/new-master-button";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { cn, moneyShort } from "@/lib/utils";
 
@@ -32,9 +29,8 @@ export default async function VendorsPage({
   const params = readVendorListParams(raw);
   const filtered = Boolean(params.q || params.status || params.category);
 
-  const vendorMaster = MASTERS.find((m) => m.key === "vendors")!;
 
-  const [vendors, categories, vendorOptions] = await Promise.all([
+  const [vendors, categories] = await Promise.all([
     prisma.vendor.findMany({
       // Shared with the export, so a download holds exactly what this screen shows.
       where: vendorListWhere(params),
@@ -52,7 +48,6 @@ export default async function VendorsPage({
       },
     }),
     categoryOptions(),
-    loadOptions(vendorMaster),
   ]);
 
   const active = vendors.filter((v) => v.status === "ACTIVE").length;
@@ -70,7 +65,12 @@ export default async function VendorsPage({
       <PageHeader
         actions={
           ctx.has(PERM.masters.vendor.create) ? (
-            <NewMasterButton def={vendorMaster} options={vendorOptions} label="+ New vendor" />
+            <Link
+              href="/material/vendors/new"
+              className="rounded-[9px] bg-brand-500 px-[15px] py-[9px] text-[12px] font-bold text-white transition-colors hover:bg-brand-600"
+            >
+              + New vendor
+            </Link>
           ) : null
         }
         title="Vendors"

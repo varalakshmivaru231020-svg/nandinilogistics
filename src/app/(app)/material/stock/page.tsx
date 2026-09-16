@@ -4,9 +4,6 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { readStockListParams, stockListWhere, stockState } from "@/lib/material/list-filters";
 import { unitOptions } from "@/lib/material/list-options";
-import { loadOptions } from "@/lib/masters/service";
-import { MASTERS } from "@/lib/masters/registry";
-import { NewMasterButton } from "@/app/(app)/masters/new-master-button";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
@@ -34,9 +31,8 @@ export default async function StockPage({
   const params = readStockListParams(raw);
   const filtered = Boolean(params.q || params.store || params.category);
 
-  const itemMaster = MASTERS.find((m) => m.key === "items")!;
 
-  const [balances, units, itemOptions] = await Promise.all([
+  const [balances, units] = await Promise.all([
     prisma.stockBalance.findMany({
       // Shared with the export, so a download holds exactly what this screen shows.
       where: stockListWhere(params),
@@ -54,7 +50,6 @@ export default async function StockPage({
       },
     }),
     unitOptions(),
-    loadOptions(itemMaster),
   ]);
 
   // The design lists the item master, one row per item, with the stock it holds
@@ -187,7 +182,12 @@ export default async function StockPage({
         description="Indent (internal request to store) → PM approval → store stock check → issue from stock, or PO to vendor for the shortfall → GRN → 3-way match"
         actions={
           ctx.has(PERM.masters.item.create) ? (
-            <NewMasterButton def={itemMaster} options={itemOptions} label="+ New item" />
+            <Link
+              href="/material/stock/new"
+              className="rounded-[9px] bg-brand-500 px-[15px] py-[9px] text-[12px] font-bold text-white transition-colors hover:bg-brand-600"
+            >
+              + New item
+            </Link>
           ) : null
         }
       />

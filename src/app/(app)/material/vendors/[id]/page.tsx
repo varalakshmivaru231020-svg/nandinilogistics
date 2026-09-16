@@ -3,8 +3,6 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { MASTERS } from "@/lib/masters/registry";
-import { loadOptions } from "@/lib/masters/service";
 import { moneyShort, qty } from "@/lib/utils";
 import { VendorDetail } from "./vendor-detail";
 
@@ -41,8 +39,6 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
   });
   if (!vendor) notFound();
 
-  const vendorMaster = MASTERS.find((m) => m.key === "vendors")!;
-  const options = await loadOptions(vendorMaster);
 
   // On-time is measured where it can be: orders that were received, against the
   // date the order promised.
@@ -99,30 +95,6 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
           value: moneyShort(Number(p.totalAmount)),
         };
       })}
-      master={{
-        def: vendorMaster,
-        options,
-        record: {
-          id: vendor.id,
-          code: vendor.code,
-          name: vendor.name,
-          contactPerson: vendor.contactPerson,
-          phone: vendor.phone,
-          email: vendor.email,
-          gstin: vendor.gstin,
-          pan: vendor.pan,
-          cityId: vendor.cityId,
-          addressLine: vendor.addressLine,
-          pincode: vendor.pincode,
-          paymentTermId: vendor.paymentTermId,
-          bankName: vendor.bankName,
-          accountNumber: vendor.accountNumber,
-          ifsc: vendor.ifsc,
-          upiId: vendor.upiId,
-          rating: vendor.rating,
-          status: vendor.status,
-        },
-      }}
       can={{
         raisePo: ctx.has(PERM.material.purchaseOrder.create),
         update: ctx.has(PERM.masters.vendor.update),

@@ -196,7 +196,8 @@ export function PoForm({
 
   const ready = (edit || projectId) && vendorId && lines.some((l) => l.itemId && Number(l.orderedQty) > 0);
 
-  const taxPct = subTotal > 0 ? Math.round((taxAmount / subTotal) * 100) : 0;
+  // With nothing priced yet the label shows the standard rate, as the design does.
+  const taxPct = subTotal > 0 ? Math.round((taxAmount / subTotal) * 100) : 18;
 
   return (
     <DetailScreen

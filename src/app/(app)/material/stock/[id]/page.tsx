@@ -3,8 +3,6 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { MASTERS } from "@/lib/masters/registry";
-import { loadOptions } from "@/lib/masters/service";
 import { formatDateTime, qty } from "@/lib/utils";
 import { ItemDetail, type Movement } from "./item-detail";
 
@@ -38,7 +36,7 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
   });
   if (!item) notFound();
 
-  const [balances, ledger, itemOptions] = await Promise.all([
+  const [balances, ledger] = await Promise.all([
     prisma.stockBalance.aggregate({ where: { itemId: id }, _sum: { quantity: true } }),
     prisma.stockLedger.findMany({
       where: { itemId: id },
@@ -62,7 +60,6 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
         },
       },
     }),
-    loadOptions(MASTERS.find((m) => m.key === "items")!),
   ]);
 
   const peopleIds = [
@@ -130,24 +127,6 @@ export default async function ItemDetailPage({ params }: { params: Promise<{ id:
         issuedTotal: `−${qty(issued, 2)} ${unit}`,
       }}
       movements={movements}
-      master={{
-        def: MASTERS.find((m) => m.key === "items")!,
-        options: itemOptions,
-        record: {
-          id: item.id,
-          code: item.code,
-          name: item.name,
-          categoryId: item.categoryId,
-          uomId: item.uomId,
-          hsnCode: item.hsnCode,
-          description: item.description,
-          taxRateId: item.taxRateId,
-          standardRate: Number(item.standardRate),
-          isAsset: item.isAsset,
-          reorderLevel: Number(item.reorderLevel),
-          status: item.status,
-        },
-      }}
       can={{
         raiseIndent: ctx.has(PERM.material.indent.create),
         update: ctx.has(PERM.masters.item.update),

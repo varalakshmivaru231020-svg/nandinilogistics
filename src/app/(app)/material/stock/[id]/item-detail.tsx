@@ -6,13 +6,11 @@ import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/primitives";
-import { MasterForm } from "@/app/(app)/masters/[key]/master-screen";
 import { deleteMasterAction } from "@/app/(app)/masters/actions";
 import {
   DetailAction, DetailActionLink, DetailScreen, Fact, PanelCard, SummaryCard, TD, TH,
 } from "@/components/shell/detail-screen";
 import { cn } from "@/lib/utils";
-import type { MasterDef } from "@/lib/masters/types";
 
 export interface Movement {
   id: string;
@@ -43,7 +41,7 @@ const TABS: Array<[string, string]> = [
 ];
 
 export function ItemDetail({
-  item, movements, master, can,
+  item, movements, can,
 }: {
   item: {
     id: string; name: string; code: string; unit: string;
@@ -53,12 +51,10 @@ export function ItemDetail({
     receivedTotal: string; issuedTotal: string;
   };
   movements: Movement[];
-  master: { def: MasterDef; options: Record<string, Array<{ value: string; label: string }>>; record: Record<string, unknown> };
   can: { raiseIndent: boolean; update: boolean; delete: boolean };
 }) {
   const router = useRouter();
   const [tab, setTab] = React.useState("all");
-  const [editing, setEditing] = React.useState(false);
   const [confirming, setConfirming] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -117,7 +113,7 @@ export function ItemDetail({
             <DetailAction tone="danger" onClick={() => setConfirming(true)}>🗑 Delete</DetailAction>
           )}
           {can.update && (
-            <DetailAction tone="primary" onClick={() => setEditing(true)}>✎ Edit</DetailAction>
+            <DetailActionLink tone="primary" href={`/material/stock/${item.id}/edit`}>✎ Edit</DetailActionLink>
           )}
         </>
       }
@@ -235,16 +231,6 @@ export function ItemDetail({
           transfers are booked by the store team against an indent.
         </div>
       </PanelCard>
-
-      {editing && (
-        <MasterForm
-          def={master.def}
-          options={master.options}
-          record={master.record}
-          onClose={() => setEditing(false)}
-          onSaved={() => { setEditing(false); router.refresh(); }}
-        />
-      )}
 
       <Modal
         open={confirming}

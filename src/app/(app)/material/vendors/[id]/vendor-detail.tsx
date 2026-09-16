@@ -7,16 +7,14 @@ import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/primitives";
-import { MasterForm } from "@/app/(app)/masters/[key]/master-screen";
 import { deleteMasterAction } from "@/app/(app)/masters/actions";
 import {
   DetailAction, DetailActionLink, DetailScreen, SoftPill,
 } from "@/components/shell/detail-screen";
 import { PO_STATUS_LABEL, PO_STATUS_TONE } from "@/lib/material/po-display";
-import type { MasterDef } from "@/lib/masters/types";
 
 export function VendorDetail({
-  vendor, rows, orders, master, can,
+  vendor, rows, orders, can,
 }: {
   vendor: {
     id: string; name: string; code: string; initials: string;
@@ -24,11 +22,9 @@ export function VendorDetail({
   };
   rows: Array<{ k: string; v: string }>;
   orders: Array<{ id: string; poNo: string; status: string; items: string; value: string }>;
-  master: { def: MasterDef; options: Record<string, Array<{ value: string; label: string }>>; record: Record<string, unknown> };
   can: { raisePo: boolean; update: boolean; delete: boolean };
 }) {
   const router = useRouter();
-  const [editing, setEditing] = React.useState(false);
   const [confirming, setConfirming] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -76,7 +72,7 @@ export function VendorDetail({
             <DetailAction tone="danger" onClick={() => setConfirming(true)}>🗑 Delete</DetailAction>
           )}
           {can.update && (
-            <DetailAction tone="primary" onClick={() => setEditing(true)}>✎ Edit</DetailAction>
+            <DetailActionLink tone="primary" href={`/material/vendors/${vendor.id}/edit`}>✎ Edit</DetailActionLink>
           )}
         </>
       }
@@ -132,16 +128,6 @@ export function VendorDetail({
           </div>
         </div>
       </div>
-
-      {editing && (
-        <MasterForm
-          def={master.def}
-          options={master.options}
-          record={master.record}
-          onClose={() => setEditing(false)}
-          onSaved={() => { setEditing(false); router.refresh(); }}
-        />
-      )}
 
       <Modal
         open={confirming}
