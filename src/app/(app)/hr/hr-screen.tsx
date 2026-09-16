@@ -2,11 +2,10 @@
 
 import * as React from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Pencil, Plus, UserCheck, UserX, X } from "lucide-react";
+import { Pencil, UserCheck, UserX, X } from "lucide-react";
 
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
-import { ListToolbar } from "@/components/list/list-toolbar";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
@@ -153,8 +152,6 @@ export function HrScreen({
         <StaffTab
           employees={employees}
           employmentTypes={employmentTypes}
-          designations={designations}
-          params={params}
           can={can}
           newType={newType}
           busy={busy}
@@ -261,70 +258,29 @@ export function HrScreen({
 /* -------------------------------- Employees -------------------------------- */
 
 function StaffTab({
-  employees, employmentTypes, designations, params, can, newType, busy,
+  employees, employmentTypes, can, newType, busy,
   onNewType, onAddType, onRemoveType, onEdit, onRemove, onStatus,
 }: {
   employees: Employee[]; employmentTypes: TypeRow[];
-  designations: Array<{ id: string; name: string }>;
-  /** The current query, for the export link. */
-  params: URLSearchParams;
   can: Record<string, boolean>; newType: string; busy: boolean;
   onNewType: (v: string) => void;
   onAddType: () => void; onRemoveType: (t: TypeRow) => void;
   onEdit: (e: Employee | "new") => void; onRemove: (e: Employee) => void;
   onStatus: (e: Employee) => void;
 }) {
-  // The export carries only the employee filters, not the attendance tabs' dates.
-  const exportParams = new URLSearchParams();
-  for (const k of ["q", "type", "designation", "status"]) {
-    const v = params.get(k);
-    if (v) exportParams.set(k, v);
-  }
-
   return (
     <div>
-      <ListToolbar
-        className="mb-3.5"
-        searchPlaceholder="Search name, code or mobile…"
-        filters={[
-          {
-            name: "type",
-            label: "Employment type",
-            allLabel: "All types",
-            options: employmentTypes.map((t) => ({ value: t.id, label: t.name })),
-          },
-          {
-            name: "designation",
-            label: "Designation",
-            allLabel: "All designations",
-            options: designations.map((d) => ({ value: d.id, label: d.name })),
-          },
-          {
-            name: "status",
-            label: "Status",
-            allLabel: "All statuses",
-            options: [
-              { value: "ACTIVE", label: "Active" },
-              { value: "INACTIVE", label: "Inactive" },
-            ],
-          },
-        ]}
-      >
-        <span className="text-[11.5px] font-semibold text-muted-600">
+      {/* The design heads this tab with the count and one button. */}
+      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
+        <span className="text-[13px] font-medium text-muted-600">
           {employees.length} employee{employees.length === 1 ? "" : "s"} on record
         </span>
-        {can.exportEmployees && (
-          <ExportMenu
-            href={(format) => exportHref("/api/hr/employees/export", format, exportParams)}
-            disabled={employees.length === 0}
-          />
-        )}
         {can.create && (
-          <Button size="sm" onClick={() => onEdit("new")}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> New employee
+          <Button size="md" onClick={() => onEdit("new")}>
+            + New employee
           </Button>
         )}
-      </ListToolbar>
+      </div>
 
       {/* Employment types — configurable, as the design's chips */}
       <Card className="mb-3.5 px-4 py-3.5">

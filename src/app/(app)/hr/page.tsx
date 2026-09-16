@@ -1,7 +1,6 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { PageHeader } from "@/components/ui/primitives";
 import { employeeListWhere, maskId, readEmployeeListParams } from "@/lib/hr/list-filters";
 import { parseAttendanceRange } from "@/lib/hr/attendance-report";
 import { loadAttendanceReport } from "@/lib/hr/attendance-report-data";
@@ -75,10 +74,6 @@ export default async function WorkforcePage({
 
   return (
     <div className="mx-auto max-w-[1400px]">
-      <PageHeader
-        title="Users & Attendance"
-        description="Everyone on site and in the office, and the day-by-day record of who worked."
-      />
       <HrScreen
         tab={tab}
         date={date}
