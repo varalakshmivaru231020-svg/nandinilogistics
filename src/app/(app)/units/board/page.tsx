@@ -33,7 +33,7 @@ export default async function AvailabilityBoardPage({
 
   if (!projectId) {
     return (
-      <div className="mx-auto max-w-7xl">
+      <div>
         <PageHeader title="Availability Board" />
         <Card>
           <EmptyState title="No projects available to you" description="You are not mapped to any project yet." />
@@ -86,7 +86,7 @@ export default async function AvailabilityBoardPage({
   }
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       {/* The design opens this screen with one button, right-aligned. */}
       {ctx.has(PERM.unit.unit.create) && (
         <div className="mb-3.5 flex justify-end">

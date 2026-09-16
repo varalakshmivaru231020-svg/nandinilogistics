@@ -120,7 +120,8 @@ export function Pagination({
   buildHref: (page: number) => string;
 }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
-  if (total === 0) return null;
+  // The design draws a pager only when there is somewhere to page to.
+  if (total === 0 || pages === 1) return null;
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
 

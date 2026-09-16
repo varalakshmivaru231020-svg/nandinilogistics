@@ -76,9 +76,16 @@ const FULFIL_TONE = {
   warn: "bg-[#E8A13A] text-white",
 } as const;
 
-const STATUS_TONE: Record<string, "slate" | "brand" | "good" | "warn" | "bad" | "navy" | "muted"> = {
-  DRAFT: "muted", SUBMITTED: "warn", PM_APPROVED: "brand", ADMIN_APPROVED: "navy",
-  PARTIALLY_ORDERED: "brand", ORDERED: "good", CLOSED: "good",
+/** The design writes these in words, not in enum case. */
+const STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Draft", SUBMITTED: "Pending PM approval", PM_APPROVED: "Pending approval",
+  ADMIN_APPROVED: "Approved", PARTIALLY_ORDERED: "Part-issued", ORDERED: "Issued",
+  CLOSED: "Closed", REJECTED: "Rejected", CANCELLED: "Cancelled",
+};
+
+const STATUS_TONE: Record<string, "slate" | "brand" | "good" | "warn" | "bad" | "violet" | "muted"> = {
+  DRAFT: "muted", SUBMITTED: "warn", PM_APPROVED: "warn", ADMIN_APPROVED: "brand",
+  PARTIALLY_ORDERED: "violet", ORDERED: "good", CLOSED: "good",
   REJECTED: "bad", CANCELLED: "muted",
 };
 
@@ -98,7 +105,7 @@ export function IndentCard({
   const rejected = indent.status === "REJECTED" || indent.status === "CANCELLED";
 
   return (
-    <div className="flex flex-wrap items-start gap-4 rounded-[13px] border border-line-400 bg-white px-[18px] py-4 transition-shadow hover:shadow-[0_6px_18px_rgba(25,26,92,.07)]">
+    <div className="flex flex-wrap items-center gap-4 border-b border-line-200 px-[18px] py-3.5 last:border-0 hover:bg-surface-tint">
       {/* What was asked for */}
       <div className="min-w-[200px] flex-[2_1_220px]">
         <Link
@@ -110,16 +117,6 @@ export function IndentCard({
         <div className="mt-0.5 text-[11.5px] font-medium text-muted-400">
           {indent.indentNo} · {indent.project} · by {indent.raisedBy} · raised {formatDate(indent.raisedAt)}
         </div>
-        {indent.waitingDays !== null && indent.waitingDays > 0 && (
-          <div
-            className={cn(
-              "mt-1 text-[10.5px] font-semibold",
-              indent.waitingDays > 2 ? "text-bad-600" : "text-muted-400",
-            )}
-          >
-            waiting {indent.waitingDays} day{indent.waitingDays === 1 ? "" : "s"}
-          </div>
-        )}
       </div>
 
       {/* When, and what for */}
@@ -168,10 +165,10 @@ export function IndentCard({
       </div>
 
       <div className="flex shrink-0 items-center gap-2.5">
-        <Badge tone={STATUS_TONE[indent.status] ?? "slate"}>{indent.status.replace(/_/g, " ")}</Badge>
+        <Badge tone={STATUS_TONE[indent.status] ?? "slate"}>{STATUS_LABEL[indent.status] ?? indent.status}</Badge>
         <Link
           href={`/material/indents/${indent.id}`}
-          className="rounded-[8px] border border-line-400 bg-white px-3 py-1.5 text-[11.5px] font-bold text-brand-700 transition-colors hover:bg-surface-hover"
+          className="rounded-[7px] bg-brand-500 px-[11px] py-1.5 text-[10.5px] font-bold text-white transition-colors hover:bg-brand-600"
         >
           View
         </Link>

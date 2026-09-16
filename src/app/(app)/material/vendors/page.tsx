@@ -60,7 +60,7 @@ export default async function VendorsPage({
   }));
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div>
       <PageHeader
         actions={
           ctx.has(PERM.masters.vendor.create) ? (

@@ -177,7 +177,7 @@ export default async function ReceiptsPage({
   const query = toSearchParams(raw);
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title="Collection Receipts"
         description="Money received against a booking milestone, keeping the collection position current."

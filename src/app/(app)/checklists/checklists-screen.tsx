@@ -70,7 +70,7 @@ export function ChecklistsScreen({
   const mandatory = checkpoints.filter((p) => p.isMandatory).length;
 
   return (
-    <div className="animate-fade-up mx-auto max-w-[1400px]">
+    <div className="animate-fade-up">
       <div className="mb-3.5 flex flex-wrap items-center gap-2.5">
         <div className="flex flex-wrap gap-[7px]">
           {TABS.map((t) => (

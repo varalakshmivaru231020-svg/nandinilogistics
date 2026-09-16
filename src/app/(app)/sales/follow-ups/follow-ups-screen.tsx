@@ -90,7 +90,7 @@ export function FollowUpsScreen({
   }
 
   return (
-    <div className="animate-fade-up mx-auto max-w-[1400px]">
+    <div className="animate-fade-up">
       {notice && <div className="mb-3"><Alert tone="success">{notice}</Alert></div>}
 
       {/* Header */}

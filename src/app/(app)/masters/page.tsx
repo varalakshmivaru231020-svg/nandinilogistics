@@ -86,7 +86,7 @@ export default async function MastersPage({
       : [];
 
   return (
-    <div className="mx-auto grid max-w-[1400px] items-start gap-3.5 [grid-template-columns:230px_1fr] max-lg:[grid-template-columns:1fr]">
+    <div className="grid items-start gap-3.5 [grid-template-columns:230px_1fr] max-lg:[grid-template-columns:1fr]">
       {/* The design's rail */}
       <nav className="rounded-[13px] border border-line-400 bg-white p-[9px]">
         <p className="px-[11px] pb-[7px] pt-[9px] text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">

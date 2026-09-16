@@ -116,7 +116,7 @@ export function TasksScreen({
   const allPicked = rows.length > 0 && rows.every((r) => selected.includes(r.id));
 
   return (
-    <div className="animate-fade-up mx-auto max-w-[1400px]">
+    <div className="animate-fade-up">
       <div className="mb-[15px] flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-[7px]">
           {FILTERS.map((f) => (

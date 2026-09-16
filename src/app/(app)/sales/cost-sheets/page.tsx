@@ -120,7 +120,7 @@ export default async function CostSheetsPage({
   const query = toSearchParams(raw);
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title="Cost Sheets"
         description="Base price, floor rise, PLC, parking, amenities, GST and registration — generated from the active price list, not typed."

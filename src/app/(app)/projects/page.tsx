@@ -65,7 +65,7 @@ export default async function ProjectsPage({
   const totalTowers = projects.reduce((s, p) => s + p.totalTowers, 0);
 
   return (
-    <div className="animate-fade-up mx-auto max-w-[1400px]">
+    <div className="animate-fade-up">
       {/* Summary line, as in the design */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] font-medium text-muted-600">

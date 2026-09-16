@@ -107,7 +107,7 @@ export default async function InvoicesPage({
   ];
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title="Vendor Invoices"
         description="Purchase Order ↔ GRN ↔ Invoice. A mismatch is blocked or flagged, never quietly paid."

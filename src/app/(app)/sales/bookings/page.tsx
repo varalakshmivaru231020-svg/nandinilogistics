@@ -130,7 +130,7 @@ export default async function BookingsPage({
   const query = toSearchParams(raw);
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title="Bookings"
         description="Customer, cost sheet, payment schedule and collection status — all hanging off the unit record."

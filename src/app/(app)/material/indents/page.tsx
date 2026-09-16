@@ -69,7 +69,7 @@ export default async function IndentsPage({
   const asOfMs = new Date().getTime();
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title="Requirement Indents"
         description="Indent (internal request to store) → PM approval → store stock check → issue from stock, or PO to vendor for the shortfall → GRN → 3-way match"
@@ -113,7 +113,7 @@ export default async function IndentsPage({
           </Card>
         ) : (
           <>
-            <div className="space-y-2.5">
+            <div className="overflow-hidden rounded-[13px] border border-line-400 bg-white">
               {indents.map((i) => (
                 <IndentCard
                   key={i.id}

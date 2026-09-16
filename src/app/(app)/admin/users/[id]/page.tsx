@@ -54,7 +54,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   }
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title={user.name}
         description={`${user.employeeCode} · ${user.email}${user.designation ? ` · ${user.designation.name}` : ""}`}

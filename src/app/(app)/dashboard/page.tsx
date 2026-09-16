@@ -433,7 +433,7 @@ export default async function DashboardPage() {
   const showApprovals = queue.length > 0 || ctx.has(PERM.material.indent.view);
 
   return (
-    <div className="animate-fade-up mx-auto max-w-[1400px]">
+    <div className="animate-fade-up">
       {/* Greeting line */}
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
         <div className="text-[13px] font-medium text-muted-600">

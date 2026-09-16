@@ -32,7 +32,7 @@ export default async function CustomersPage({
   });
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title="Customers"
         description="Booked customers with their KYC, bookings and collection position."

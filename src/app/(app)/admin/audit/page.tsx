@@ -107,7 +107,7 @@ export default async function AuditPage({
   ];
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title="Audit Trail"
         description="Every create, edit, approve, delete and sign-in on the platform, with the field-level change recorded."

@@ -26,7 +26,7 @@ export default async function PermissionsPage() {
   const dbCount = await prisma.permission.count();
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title="Permission Catalogue"
         description="Every guarded surface in the platform. This list is generated from the code registry, so it can never drift from what the application actually enforces."

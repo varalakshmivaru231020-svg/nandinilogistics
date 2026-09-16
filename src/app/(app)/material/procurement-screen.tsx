@@ -149,7 +149,7 @@ export function ProcurementScreen({
     tab === "vendors" || tab === "items";
 
   return (
-    <div className="animate-fade-up mx-auto max-w-[1400px]">
+    <div className="animate-fade-up">
       {/* Chain explainer, as in the design */}
       <div className="mb-4 flex items-center gap-2">
         <p className="flex-1 text-[11.5px] font-medium leading-relaxed text-muted-400">

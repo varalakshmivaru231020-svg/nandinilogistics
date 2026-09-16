@@ -122,7 +122,7 @@ export function LeadDetail({
   ];
 
   return (
-    <div className="animate-fade-up mx-auto max-w-[1400px]">
+    <div className="animate-fade-up">
       {/* ------------------------------- Header ------------------------------- */}
       <div className="mb-3.5 flex flex-wrap items-start gap-3">
         <Link

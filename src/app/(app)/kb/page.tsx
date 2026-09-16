@@ -43,7 +43,7 @@ export default async function KnowledgeBasePage({
   ]);
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div>
       <KbScreen
         query={q}
         totalArticles={totalArticles}

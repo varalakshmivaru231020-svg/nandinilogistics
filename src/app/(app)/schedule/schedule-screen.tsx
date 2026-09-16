@@ -142,7 +142,7 @@ export function ScheduleScreen({
   }
 
   return (
-    <div className="animate-fade-up mx-auto max-w-[1400px]">
+    <div className="animate-fade-up">
       {error && <div className="mb-3"><Alert tone="error">{error}</Alert></div>}
       {notice && !error && <div className="mb-3"><Alert tone="success">{notice}</Alert></div>}
 

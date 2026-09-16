@@ -79,7 +79,7 @@ export function UnitSetup({
   const editingUnit = planned.find((p) => p.key === editing) ?? null;
 
   return (
-    <div className="animate-fade-up mx-auto max-w-[1400px]">
+    <div className="animate-fade-up">
       <div className="mb-4 flex flex-wrap items-center gap-3.5">
         <button
           type="button"

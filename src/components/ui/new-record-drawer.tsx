@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
@@ -33,7 +32,6 @@ export function NewRecordDrawer({
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
-        <Plus className="h-3.5 w-3.5" />
         {label}
       </Button>
 

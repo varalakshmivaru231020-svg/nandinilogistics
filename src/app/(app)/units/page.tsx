@@ -182,7 +182,7 @@ export default async function UnitsPage({
   });
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <UnitManager lookups={formLookups} canSeeAreas={showPrice}>
         <PageHeader
           title="Units"

@@ -48,7 +48,7 @@ export default async function LeadsPage({
     .reduce((n, s) => n + s._count, 0);
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <LeadsScreen
         totalLeads={totalLeads}
         openLeads={openLeads}

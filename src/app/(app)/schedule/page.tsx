@@ -33,7 +33,7 @@ export default async function SchedulePage({
 
   if (!projectId) {
     return (
-      <div className="mx-auto max-w-7xl">
+      <div>
         <PageHeader title="Project Schedule" />
         <Card>
           <EmptyState title="No projects available to you" description="You are not mapped to any project yet." />

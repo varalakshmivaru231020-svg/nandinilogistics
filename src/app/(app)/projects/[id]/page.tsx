@@ -97,7 +97,7 @@ export default async function ProjectDetailPage({
     : [];
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title={project.name}
         description={[project.projectType?.name, project.city?.name, project.addressLine].filter(Boolean).join(" · ")}

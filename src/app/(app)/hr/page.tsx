@@ -73,7 +73,7 @@ export default async function WorkforcePage({
   const report = canReport && range.ok ? await loadAttendanceReport(prisma, range, peopleParams) : [];
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div>
       <HrScreen
         tab={tab}
         date={date}

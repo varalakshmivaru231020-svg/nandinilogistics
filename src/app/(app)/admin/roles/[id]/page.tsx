@@ -31,7 +31,7 @@ export default async function RoleDetailPage({ params }: { params: Promise<{ id:
   const granted = role.permissions.map((p) => p.permission.code);
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title={role.name}
         description={role.description ?? undefined}

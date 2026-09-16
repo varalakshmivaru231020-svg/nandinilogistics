@@ -47,7 +47,7 @@ export default async function ReportPage({
   const rows = JSON.parse(JSON.stringify(result.rows)) as Array<Record<string, unknown>>;
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title={def.label}
         description={def.description}

@@ -54,7 +54,7 @@ export default async function MasterListPage({
   const plainRows = JSON.parse(JSON.stringify(rows)) as Array<Record<string, unknown>>;
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title={def.label}
         description={def.description}

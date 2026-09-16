@@ -58,7 +58,7 @@ export default async function IssuesPage({
   const pendingAck = issues.filter((i) => !i.acknowledgedAt && !i.cancelledAt).length;
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div>
       <PageHeader
         title="Material Issues"
         description="Store to supervisor, valued at the weighted-average rate and acknowledged by whoever receives it."
