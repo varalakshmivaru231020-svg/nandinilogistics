@@ -27,9 +27,18 @@ function readableSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/**
+ * Attendance is kept as a date, not an instant: every day here is the UTC
+ * midnight the column stores, so a calendar cell and the mark on it cannot
+ * drift apart by a day east of Greenwich.
+ */
+function dayKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 /** The design's dd/mm/yyyy, used on the log and the range label. */
 function slashDate(d: Date): string {
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
 }
 
 export default async function EmployeeDetailPage({
@@ -54,12 +63,11 @@ export default async function EmployeeDetailPage({
   if (!employee) notFound();
 
   // The design opens on the last fortnight.
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const defaultFrom = new Date(today);
-  defaultFrom.setDate(defaultFrom.getDate() - 13);
-  const from = raw.from ? new Date(`${raw.from}T00:00:00`) : defaultFrom;
-  const to = raw.to ? new Date(`${raw.to}T00:00:00`) : today;
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const defaultFrom = new Date(today.getTime() - 13 * 86_400_000);
+  const from = raw.from ? new Date(`${raw.from}T00:00:00.000Z`) : defaultFrom;
+  const to = raw.to ? new Date(`${raw.to}T00:00:00.000Z`) : today;
 
   const canViewAttendance = ctx.has(PERM.hr.attendance.view);
   const entries = canViewAttendance
@@ -69,19 +77,19 @@ export default async function EmployeeDetailPage({
       })
     : [];
 
-  const byDay = new Map(entries.map((e) => [e.attendanceOn.toISOString().slice(0, 10), e]));
+  const byDay = new Map(entries.map((e) => [dayKey(e.attendanceOn), e]));
 
   // Each day in the range, as the calendar draws it.
   const calendar: AttendanceDay[] = [];
-  for (let d = new Date(from); d <= to && calendar.length < 93; d.setDate(d.getDate() + 1)) {
-    const key = d.toISOString().slice(0, 10);
+  for (let d = new Date(from); d <= to && calendar.length < 93; d.setUTCDate(d.getUTCDate() + 1)) {
+    const key = dayKey(d);
     const entry = byDay.get(key);
     const meta = entry ? STATUS_LABEL[entry.status] : null;
     calendar.push({
       day: key.slice(8),
       mark: meta?.mark ?? "·",
       status: (entry?.status as AttendanceDay["status"]) ?? null,
-      tip: `${slashDate(new Date(`${key}T00:00:00`))}${
+      tip: `${slashDate(new Date(`${key}T00:00:00.000Z`))}${
         meta
           ? ` · ${meta.label}${Number(entry!.overtimeHours) ? ` · OT ${Number(entry!.overtimeHours)} h` : ""}${entry!.notes ? `\n${entry!.notes}` : ""}`
           : " · not marked"
@@ -148,8 +156,8 @@ export default async function EmployeeDetailPage({
       calendar={calendar}
       log={log}
       range={{
-        from: from.toISOString().slice(0, 10),
-        to: to.toISOString().slice(0, 10),
+        from: dayKey(from),
+        to: dayKey(to),
         label: `${calendar.length} ${calendar.length === 1 ? "day" : "days"} · ${slashDate(from)} → ${slashDate(to)}`,
         marked: `${log.length} of ${calendar.length} days marked`,
       }}
