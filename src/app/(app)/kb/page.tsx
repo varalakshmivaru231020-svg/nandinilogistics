@@ -35,7 +35,7 @@ export default async function KnowledgeBasePage({
       },
       orderBy: { updatedAt: "desc" },
       include: {
-        author: { select: { name: true } },
+        author: { select: { name: true, roles: { select: { role: { select: { name: true } } }, take: 1 } } },
         attachments: { select: { id: true, fileName: true, fileSize: true } },
       },
     }),
@@ -55,7 +55,8 @@ export default async function KnowledgeBasePage({
           body: a.body,
           category: a.category,
           isPublished: a.isPublished,
-          author: a.author?.name ?? "System",
+          // The design credits the role that wrote the article, not the person.
+          author: a.author?.roles[0]?.role.name ?? a.author?.name ?? "System",
           updatedAt: a.updatedAt.toISOString(),
           attachments: a.attachments,
         }))}

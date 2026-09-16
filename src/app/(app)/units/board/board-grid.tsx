@@ -25,14 +25,27 @@ interface Unit {
 
 interface Block { id: string; name: string; units: Unit[] }
 
-/** One status, one colour, everywhere. */
+/**
+ * The board paints three states, as the design does: a flat is free, someone is
+ * holding it, or it is gone. Everything after a booking — agreement, registry —
+ * is still gone, and a blocked flat is held back.
+ */
+const BOARD_STATE: Record<string, "AVAILABLE" | "HELD" | "BOOKED"> = {
+  AVAILABLE: "AVAILABLE",
+  HELD: "HELD",
+  BLOCKED: "HELD",
+  BOOKED: "BOOKED",
+  AGREEMENT: "BOOKED",
+  REGISTERED: "BOOKED",
+};
+
+const boardState = (status: string) => BOARD_STATE[status] ?? "AVAILABLE";
+
+/** One state, one colour, everywhere. */
 const STATUS_STYLE: Record<string, { cell: string; dot: string; label: string }> = {
   AVAILABLE:  { cell: "border-good-050 bg-good-050 text-good-700 hover:border-good-600",    dot: "bg-good-600",  label: "Available" },
   HELD:       { cell: "border-warn-050 bg-warn-050 text-warn-700 hover:border-warn-700",    dot: "bg-warn-700",  label: "On hold" },
   BOOKED:     { cell: "border-brand-100 bg-brand-100 text-brand-700 hover:border-brand-500", dot: "bg-brand-500", label: "Booked" },
-  AGREEMENT:  { cell: "border-line-400 bg-surface-field text-navy-800 hover:border-navy-800", dot: "bg-navy-800",  label: "Agreement" },
-  REGISTERED: { cell: "border-line-500 bg-line-400 text-navy-600 hover:border-navy-600",     dot: "bg-navy-500",  label: "Registered" },
-  BLOCKED:    { cell: "border-bad-050 bg-bad-050 text-bad-600 hover:border-bad-600",         dot: "bg-bad-600",   label: "Blocked" },
 };
 
 /** The design's legend swatches: a tint with a stronger border. */
@@ -78,13 +91,13 @@ export function BoardGrid({
   // The design keeps every flat on the board and fades the ones a filter
   // excludes, so a tower does not change shape as the filters are used.
   const dimmed = (u: Unit) =>
-    !((status === "all" || u.status === status) && (type === "all" || u.unitTypeName === type));
+    !((status === "all" || boardState(u.status) === status) && (type === "all" || u.unitTypeName === type));
 
   const floors = new Map<number, Unit[]>();
   for (const u of units) floors.set(u.floorNumber, [...(floors.get(u.floorNumber) ?? []), u]);
   const rows = [...floors.entries()].sort((a, b) => b[0] - a[0]);
 
-  const count = (s: string) => units.filter((u) => u.status === s).length;
+  const count = (s: string) => units.filter((u) => boardState(u.status) === s).length;
 
   return (
     <div>
@@ -97,13 +110,13 @@ export function BoardGrid({
           <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-[7px]">
               {projects.map((p) => (
-                <Chip
+                <ProjectChip
                   key={p.id}
                   picked={p.id === activeProjectId}
                   onClick={() => router.push(`/units/board?project=${p.id}`)}
                 >
                   {p.name}
-                </Chip>
+                </ProjectChip>
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-muted-600">
@@ -150,7 +163,7 @@ export function BoardGrid({
               >
                 <div className="text-center text-[11px] font-bold text-muted-400">Fl {floor}</div>
                 {floorUnits.map((u) => {
-                  const style = STATUS_STYLE[u.status] ?? STATUS_STYLE.AVAILABLE;
+                  const style = STATUS_STYLE[boardState(u.status)];
                   const faded = dimmed(u);
                   return (
                     <button
@@ -225,10 +238,30 @@ function Chip({ children, picked, onClick }: { children: React.ReactNode; picked
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-full border px-[13px] py-[7px] text-[11.5px] font-semibold transition-colors",
+        "cursor-pointer rounded-full border px-[11px] py-[6px] text-[11px] font-semibold transition-colors",
         picked
           ? "border-brand-500 bg-brand-100 text-brand-700"
-          : "border-line-400 bg-white text-navy-600 hover:border-brand-500",
+          : "border-line-400 bg-white text-muted-600 hover:border-brand-500",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** The project the board is showing is the design's one solid chip. */
+function ProjectChip({
+  children, picked, onClick,
+}: { children: React.ReactNode; picked: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "cursor-pointer rounded-full border px-4 py-[9px] text-[12px] font-bold transition-colors",
+        picked
+          ? "border-brand-500 bg-[linear-gradient(140deg,#0089C9,#2F308C)] text-white shadow-[0_5px_14px_rgba(0,137,201,.25)]"
+          : "border-line-400 bg-white text-navy-500 hover:border-brand-500",
       )}
     >
       {children}
@@ -261,7 +294,7 @@ function UnitPanel({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const style = STATUS_STYLE[unit.status] ?? STATUS_STYLE.AVAILABLE;
+  const style = STATUS_STYLE[boardState(unit.status)];
   const holdExpired = unit.hold ? new Date(unit.hold.expiresAt).getTime() < nowMs : false;
 
   async function run(fn: () => Promise<{ ok: boolean; error?: string }>, msg: string) {

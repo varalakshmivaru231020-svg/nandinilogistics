@@ -7,7 +7,12 @@ import { Card, Field, Input, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
-import { formatDateTime } from "@/lib/utils";
+/** The design stamps an article in figures: 02/09/2026, 11:20. */
+function stamp(value: string) {
+  const d = new Date(value);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 import { FileChip } from "@/components/ui/file-tag";
 import {
   createArticleAction, deleteArticleAction, updateArticleAction,
@@ -79,7 +84,7 @@ export function KbScreen({
             <div className="font-display text-[19px] font-bold text-navy-950">{open.title}</div>
             <p className="mt-[3px] text-[12px] font-medium text-muted-500">
               {open.attachments.length} {open.attachments.length === 1 ? "attachment" : "attachments"}
-              {" · last updated by "}{open.author} · {formatDateTime(open.updatedAt)}
+              {" · last updated by "}{open.author} · {stamp(open.updatedAt)}
             </p>
           </div>
           {can.update && (
@@ -222,7 +227,7 @@ export function KbScreen({
 
               <p className="mt-[11px] text-[11px] font-semibold text-muted-400">
                 {a.attachments.length} attachment{a.attachments.length === 1 ? "" : "s"} · {a.author} ·{" "}
-                {formatDateTime(a.updatedAt)}
+                {stamp(a.updatedAt)}
               </p>
 
               <div className="mt-[13px] flex gap-[7px]">

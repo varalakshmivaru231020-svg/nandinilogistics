@@ -133,7 +133,7 @@ export default async function VendorsPage({
 
                 {showPerformance && (
                   <div className="shrink-0 text-right">
-                    <div className="font-display text-[16px] font-extrabold text-navy-950">★ {v.rating ?? "—"}</div>
+                    <div className="font-display text-[16px] font-extrabold text-navy-950">★ {v.rating === null ? "—" : Number(v.rating).toFixed(1)}</div>
                     <div
                       className={cn(
                         "text-[12.5px] font-bold",

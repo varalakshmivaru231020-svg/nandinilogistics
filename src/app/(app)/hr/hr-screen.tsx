@@ -27,6 +27,19 @@ interface Employee {
 }
 interface TypeRow { id: string; name: string; count: number; canDelete: boolean }
 
+/**
+ * The design colours the employment type: staff navy, a contract purple, and
+ * direct labour green. Anything else stays slate.
+ */
+const TYPE_PILL: Record<string, string> = {
+  "company staff": "bg-[#EFF3FB] text-[#2F308C]",
+  "contract role": "bg-[#EFE9FC] text-[#5636A8]",
+  "direct labour": "bg-good-050 text-good-700",
+};
+
+const typePill = (name: string) =>
+  TYPE_PILL[name.trim().toLowerCase()] ?? "bg-surface-field text-navy-500";
+
 /** The design tints each employee's initials from a four-colour palette. */
 const AVATAR_COLOURS = ["#0089C9", "#2F308C", "#1F9D66", "#E8A13A"];
 
@@ -319,7 +332,7 @@ function StaffTab({
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3"><Badge tone="slate">{e.employmentType}</Badge></td>
+                <td className="px-4 py-3"><span className={cn("inline-block whitespace-nowrap rounded-full px-2.5 py-[5px] text-[10.5px] font-bold", typePill(e.employmentType))}>{e.employmentType}</span></td>
                 <td className="px-4 py-3 text-[12px] font-medium text-navy-500">
                   <span className="num">{e.aadhaar ?? "—"}</span>
                   <br />
@@ -479,7 +492,7 @@ function MarkTab({
                     <p className="text-[12.5px] font-bold text-navy-950">{e.name}</p>
                     <p className="text-[11px] font-medium text-muted-400">{e.designation ?? e.code}</p>
                   </td>
-                  <td className="px-4 py-2.5"><Badge tone="slate">{e.employmentType}</Badge></td>
+                  <td className="px-4 py-2.5"><span className={cn("inline-block whitespace-nowrap rounded-full px-2.5 py-[5px] text-[10.5px] font-bold", typePill(e.employmentType))}>{e.employmentType}</span></td>
                   <td className="px-4 py-2.5">
                     <span className="flex flex-wrap gap-1.5">
                       {MARKS.map((m) => {
@@ -596,7 +609,7 @@ function ReportTab({
                   </p>
                   <p className="num text-[11px] font-medium text-muted-400">{r.code}</p>
                 </td>
-                <td className="px-4 py-2.5"><Badge tone="slate">{r.employmentType}</Badge></td>
+                <td className="px-4 py-2.5"><span className={cn("inline-block whitespace-nowrap rounded-full px-2.5 py-[5px] text-[10.5px] font-bold", typePill(r.employmentType))}>{r.employmentType}</span></td>
                 <td className="num px-4 py-2.5 text-right text-[12px] font-bold text-good-700">{r.present}</td>
                 <td className="num px-4 py-2.5 text-right text-[12px] font-bold text-warn-700">{r.half}</td>
                 <td className="num px-4 py-2.5 text-right text-[12px] font-bold text-bad-600">{r.absent}</td>
