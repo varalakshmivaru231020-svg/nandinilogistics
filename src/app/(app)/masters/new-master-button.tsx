@@ -13,11 +13,14 @@ import type { MasterDef } from "@/lib/masters/types";
  * to another screen.
  */
 export function NewMasterButton({
-  def, options, label,
+  def, options, label, record, className,
 }: {
   def: MasterDef;
   options: Record<string, Array<{ value: string; label: string }>>;
   label: string;
+  /** Pass a record to open it instead of a blank form. */
+  record?: Record<string, unknown> | null;
+  className?: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const router = useRouter();
@@ -28,7 +31,10 @@ export function NewMasterButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-[9px] bg-brand-500 px-[15px] py-[9px] text-[12px] font-bold text-white transition-colors hover:bg-brand-600"
+        className={
+          className ??
+          "rounded-[9px] bg-brand-500 px-[15px] py-[9px] text-[12px] font-bold text-white transition-colors hover:bg-brand-600"
+        }
       >
         {label}
       </button>
@@ -36,7 +42,7 @@ export function NewMasterButton({
         <MasterForm
           def={def}
           options={options}
-          record={null}
+          record={record ?? null}
           onClose={() => setOpen(false)}
           onSaved={(message) => { setOpen(false); toast(message); router.refresh(); }}
         />
