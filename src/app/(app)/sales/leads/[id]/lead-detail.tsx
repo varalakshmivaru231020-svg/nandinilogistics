@@ -9,7 +9,7 @@ import { Alert, Badge, Card, Field, Input, Select } from "@/components/ui/primit
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { cn, formatDate, money } from "@/lib/utils";
+import { cn, formatDate, money, phone } from "@/lib/utils";
 import {
   addLeadNoteAction, blockUnitForLeadAction, changeLeadStageAction, releaseUnitForLeadAction,
 } from "../actions";
@@ -153,7 +153,7 @@ export function LeadDetail({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-display text-[19px] font-bold tracking-[-.01em] text-navy-950">{lead.name}</span>
-            <span className="num text-[13px] font-semibold text-brand-700">📞 {lead.phone}</span>
+            <span className="num text-[13px] font-semibold text-brand-700">📞 {phone(lead.phone)}</span>
             <span className="rounded-full bg-brand-100 px-[10px] py-[5px] text-[10px] font-bold text-brand-700">
               {lead.sourceName}
             </span>

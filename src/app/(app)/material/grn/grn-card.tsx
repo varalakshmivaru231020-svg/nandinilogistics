@@ -27,6 +27,8 @@ export interface GrnCardRow {
   match: { label: string; tone: "good" | "warn" | "bad" | "muted" };
   /** What arrived, as the design writes it: "TMT steel 16 mm · 6.2 of 12 Ton". */
   item: string;
+  /** The unit those figures are in, when every line shares one. */
+  unit: string | null;
 }
 
 
@@ -63,16 +65,16 @@ export function GrnCard({ grn }: { grn: GrnCardRow }) {
       {/* What arrived, split three ways — the design puts these side by side. */}
       <div className="flex min-w-[180px] flex-[1_1_200px] flex-wrap gap-1.5">
         <span className="num rounded-full bg-good-050 px-[9px] py-[4px] text-[10.5px] font-bold text-good-700">
-          Accepted {qty(grn.accepted)}
+          Accepted {qty(grn.accepted)}{grn.unit ? ` ${grn.unit}` : ""}
         </span>
         {grn.rejected > 0 && (
           <span className="num rounded-full bg-bad-050 px-[9px] py-[4px] text-[10.5px] font-bold text-bad-600">
-            Rejected {qty(grn.rejected)}
+            Rejected {qty(grn.rejected)}{grn.unit ? ` ${grn.unit}` : ""}
           </span>
         )}
         {grn.short > 0 && (
           <span className="num rounded-full bg-warn-050 px-[9px] py-[4px] text-[10.5px] font-bold text-warn-700">
-            Short {qty(grn.short)}
+            Short {qty(grn.short)}{grn.unit ? ` ${grn.unit}` : ""}
           </span>
         )}
       </div>

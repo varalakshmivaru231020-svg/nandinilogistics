@@ -10,7 +10,7 @@ import { ListNote } from "@/components/list/list-note";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
-import { cn, formatDate, money, maskPhone } from "@/lib/utils";
+import { cn, money, maskPhone, phone } from "@/lib/utils";
 import { LEAD_IMPORT_COLUMNS } from "@/lib/sales/lead-import";
 import {
   changeLeadStageAction, createLeadAction, importLeadsAction, logFollowUpAction,
@@ -49,7 +49,7 @@ const STAGE_TONE: Record<string, "muted" | "brand" | "warn" | "navy" | "good" | 
 interface Lead {
   id: string; leadNo: string; name: string; phone: string; email: string | null;
   state: string; source: string; sourceId: string; ownerId: string | null; ownerName: string | null;
-  projectCode: string | null; requirement: string | null;
+  projectName: string | null; requirement: string | null;
   budgetMin: number | null; budgetMax: number | null;
   nextActionAt: string | null; lostReason: string | null;
   followUpCount: number; visitCount: number; isDuplicate: boolean;
@@ -67,12 +67,30 @@ const FU_BLOCK: Record<string, string> = {
   brand: "border-[#BFE0F2] border-l-brand-700 bg-brand-100 text-brand-700",
 };
 
-function followUp(nextActionAt: string | null, nowMs: number) {
+/**
+ * The design colours a source chip by which source it is, and leaves anything
+ * it does not know in slate.
+ */
+const SOURCE_TONE: Record<string, string> = {
+  website: "bg-brand-100 text-brand-700",
+  magicbricks: "bg-warn-050 text-warn-700",
+  "99acres": "bg-[#EFE9FC] text-[#6A46C8]",
+  "walk-in": "bg-good-050 text-good-700",
+  referral: "bg-bad-050 text-bad-700",
+};
+
+const sourceTone = (name: string) => SOURCE_TONE[name.trim().toLowerCase()] ?? "bg-[#EEF1F9] text-[#4A5077]";
+
+function followUp(nextActionAt: string | null, nowMs: number, state?: string) {
   if (!nextActionAt) return null;
-  const due = new Date(nextActionAt).getTime();
-  const days = Math.round((due - nowMs) / 86_400_000);
-  const when = `${formatDate(nextActionAt)} · ${new Date(nextActionAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
-  const base = { text: when, icon: "📞", kind: "CALL" };
+  const due = new Date(nextActionAt);
+  const days = Math.round((due.getTime() - nowMs) / 86_400_000);
+  // The design writes the date in figures: 08/09/2026 · 11:00.
+  const dd = String(due.getDate()).padStart(2, "0");
+  const mm = String(due.getMonth() + 1).padStart(2, "0");
+  const when = `${dd}/${mm}/${due.getFullYear()} · ${due.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+  const visit = state === "SITE_VISIT_SCHEDULED";
+  const base = { text: when, icon: visit ? "🏠" : "📞", kind: visit ? "SITE VISIT" : "CALL" };
   if (days < 0) return { ...base, badge: "overdue", tone: "bad" as const };
   if (days === 0) return { ...base, badge: "today", tone: "warn" as const };
   return { ...base, badge: "upcoming", tone: "brand" as const };
@@ -273,7 +291,7 @@ export function LeadsScreen({
 
                 <div className="flex min-h-[60px] flex-col gap-2">
                   {cards.slice(0, 6).map((c) => {
-                    const fu = followUp(c.nextActionAt, nowMs);
+                    const fu = followUp(c.nextActionAt, nowMs, c.state);
                     return (
                       <div
                         key={c.id}
@@ -290,15 +308,15 @@ export function LeadsScreen({
                       >
                         <div className="mb-1.5 flex items-center justify-between gap-1.5">
                           <span className="text-[12.5px] font-bold text-navy-950">{c.name}</span>
-                          <span className="shrink-0 rounded-full bg-surface-field px-2 py-0.5 text-[9px] font-bold uppercase tracking-[.04em] text-muted-600">
+                          <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold tracking-[.04em]", sourceTone(c.source))}>
                             {c.source}
                           </span>
                         </div>
                         <p className="text-[11.5px] font-medium text-navy-500">
-                          {[c.projectCode, c.requirement].filter(Boolean).join(" · ") || "—"}
+                          {[c.projectName, c.requirement].filter(Boolean).join(" · ") || "—"}
                         </p>
                         <div className="mt-[7px] text-[11.5px] font-semibold text-brand-700">
-                          📞 {can.viewContact ? c.phone : maskPhone(c.phone)}
+                          📞 {can.viewContact ? phone(c.phone) : maskPhone(c.phone)}
                         </div>
 
                         {fu ? (
@@ -355,7 +373,7 @@ export function LeadsScreen({
             </thead>
             <tbody>
               {leads.map((r) => {
-                const fu = followUp(r.nextActionAt, nowMs);
+                const fu = followUp(r.nextActionAt, nowMs, r.state);
                 return (
                   <tr
                     key={r.id}
@@ -365,13 +383,13 @@ export function LeadsScreen({
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2">
                         <span className="text-[13px] font-bold text-navy-950">{r.name}</span>
-                        <span className="rounded-full bg-surface-field px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[.04em] text-muted-600">
+                        <span className={cn("rounded-full px-2 py-0.5 text-[9.5px] font-bold tracking-[.04em]", sourceTone(r.source))}>
                           {r.source}
                         </span>
                         {r.isDuplicate && <Copy className="h-3 w-3 text-warn-700" />}
                       </div>
                       <div className="mt-1 text-[12px] font-semibold text-brand-700">
-                        📞 {can.viewContact ? r.phone : maskPhone(r.phone)}
+                        📞 {can.viewContact ? phone(r.phone) : maskPhone(r.phone)}
                       </div>
                     </td>
                     <td className="px-4 py-3.5 text-[12.5px] font-medium text-navy-500">

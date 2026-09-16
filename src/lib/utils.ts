@@ -105,6 +105,19 @@ export function titleFromCode(code: string): string {
  * lacks `sales.lead.viewContact` — the number is never sent to the client in
  * full, so hiding it is not a UI courtesy but the actual boundary.
  */
+/**
+ * A mobile number as the design writes it: +91 98450 11234. Anything that is
+ * not a plain ten-digit Indian number is left exactly as it was entered.
+ */
+export function phone(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 10) return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+  if (digits.length === 12 && digits.startsWith("91")) {
+    return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
+  }
+  return value;
+}
+
 export function maskPhone(phone: string) {
   return phone.length > 4 ? `${"•".repeat(phone.length - 4)}${phone.slice(-4)}` : "••••";
 }

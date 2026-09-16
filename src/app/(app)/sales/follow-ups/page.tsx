@@ -36,6 +36,7 @@ export default async function FollowUpsPage({
     take: 300,
     include: {
       source: { select: { name: true } },
+      project: { select: { name: true } },
       owner: { select: { name: true } },
       followUps: {
         orderBy: { completedAt: "desc" },
@@ -63,7 +64,8 @@ export default async function FollowUpsPage({
         leadNo: l.leadNo,
         name: l.name,
         phone: l.phone,
-        requirement: l.requirement,
+        // The design reads the lead's interest as "Skyline · 2 BHK".
+        requirement: [l.project?.name, l.requirement].filter(Boolean).join(" · ") || null,
         source: l.source.name,
         ownerName: l.owner?.name ?? null,
         state: l.state,

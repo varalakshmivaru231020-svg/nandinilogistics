@@ -42,7 +42,7 @@ export default async function GrnListPage({
           select: {
             receivedQty: true, acceptedQty: true, rejectedQty: true, shortQty: true,
             poItem: { select: { orderedQty: true } },
-            item: { select: { name: true, uom: { select: { code: true } } } },
+            item: { select: { name: true, uom: { select: { name: true } } } },
           },
         },
       },
@@ -99,11 +99,15 @@ export default async function GrnListPage({
             const accepted = g.items.reduce((n, i) => n + Number(i.acceptedQty), 0);
             const rejected = g.items.reduce((n, i) => n + Number(i.rejectedQty), 0);
             const short = g.items.reduce((n, i) => n + Number(i.shortQty), 0);
+            // The design names the unit beside each figure; a receipt mixing
+            // units has no single one to name.
+            const units = new Set(g.items.map((i) => i.item.uom.name));
+            const unit = units.size === 1 ? [...units][0] : null;
             // The design names the first line and what it delivered of its order.
             const first = g.items[0];
             const ordered = first ? Number(first.poItem?.orderedQty ?? 0) : 0;
             const item = first
-              ? `${first.item.name} · ${qty(first.receivedQty, 3)}${ordered ? ` of ${qty(ordered, 3)}` : ""} ${first.item.uom.code}` +
+              ? `${first.item.name} · ${qty(first.receivedQty, 3)}${ordered ? ` of ${qty(ordered, 3)}` : ""} ${first.item.uom.name}` +
                 (g.items.length > 1 ? ` +${g.items.length - 1}` : "")
               : "—";
 
@@ -113,6 +117,7 @@ export default async function GrnListPage({
                 grn={{
                   id: g.id,
                   item,
+                  unit,
                   grnNo: g.grnNo,
                   poNo: g.purchaseOrder.poNo,
                   poId: g.purchaseOrder.id,

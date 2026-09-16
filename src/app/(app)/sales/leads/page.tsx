@@ -28,7 +28,7 @@ export default async function LeadsPage({
       include: {
         source: { select: { name: true } },
         owner: { select: { id: true, name: true } },
-        project: { select: { code: true } },
+        project: { select: { name: true } },
         lostReason: { select: { name: true } },
         _count: { select: { followUps: true, siteVisits: true } },
       },
@@ -69,7 +69,7 @@ export default async function LeadsPage({
           source: l.source.name,
           ownerId: l.owner?.id ?? null,
           ownerName: l.owner?.name ?? null,
-          projectCode: l.project?.code ?? null,
+          projectName: l.project?.name ?? null,
           requirement: l.requirement,
           budgetMin: l.budgetMin === null ? null : Number(l.budgetMin),
           budgetMax: l.budgetMax === null ? null : Number(l.budgetMax),

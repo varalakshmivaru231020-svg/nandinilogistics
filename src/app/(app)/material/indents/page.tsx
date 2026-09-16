@@ -11,11 +11,23 @@ import { projectOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
 import { fulfilLines } from "@/lib/material/indent-lines";
+import { qty } from "@/lib/utils";
 import { IndentCard } from "./indent-card";
 import { Pagination } from "@/components/ui/data-table";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 
 export const metadata = { title: "Requirement Indents" };
+
+/** The design names an indent by what it asks for: the item and how much. */
+function itemSummary(
+  items: Array<{ requestedQty: unknown; approvedQty: unknown; item: { name: string; uom: { name: string } } }>,
+  count: number,
+): string {
+  const first = items[0];
+  if (!first) return "No lines";
+  const amount = qty(Number(first.approvedQty ?? first.requestedQty), 3);
+  return `${first.item.name} · ${amount} ${first.item.uom.name}${count > 1 ? ` +${count - 1} more` : ""}`;
+}
 
 const PAGE_SIZE = 30;
 
@@ -46,12 +58,12 @@ export default async function IndentsPage({
       take: PAGE_SIZE,
       include: {
         project: { select: { code: true, name: true } },
-        raisedBy: { select: { name: true } },
+        raisedBy: { select: { name: true, designation: { select: { name: true } } } },
         workPackage: { select: { name: true } },
         items: {
           select: {
             itemId: true, requestedQty: true, approvedQty: true,
-            item: { select: { uom: { select: { code: true } } } },
+            item: { select: { name: true, uom: { select: { code: true, name: true } } } },
           },
         },
         _count: { select: { items: true } },
@@ -116,9 +128,11 @@ export default async function IndentsPage({
                   indent={{
                     id: i.id,
                     indentNo: i.indentNo,
-                    title: i.purpose || `${i._count.items} line${i._count.items === 1 ? "" : "s"}`,
-                    project: i.project.code,
-                    raisedBy: i.raisedBy.name,
+                    title: itemSummary(i.items, i._count.items),
+                    project: i.project.name,
+                    raisedBy: i.raisedBy.designation
+                      ? `${i.raisedBy.name} · ${i.raisedBy.designation.name}`
+                      : i.raisedBy.name,
                     raisedAt: i.raisedAt.toISOString(),
                     requiredBy: i.requiredByDate?.toISOString() ?? null,
                     activity: i.workPackage?.name ?? null,

@@ -11,6 +11,7 @@ import {
 import { vendorOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
+import { PoApproveButton } from "./approve-button";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
 import { cn, formatDate, moneyShort, qty } from "@/lib/utils";
@@ -25,10 +26,11 @@ type PoRow = {
   id: string; poNo: string; status: string; poDate: Date; expectedDate: Date | null;
   totalAmount: unknown; revision: number; indentId: string | null;
   project: { code: string }; vendor: { name: string };
-  createdBy: { name: string };
+  sourceIndent: { indentNo: string } | null;
+  createdBy: { name: string; designation: { name: string } | null };
   pmApprovedBy: { name: string } | null;
   adminApprovedBy: { name: string } | null;
-  items: Array<{ orderedQty: unknown; receivedQty: unknown; item: { name: string; uom: { code: string } } }>;
+  items: Array<{ orderedQty: unknown; receivedQty: unknown; item: { name: string; uom: { name: string } } }>;
   _count: { items: number; grns: number };
 };
 
@@ -41,6 +43,8 @@ export default async function PurchaseOrdersPage({
   // Read once, so every row ages against the same instant.
   const nowMs = new Date().getTime();
   const canPrint = ctx.has(PERM.material.purchaseOrder.print);
+  const canApprovePm = ctx.has(PERM.material.purchaseOrder.approve);
+  const canApproveAdmin = ctx.has(PERM.material.purchaseOrder.approveAdmin);
 
   const raw = await searchParams;
   const params = readPoListParams(raw);
@@ -59,10 +63,11 @@ export default async function PurchaseOrdersPage({
       include: {
         project: { select: { code: true } },
         vendor: { select: { name: true } },
-        createdBy: { select: { name: true } },
+        sourceIndent: { select: { indentNo: true } },
+        createdBy: { select: { name: true, designation: { select: { name: true } } } },
         pmApprovedBy: { select: { name: true } },
         adminApprovedBy: { select: { name: true } },
-        items: { select: { orderedQty: true, receivedQty: true, item: { select: { name: true, uom: { select: { code: true } } } } } },
+        items: { select: { orderedQty: true, receivedQty: true, item: { select: { name: true, uom: { select: { name: true } } } } } },
         _count: { select: { items: true, grns: true } },
       },
     }),
@@ -88,7 +93,7 @@ export default async function PurchaseOrdersPage({
             {p.revision > 0 && <Badge tone="warn">rev {p.revision}</Badge>}
           </div>
           <p className="mt-0.5 text-[11px] font-medium text-muted-400">
-            {p.indentId ? "from an approved indent · " : ""}{formatDate(p.poDate)}
+            from {p.sourceIndent?.indentNo ?? "—"} · {formatDate(p.poDate)}
           </p>
           {/* Who raised it, and how far the two approvals have got. */}
           <p className="text-[11px] font-medium text-muted-400">
@@ -96,7 +101,7 @@ export default async function PurchaseOrdersPage({
               ? `approved ${p.adminApprovedBy.name}`
               : p.pmApprovedBy
                 ? `PM ✓ ${p.pmApprovedBy.name}`
-                : `raised ${p.createdBy.name}`}
+                : `raised ${p.createdBy.name}${p.createdBy.designation ? ` · ${p.createdBy.designation.name}` : ""}`}
           </p>
         </div>
       ),
@@ -111,7 +116,7 @@ export default async function PurchaseOrdersPage({
         return (
           <span className="text-[12.5px] font-medium text-navy-500">
             {first
-              ? `${first.item.name} · ${qty(first.orderedQty, 3)} ${first.item.uom.code}`
+              ? `${first.item.name} · ${qty(first.orderedQty, 3)} ${first.item.uom.name}`
               : "—"}
             {more > 0 && <span className="text-muted-400"> +{more}</span>}
           </span>
@@ -155,6 +160,8 @@ export default async function PurchaseOrdersPage({
       align: "right",
       render: (p) => (
         <span className="inline-flex items-center gap-1.5">
+          {p.status === "PENDING_PM" && canApprovePm && <PoApproveButton id={p.id} level="PM" />}
+          {p.status === "PENDING_ADMIN" && canApproveAdmin && <PoApproveButton id={p.id} level="ADMIN" />}
           {canPrint && (
             <Link
               href={`/print/purchase-orders/${p.id}`}

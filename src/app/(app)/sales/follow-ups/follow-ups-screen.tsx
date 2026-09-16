@@ -8,7 +8,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, phone } from "@/lib/utils";
 import { logFollowUpAction } from "../leads/actions";
 
 export interface FollowUpRow {
@@ -183,7 +183,7 @@ export function FollowUpsScreen({
                           {CHANNEL_LABEL[c.channel] ?? c.channel}
                         </span>
                         <div className="mt-2 text-[13px] font-bold text-navy-950">{c.name}</div>
-                        <div className="mt-1 text-[12px] font-bold text-brand-700">📞 {c.phone}</div>
+                        <div className="mt-1 text-[12px] font-bold text-brand-700">📞 {phone(c.phone)}</div>
                         {c.requirement && (
                           <div className="mt-0.5 line-clamp-1 text-[11.5px] font-medium text-muted-500">
                             {c.requirement}
@@ -258,7 +258,7 @@ export function FollowUpsScreen({
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="text-[13px] font-bold text-navy-950">{r.name}</div>
-                      <div className="mt-0.5 text-[12px] font-bold text-brand-700">📞 {r.phone}</div>
+                      <div className="mt-0.5 text-[12px] font-bold text-brand-700">📞 {phone(r.phone)}</div>
                       <div className="text-[11px] font-medium text-muted-400">
                         {r.requirement ?? r.leadNo}
                       </div>
@@ -454,7 +454,7 @@ function LogModal({
         {error && <Alert tone="error">{error}</Alert>}
 
         <div className="rounded-[10px] bg-surface-sunken px-3 py-2.5">
-          <p className="text-[12px] font-bold text-brand-700">📞 {row.phone}</p>
+          <p className="text-[12px] font-bold text-brand-700">📞 {phone(row.phone)}</p>
           {row.requirement && (
             <p className="mt-1 text-[11.5px] font-medium text-muted-600">{row.requirement}</p>
           )}
