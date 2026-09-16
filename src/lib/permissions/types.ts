@@ -41,5 +41,4 @@ export interface ModuleDef {
   /** Ordering in the matrix UI and the sidebar. */
   sortOrder: number;
   /** Pending client verification — permissions are registered but the UI is not built. */
-  pending?: boolean;
 }

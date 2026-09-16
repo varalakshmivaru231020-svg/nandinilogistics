@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   MODULES, PERMISSIONS, PERMISSION_CODES, getPermission,
-  permissionGroups, permissionsByModule, PENDING_MODULES,
+  permissionGroups, permissionsByModule,
 } from "@/lib/permissions/registry";
 import { PERM } from "@/lib/permissions/codes";
 import { MASTERS, masterPerm } from "@/lib/masters/registry";
@@ -153,19 +153,12 @@ describe("navigation is a projection of the permission set", () => {
   });
 });
 
-describe("pending modules", () => {
-  it("holds Task and Checklist back", () => {
-    expect(PENDING_MODULES.sort()).toEqual(["checklist", "task"]);
-  });
-
-  it("still registers their permissions so roles can be pre-configured", () => {
+describe("tasks and checklists", () => {
+  it("registers their permissions", () => {
     expect(permissionsByModule("task").length).toBeGreaterThan(0);
     expect(permissionsByModule("checklist").length).toBeGreaterThan(0);
   });
 
-  // The design draws both screens in its Execution group, so both sit in the
-  // menu and open the preview screens built from it. What is still missing is
-  // the data behind them, not the entry.
   it("keeps them in the navigation, where the design draws them", () => {
     const hrefs = visibleNavigation(() => true).flatMap((s) => s.items.map((i) => i.href));
     expect(hrefs).toContain("/tasks");

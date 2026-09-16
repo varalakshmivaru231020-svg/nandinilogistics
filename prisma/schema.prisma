@@ -189,38 +189,41 @@ model User {
   sessions       Session[]
   auditLogs      AuditLog[]
 
-  indentsRaised      Indent[]            @relation("IndentRaisedBy")
-  indentApprovals    IndentApproval[]
-  purchaseOrders     PurchaseOrder[]
-  goodsReceipts      Grn[]
-  materialIssues     MaterialIssue[]
-  leadsOwned         Lead[]              @relation("LeadOwner")
-  followUps          LeadFollowUp[]
-  siteVisits         SiteVisit[]
-  bookings           Booking[]
-  unitHolds          UnitHold[]
-  progressLogs       SiteProgressLog[]
-  managedProjects    Project[]           @relation("ProjectManager")
-  extensionsAsked    ScheduleExtension[] @relation("ExtensionRequestedBy")
-  extensionsDecided  ScheduleExtension[] @relation("ExtensionDecidedBy")
-  leadNotes          LeadNote[]
-  leadDocuments      LeadDocument[]
-  employeeDocuments  EmployeeDocument[]
-  attendanceEntries  AttendanceEntry[]
-  kbArticles         KbArticle[]
-  kbAttachments      KbAttachment[]
-  grnsInspected      Grn[]               @relation("GrnInspector")
-  settingsUpdated    AppSetting[]        @relation("SettingUpdatedBy")
-  notifications      Notification[]      @relation("NotificationRecipient")
-  scheduleTemplates  ScheduleTemplate[]
-  posApprovedAsPm    PurchaseOrder[]     @relation("PoPmApprover")
-  posApprovedAsAdmin PurchaseOrder[]     @relation("PoAdminApprover")
+  indentsRaised          Indent[]            @relation("IndentRaisedBy")
+  indentApprovals        IndentApproval[]
+  purchaseOrders         PurchaseOrder[]
+  goodsReceipts          Grn[]
+  materialIssues         MaterialIssue[]
+  leadsOwned             Lead[]              @relation("LeadOwner")
+  followUps              LeadFollowUp[]
+  siteVisits             SiteVisit[]
+  bookings               Booking[]
+  unitHolds              UnitHold[]
+  progressLogs           SiteProgressLog[]
+  managedProjects        Project[]           @relation("ProjectManager")
+  extensionsAsked        ScheduleExtension[] @relation("ExtensionRequestedBy")
+  extensionsDecided      ScheduleExtension[] @relation("ExtensionDecidedBy")
+  leadNotes              LeadNote[]
+  leadDocuments          LeadDocument[]
+  employeeDocuments      EmployeeDocument[]
+  attendanceEntries      AttendanceEntry[]
+  kbArticles             KbArticle[]
+  kbAttachments          KbAttachment[]
+  grnsInspected          Grn[]               @relation("GrnInspector")
+  settingsUpdated        AppSetting[]        @relation("SettingUpdatedBy")
+  notifications          Notification[]      @relation("NotificationRecipient")
+  scheduleTemplates      ScheduleTemplate[]
+  posApprovedAsPm        PurchaseOrder[]     @relation("PoPmApprover")
+  posApprovedAsAdmin     PurchaseOrder[]     @relation("PoAdminApprover")
+  materialReturnsRaised  MaterialReturn[]    @relation("ReturnRaisedBy")
+  materialReturnsDecided MaterialReturn[]    @relation("ReturnDecidedBy")
+  tasksAssigned          Task[]              @relation("TaskAssignee")
+  tasksCreated           Task[]              @relation("TaskCreatedBy")
+  checklistRuns          ChecklistRun[]      @relation("ChecklistRunBy")
 
   @@index([status])
   @@index([departmentId])
   @@map("users")
-  materialReturnsRaised  MaterialReturn[] @relation("ReturnRaisedBy")
-  materialReturnsDecided MaterialReturn[] @relation("ReturnDecidedBy")
 }
 
 model Role {
@@ -574,19 +577,19 @@ model Item {
   uom      Uom          @relation(fields: [uomId], references: [id])
   taxRate  TaxRate?     @relation(fields: [taxRateId], references: [id])
 
-  indentItems   IndentItem[]
-  poItems       PurchaseOrderItem[]
-  grnItems      GrnItem[]
-  invoiceItems  VendorInvoiceItem[]
-  transferItems StockTransferItem[]
-  issueItems    MaterialIssueItem[]
-  stockBalances StockBalance[]
-  stockLedger   StockLedger[]
+  indentItems         IndentItem[]
+  poItems             PurchaseOrderItem[]
+  grnItems            GrnItem[]
+  invoiceItems        VendorInvoiceItem[]
+  transferItems       StockTransferItem[]
+  issueItems          MaterialIssueItem[]
+  stockBalances       StockBalance[]
+  stockLedger         StockLedger[]
+  materialReturnItems MaterialReturnItem[]
 
   @@index([categoryId])
   @@index([status])
   @@map("m_items")
-  materialReturnItems MaterialReturnItem[]
 }
 
 model TaxRate {
@@ -670,16 +673,16 @@ model Store {
 
   project Project? @relation(fields: [projectId], references: [id])
 
-  stockBalances StockBalance[]
-  stockLedger   StockLedger[]
-  grns          Grn[]
-  issues        MaterialIssue[]
-  transfersFrom StockTransfer[] @relation("TransferFrom")
-  transfersTo   StockTransfer[] @relation("TransferTo")
+  stockBalances   StockBalance[]
+  stockLedger     StockLedger[]
+  grns            Grn[]
+  issues          MaterialIssue[]
+  transfersFrom   StockTransfer[]  @relation("TransferFrom")
+  transfersTo     StockTransfer[]  @relation("TransferTo")
+  materialReturns MaterialReturn[]
 
   @@index([projectId])
   @@map("m_stores")
-  materialReturns MaterialReturn[]
 }
 
 model LeadSource {
@@ -865,11 +868,12 @@ model Project {
   priceLists        PriceList[]
   numbering         NumberingSeries[]
   attendanceEntries AttendanceEntry[]
+  materialReturns   MaterialReturn[]
+  tasks             Task[]
 
   @@index([status])
   @@index([projectManagerId])
   @@map("projects")
-  materialReturns MaterialReturn[]
 }
 
 model ProjectPhase {
@@ -1601,10 +1605,10 @@ model MaterialIssue {
 
   items       MaterialIssueItem[]
   stockLedger StockLedger[]
+  returns     MaterialReturn[]
 
   @@index([projectId])
   @@map("material_issues")
-  returns MaterialReturn[]
 }
 
 model MaterialIssueItem {
@@ -1617,12 +1621,12 @@ model MaterialIssueItem {
   value       Decimal @default(0) @db.Decimal(16, 2)
   remarks     String?
 
-  issue MaterialIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  item  Item          @relation(fields: [itemId], references: [id])
+  issue       MaterialIssue        @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  item        Item                 @relation(fields: [itemId], references: [id])
+  returnItems MaterialReturnItem[]
 
   @@index([issueId])
   @@map("material_issue_items")
-  returnItems MaterialReturnItem[]
 }
 
 model StockTransfer {
@@ -2053,27 +2057,27 @@ model PaymentDemand {
 }
 
 model Receipt {
-  id          String    @id @default(cuid())
-  receiptNo   String    @unique
-  bookingId   String
-  demandId    String?
-  receiptDate DateTime  @default(now())
-  amount      Decimal   @db.Decimal(16, 2)
+  id           String    @id @default(cuid())
+  receiptNo    String    @unique
+  bookingId    String
+  demandId     String?
+  receiptDate  DateTime  @default(now())
+  amount       Decimal   @db.Decimal(16, 2)
   /// NEFT | RTGS | CHEQUE | UPI | CASH | DD
-  mode        String    @default("NEFT")
-  referenceNo String?
-  bankId      String?
+  mode         String    @default("NEFT")
+  referenceNo  String?
+  bankId       String?
   /// When the money was realised. Electronic modes clear on entry; a cheque or
   /// DD clears when the bank confirms it.
-  clearedAt   DateTime?
-  clearedById String?
+  clearedAt    DateTime?
+  clearedById  String?
   /// A cheque or DD the bank returned. The amount stops counting towards the
   /// booking and its demand; the receipt itself stays for the record.
   bouncedAt    DateTime?
   bouncedById  String?
   bounceReason String?
-  remarks     String?
-  createdAt   DateTime  @default(now())
+  remarks      String?
+  createdAt    DateTime  @default(now())
 
   booking Booking        @relation(fields: [bookingId], references: [id])
   demand  PaymentDemand? @relation(fields: [demandId], references: [id])
@@ -2109,11 +2113,11 @@ model MaterialReturn {
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
 
-  project   Project       @relation(fields: [projectId], references: [id])
-  store     Store         @relation(fields: [storeId], references: [id])
-  issue     MaterialIssue @relation(fields: [issueId], references: [id])
-  raisedBy  User          @relation("ReturnRaisedBy", fields: [raisedById], references: [id])
-  decidedBy User?         @relation("ReturnDecidedBy", fields: [decidedById], references: [id])
+  project   Project              @relation(fields: [projectId], references: [id])
+  store     Store                @relation(fields: [storeId], references: [id])
+  issue     MaterialIssue        @relation(fields: [issueId], references: [id])
+  raisedBy  User                 @relation("ReturnRaisedBy", fields: [raisedById], references: [id])
+  decidedBy User?                @relation("ReturnDecidedBy", fields: [decidedById], references: [id])
   items     MaterialReturnItem[]
 
   @@index([projectId, status])
@@ -2139,4 +2143,127 @@ model MaterialReturnItem {
 
   @@index([returnId])
   @@map("material_return_items")
+}
+
+// --------------------------------- Tasks ------------------------------------
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  SUBMITTED
+  APPROVED
+  REOPENED
+}
+
+enum TaskPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+/// A unit of site work raised against a project and a person, moving
+/// Open → In Progress → Submitted → Approved, or back to Reopened.
+model Task {
+  id          String       @id @default(cuid())
+  taskNo      String       @unique
+  title       String
+  projectId   String?
+  /// Free text, as the design writes it: "Tower B · Fl 8".
+  location    String?
+  assigneeId  String
+  dueDate     DateTime?    @db.Date
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(OPEN)
+  /// What was attached on completion, e.g. "3 photos".
+  evidence    String?
+  createdById String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  project   Project? @relation(fields: [projectId], references: [id])
+  assignee  User     @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdBy User     @relation("TaskCreatedBy", fields: [createdById], references: [id])
+
+  @@index([status])
+  @@index([assigneeId])
+  @@index([projectId])
+  @@map("tasks")
+}
+
+// ------------------------------ Checklists -----------------------------------
+
+enum ChecklistRunResult {
+  PASS
+  FAIL
+}
+
+enum ChecklistRunState {
+  OPEN
+  CLOSED
+}
+
+/// The library is grouped into categories — Safety, Structural, Finishing.
+model ChecklistCategory {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  checklists Checklist[]
+
+  @@map("checklist_categories")
+}
+
+model Checklist {
+  id         String   @id @default(cuid())
+  categoryId String
+  name       String
+  version    String   @default("v1.0")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  category    ChecklistCategory     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  checkpoints ChecklistCheckpoint[]
+  runs        ChecklistRun[]
+
+  @@index([categoryId])
+  @@map("checklists")
+}
+
+model ChecklistCheckpoint {
+  id          String   @id @default(cuid())
+  checklistId String
+  text        String
+  isMandatory Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  checklist Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@index([checklistId])
+  @@map("checklist_checkpoints")
+}
+
+/// One inspection carried out on site against a checklist.
+model ChecklistRun {
+  id            String             @id @default(cuid())
+  checklistId   String
+  /// Where it was carried out, as the design writes it: "Tower B · Fl 5".
+  location      String
+  performedById String
+  /// Percentage of checkpoints passed.
+  score         Int                @default(0)
+  result        ChecklistRunResult @default(PASS)
+  state         ChecklistRunState  @default(OPEN)
+  performedAt   DateTime           @default(now())
+
+  checklist   Checklist @relation(fields: [checklistId], references: [id])
+  performedBy User      @relation("ChecklistRunBy", fields: [performedById], references: [id])
+
+  @@index([checklistId])
+  @@map("checklist_runs")
 }

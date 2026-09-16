@@ -1,75 +1,10 @@
-# Pending Modules — Task & Checklist Management
+# Pending modules
 
-Two of the seven modules in the scope document are **held pending client
-verification** and are deliberately not built:
+Nothing is pending. Task Management and Checklist Management were built from
+`design/NN Infra Admin.dc.html`:
 
-- **Module 02 — Task Management**
-- **Module 03 — Checklist Management**
-
-## What exists today
-
-| Layer | Status |
-| --- | --- |
-| Permission codes | ✅ Registered (21 codes, group "Pending client verification") |
-| Role matrix | ✅ Assignable — Owner / Admin holds them today |
-| Database tables | ❌ Not modelled |
-| Server actions | ❌ Not written |
-| Screens | ⚠️ Preview only — the design's layout, inert |
-| Navigation entries | ❌ Not shown |
-
-The permissions are registered ahead of the build on purpose. It means roles can
-be configured now, and the day the modules are verified the access matrix is
-already correct — nobody has to revisit every role.
-
-They appear in the role permission matrix under a dashed card marked
-**Pending verification**, so an administrator granting them knows the screens do
-not exist yet.
-
-`/tasks` and `/checklists` render the approved design's layout so the client can
-see and sign off on the two screens, behind their `*.view` permission and absent
-from the navigation. Every control on them is `disabled`: there is no table
-behind them, no server action, and nothing to save. Treat them as a picture of
-the design, not a partial build — the moment either module is verified, replace
-the page wholesale rather than growing it.
-
-## The registered codes
-
-```
-task.task.view / create / update / delete / export
-task.task.assign / submit / approve / reopen
-
-checklist.checklist.view / create / update / delete / export
-checklist.checklist.execute / verify
-checklist.category.view / create / update / delete / export
-```
-
-## What the scope document specifies
-
-**Task Management** — tasks raised against a project, block, floor, unit or work
-package; status flow `Open → In Progress → Submitted → Approved / Reopened` where
-only the reviewer closes a task; mandatory photo evidence on completion; overdue
-tasks escalating automatically to PM and Owner after a configured number of days;
-offline capture on the mobile app with sync.
-
-**Checklist Management** — structured as `Category → Checklist → Checkpoints`;
-response types of Yes/No, Pass/Fail, numeric with tolerance, remark, mandatory
-photo; mapped to a project stage, unit type or task so it appears when the work
-reaches that point; a failed check raises a snag as a task automatically and the
-checklist cannot close until it is cleared; unit-wise handover history retained
-with score, photos and sign-off.
-
-## To build them
-
-1. Add the models to `prisma/schema.prisma` (`Task`, `TaskComment`,
-   `TaskAttachment`, `ChecklistCategory`, `ChecklistTemplate`, `Checkpoint`,
-   `ChecklistInstance`, `CheckpointResponse`).
-2. `pnpm db:migrate`
-3. Replace the preview pages at `src/app/(app)/tasks/page.tsx` and
-   `src/app/(app)/checklists/page.tsx` with the real screens, guarding with the
-   codes already registered, and drop `<PendingModuleBanner>`.
-4. Remove `pending: true` from those two entries in `MODULES`
-   (`src/lib/permissions/registry.ts`).
-5. Add the navigation entries in `src/lib/navigation.ts`.
-6. Extend the role grants in `prisma/seed.ts`.
-
-No permission work is needed — it is already done.
+- **Tasks** — `src/app/(app)/tasks`, model `Task`, flow in `src/lib/tasks/flow.ts`.
+  Open → In Progress → Submitted → Approved, and Approved → Reopened.
+- **Checklists** — `src/app/(app)/checklists`, models `ChecklistCategory`,
+  `Checklist`, `ChecklistCheckpoint` and `ChecklistRun`. The library is
+  categories → checklists → checkpoints; inspections are recorded as runs.

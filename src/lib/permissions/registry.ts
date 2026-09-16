@@ -22,8 +22,8 @@ import type { ModuleDef, PermissionDef, PermissionKind } from "./types";
 export const MODULES: ModuleDef[] = [
   { key: "dashboard", label: "Dashboards", sortOrder: 10 },
   { key: "project", label: "Project Management", sortOrder: 20 },
-  { key: "task", label: "Task Management", sortOrder: 30, pending: true },
-  { key: "checklist", label: "Checklist Management", sortOrder: 40, pending: true },
+  { key: "task", label: "Task Management", sortOrder: 30 },
+  { key: "checklist", label: "Checklist Management", sortOrder: 40 },
   { key: "schedule", label: "Project Schedule", sortOrder: 50 },
   { key: "material", label: "Material & Inventory", sortOrder: 60 },
   { key: "sales", label: "Lead Management & Sales CRM", sortOrder: 70 },
@@ -744,11 +744,4 @@ export function permissionGroups(): Array<{ group: string; module: string; permi
     module: permissions[0].module,
     permissions,
   }));
-}
-
-/** Modules that are registered but deliberately not built yet. */
-export const PENDING_MODULES = MODULES.filter((m) => m.pending).map((m) => m.key);
-
-export function isPendingModule(moduleKey: string): boolean {
-  return PENDING_MODULES.includes(moduleKey);
 }

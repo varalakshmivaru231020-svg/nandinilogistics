@@ -47,13 +47,6 @@ anything.
   never hand-built.
 - Derive state; don't sync it in an effect. The lint config enforces this.
 
-## Deliberately not built
-
-**Task Management** and **Checklist Management** are pending client
-verification. Their permissions are registered and assignable; the tables,
-actions and screens are not written. Do not build them without being asked —
-see `docs/PENDING_MODULES.md`.
-
 ## Stock and money
 
 Anything that changes stock goes through `postStockMovement()` in

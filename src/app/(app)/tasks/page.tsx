@@ -1,94 +1,71 @@
 import { requirePermission } from "@/lib/rbac/guard";
+import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { Badge, Card } from "@/components/ui/primitives";
-import { Button } from "@/components/ui/button";
-import { PendingModuleBanner } from "@/components/pending-module-banner";
-import { cn } from "@/lib/utils";
+import { projectScopeFilter } from "@/lib/rbac/context";
+import { TasksScreen } from "./tasks-screen";
 
 export const metadata = { title: "Task Management" };
 
-/**
- * Task Management — preview only. See docs/PENDING_MODULES.md.
- * Structure and wording follow design/NN Infra Admin.dc.html.
- */
-const CHIPS = [
-  { label: "Open", count: 0 },
-  { label: "In progress", count: 0 },
-  { label: "Submitted", count: 0 },
-  { label: "Overdue", count: 0 },
-];
+export default async function TasksPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ filter?: string }>;
+}) {
+  const ctx = await requirePermission(PERM.task.task.view);
+  const { filter = "All" } = await searchParams;
 
-const COLUMNS = [
-  "", "Task", "Location", "Assignee", "Due", "Priority", "Evidence", "Status", "Actions",
-];
+  const scope = projectScopeFilter(ctx);
+  const where = { OR: [scope, { projectId: null }] };
 
-export default async function TasksPage() {
-  await requirePermission(PERM.task.task.view);
+  const [tasks, projects, people] = await Promise.all([
+    prisma.task.findMany({
+      where,
+      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+      select: {
+        id: true, taskNo: true, title: true, location: true, dueDate: true,
+        priority: true, status: true, evidence: true,
+        project: { select: { id: true, code: true } },
+        assignee: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.project.findMany({
+      where: ctx.canAccessAllProjects ? { status: "ACTIVE" } : { status: "ACTIVE", id: { in: ctx.projectIds } },
+      orderBy: { name: "asc" },
+      select: { id: true, code: true },
+    }),
+    prisma.user.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
   return (
-    <div className="animate-fade-up mx-auto max-w-[1400px]">
-      <PendingModuleBanner module="Task Management" />
-
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          {CHIPS.map((c, i) => (
-            <button
-              key={c.label}
-              type="button"
-              disabled
-              className={cn(
-                "cursor-not-allowed rounded-[9px] border px-3.5 py-2 text-[12px] font-bold opacity-60",
-                i === 0
-                  ? "border-brand-500 bg-brand-100 text-brand-700"
-                  : "border-line-400 bg-white text-muted-600",
-              )}
-            >
-              {c.label} <span className="font-semibold opacity-65">{c.count}</span>
-            </button>
-          ))}
-        </div>
-        <Button size="md" disabled>+ New task</Button>
-      </div>
-
-      <Card className="overflow-x-auto">
-        <table className="w-full min-w-[860px] border-collapse">
-          <thead>
-            <tr className="bg-surface-sunken">
-              {COLUMNS.map((h, i) => (
-                <th
-                  key={`${h}-${i}`}
-                  className={cn(
-                    "border-b border-line-300 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
-                    i === COLUMNS.length - 1 ? "text-right" : "text-left",
-                  )}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td colSpan={COLUMNS.length} className="px-4 py-16 text-center">
-                <p className="font-display text-[14px] font-bold text-navy-950">
-                  No task data — the module is not built
-                </p>
-                <p className="mx-auto mt-1.5 max-w-lg text-[12px] font-medium leading-relaxed text-muted-600">
-                  The scope document specifies tasks raised against a project, block, floor, unit or
-                  work package; a status flow of Open → In Progress → Submitted → Approved or
-                  Reopened where only the reviewer closes a task; mandatory photo evidence on
-                  completion; and automatic escalation to the PM and Owner once overdue.
-                </p>
-                <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-                  {["task.task.view", "task.task.create", "task.task.assign", "task.task.approve"].map((c) => (
-                    <Badge key={c} tone="muted">{c}</Badge>
-                  ))}
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </Card>
-    </div>
+    <TasksScreen
+      filter={filter}
+      nowMs={new Date().getTime()}
+      projects={projects}
+      people={people}
+      tasks={tasks.map((t) => ({
+        id: t.id,
+        taskNo: t.taskNo,
+        title: t.title,
+        projectId: t.project?.id ?? null,
+        projectCode: t.project?.code ?? null,
+        location: t.location,
+        assigneeId: t.assignee.id,
+        assignee: t.assignee.name,
+        dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+        priority: t.priority,
+        status: t.status,
+        evidence: t.evidence,
+      }))}
+      can={{
+        create: ctx.has(PERM.task.task.create),
+        update: ctx.has(PERM.task.task.update),
+        assign: ctx.has(PERM.task.task.assign),
+        delete: ctx.has(PERM.task.task.delete),
+      }}
+    />
   );
 }
