@@ -163,9 +163,12 @@ describe("pending modules", () => {
     expect(permissionsByModule("checklist").length).toBeGreaterThan(0);
   });
 
-  it("keeps them out of the navigation until they are built", () => {
+  // The design draws both screens in its Execution group, so both sit in the
+  // menu and open the preview screens built from it. What is still missing is
+  // the data behind them, not the entry.
+  it("keeps them in the navigation, where the design draws them", () => {
     const hrefs = visibleNavigation(() => true).flatMap((s) => s.items.map((i) => i.href));
-    expect(hrefs.some((h) => h.startsWith("/tasks"))).toBe(false);
-    expect(hrefs.some((h) => h.startsWith("/checklists"))).toBe(false);
+    expect(hrefs).toContain("/tasks");
+    expect(hrefs).toContain("/checklists");
   });
 });

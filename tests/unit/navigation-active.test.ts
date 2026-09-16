@@ -12,8 +12,15 @@ describe("exactly one navigation entry is ever active", () => {
   /** Every href the navigation declares, so the parent/child pairs are real. */
   const allHrefs = NAVIGATION.flatMap((s) => s.items.map((i) => i.href));
 
-  it("picks the child, not the parent, for a nested route", () => {
-    expect(activeNavHref("/projects/progress", NAVIGATION)).toBe("/projects/progress");
+  // The design's menu has no parent/child pair, so the rule is checked against
+  // a menu of its own: whatever the entries, the longest match must win.
+  it("picks the child, not the parent, when both are listed", () => {
+    const sections = [{ items: [{ href: "/projects" }, { href: "/projects/progress" }] }];
+    expect(activeNavHref("/projects/progress", sections)).toBe("/projects/progress");
+  });
+
+  it("lights the entry a screen opened from inside another belongs to", () => {
+    expect(activeNavHref("/material/indents/abc123", NAVIGATION)).toBe("/material/indents");
   });
 
   it("picks the parent for a route the navigation does not list", () => {

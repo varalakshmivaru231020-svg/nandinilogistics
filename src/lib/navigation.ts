@@ -1,9 +1,16 @@
 import { PERM } from "@/lib/permissions/codes";
 
 /**
- * The sidebar. Every entry names the permission that reveals it, so the menu a
- * user sees is a direct projection of what they are allowed to open — there is
- * no separate "menu configuration" to drift out of step with the guards.
+ * The sidebar, exactly as drawn in design/NN Infra Admin.dc.html: six groups,
+ * sixteen screens, in the design's own order and under its own names.
+ *
+ * Nothing else belongs here. Screens the design does not draw — vendor
+ * invoices, payments, transfers, cost sheets, reports, the administration
+ * pages — are reached from within the screen that owns them, not from a menu
+ * entry the design never had.
+ *
+ * Every entry names the permission that reveals it, so the menu a user sees is
+ * a direct projection of what they are allowed to open.
  */
 
 export interface NavItem {
@@ -13,28 +20,24 @@ export interface NavItem {
   permission?: string;
   /** Shown when the user holds ANY of these. */
   anyPermission?: string[];
-  /** Lucide icon name, resolved in the sidebar component. */
+  /** Key into the design's icon set — see components/shell/nav-icons.tsx. */
   icon?: string;
   badge?: "indentPending" | "followUpDue" | "reorder";
 }
 
 export interface NavSection {
   label: string;
-  icon: string;
   items: NavItem[];
-  /** Collapsed by default in the sidebar. */
-  collapsed?: boolean;
 }
 
 export const NAVIGATION: NavSection[] = [
   {
     label: "Overview",
-    icon: "LayoutDashboard",
     items: [
       {
         label: "Dashboard",
         href: "/dashboard",
-        icon: "LayoutDashboard",
+        icon: "dashboard",
         anyPermission: [
           PERM.dashboard.owner.view,
           PERM.dashboard.projectManager.view,
@@ -46,115 +49,43 @@ export const NAVIGATION: NavSection[] = [
     ],
   },
   {
-    // The design calls this group Execution.
     label: "Execution",
-    icon: "Building2",
     items: [
-      { label: "Projects", href: "/projects", icon: "Building2", permission: PERM.project.project.view },
-      { label: "Site Progress", href: "/projects/progress", icon: "CameraIcon", permission: PERM.project.progressLog.view },
-      { label: "Schedule", href: "/schedule", icon: "GanttChartSquare", permission: PERM.schedule.activity.view },
+      { label: "Projects", href: "/projects", icon: "projects", permission: PERM.project.project.view },
+      { label: "Tasks", href: "/tasks", icon: "tasks", permission: PERM.task.task.view },
+      { label: "Checklists", href: "/checklists", icon: "checklists", permission: PERM.checklist.checklist.view },
+      { label: "Schedule", href: "/schedule", icon: "schedule", permission: PERM.schedule.activity.view },
     ],
   },
   {
     label: "Procurement",
-    icon: "PackageSearch",
     items: [
-      // The design's Procurement group is five top-level screens, in this
-      // order and under these names. The rest of the chain — invoices,
-      // payments, issues, transfers — follows below; the scope document
-      // requires them and the design simply does not draw them.
-      { label: "Indents", href: "/material/indents", icon: "ClipboardList", permission: PERM.material.indent.view, badge: "indentPending" },
-      { label: "Purchase Orders", href: "/material/purchase-orders", icon: "FileText", permission: PERM.material.purchaseOrder.view },
-      { label: "Goods Receipt", href: "/material/grn", icon: "PackageCheck", permission: PERM.material.grn.view },
-      { label: "Item Master", href: "/material/stock", icon: "Boxes", permission: PERM.material.stock.view },
-      { label: "Vendors", href: "/material/vendors", icon: "Store", permission: PERM.material.vendor.view },
-
-      {
-        label: "Material & Inventory",
-        href: "/material",
-        icon: "PackageSearch",
-        anyPermission: [
-          PERM.material.indent.view,
-          PERM.material.purchaseOrder.view,
-          PERM.material.grn.view,
-          PERM.masters.vendor.view,
-          PERM.masters.item.view,
-        ],
-      },
-      { label: "Vendor Invoices", href: "/material/invoices", icon: "ReceiptText", permission: PERM.material.vendorInvoice.view },
-      { label: "Payments", href: "/material/payments", icon: "Banknote", permission: PERM.material.vendorPayment.view },
-      { label: "Reorder Alerts", href: "/material/reorder", icon: "TriangleAlert", permission: PERM.material.reorder.view, badge: "reorder" },
-      { label: "Material Issues", href: "/material/issues", icon: "ArrowLeftRight", permission: PERM.material.issue.view },
-      { label: "Material Returns", href: "/material/returns", icon: "Undo2", permission: PERM.material.return.view },
-      { label: "Store Transfers", href: "/material/transfers", icon: "Truck", permission: PERM.material.transfer.view },
+      { label: "Indents", href: "/material/indents", icon: "indents", permission: PERM.material.indent.view, badge: "indentPending" },
+      { label: "Purchase Orders", href: "/material/purchase-orders", icon: "pos", permission: PERM.material.purchaseOrder.view },
+      { label: "Goods Receipt", href: "/material/grn", icon: "grn", permission: PERM.material.grn.view },
+      { label: "Item Master", href: "/material/stock", icon: "items", permission: PERM.material.stock.view },
+      { label: "Vendors", href: "/material/vendors", icon: "vendors", permission: PERM.material.vendor.view },
     ],
   },
   {
     label: "Sales",
-    icon: "Handshake",
     items: [
-      { label: "Leads · CRM", href: "/sales/leads", icon: "UserPlus", permission: PERM.sales.lead.view },
-      { label: "Follow-ups", href: "/sales/follow-ups", icon: "PhoneCall", permission: PERM.sales.followUp.view, badge: "followUpDue" },
-      { label: "Site Visits", href: "/sales/site-visits", icon: "MapPin", permission: PERM.sales.siteVisit.view },
-      { label: "Customers", href: "/sales/customers", icon: "Users", permission: PERM.sales.customer.view },
-      { label: "Cost Sheets", href: "/sales/cost-sheets", icon: "Calculator", permission: PERM.sales.costSheet.view },
-      { label: "Bookings", href: "/sales/bookings", icon: "BookCheck", permission: PERM.sales.booking.view },
-      { label: "Receipts", href: "/sales/receipts", icon: "IndianRupee", permission: PERM.sales.receipt.view },
+      { label: "Leads · CRM", href: "/sales/leads", icon: "leads", permission: PERM.sales.lead.view },
+      { label: "Follow-ups", href: "/sales/follow-ups", icon: "followups", permission: PERM.sales.followUp.view, badge: "followUpDue" },
+      { label: "Available Flats", href: "/units/board", icon: "flats", permission: PERM.unit.board.view },
     ],
   },
   {
-    label: "Available Flats",
-    icon: "Grid3x3",
-    items: [
-      { label: "Available Flats", href: "/units/board", icon: "Grid3x3", permission: PERM.unit.board.view },
-      { label: "Units", href: "/units", icon: "DoorOpen", permission: PERM.unit.unit.view },
-      { label: "Price Lists", href: "/units/price-lists", icon: "Tags", permission: PERM.unit.priceList.view },
-    ],
-  },
-  {
-    // The design calls this group Workforce and the screen "Users & Attendance".
     label: "Workforce",
-    icon: "Users",
     items: [
-      { label: "Users & Attendance", href: "/hr", icon: "Users", permission: PERM.hr.employee.view },
-    ],
-  },
-  {
-    label: "Reports",
-    icon: "BarChart3",
-    collapsed: true,
-    items: [
-      { label: "All Reports", href: "/reports", icon: "BarChart3", anyPermission: [PERM.reports.budgetVsActual.view, PERM.reports.salesFunnel.view, PERM.reports.stockValuation.view, PERM.reports.unitAvailability.view] },
-    ],
-  },
-  {
-    // The design names this screen "Masters & Users" and keeps both on it.
-    label: "Masters",
-    icon: "Database",
-    collapsed: true,
-    items: [
-      { label: "Masters & Users", href: "/masters", icon: "Database", anyPermission: MASTER_VIEW_CODES() },
-    ],
-  },
-  {
-    label: "Knowledge Base",
-    icon: "BookOpen",
-    items: [
-      { label: "Knowledge Base", href: "/kb", icon: "BookOpen", permission: PERM.kb.article.view },
+      { label: "Users & Attendance", href: "/hr", icon: "hr", permission: PERM.hr.employee.view },
     ],
   },
   {
     label: "Administration",
-    icon: "ShieldCheck",
-    collapsed: true,
     items: [
-      { label: "Users", href: "/admin/users", icon: "UserCog", permission: PERM.admin.user.view },
-      { label: "Roles & Permissions", href: "/admin/roles", icon: "ShieldCheck", permission: PERM.admin.role.view },
-      { label: "Permission Catalogue", href: "/admin/permissions", icon: "KeyRound", permission: PERM.admin.permission.view },
-      { label: "Approval Limits", href: "/admin/approval-limits", icon: "SlidersHorizontal", permission: PERM.admin.approvalLimit.view },
-      { label: "Settings", href: "/admin/settings", icon: "Settings2", permission: PERM.admin.settings.view },
-      { label: "Audit Trail", href: "/admin/audit", icon: "ScrollText", permission: PERM.admin.audit.view },
-      { label: "Sessions", href: "/admin/sessions", icon: "MonitorSmartphone", permission: PERM.admin.session.view },
+      { label: "Knowledge Base", href: "/kb", icon: "kb", permission: PERM.kb.article.view },
+      { label: "Masters & Users", href: "/masters", icon: "masters", anyPermission: MASTER_VIEW_CODES() },
     ],
   },
 ];
@@ -178,10 +109,9 @@ export function visibleNavigation(has: (code: string) => boolean): NavSection[] 
 /**
  * Which navigation entry a URL belongs to.
  *
- * Longest match wins, and exactly one entry can ever be returned. A plain
- * prefix test cannot tell a parent from its child — /projects/progress matches
- * both "Projects" (/projects) and "Site Progress" (/projects/progress), which
- * lit up two items in the sidebar at once.
+ * Longest match wins, and exactly one entry can ever be returned, so a screen
+ * reached from inside another (a purchase order from an indent, say) lights up
+ * the one menu entry it sits under.
  */
 export function activeNavHref(
   pathname: string,

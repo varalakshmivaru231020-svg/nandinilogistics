@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Building2, ChevronDown, LogOut, Search, ShieldCheck, UserRound } from "lucide-react";
+import { Bell, Building2, LogOut, Menu, Search, ShieldCheck, UserRound } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { NAVIGATION } from "@/lib/navigation";
@@ -104,7 +104,7 @@ export function Topbar({
         className="rounded-[8px] p-1.5 text-muted-600 hover:bg-surface-hover lg:hidden"
         aria-label="Open menu"
       >
-        <Search className="h-5 w-5" />
+        <Menu className="h-5 w-5" />
       </button>
 
       <div className="font-display text-[17px] font-bold text-navy-950">{title}</div>
@@ -149,7 +149,7 @@ export function Topbar({
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="flex items-center gap-2 rounded-[9px] pl-1 pr-1.5 hover:bg-surface-hover"
+          className="rounded-full"
         >
           <span
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[12px] font-bold text-white"
@@ -157,7 +157,6 @@ export function Topbar({
           >
             {initials}
           </span>
-          <ChevronDown className="h-3.5 w-3.5 text-muted-500" />
         </button>
 
         {open && (
