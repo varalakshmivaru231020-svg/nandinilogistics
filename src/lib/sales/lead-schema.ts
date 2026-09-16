@@ -19,6 +19,12 @@ export const LeadSchema = z.object({
   budgetMin: z.coerce.number().min(0).optional(),
   budgetMax: z.coerce.number().min(0).optional(),
   nextActionAt: z.string().optional(),
+  /// The design's "Site visit planned?" — the lead opens on that stage.
+  siteVisitPlanned: z
+    .union([z.literal("on"), z.literal("true"), z.literal("")])
+    .optional()
+    .transform((v) => v === "on" || v === "true")
+    .optional(),
 });
 
 export type LeadInput = z.infer<typeof LeadSchema>;

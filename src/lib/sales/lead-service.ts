@@ -125,6 +125,8 @@ export async function captureLead(
       budgetMax: input.budgetMax ?? null,
       nextActionAt: input.nextActionAt ? new Date(input.nextActionAt) : null,
       unitTypeId: input.unitTypeId,
+      // Captured with a visit already planned: the lead opens on that stage.
+      ...(input.siteVisitPlanned ? { state: "SITE_VISIT_SCHEDULED" as const } : {}),
       duplicateOfId: duplicateOf?.id ?? null,
     },
     select: { id: true, leadNo: true, name: true },

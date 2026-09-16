@@ -431,10 +431,10 @@ export function ChecklistsScreen({
                   </div>
                 </div>
                 <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", r.result === "PASS" ? "bg-good-050 text-good-700" : "bg-bad-050 text-bad-700")}>
-                  {r.result === "PASS" ? "Passed" : "Failed"}
+                  {r.result === "PASS" ? "Pass" : "Fail"}
                 </span>
                 <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", r.state === "CLOSED" ? "bg-surface-hover text-navy-800" : "bg-warn-050 text-warn-800")}>
-                  {r.state === "CLOSED" ? "Closed" : "Open"}
+                  {r.state === "CLOSED" ? "Closed" : "Awaiting PM verify"}
                 </span>
               </div>
             ))}

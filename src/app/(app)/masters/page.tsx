@@ -223,6 +223,17 @@ async function TaxAndUom() {
 
 /* --------------------------------- Users ---------------------------------- */
 
+/** The design gives each role its own colour, with the owner on navy. */
+function rolePill(role: string | undefined): string {
+  const name = (role ?? "").toLowerCase();
+  if (name.includes("owner") || name.includes("admin")) return "bg-navy-950 text-white";
+  if (name.includes("project manager")) return "bg-brand-100 text-brand-700";
+  if (name.includes("supervisor")) return "bg-good-050 text-good-700";
+  if (name.includes("store")) return "bg-warn-050 text-warn-700";
+  if (name.includes("sales")) return "bg-[#EFE9FC] text-[#6A46C8]";
+  return "bg-surface-field text-navy-500";
+}
+
 async function Users() {
   const users = await prisma.user.findMany({
     orderBy: { name: "asc" },
@@ -253,7 +264,7 @@ async function Users() {
                 <p className="truncate text-[11px] font-medium text-muted-400">{u.email}</p>
               </div>
             </div>
-            <span className="w-fit rounded-full bg-brand-100 px-2.5 py-1 text-[11px] font-bold text-brand-700">
+            <span className={cn("w-fit rounded-full px-2.5 py-1 text-[11px] font-bold", rolePill(u.roles[0]?.role.name))}>
               {u.roles[0]?.role.name ?? "No role"}
             </span>
             <p className="text-[11.5px] font-medium text-navy-500">

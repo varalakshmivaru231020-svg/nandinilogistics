@@ -378,7 +378,9 @@ export function LeadsScreen({
                       {r.requirement ?? "—"}
                       {(r.budgetMin || r.budgetMax) && (
                         <div className="num text-[11px] text-muted-400">
-                          {money(r.budgetMin ?? 0)} – {money(r.budgetMax ?? 0)}
+                          {r.budgetMin && r.budgetMax
+                            ? `${money(r.budgetMin)} – ${money(r.budgetMax)}`
+                            : money(r.budgetMax ?? r.budgetMin ?? 0)}
                         </div>
                       )}
                     </td>
@@ -481,49 +483,50 @@ function NewLeadModal({
 
   return (
     <Modal
-      open onClose={onClose} title="New lead"
-      description="Duplicate detection runs on the phone number as you save."
+      open onClose={onClose} title="Capture lead"
+      description="Form is built from Masters → Lead Settings"
+      size="sm"
       footer={
         <>
           <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
-          <Button type="submit" form="lead-form" loading={busy}>Capture lead</Button>
+          <Button type="submit" form="lead-form" loading={busy}>Save lead</Button>
         </>
       }
     >
-      <form id="lead-form" onSubmit={onSubmit} className="space-y-4">
+      <form id="lead-form" onSubmit={onSubmit} className="space-y-3.5">
         {error && <Alert tone="error">{error}</Alert>}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Name" required><Input name="name" required /></Field>
-          <Field label="Phone" required><Input name="phone" type="tel" required /></Field>
-          <Field label="Alternate phone"><Input name="altPhone" type="tel" /></Field>
-          <Field label="Email"><Input name="email" type="email" /></Field>
-          <Field label="Source" required>
-            <Select name="sourceId" required defaultValue="">
-              <option value="">Select…</option>
-              {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Project of interest">
-            <Select name="projectId" defaultValue="">
-              <option value="">— Not specified —</option>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Interested in" hint="Matched against available inventory.">
-            <Select name="unitTypeId" defaultValue="">
-              <option value="">Any unit type</option>
-              {unitTypes.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Budget from (₹)"><Input name="budgetMin" type="number" min={0} step="any" /></Field>
-          <Field label="Budget to (₹)"><Input name="budgetMax" type="number" min={0} step="any" /></Field>
-          <Field label="Requirement" className="sm:col-span-2">
-            <Textarea name="requirement" rows={2} placeholder="2–3 BHK, east facing, ready to move" />
-          </Field>
-          <Field label="Next action on" className="sm:col-span-2" hint="Overdue follow-ups escalate to the sales head.">
-            <Input name="nextActionAt" type="date" />
-          </Field>
-        </div>
+
+        <Field label="Name" required><Input name="name" required /></Field>
+        <Field label="Mobile number" required><Input name="phone" type="tel" required /></Field>
+        <Field label="Source" required>
+          <Select name="sourceId" required defaultValue="">
+            <option value="">Select…</option>
+            {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Email"><Input name="email" type="email" /></Field>
+        <Field label="Budget"><Input name="budgetMax" type="number" min={0} step="any" /></Field>
+        <Field label="Interested in">
+          <Select name="unitTypeId" defaultValue="">
+            <option value="">Any unit type</option>
+            {unitTypes.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Preferred project">
+          <Select name="projectId" defaultValue="">
+            <option value="">— Not specified —</option>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Requirement notes">
+          <Textarea name="requirement" rows={2} placeholder="Type here…" />
+        </Field>
+        <Field label="Site visit planned?">
+          <label className="flex items-center gap-2 text-[12.5px] font-medium text-navy-900">
+            <input type="checkbox" name="siteVisitPlanned" className="h-4 w-4 accent-[#0089C9]" />
+            Yes
+          </label>
+        </Field>
       </form>
     </Modal>
   );

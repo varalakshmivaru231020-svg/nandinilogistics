@@ -10,6 +10,7 @@ import { PERM } from "@/lib/permissions/codes";
 import { markAttendance } from "@/lib/hr/attendance-marking";
 import { editableEmployee, maskIdentityChanges } from "@/lib/hr/employee-audit";
 import { checkStatusChange, claimEmployeeStatus, statusLabel } from "@/lib/hr/employee-status";
+import { FileTooLargeError, UnsupportedFileTypeError, put, remove } from "@/lib/storage";
 
 /**
  * The design makes name, mobile, photo and Aadhaar mandatory on an employee.
@@ -28,6 +29,57 @@ const EmployeeSchema = z.object({
 
 function nextEmployeeCode(count: number) {
   return `EMP-${String(count + 1).padStart(4, "0")}`;
+}
+
+/** The two copies the design's form takes, and nothing else. */
+const DOC_KINDS = ["Aadhaar card", "PAN card"] as const;
+
+/** Stores one uploaded file, turning the storage rules into form errors. */
+async function store(employeeId: string, file: File) {
+  try {
+    return await put(`employee-${employeeId}`, file.name, Buffer.from(await file.arrayBuffer()), file.type);
+  } catch (err) {
+    if (err instanceof FileTooLargeError || err instanceof UnsupportedFileTypeError) {
+      throw new Error(err.message);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Saves the photo and the identity copies the design's form offers. Replacing
+ * one removes what it replaced, so nothing is orphaned in storage.
+ */
+async function saveFiles(employeeId: string, formData: FormData, uploadedById: string) {
+  const photo = formData.get("photo");
+  if (photo instanceof File && photo.size > 0) {
+    const previous = await prisma.employee.findUnique({ where: { id: employeeId }, select: { photoKey: true } });
+    const stored = await store(employeeId, photo);
+    await prisma.employee.update({ where: { id: employeeId }, data: { photoKey: stored.key } });
+    if (previous?.photoKey) await remove(previous.photoKey).catch(() => undefined);
+  }
+
+  for (const kind of DOC_KINDS) {
+    const file = formData.get(`doc:${kind}`);
+    if (!(file instanceof File) || file.size === 0) continue;
+    const previous = await prisma.employeeDocument.findUnique({
+      where: { employeeId_kind: { employeeId, kind } },
+      select: { storageKey: true },
+    });
+    const stored = await store(employeeId, file);
+    await prisma.employeeDocument.upsert({
+      where: { employeeId_kind: { employeeId, kind } },
+      create: {
+        employeeId, kind, storageKey: stored.key, fileName: file.name,
+        fileSize: stored.size, mimeType: stored.mimeType, uploadedById,
+      },
+      update: {
+        storageKey: stored.key, fileName: file.name,
+        fileSize: stored.size, mimeType: stored.mimeType, uploadedById,
+      },
+    });
+    if (previous?.storageKey) await remove(previous.storageKey).catch(() => undefined);
+  }
 }
 
 export async function createEmployeeAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
@@ -53,6 +105,8 @@ export async function createEmployeeAction(formData: FormData): Promise<ActionRe
         },
       });
     });
+
+    await saveFiles(employee.id, formData, ctx.id);
 
     await recordAudit({
       action: "CREATE", entity: "Employee", entityId: employee.id, userId: ctx.id,
@@ -84,6 +138,7 @@ export async function updateEmployeeAction(id: string, formData: FormData): Prom
       designationId: v.designationId || null,
     };
     await prisma.employee.update({ where: { id }, data });
+    await saveFiles(id, formData, ctx.id);
 
     // Every field the form changed; Aadhaar and PAN masked to their last four.
     const changes = maskIdentityChanges(diff(editableEmployee(before), editableEmployee(data)));

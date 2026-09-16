@@ -421,9 +421,10 @@ function TaskDrawer({
           <div className="mt-3.5">
             <FieldLabel optional>Project</FieldLabel>
             <div className="flex flex-wrap gap-1.5">
+              <Chip picked={projectId === ""} onClick={() => setProjectId("")}>— no project —</Chip>
               {projects.map((p) => (
-                <Chip key={p.id} picked={projectId === p.id} onClick={() => setProjectId(projectId === p.id ? "" : p.id)}>
-                  {p.code}
+                <Chip key={p.id} picked={projectId === p.id} onClick={() => setProjectId(p.id)}>
+                  {p.name ?? p.code}
                 </Chip>
               ))}
             </div>
@@ -439,7 +440,7 @@ function TaskDrawer({
             <div className="flex flex-wrap gap-1.5">
               {people.map((p) => (
                 <Chip key={p.id} picked={assigneeId === p.id} onClick={() => setAssigneeId(p.id)}>
-                  {p.name}
+                  {p.name ?? p.code}
                 </Chip>
               ))}
             </div>

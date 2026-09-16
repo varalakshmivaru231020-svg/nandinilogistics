@@ -127,9 +127,12 @@ export function LeadDetail({
     ["Mobile number", lead.phone],
     ["Source", lead.sourceName],
     ["Email", lead.email || "—"],
-    ["Budget", lead.budgetMin || lead.budgetMax
-      ? `${money(lead.budgetMin ?? 0)} – ${money(lead.budgetMax ?? 0)}`
-      : "—"],
+    // Captured as one figure, so it reads as one; a range only when both are set.
+    ["Budget", lead.budgetMin && lead.budgetMax
+      ? `${money(lead.budgetMin)} – ${money(lead.budgetMax)}`
+      : lead.budgetMax || lead.budgetMin
+        ? money(lead.budgetMax ?? lead.budgetMin ?? 0)
+        : "—"],
     ["Interested in", lead.unitTypeName ?? "—"],
     ["Preferred project", lead.projectName ?? "—"],
     ["Requirement notes", lead.requirement || "—"],

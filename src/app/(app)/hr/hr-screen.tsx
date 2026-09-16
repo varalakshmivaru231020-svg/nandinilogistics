@@ -624,6 +624,8 @@ function EmployeeForm({
 }) {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [photoName, setPhotoName] = React.useState<string | null>(null);
+  const [docNames, setDocNames] = React.useState<Record<string, string | null>>({});
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -638,40 +640,99 @@ function EmployeeForm({
   }
 
   return (
-    <Modal open onClose={onClose} title={employee ? "Edit employee" : "New employee"} size="lg">
-      <form onSubmit={submit} className="space-y-3">
+    <Modal
+      open
+      onClose={onClose}
+      title={employee ? "Edit employee" : "New employee"}
+      description="Name, mobile, photo and Aadhaar are mandatory"
+      size="lg"
+    >
+      <form onSubmit={submit} className="space-y-3.5">
         {error && <p className="rounded-[9px] bg-bad-050 px-3 py-2 text-[12px] font-bold text-bad-600">{error}</p>}
 
-        <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
-          <Field label="Name" required>
-            <Input name="name" defaultValue={employee?.name} required autoFocus />
-          </Field>
-          <Field label="Employment type" required>
-            <Select name="employmentTypeId" defaultValue={employee?.employmentTypeId} required>
-              {employmentTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Designation">
-            <Select name="designationId" defaultValue={employee?.designationId ?? ""}>
-              <option value="">Select designation…</option>
-              {designations.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Mobile" required>
-            <Input name="mobile" defaultValue={employee?.mobile} placeholder="+91 98450 66120" required />
-          </Field>
-          <Field label="Aadhaar" required hint="Mandatory, as in the design.">
-            <Input name="aadhaar" defaultValue={employee?.aadhaar ?? ""} placeholder="4821 7734 9012" required />
+        <div className="flex flex-wrap items-start gap-3.5">
+          <label className="flex h-[120px] w-[120px] shrink-0 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-[12px] border border-dashed border-[#C6CFE8] bg-surface-tint text-center transition-colors hover:border-brand-500">
+            <span className="text-[22px]">📷</span>
+            <span className="px-2 text-[11px] font-semibold text-muted-600">
+              {photoName ?? (employee ? "Replace photo" : "Add photo")}
+            </span>
+            <input
+              type="file"
+              name="photo"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => setPhotoName(e.target.files?.[0]?.name ?? null)}
+            />
+          </label>
+
+          <div className="grid min-w-[240px] flex-1 gap-3">
+            <Field label="Type of employment" required>
+              <Select name="employmentTypeId" defaultValue={employee?.employmentTypeId} required>
+                {employmentTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Name" required>
+              <Input name="name" defaultValue={employee?.name} placeholder="Full name" required autoFocus />
+            </Field>
+            <Field label="Designation">
+              <Select name="designationId" defaultValue={employee?.designationId ?? ""}>
+                <option value="">Select designation…</option>
+                {designations.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </Select>
+            </Field>
+          </div>
+        </div>
+
+        <Field label="Mobile number" required>
+          <Input name="mobile" defaultValue={employee?.mobile} placeholder="+91 98765 43210" required />
+        </Field>
+
+        <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+          <Field label="Aadhaar number" required>
+            <Input name="aadhaar" defaultValue={employee?.aadhaar ?? ""} placeholder="1234 5678 9012" required />
           </Field>
           <Field label="PAN">
             <Input name="pan" defaultValue={employee?.pan ?? ""} placeholder="ABCDE1234F" className="uppercase" />
           </Field>
-          <Field label="Alternate contact">
-            <Input name="altContact" defaultValue={employee?.altContact ?? ""} />
+          <Field label="Alternate number">
+            <Input name="altContact" defaultValue={employee?.altContact ?? ""} placeholder="+91 90000 00000" />
           </Field>
-          <Field label="Address" className="sm:col-span-2">
-            <Input name="address" defaultValue={employee?.address ?? ""} />
-          </Field>
+        </div>
+
+        <Field label="Address">
+          <Textarea name="address" rows={2} defaultValue={employee?.address ?? ""} placeholder="House, area, city" />
+        </Field>
+
+        <div>
+          <p className="mb-[5px] text-[11px] font-semibold text-muted-600">
+            Attachments <span className="font-medium text-muted-300">· optional</span>
+          </p>
+          <p className="mb-2 text-[11px] font-medium text-muted-400">Aadhaar card and PAN card copies only</p>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            {(["Aadhaar card", "PAN card"] as const).map((kind) => (
+              <label
+                key={kind}
+                className="flex cursor-pointer items-center gap-2.5 rounded-[10px] border border-dashed border-[#C6CFE8] bg-surface-sunken px-3 py-2.5 transition-colors hover:border-brand-500"
+              >
+                <span className="rounded-[5px] bg-bad-700 px-1.5 py-1 text-[8px] font-extrabold text-white">PDF</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[12px] font-bold text-navy-900">{kind}</span>
+                  <span className="block truncate text-[11px] font-medium text-muted-400">
+                    {docNames[kind] ?? "Choose a file"}
+                  </span>
+                </span>
+                <input
+                  type="file"
+                  name={`doc:${kind}`}
+                  accept="application/pdf,image/*"
+                  className="hidden"
+                  onChange={(e) =>
+                    setDocNames((d) => ({ ...d, [kind]: e.target.files?.[0]?.name ?? null }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
