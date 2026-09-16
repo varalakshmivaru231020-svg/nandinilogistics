@@ -2,10 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { PackageCheck } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { Alert, Card, CardBody, CardHeader, CardTitle, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { DetailAction, DetailScreen } from "@/components/shell/detail-screen";
 import { money, qty } from "@/lib/utils";
 import { createGrnAction } from "../actions";
 
@@ -116,13 +115,30 @@ export function GrnForm({
   }
 
   return (
-    <div className="space-y-4">
+    <DetailScreen
+      backHref="/material/grn/new"
+      title="Receive goods · GRN"
+      pills={
+        <span className="rounded-full bg-surface-field px-[10px] py-[5px] text-[10.5px] font-bold text-navy-500">
+          {po.poNo}
+        </span>
+      }
+      subtitle={`${po.vendorName} · ${po.projectName} — what you mark accepted enters the store as soon as this is created.`}
+      actions={
+        <>
+          <DetailAction tone="plain" onClick={() => router.push("/material/grn")}>Cancel</DetailAction>
+          <DetailAction
+            tone="primary"
+            disabled={hasError || !anyReceived || !storeId || busy}
+            onClick={save}
+          >
+            Create GRN &amp; receive stock
+          </DetailAction>
+        </>
+      }
+    >
+      <div className="space-y-3.5">
       {error && <Alert tone="error">{error}</Alert>}
-
-      <Alert tone="info" title={`Receiving against ${po.poNo}`}>
-        {po.vendorName} · {po.projectCode} — {po.projectName}. Only the quantity you mark accepted
-        will enter the stock ledger when this receipt is posted.
-      </Alert>
 
       <Card>
         <CardHeader><CardTitle>Delivery</CardTitle></CardHeader>
@@ -223,14 +239,10 @@ export function GrnForm({
         </CardBody>
       </Card>
 
-      <div className="flex items-center justify-end gap-2">
-        {hasError && <Badge tone="bad">Fix the highlighted lines</Badge>}
-        {!anyReceived && !hasError && <Badge tone="slate">Enter what was received</Badge>}
-        <Button onClick={save} loading={busy} disabled={hasError || !anyReceived || !storeId}>
-          <PackageCheck className="h-3.5 w-3.5" />
-          Record goods receipt
-        </Button>
+      {hasError && (
+        <Alert tone="error">Accepted plus rejected cannot be more than what arrived.</Alert>
+      )}
       </div>
-    </div>
+    </DetailScreen>
   );
 }

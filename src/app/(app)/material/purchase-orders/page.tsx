@@ -11,8 +11,6 @@ import {
 import { vendorOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
-import { poLookups } from "./lookups";
-import { NewPoDrawer } from "./new-po-drawer";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
 import { cn, formatDate, moneyShort, qty } from "@/lib/utils";
@@ -44,7 +42,6 @@ export default async function PurchaseOrdersPage({
   const nowMs = new Date().getTime();
   const canPrint = ctx.has(PERM.material.purchaseOrder.print);
 
-  const lookups = ctx.has(PERM.material.purchaseOrder.create) ? await poLookups(ctx) : null;
   const raw = await searchParams;
   const params = readPoListParams(raw);
   const query = toSearchParams(raw);
@@ -188,13 +185,12 @@ export default async function PurchaseOrdersPage({
         actions={
           <div className="flex items-center gap-2">
             {ctx.has(PERM.material.purchaseOrder.create) && (
-              <NewPoDrawer
-                projects={lookups!.projects}
-                vendors={lookups!.vendors}
-                terms={lookups!.terms}
-                items={lookups!.items}
-                openIndents={lookups!.openIndents}
-              />
+              <Link
+              href="/material/purchase-orders/new"
+              className="rounded-[9px] bg-brand-500 px-[15px] py-[9px] text-[12px] font-bold text-white transition-colors hover:bg-brand-600"
+            >
+              + New purchase order
+            </Link>
             )}
           </div>
         }

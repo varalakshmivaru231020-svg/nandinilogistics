@@ -2,11 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Link2, Plus, Save, Send, Trash2 } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
-import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, Field, Input, Select, Textarea } from "@/components/ui/primitives";
-import { money, qty } from "@/lib/utils";
+import { Alert } from "@/components/ui/primitives";
+import { DetailAction, DetailScreen, PanelCard } from "@/components/shell/detail-screen";
+import { cn, money } from "@/lib/utils";
 import { poTotals, priceLine } from "@/lib/material/procurement";
 import { createPurchaseOrderAction, updatePurchaseOrderAction } from "../actions";
 
@@ -27,13 +25,6 @@ interface Line {
   specification: string;
 }
 
-function blankLine(): Line {
-  return {
-    key: Math.random().toString(36).slice(2),
-    receivedQty: 0,
-    itemId: "", orderedQty: "", rate: "", discountPct: "0", taxPct: "0", specification: "",
-  };
-}
 
 /** An existing, unapproved order being edited in place. */
 export interface PoEditState {
@@ -54,11 +45,10 @@ export interface PoEditState {
 }
 
 export function PoForm({
-  projects, vendors, terms, items, openIndents, prefill, edit, startWithVendorId,
+  projects, vendors, items, openIndents, prefill, edit, startWithVendorId,
 }: {
   projects: Array<{ id: string; name: string; code: string }>;
   vendors: Array<{ id: string; name: string; paymentTermId: string | null }>;
-  terms: Array<{ id: string; name: string }>;
   items: ItemOpt[];
   openIndents: Array<{ id: string; indentNo: string; purpose: string | null; projectId: string }>;
   prefill: { projectId: string; indentId: string; indentNo: string; lines: Array<{ itemId: string; qty: number; rate: number; specification: string }> } | null;
@@ -76,7 +66,8 @@ export function PoForm({
   const [expectedDate, setExpectedDate] = React.useState(init?.expectedDate ?? "");
   const [deliveryAddress, setDeliveryAddress] = React.useState(init?.deliveryAddress ?? "");
   const [poTerms, setPoTerms] = React.useState(init?.terms ?? "");
-  const [otherCharges, setOtherCharges] = React.useState(String(init?.otherCharges ?? 0));
+  // The design's builder has no other-charges field; an edited order keeps what it had.
+  const otherCharges = String(init?.otherCharges ?? 0);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -94,7 +85,7 @@ export function PoForm({
         specification: l.specification,
       }));
     }
-    if (!prefill?.lines.length) return [blankLine()];
+    if (!prefill?.lines.length) return [];
     return prefill.lines.map((l) => ({
       key: Math.random().toString(36).slice(2),
       receivedQty: 0,
@@ -107,18 +98,30 @@ export function PoForm({
     }));
   });
 
+  const [pick, setPick] = React.useState("");
+
+  // What is left to add, narrowed by the search box.
+  const pool = items.filter(
+    (i) =>
+      !lines.some((l) => l.itemId === i.id) &&
+      (!pick.trim() || `${i.name} ${i.code}`.toLowerCase().includes(pick.trim().toLowerCase())),
+  );
+
+  function addItem(item: ItemOpt) {
+    setLines((ls) => [
+      ...ls,
+      {
+        key: item.id, receivedQty: 0, itemId: item.id, orderedQty: "",
+        rate: String(item.standardRate), discountPct: "0", taxPct: String(item.taxPct),
+        specification: "",
+      },
+    ]);
+  }
+
   function updateLine(key: string, patch: Partial<Line>) {
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
 
-  function onItemChange(key: string, itemId: string) {
-    const item = itemById.get(itemId);
-    updateLine(key, {
-      itemId,
-      rate: item ? String(item.standardRate) : "",
-      taxPct: item ? String(item.taxPct) : "0",
-    });
-  }
 
   // A vendor's default payment term fills in when they are chosen.
   function onVendorChange(id: string) {
@@ -193,206 +196,248 @@ export function PoForm({
 
   const ready = (edit || projectId) && vendorId && lines.some((l) => l.itemId && Number(l.orderedQty) > 0);
 
+  const taxPct = subTotal > 0 ? Math.round((taxAmount / subTotal) * 100) : 0;
+
   return (
-    <div className="space-y-4">
-      {error && <Alert tone="error">{error}</Alert>}
+    <DetailScreen
+      backHref="/material/purchase-orders"
+      title={edit ? "Edit purchase order" : "Raise purchase order"}
+      subtitle="Raised POs go to Project Manager, then Admin."
+      actions={
+        <>
+          <DetailAction tone="plain" onClick={() => router.push("/material/purchase-orders")}>Cancel</DetailAction>
+          <DetailAction tone="primary" disabled={!ready || busy} onClick={() => save(true)}>
+            {edit ? "Save order" : "Raise PO & send for approval"}
+          </DetailAction>
+        </>
+      }
+    >
+      {error && <div className="mb-3.5"><Alert tone="error">{error}</Alert></div>}
 
-      {prefill && (
-        <Alert tone="info" title={`Pre-filled from indent ${prefill.indentNo}`}>
-          Only the quantity left to purchase after the stock check has been carried over.
-        </Alert>
-      )}
-
-      {!edit && !prefill && openIndents.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Start from an approved indent</CardTitle>
-            <span className="text-xs text-muted-500">{openIndents.length} waiting to be ordered</span>
-          </CardHeader>
-          <CardBody className="flex flex-wrap gap-2">
-            {openIndents.slice(0, 8).map((i) => (
-              <a
-                key={i.id}
-                href={`/material/purchase-orders/new?indent=${i.id}`}
-                className="inline-flex items-center gap-1.5 rounded-md border border-line-400 bg-white px-2.5 py-1.5 text-xs text-navy-600 hover:border-brand-300 hover:bg-brand-50"
+      <div className="grid items-start gap-3.5 lg:grid-cols-2">
+        <div className="rounded-[13px] border border-line-400 bg-white px-5 py-[18px]">
+          <div className="mb-3 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">Order details</div>
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <label className="block">
+              <span className={LABEL}>Vendor {REQUIRED}</span>
+              <select
+                value={vendorId}
+                onChange={(e) => onVendorChange(e.target.value)}
+                className={cn(FIELD, "mt-1.5")}
               >
-                <Link2 className="h-3 w-3 text-muted-400" />
-                <span className="font-medium">{i.indentNo}</span>
-                {i.purpose && <span className="text-muted-500">· {i.purpose}</span>}
-              </a>
-            ))}
-          </CardBody>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader><CardTitle>Order details</CardTitle></CardHeader>
-        <CardBody>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Project" required hint={edit ? "An order stays on the project it was raised for." : undefined}>
-              {edit ? (
-                <Input value={edit.projectLabel} disabled readOnly />
-              ) : (
-                <Select value={projectId} onChange={(e) => setProjectId(e.target.value)} required>
-                  {projects.length === 0 && <option value="">No projects mapped to you</option>}
-                  {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
-                </Select>
-              )}
-            </Field>
-
-            <Field label="Vendor" required>
-              <Select value={vendorId} onChange={(e) => onVendorChange(e.target.value)} required>
-                <option value="">Select a vendor…</option>
+                <option value="">Select vendor…</option>
                 {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </Select>
-            </Field>
+              </select>
+            </label>
 
-            <Field label="Payment term">
-              <Select value={paymentTermId} onChange={(e) => setPaymentTermId(e.target.value)}>
-                <option value="">— Not specified —</option>
-                {terms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </Select>
-            </Field>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={LABEL}>Against indents</span>
+                <span className="rounded-full bg-brand-100 px-2 py-[3px] text-[9.5px] font-bold text-brand-700">
+                  {prefill ? `linked to ${prefill.indentNo}` : "Optional — none linked"}
+                </span>
+              </div>
+              <div className="mt-1.5 max-h-[120px] space-y-1.5 overflow-y-auto">
+                {openIndents.length === 0 && (
+                  <div className="text-[11.5px] font-medium text-muted-400">No approved indents waiting.</div>
+                )}
+                {openIndents.slice(0, 12).map((i) => (
+                  <a
+                    key={i.id}
+                    href={`/material/purchase-orders/new?indent=${i.id}`}
+                    className={cn(
+                      "block rounded-[9px] border px-3 py-2 transition-colors",
+                      prefill?.indentId === i.id
+                        ? "border-brand-500 bg-brand-100"
+                        : "border-line-300 bg-surface-sunken hover:border-brand-500",
+                    )}
+                  >
+                    <div className="text-[12px] font-bold text-navy-950">{i.indentNo}</div>
+                    {i.purpose && (
+                      <div className="mt-0.5 text-[11px] font-medium text-muted-400">{i.purpose}</div>
+                    )}
+                  </a>
+                ))}
+              </div>
+            </div>
 
-            <Field label="Expected delivery">
-              <Input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} />
-            </Field>
+            <label className="block">
+              <span className={LABEL}>Project</span>
+              {edit ? (
+                <input value={edit.projectLabel} readOnly className={cn(FIELD, "mt-1.5")} />
+              ) : (
+                <select
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                  className={cn(FIELD, "mt-1.5")}
+                >
+                  {projects.length === 0 && <option value="">No projects mapped to you</option>}
+                  {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
+            </label>
 
-            <Field label="Delivery address" className="sm:col-span-2">
-              <Textarea value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} rows={2} placeholder="Site gate, contact person and phone" />
-            </Field>
+            <label className="block">
+              <span className={LABEL}>Delivery due</span>
+              <input
+                type="date"
+                value={expectedDate}
+                onChange={(e) => setExpectedDate(e.target.value)}
+                className={cn(FIELD, "mt-1.5")}
+              />
+            </label>
 
-            <Field label="Terms & conditions" className="sm:col-span-2">
-              <Textarea value={poTerms} onChange={(e) => setPoTerms(e.target.value)} rows={2} />
-            </Field>
+            <label className="block sm:col-span-2">
+              <span className={LABEL}>Remarks</span>
+              <textarea
+                rows={3}
+                value={deliveryAddress}
+                onChange={(e) => setDeliveryAddress(e.target.value)}
+                placeholder="e.g. deliver in two lots, unload at basement gate…"
+                className={cn(FIELD, "mt-1.5 resize-y")}
+              />
+            </label>
+
+            <label className="block sm:col-span-2">
+              <span className={LABEL}>Payment &amp; delivery terms</span>
+              <input
+                value={poTerms}
+                onChange={(e) => setPoTerms(e.target.value)}
+                placeholder="30 days credit · delivery at site"
+                className={cn(FIELD, "mt-1.5")}
+              />
+            </label>
           </div>
-        </CardBody>
-      </Card>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Items</CardTitle>
-          <Button variant="secondary" size="sm" onClick={() => setLines((l) => [...l, blankLine()])}>
-            <Plus className="h-3.5 w-3.5" />
-            Add line
-          </Button>
-        </CardHeader>
-        <CardBody className="space-y-3">
-          {lines.map((line, idx) => {
-            const item = itemById.get(line.itemId);
-            const c = computed[idx];
-            const received = line.receivedQty > 0;
-            return (
-              <div key={line.key} className="rounded-md border border-line-400 p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-500">
-                    Line {idx + 1}
-                    {received && ` · ${qty(line.receivedQty, 3)} already received`}
+        <div className="rounded-[13px] border border-line-400 bg-white px-5 py-[18px]">
+          <div className="mb-3 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+            Add items from item master
+          </div>
+          <input
+            value={pick}
+            onChange={(e) => setPick(e.target.value)}
+            placeholder="Search item name or code…"
+            className={FIELD}
+          />
+          <div className="mt-2.5 max-h-[280px] overflow-y-auto">
+            {pool.slice(0, 40).map((i) => (
+              <button
+                key={i.id}
+                type="button"
+                onClick={() => addItem(i)}
+                className="flex w-full cursor-pointer items-center gap-2 border-b border-line-100 px-1 py-2.5 text-left last:border-0 hover:bg-surface-tint"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[12.5px] font-semibold text-navy-900">{i.name}</span>
+                  <span className="mt-0.5 block text-[11px] font-medium text-muted-400">
+                    {i.code} · {money(i.standardRate)} standard rate
                   </span>
-                  {lines.length > 1 && !received && (
-                    <button
-                      type="button"
-                      onClick={() => setLines((ls) => ls.filter((l) => l.key !== line.key))}
-                      className="rounded p-1 text-muted-400 hover:bg-bad-050 hover:text-bad-600"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+                </span>
+                <span className="shrink-0 text-[11.5px] font-bold text-brand-700">+ Add</span>
+              </button>
+            ))}
+            {pool.length === 0 && (
+              <div className="py-4 text-center text-[12px] font-medium text-muted-400">
+                No matching items left to add
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <PanelCard
+        title="Order lines"
+        right={
+          <span className="text-[11.5px] font-semibold text-muted-600">
+            {lines.length} {lines.length === 1 ? "item" : "items"}
+          </span>
+        }
+      >
+        {lines.length === 0 ? (
+          <div className="px-7 py-8 text-center">
+            <div className="text-[12.5px] font-semibold text-muted-600">
+              No items yet — pick them from the item master above
+            </div>
+            <div className="mt-1 text-[11.5px] font-medium text-muted-400">
+              Add as many items as the order needs, then enter quantity and rate for each
+            </div>
+          </div>
+        ) : (
+          lines.map((l, i) => {
+            const item = itemById.get(l.itemId);
+            return (
+              <div
+                key={l.key}
+                className="flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-line-100 px-5 py-3.5 last:border-0"
+              >
+                <div className="min-w-[180px] flex-[1_1_220px]">
+                  <div className="text-[12.5px] font-semibold text-navy-900">{item?.name ?? "—"}</div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-muted-400">
+                    <span>{item?.code ?? ""}</span>
+                    {prefill && (
+                      <span className="rounded-full bg-surface-field px-2 py-[2px] text-[10px] font-semibold text-navy-500">
+                        from {prefill.indentNo}
+                      </span>
+                    )}
+                  </div>
                 </div>
-
-                <div className="grid gap-3 sm:grid-cols-12">
-                  <Field label="Item" required className="sm:col-span-4">
-                    <Select value={line.itemId} disabled={received} onChange={(e) => onItemChange(line.key, e.target.value)}>
-                      <option value="">Select an item…</option>
-                      {items.map((i) => <option key={i.id} value={i.id}>{i.code} — {i.name}</option>)}
-                    </Select>
-                  </Field>
-
-                  <Field label={`Qty${item ? ` (${item.uom})` : ""}`} required className="sm:col-span-2">
-                    <Input type="number" step="any" min={line.receivedQty || 0} value={line.orderedQty}
-                      onChange={(e) => updateLine(line.key, { orderedQty: e.target.value })} />
-                  </Field>
-
-                  <Field label="Rate (₹)" required className="sm:col-span-2">
-                    <Input type="number" step="any" min={0} value={line.rate}
-                      onChange={(e) => updateLine(line.key, { rate: e.target.value })} />
-                  </Field>
-
-                  <Field label="Disc %" className="sm:col-span-1">
-                    <Input type="number" step="any" min={0} max={100} value={line.discountPct}
-                      onChange={(e) => updateLine(line.key, { discountPct: e.target.value })} />
-                  </Field>
-
-                  <Field label="GST %" className="sm:col-span-1">
-                    <Input type="number" step="any" min={0} max={100} value={line.taxPct}
-                      onChange={(e) => updateLine(line.key, { taxPct: e.target.value })} />
-                  </Field>
-
-                  <Field label="Amount" className="sm:col-span-2">
-                    <div className="num flex h-9 items-center justify-end rounded-md bg-surface-sunken px-3 text-sm font-medium text-navy-900">
-                      {money(c.total)}
-                    </div>
-                  </Field>
-
-                  <Field label="Specification" className="sm:col-span-12">
-                    <Input value={line.specification}
-                      onChange={(e) => updateLine(line.key, { specification: e.target.value })}
-                      placeholder="Grade, make, size or any other requirement" />
-                  </Field>
+                <label className="block w-[120px]">
+                  <span className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">
+                    Qty · {item?.uom ?? ""}
+                  </span>
+                  <input
+                    value={l.orderedQty}
+                    onChange={(e) => updateLine(l.key, { orderedQty: e.target.value.replace(/[^\d.]/g, "") })}
+                    placeholder="0"
+                    className={cn(FIELD, "mt-1 py-2")}
+                  />
+                </label>
+                <label className="block w-[120px]">
+                  <span className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">Rate ₹</span>
+                  <input
+                    value={l.rate}
+                    onChange={(e) => updateLine(l.key, { rate: e.target.value.replace(/[^\d.]/g, "") })}
+                    placeholder="0"
+                    className={cn(FIELD, "mt-1 py-2")}
+                  />
+                </label>
+                <div className="w-[120px]">
+                  <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">Amount</div>
+                  <div className="mt-1 text-[12.5px] font-bold text-navy-950">{money(computed[i]?.total ?? 0)}</div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}
+                  className="ml-auto shrink-0 cursor-pointer rounded-[7px] border border-bad-100 bg-bad-050 px-3 py-1.5 text-[11px] font-semibold text-bad-700 transition-colors hover:bg-[#F8DBDB]"
+                >
+                  Remove
+                </button>
               </div>
             );
-          })}
-
-          <div className="space-y-1 border-t border-line-400 pt-3">
-            <div className="flex items-center justify-end gap-3 text-sm">
-              <span className="text-muted-500">Sub-total</span>
-              <span className="num w-36 text-right text-navy-900">{money(subTotal)}</span>
-            </div>
-            <div className="flex items-center justify-end gap-3 text-sm">
-              <span className="text-muted-500">GST</span>
-              <span className="num w-36 text-right text-navy-900">{money(taxAmount)}</span>
-            </div>
-            <div className="flex items-center justify-end gap-3 text-sm">
-              <span className="text-muted-500">Other charges</span>
-              <Input
-                type="number" step="any" min={0} value={otherCharges}
-                onChange={(e) => setOtherCharges(e.target.value)}
-                className="num w-36 text-right"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-3 border-t border-line-400 pt-2">
-              <span className="text-sm font-medium text-navy-600">Order total</span>
-              <span className="num w-36 text-right text-lg font-semibold text-navy-950">{money(grandTotal)}</span>
-            </div>
-          </div>
-        </CardBody>
-      </Card>
-
-      <div className="flex items-center justify-end gap-2">
-        {!ready && <Badge tone="slate">Choose {edit ? "" : "a project, "}a vendor and at least one item</Badge>}
-        {edit ? (
-          <>
-            <Button variant="secondary" onClick={() => router.push(`/material/purchase-orders/${edit.poId}`)} disabled={busy}>
-              Discard changes
-            </Button>
-            <Button onClick={() => save(false)} loading={busy} disabled={!ready}>
-              <Save className="h-3.5 w-3.5" />
-              Save changes
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button variant="secondary" onClick={() => save(false)} loading={busy} disabled={!ready}>
-              Save as draft
-            </Button>
-            <Button onClick={() => save(true)} loading={busy} disabled={!ready}>
-              <Send className="h-3.5 w-3.5" />
-              Submit for approval
-            </Button>
-          </>
+          })
         )}
-      </div>
-    </div>
+
+        <div className="flex flex-wrap justify-end gap-[34px] bg-surface-sunken px-5 py-4">
+          <div className="text-right">
+            <div className="text-[10.5px] font-semibold uppercase tracking-[.07em] text-muted-400">Subtotal</div>
+            <div className="mt-[3px] text-[14px] font-bold text-navy-600">{money(subTotal)}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10.5px] font-semibold uppercase tracking-[.07em] text-muted-400">GST {taxPct}%</div>
+            <div className="mt-[3px] text-[14px] font-bold text-navy-600">{money(taxAmount)}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10.5px] font-semibold uppercase tracking-[.07em] text-navy-800">PO value</div>
+            <div className="mt-[3px] font-display text-[20px] font-extrabold text-navy-950">{money(grandTotal)}</div>
+          </div>
+        </div>
+      </PanelCard>
+    </DetailScreen>
   );
 }
+
+const LABEL = "text-[11px] font-semibold text-navy-600";
+const REQUIRED = <span className="text-bad-600">*</span>;
+const FIELD =
+  "w-full rounded-[9px] border border-line-400 bg-surface-sunken px-3 py-2.5 text-[12.5px] font-medium text-navy-900 outline-none transition-colors focus:border-brand-500 focus:bg-white";

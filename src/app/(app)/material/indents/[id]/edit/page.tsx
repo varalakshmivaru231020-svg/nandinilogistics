@@ -1,12 +1,9 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronRight } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { isIndentEditable, mayEditIndentAs } from "@/lib/material/procurement";
-import { PageHeader } from "@/components/ui/primitives";
 import { IndentForm } from "../../new/indent-form";
 import { indentLookups } from "../../lookups";
 
@@ -65,32 +62,19 @@ export default async function EditIndentPage({ params }: { params: Promise<{ id:
     ...activeItems,
     ...missing.map((i) => ({
       id: i.id, code: i.code, name: i.name, uom: i.uom.code,
-      category: i.category.name, standardRate: Number(i.standardRate),
+      category: i.category.name, standardRate: Number(i.standardRate), onHand: 0,
     })),
   ];
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <PageHeader
-        title={`Edit ${indent.indentNo}`}
-        description="No approval step has been recorded yet, so the indent is changed in place."
-        breadcrumb={
-          <span className="flex items-center gap-1">
-            <Link href="/material/indents" className="hover:text-brand-600">Indents</Link>
-            <ChevronRight className="h-3 w-3" />
-            <Link href={`/material/indents/${indent.id}`} className="hover:text-brand-600">{indent.indentNo}</Link>
-            <ChevronRight className="h-3 w-3" />
-            <span>Edit</span>
-          </span>
-        }
-      />
-
-      <IndentForm
-        projects={[]}
+    <IndentForm
+        projects={[{ id: indent.projectId, name: indent.project.name, code: indent.project.code, workPackages }]}
         items={items}
         canSubmit={false}
         edit={{
           indentId: indent.id,
+          indentNo: indent.indentNo,
+          projectId: indent.projectId,
           projectLabel: `${indent.project.code} — ${indent.project.name}`,
           workPackages,
           initial: {
@@ -108,6 +92,5 @@ export default async function EditIndentPage({ params }: { params: Promise<{ id:
           },
         }}
       />
-    </div>
   );
 }

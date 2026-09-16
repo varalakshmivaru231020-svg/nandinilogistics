@@ -4,14 +4,14 @@ import { prisma } from "@/lib/db";
 import type { AuthContext } from "@/lib/rbac/context";
 
 /**
- * The projects and items an indent can be raised against. Shared by the full
- * /new page and the drawer the list screen opens, so both offer exactly the
- * same options and there is one query to keep correct.
+ * The projects and items an indent can be raised against, with what the store
+ * is holding — the builder checks each line against live stock as it is typed,
+ * which is what the design promises.
  */
 export async function indentLookups(ctx: AuthContext) {
   const projectWhere = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
 
-  const [projects, items] = await Promise.all([
+  const [projects, items, balances] = await Promise.all([
     prisma.project.findMany({
       where: { ...projectWhere, status: { in: ["PLANNING", "ACTIVE"] } },
       orderBy: { name: "asc" },
@@ -30,7 +30,10 @@ export async function indentLookups(ctx: AuthContext) {
         category: { select: { name: true } },
       },
     }),
+    prisma.stockBalance.groupBy({ by: ["itemId"], _sum: { quantity: true } }),
   ]);
+
+  const onHand = new Map(balances.map((b) => [b.itemId, Number(b._sum.quantity ?? 0)]));
 
   return {
     projects: projects.map((p) => ({
@@ -46,6 +49,7 @@ export async function indentLookups(ctx: AuthContext) {
       uom: i.uom.code,
       category: i.category.name,
       standardRate: Number(i.standardRate),
+      onHand: onHand.get(i.id) ?? 0,
     })),
   };
 }

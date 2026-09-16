@@ -1,12 +1,9 @@
-import Link from "next/link";
-import { ChevronRight, PackageSearch } from "lucide-react";
-
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { Card, CardBody, CardHeader, CardTitle, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { formatDate, money } from "@/lib/utils";
 import { GrnForm } from "./grn-form";
+import { GrnPoPicker } from "./po-picker";
 
 export const metadata = { title: "Receive Material" };
 
@@ -51,80 +48,41 @@ export default async function NewGrnPage({
     select: { id: true, name: true, code: true },
   });
 
-  return (
-    <div className="mx-auto max-w-6xl">
-      <PageHeader
-        title="Receive material"
-        description="Record what actually arrived — accepted, rejected and short — against the challan."
-        breadcrumb={
-          <span className="flex items-center gap-1">
-            <Link href="/material/grn" className="hover:text-brand-600">Goods Receipt</Link>
-            <ChevronRight className="h-3 w-3" />
-            <span>New</span>
-          </span>
-        }
+  if (!po) {
+    return (
+      <GrnPoPicker
+        pos={openPos.map((p) => ({
+          id: p.id,
+          poNo: p.poNo,
+          status: p.status,
+          vendor: p.vendor.name,
+          items: `${p._count.items} line${p._count.items === 1 ? "" : "s"}${p.expectedDate ? ` · expected ${formatDate(p.expectedDate)}` : ""}`,
+          value: money(Number(p.totalAmount)),
+        }))}
       />
+    );
+  }
 
-      {!po ? (
-        openPos.length === 0 ? (
-          <Card>
-            <EmptyState
-              icon={<PackageSearch className="h-8 w-8" />}
-              title="No purchase orders awaiting delivery"
-              description="Material can only be received against an approved purchase order."
-            />
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Which purchase order arrived?</CardTitle>
-              <span className="text-xs text-muted-500">{openPos.length} awaiting delivery</span>
-            </CardHeader>
-            <CardBody className="p-0">
-              <ul className="divide-y divide-line-200">
-                {openPos.map((p) => (
-                  <li key={p.id}>
-                    <Link
-                      href={`/material/grn/new?po=${p.id}`}
-                      className="flex items-center justify-between px-4 py-3 hover:bg-surface-hover"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-navy-900">{p.poNo}</p>
-                        <p className="text-xs text-muted-500">
-                          {p.project.code} · {p.vendor.name} · {p._count.items} line(s)
-                          {p.expectedDate && ` · expected ${formatDate(p.expectedDate)}`}
-                        </p>
-                      </div>
-                      <span className="num text-sm text-muted-600">{money(p.totalAmount)}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </CardBody>
-          </Card>
-        )
-      ) : (
-        <GrnForm
-          po={{
-            id: po.id,
-            poNo: po.poNo,
-            vendorName: po.vendor.name,
-            projectCode: po.project.code,
-            projectName: po.project.name,
-          }}
-          stores={stores}
-          lines={po.items.map((l) => ({
-            poItemId: l.id,
-            itemId: l.item.id,
-            code: l.item.code,
-            name: l.item.name,
-            uom: l.item.uom.code,
-            orderedQty: Number(l.orderedQty),
-            alreadyReceived: Number(l.receivedQty),
-            rate: Number(l.rate),
-          }))}
-        />
-      )}
-    </div>
+  return (
+    <GrnForm
+      po={{
+        id: po.id,
+        poNo: po.poNo,
+        vendorName: po.vendor.name,
+        projectCode: po.project.code,
+        projectName: po.project.name,
+      }}
+      stores={stores}
+      lines={po.items.map((l) => ({
+        poItemId: l.id,
+        itemId: l.item.id,
+        code: l.item.code,
+        name: l.item.name,
+        uom: l.item.uom.code,
+        orderedQty: Number(l.orderedQty),
+        alreadyReceived: Number(l.receivedQty),
+        rate: Number(l.rate),
+      }))}
+    />
   );
 }

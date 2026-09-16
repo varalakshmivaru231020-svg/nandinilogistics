@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ClipboardList } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
@@ -10,8 +11,6 @@ import { projectOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
 import { fulfilLines } from "@/lib/material/indent-lines";
-import { indentLookups } from "./lookups";
-import { NewIndentDrawer } from "./new-indent-drawer";
 import { IndentCard } from "./indent-card";
 import { Pagination } from "@/components/ui/data-table";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
@@ -27,9 +26,6 @@ export default async function IndentsPage({
 }) {
   const ctx = await requirePermission(PERM.material.indent.view);
 
-  // Only loaded for someone who can actually raise one — the drawer needs the
-  // same options the full /new page offers.
-  const lookups = ctx.has(PERM.material.indent.create) ? await indentLookups(ctx) : null;
   const raw = await searchParams;
   const params = readIndentListParams(raw);
   const query = toSearchParams(raw);
@@ -75,15 +71,14 @@ export default async function IndentsPage({
         title="Requirement Indents"
         description="Indent (internal request to store) → PM approval → store stock check → issue from stock, or PO to vendor for the shortfall → GRN → 3-way match"
         actions={
-          <div className="flex items-center gap-2">
-            {ctx.has(PERM.material.indent.create) && lookups && (
-              <NewIndentDrawer
-                projects={lookups.projects}
-                items={lookups.items}
-                canSubmit={ctx.has(PERM.material.indent.submit)}
-              />
-            )}
-          </div>
+          ctx.has(PERM.material.indent.create) ? (
+            <Link
+              href="/material/indents/new"
+              className="rounded-[9px] bg-brand-500 px-[15px] py-[9px] text-[12px] font-bold text-white transition-colors hover:bg-brand-600"
+            >
+              + New indent
+            </Link>
+          ) : null
         }
       />
 

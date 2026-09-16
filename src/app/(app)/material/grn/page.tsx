@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { qty } from "@/lib/utils";
 import { PackageCheck } from "lucide-react";
 
@@ -8,8 +9,6 @@ import { grnListWhere, grnMatch, readGrnListParams } from "@/lib/material/list-f
 import { vendorOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
-import { grnLookups } from "./lookups";
-import { NewGrnDrawer } from "./new-grn-drawer";
 import { GrnCard } from "./grn-card";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 
@@ -25,7 +24,6 @@ export default async function GrnListPage({
   const params = readGrnListParams(raw);
   const filtered = Boolean(params.q || params.status || params.project || params.from || params.to);
 
-  const lookups = ctx.has(PERM.material.grn.create) ? await grnLookups(ctx) : null;
 
   const [grns, vendors] = await Promise.all([
     prisma.grn.findMany({
@@ -59,11 +57,14 @@ export default async function GrnListPage({
         title="Goods Receipt · GRN"
         description="Indent (internal request to store) → PM approval → store stock check → issue from stock, or PO to vendor for the shortfall → GRN → 3-way match"
         actions={
-          <div className="flex items-center gap-2">
-            {ctx.has(PERM.material.grn.create) && (
-              <NewGrnDrawer openPos={lookups!.openPos} stores={lookups!.stores} />
-            )}
-          </div>
+          ctx.has(PERM.material.grn.create) ? (
+            <Link
+              href="/material/grn/new"
+              className="rounded-[9px] bg-brand-500 px-[15px] py-[9px] text-[12px] font-bold text-white transition-colors hover:bg-brand-600"
+            >
+              + New GRN
+            </Link>
+          ) : null
         }
       />
 

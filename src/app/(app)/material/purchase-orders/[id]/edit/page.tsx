@@ -1,12 +1,9 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronRight } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { isPoEditable } from "@/lib/material/procurement";
-import { PageHeader } from "@/components/ui/primitives";
 import { PoForm } from "../../new/po-form";
 import { poLookups } from "../../lookups";
 
@@ -66,25 +63,9 @@ export default async function EditPoPage({ params }: { params: Promise<{ id: str
   ];
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <PageHeader
-        title={`Edit ${po.poNo}`}
-        description="Nobody has approved this order yet, so it is changed in place. The PO number stays the same."
-        breadcrumb={
-          <span className="flex items-center gap-1">
-            <Link href="/material/purchase-orders" className="hover:text-brand-600">Purchase Orders</Link>
-            <ChevronRight className="h-3 w-3" />
-            <Link href={`/material/purchase-orders/${po.id}`} className="hover:text-brand-600">{po.poNo}</Link>
-            <ChevronRight className="h-3 w-3" />
-            <span>Edit</span>
-          </span>
-        }
-      />
-
-      <PoForm
+    <PoForm
         projects={[]}
         vendors={vendors}
-        terms={lookups.terms}
         items={items}
         openIndents={[]}
         prefill={null}
@@ -111,6 +92,5 @@ export default async function EditPoPage({ params }: { params: Promise<{ id: str
           },
         }}
       />
-    </div>
   );
 }

@@ -1,10 +1,6 @@
-import Link from "next/link";
-import { ChevronRight } from "lucide-react";
-
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { PageHeader } from "@/components/ui/primitives";
 import { PoForm } from "./po-form";
 import { poLookups } from "../lookups";
 
@@ -18,7 +14,7 @@ export default async function NewPoPage({
   const ctx = await requirePermission(PERM.material.purchaseOrder.create);
   const { indent: indentId, vendor: vendorId } = await searchParams;
 
-  const { projects, vendors, terms, items, openIndents } = await poLookups(ctx);
+  const { projects, vendors, items, openIndents } = await poLookups(ctx);
 
   const sourceIndent = indentId
     ? await prisma.indent.findUnique({
@@ -48,28 +44,13 @@ export default async function NewPoPage({
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <PageHeader
-        title="New purchase order"
-        description="Raised against an approved indent, carrying only the shortfall the stock check left to buy."
-        breadcrumb={
-          <span className="flex items-center gap-1">
-            <Link href="/material/purchase-orders" className="hover:text-brand-600">Purchase Orders</Link>
-            <ChevronRight className="h-3 w-3" />
-            <span>New</span>
-          </span>
-        }
-      />
-
-      <PoForm
-        projects={projects}
-        vendors={vendors}
-        terms={terms}
-        items={items}
-        openIndents={openIndents}
-        prefill={prefill}
-        startWithVendorId={vendorId}
-      />
-    </div>
+    <PoForm
+      projects={projects}
+      vendors={vendors}
+      items={items}
+      openIndents={openIndents}
+      prefill={prefill}
+      startWithVendorId={vendorId}
+    />
   );
 }
