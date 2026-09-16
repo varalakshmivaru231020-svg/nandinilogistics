@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Pencil, UserCheck, UserX, X } from "lucide-react";
 
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
@@ -26,6 +25,17 @@ interface Employee {
   documents: Array<{ id: string; kind: string; fileName: string; fileSize: number }>;
 }
 interface TypeRow { id: string; name: string; count: number; canDelete: boolean }
+
+/** The design tints each employee's initials from a four-colour palette. */
+const AVATAR_COLOURS = ["#0089C9", "#2F308C", "#1F9D66", "#E8A13A"];
+
+function initials(name: string) {
+  return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+}
+
+function initialsIndex(name: string) {
+  return name.length % AVATAR_COLOURS.length;
+}
 interface Mark { employeeId: string; status: string; overtimeHours: number }
 /** Someone who can be marked — active employees only. */
 interface MarkRow { id: string; code: string; name: string; employmentType: string; designation: string | null }
@@ -261,7 +271,7 @@ function StaffTab({
         <table className="w-full min-w-[820px] border-collapse">
           <thead>
             <tr className="bg-surface-sunken">
-              {["Employee", "Type", "Designation", "Mobile", "Aadhaar", "Documents", "Status", ""].map((h, i) => (
+              {["Employee", "Type", "Aadhaar · PAN", "Address", ""].map((h, i) => (
                 <th
                   key={h || i}
                   className={cn(
@@ -277,7 +287,7 @@ function StaffTab({
           <tbody>
             {employees.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
+                <td colSpan={5} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
                   Nobody on record yet.
                 </td>
               </tr>
@@ -290,52 +300,61 @@ function StaffTab({
                 )}
               >
                 <td className="px-4 py-3">
-                  <p className={cn("text-[12.5px] font-bold", isInactive(e.status) ? "text-muted-500" : "text-navy-950")}>{e.name}</p>
-                  <p className="num text-[11px] font-medium text-muted-400">{e.code}</p>
+                  <div className="flex items-center gap-[11px]">
+                    <span
+                      className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[10px] text-[12px] font-bold text-white"
+                      style={{ background: AVATAR_COLOURS[initialsIndex(e.name)] }}
+                    >
+                      {initials(e.name)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className={cn("text-[13px] font-bold", isInactive(e.status) ? "text-muted-500" : "text-navy-950")}>
+                        {e.name}
+                      </p>
+                      <p className="num mt-0.5 text-[11.5px] font-semibold text-brand-700">📞 {e.mobile}</p>
+                      <p className="mt-px text-[11px] font-medium text-muted-400">
+                        {e.designation ?? "—"} · alt {e.altContact ?? "—"}
+                      </p>
+                    </div>
+                  </div>
                 </td>
                 <td className="px-4 py-3"><Badge tone="slate">{e.employmentType}</Badge></td>
-                <td className="px-4 py-3 text-[12px] font-medium text-muted-600">{e.designation ?? "—"}</td>
-                <td className="num px-4 py-3 text-[12px] font-semibold text-navy-900">{e.mobile}</td>
-                <td className="num px-4 py-3 text-[12px] font-medium text-muted-600">{e.aadhaar ?? "—"}</td>
-                <td className="px-4 py-3">
-                  {e.documents.length === 0
-                    ? <span className="text-[11.5px] font-medium text-muted-400">None</span>
-                    : <span className="flex flex-wrap gap-1">
-                        {e.documents.map((d) => <Badge key={d.id} tone="muted">{d.kind}</Badge>)}
-                      </span>}
+                <td className="px-4 py-3 text-[12px] font-medium text-navy-500">
+                  <span className="num">{e.aadhaar ?? "—"}</span>
+                  <br />
+                  <span className="num text-[11px] text-muted-400">{e.pan ?? "—"}</span>
                 </td>
+                <td className="px-4 py-3 text-[12px] font-medium text-navy-500">{e.address ?? "—"}</td>
                 <td className="px-4 py-3">
-                  <Badge tone={isInactive(e.status) ? "muted" : "good"}>{statusLabel(e.status)}</Badge>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <span className="inline-flex gap-1">
+                  <div className="flex justify-end gap-1.5">
                     {can.update && (
                       <button
                         type="button"
-                        title={isInactive(e.status) ? "Activate" : "Deactivate"}
                         onClick={() => onStatus(e)}
-                        className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-muted-400 transition-colors hover:bg-surface-hover hover:text-navy-900"
+                        className="rounded-[7px] bg-brand-500 px-[13px] py-1.5 text-[11px] font-bold text-white hover:bg-brand-600"
                       >
-                        {isInactive(e.status) ? <UserCheck className="h-3.5 w-3.5" /> : <UserX className="h-3.5 w-3.5" />}
+                        {isInactive(e.status) ? "Activate" : "View"}
                       </button>
                     )}
                     {can.update && (
                       <button
-                        type="button" title="Edit" onClick={() => onEdit(e)}
-                        className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-muted-400 transition-colors hover:bg-surface-hover hover:text-navy-900"
+                        type="button"
+                        onClick={() => onEdit(e)}
+                        className="rounded-[7px] border border-line-400 bg-white px-3 py-1.5 text-[11px] font-semibold text-navy-500 hover:border-brand-500 hover:text-brand-700"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        Edit
                       </button>
                     )}
                     {can.remove && (
                       <button
-                        type="button" title="Delete" onClick={() => onRemove(e)}
-                        className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-muted-400 transition-colors hover:bg-bad-050 hover:text-bad-600"
+                        type="button"
+                        onClick={() => onRemove(e)}
+                        className="rounded-[7px] border border-bad-100 bg-bad-050 px-3 py-1.5 text-[11px] font-semibold text-bad-700 hover:brightness-95"
                       >
-                        <X className="h-3.5 w-3.5" />
+                        Delete
                       </button>
                     )}
-                  </span>
+                  </div>
                 </td>
               </tr>
             ))}
