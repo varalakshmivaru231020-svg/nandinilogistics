@@ -332,6 +332,18 @@ async function Limits() {
   );
 }
 
+/**
+ * The design colours an employment type wherever it appears — here and on the
+ * employee list.
+ */
+const TYPE_PILL: Record<string, string> = {
+  "company staff": "border-[#DDE4F3] bg-[#EFF3FB] text-[#2F308C]",
+  "contract role": "border-[#DFD4F5] bg-[#EFE9FC] text-[#5636A8]",
+  "direct labour": "border-[#C4E8D4] bg-good-050 text-good-700",
+};
+
+const typePill = (name: string) => TYPE_PILL[name.trim().toLowerCase()];
+
 /* ----------------------------- Lead settings ------------------------------ */
 
 const LEAD_TABS = [
@@ -491,6 +503,8 @@ async function Workforce({ canEdit, canDelete }: { canEdit: boolean; canDelete: 
           addLabel="+ Add type"
           chips={types.map((t) => ({
             id: t.id, label: t.name, count: t._count.employees, canDelete: t._count.employees === 0,
+            // The design colours a type the way the employee list colours it.
+            tone: typePill(t.name),
           }))}
         />
       </div>

@@ -197,7 +197,7 @@ export function NewApprovalLimit({ roles }: { roles: Array<{ id: string; name: s
 export function ChipEditor({
   chips, placeholder, addLabel, kind, canAdd, canDelete,
 }: {
-  chips: Array<{ id: string; label: string; count?: number; canDelete: boolean }>;
+  chips: Array<{ id: string; label: string; count?: number; canDelete: boolean; tone?: string }>;
   placeholder: string;
   addLabel: string;
   /** Employment types have their own table; everything else is a master. */
@@ -243,10 +243,13 @@ export function ChipEditor({
         {chips.map((c) => (
           <span
             key={c.id}
-            className="inline-flex items-center gap-[7px] rounded-full border border-line-400 bg-surface-field py-1.5 pl-3 pr-[7px] text-[11.5px] font-semibold text-navy-600"
+            className={cn(
+              "inline-flex items-center gap-[7px] rounded-full border py-1.5 pl-3 pr-[7px] text-[11.5px] font-semibold",
+              c.tone ?? "border-line-400 bg-surface-field text-navy-600",
+            )}
           >
             {c.label}
-            {c.count !== undefined && <span className="num opacity-60">{c.count}</span>}
+            {c.count !== undefined && <span className="num opacity-60">· {c.count}</span>}
             {canDelete && c.canDelete && (
               <button
                 type="button"
@@ -268,7 +271,7 @@ export function ChipEditor({
             placeholder={placeholder}
             className="w-[210px]"
           />
-          <Button onClick={add} loading={busy} disabled={!value.trim()}>{addLabel}</Button>
+          <Button onClick={add} loading={busy}>{addLabel}</Button>
         </div>
       )}
     </>
