@@ -265,7 +265,7 @@ async function Users() {
                 <p className="truncate text-[11px] font-medium text-muted-400">{u.email}</p>
               </div>
             </div>
-            <span className={cn("w-fit rounded-full px-2.5 py-1 text-[11px] font-bold", rolePill(u.roles[0]?.role.name))}>
+            <span className={cn("block rounded-full px-2.5 py-[5px] text-[10.5px] font-bold", rolePill(u.roles[0]?.role.name))}>
               {u.roles[0]?.role.name ?? "No role"}
             </span>
             <p className="text-[11.5px] font-medium text-navy-500">
@@ -275,7 +275,7 @@ async function Users() {
             </p>
             <span
               className={cn(
-                "w-fit rounded-full px-2.5 py-1 text-[11px] font-bold",
+                "block rounded-full px-2.5 py-[5px] text-[10.5px] font-bold",
                 u.status === "ACTIVE" ? "bg-good-050 text-good-700" : "bg-warn-050 text-warn-700",
               )}
             >

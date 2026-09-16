@@ -47,6 +47,9 @@ export function ChecklistsScreen({
   const [editingPoint, setEditingPoint] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
+  // A failed inspection that has not been closed is an open snag.
+  const openSnags = runs.filter((r) => r.result === "FAIL" && r.state !== "CLOSED").length;
+
   const activeCategory = categories.find((c) => c.id === activeCategoryId) ?? null;
   const activeList = checklists.find((l) => l.id === activeListId) ?? null;
 
@@ -438,8 +441,17 @@ export function ChecklistsScreen({
                 <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", r.result === "PASS" ? "bg-good-050 text-good-700" : "bg-bad-050 text-bad-700")}>
                   {r.result === "PASS" ? "Pass" : "Fail"}
                 </span>
-                <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", r.state === "CLOSED" ? "bg-surface-hover text-navy-800" : "bg-warn-050 text-warn-800")}>
-                  {r.state === "CLOSED" ? "Closed" : "Awaiting PM verify"}
+                <span
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[11px] font-bold",
+                    r.state === "CLOSED"
+                      ? "bg-surface-hover text-navy-800"
+                      : r.result === "FAIL"
+                        ? "bg-bad-050 text-bad-700"
+                        : "bg-warn-050 text-warn-800",
+                  )}
+                >
+                  {r.state === "CLOSED" ? "Closed" : r.result === "FAIL" ? "Snag raised" : "Awaiting PM verify"}
                 </span>
               </div>
             ))}
@@ -449,6 +461,14 @@ export function ChecklistsScreen({
               </p>
             )}
           </div>
+        </div>
+      )}
+
+      {/* The design says out loud what a failed inspection costs. */}
+      {tab === "runs" && openSnags > 0 && (
+        <div className="mt-3.5 rounded-[12px] border border-[#F3DDBB] bg-warn-050 px-[17px] py-3.5 text-[12px] font-bold text-warn-800">
+          ⚠ {openSnags} failed inspection{openSnags === 1 ? "" : "s"} raised a snag — the checklist
+          stays open until it is cleared.
         </div>
       )}
     </div>

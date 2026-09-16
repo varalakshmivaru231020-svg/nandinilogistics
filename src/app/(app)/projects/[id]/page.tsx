@@ -313,7 +313,7 @@ export default async function ProjectDetailPage({
             <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
               <div className="mb-3 flex items-center justify-between">
                 <div className="text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
-                  Daily site progress · {todaysLogs.length} photos today
+                  Daily site progress · {todaysLogs.length} photo{todaysLogs.length === 1 ? "" : "s"} today
                 </div>
                 {ctx.has(PERM.project.progressLog.create) && (
                   <Link
@@ -325,7 +325,7 @@ export default async function ProjectDetailPage({
                 )}
               </div>
               <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(170px,1fr))]">
-                {project.progressLogs.map((l) => (
+                {todaysLogs.map((l) => (
                   <div
                     key={l.id}
                     className="flex aspect-[1.4] flex-col items-center justify-center gap-[5px] rounded-[10px] border border-line-400 bg-[linear-gradient(150deg,#E4EBF7,#CDD8EE)]"
@@ -343,9 +343,9 @@ export default async function ProjectDetailPage({
                   </div>
                 ))}
               </div>
-              {project.progressLogs.length === 0 && (
+              {todaysLogs.length === 0 && (
                 <div className="py-6 text-center text-[12px] font-medium text-muted-400">
-                  No site logs captured yet. These are written from the supervisor&rsquo;s phone.
+                  Nothing captured today. These are written from the supervisor&rsquo;s phone.
                 </div>
               )}
               <div className="mt-[9px] text-[11px] font-medium text-muted-400">
