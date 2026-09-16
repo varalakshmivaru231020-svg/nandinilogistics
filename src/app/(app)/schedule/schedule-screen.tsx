@@ -69,7 +69,6 @@ export function ScheduleScreen({
   const [busy, setBusy] = React.useState<string | null>(null);
 
   const done = activities.filter((a) => a.status === "COMPLETED");
-  const critical = activities.filter((a) => a.isCriticalPath);
   const pendingExt = extensions.filter((e) => e.status === "PENDING");
 
   // The design's four tiles: completion, punctuality at each end, and what is
@@ -85,23 +84,11 @@ export function ScheduleScreen({
     (a) => a.status !== "COMPLETED" && a.plannedEnd && new Date(a.plannedEnd).getTime() < nowMs,
   );
 
-  const stats: Array<{ v: string; l: string; tone: "navy" | "good" | "brand" | "bad" }> = [
-    { v: `${done.length} of ${activities.length}`, l: "Activities completed", tone: "navy" },
-    {
-      v: started.length ? `${startedOnTime.length} of ${started.length}` : "—",
-      l: "Started on time", tone: "good",
-    },
-    {
-      v: done.length ? `${finishedOnTime.length} of ${done.length}` : "—",
-      l: "Completed on time", tone: "brand",
-    },
-    {
-      v: String(overdue.length),
-      l: overdue.length === 1 ? "Activity overdue" : "Activities overdue", tone: "bad",
-    },
-    ...(can.viewCriticalPath
-      ? [{ v: String(critical.length), l: "On the critical path", tone: "navy" as const }]
-      : []),
+  const stats: Array<{ v: string; l: string }> = [
+    { v: `${done.length} of ${activities.length}`, l: "Activities completed" },
+    { v: started.length ? `${startedOnTime.length} of ${started.length}` : "—", l: "Started on time" },
+    { v: done.length ? `${finishedOnTime.length} of ${done.length}` : "—", l: "Completed on time" },
+    { v: String(overdue.length), l: overdue.length === 1 ? "Activity overdue" : "Activities overdue" },
   ];
 
   // Group into the design's main-category tree.
@@ -185,7 +172,7 @@ export function ScheduleScreen({
         <div className="flex-1" />
         {tab === "plan" && can.create && (
           <Button size="lg" onClick={() => setAdding(true)}>
-+ Add activity
++ Main category
           </Button>
         )}
       </div>
@@ -195,18 +182,9 @@ export function ScheduleScreen({
         <>
           <div className="mb-3.5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
             {stats.map((k) => (
-              <div
-                key={k.l}
-                className={cn(
-                  "rounded-[12px] border px-4 py-3.5",
-                  k.tone === "navy" && "border-line-300 bg-surface-hover text-navy-800",
-                  k.tone === "good" && "border-good-050 bg-good-050 text-good-700",
-                  k.tone === "brand" && "border-brand-100 bg-brand-100 text-brand-700",
-                  k.tone === "bad" && "border-bad-050 bg-bad-050 text-bad-600",
-                )}
-              >
-                <div className="num font-display text-[19px] font-extrabold">{k.v}</div>
-                <div className="mt-0.5 text-[11.5px] font-semibold opacity-90">{k.l}</div>
+              <div key={k.l} className="rounded-[12px] border border-line-400 bg-white px-4 py-3.5">
+                <div className="num font-display text-[19px] font-extrabold text-navy-950">{k.v}</div>
+                <div className="mt-[3px] text-[11.5px] font-semibold text-muted-600">{k.l}</div>
               </div>
             ))}
           </div>
@@ -229,16 +207,40 @@ export function ScheduleScreen({
                         {g.phase ? `${g.phase} · ` : ""}PM {projectManager ?? "unassigned"}
                       </div>
                     </div>
-                    <div className="min-w-[130px]">
-                      <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">ACTIVITIES</div>
-                      <div className="num text-[12.5px] font-semibold text-navy-600">{g.items.length}</div>
-                    </div>
-                    <div className="min-w-[130px]">
-                      <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">PROGRESS</div>
-                      <div className="num text-[12.5px] font-semibold text-navy-600">
-                        {Math.round(g.items.reduce((s, a) => s + a.progressPct, 0) / g.items.length)}%
-                      </div>
-                    </div>
+                    {(() => {
+                      const closed = g.items.filter((a) => a.status === "COMPLETED").length;
+                      const pct = Math.round(
+                        g.items.reduce((sum, a) => sum + a.progressPct, 0) / g.items.length,
+                      );
+                      const starts = g.items.map((a) => a.plannedStart).filter(Boolean) as string[];
+                      const ends = g.items.map((a) => a.plannedEnd).filter(Boolean) as string[];
+                      const from = starts.sort()[0];
+                      const to = ends.sort().at(-1);
+                      return (
+                        <>
+                          <div className="min-w-[150px]">
+                            <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">PLANNED</div>
+                            <div className="text-[12.5px] font-semibold text-navy-900">
+                              {from ? formatDate(from) : "—"} → {to ? formatDate(to) : "—"}
+                            </div>
+                          </div>
+                          <div className="min-w-[200px] flex-1">
+                            <div className="text-[12.5px] font-bold text-brand-700">
+                              {pct}% · {closed} of {g.items.length} sub-activities complete
+                            </div>
+                            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#EDF0F8]">
+                              <div
+                                className="h-full rounded-full bg-brand-500"
+                                style={{ width: `${Math.max(2, pct)}%` }}
+                              />
+                            </div>
+                            <div className="mt-1 text-[11px] font-medium text-muted-400">
+                              Completes automatically when all sub-activities are closed
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
 
                   <ul className="divide-y divide-line-100">
