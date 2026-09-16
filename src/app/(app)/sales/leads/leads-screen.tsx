@@ -23,16 +23,22 @@ const STAGES = [
 type Stage = (typeof STAGES)[number];
 
 /** Board columns exclude LOST — the design keeps the pipeline to live stages. */
-const BOARD_STAGES: Stage[] = [
-  "NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED",
+/**
+ * The design's six columns. Site Visit is one column holding both the planned
+ * and the done stage; dropping a card there schedules the visit.
+ */
+const BOARD_COLUMNS: Array<{ key: string; label: string; stages: Stage[]; drop: Stage }> = [
+  { key: "new", label: "New", stages: ["NEW"], drop: "NEW" },
+  { key: "contacted", label: "Contacted", stages: ["CONTACTED"], drop: "CONTACTED" },
+  { key: "visit", label: "Site Visit", stages: ["SITE_VISIT_SCHEDULED", "VISIT_DONE"], drop: "SITE_VISIT_SCHEDULED" },
+  { key: "nego", label: "Negotiation", stages: ["NEGOTIATION"], drop: "NEGOTIATION" },
+  { key: "booked", label: "Booked", stages: ["BOOKED"], drop: "BOOKED" },
+  { key: "lost", label: "Lost", stages: ["LOST"], drop: "LOST" },
 ];
 
 const STAGE_LABEL: Record<string, string> = {
-  // The design's own stage names. It keeps one "Site Visit" column; this
-  // splits scheduled from done, which the site-visit module needs, so the two
-  // are named as stages of the same thing rather than as separate ideas.
-  NEW: "New", CONTACTED: "Contacted", SITE_VISIT_SCHEDULED: "Site Visit · planned",
-  VISIT_DONE: "Site Visit · done", NEGOTIATION: "Negotiation", BOOKED: "Booked", LOST: "Lost",
+  NEW: "New", CONTACTED: "Contacted", SITE_VISIT_SCHEDULED: "Site Visit",
+  VISIT_DONE: "Site Visit", NEGOTIATION: "Negotiation", BOOKED: "Booked", LOST: "Lost",
 };
 
 const STAGE_TONE: Record<string, "muted" | "brand" | "warn" | "navy" | "good" | "bad"> = {
@@ -51,15 +57,25 @@ interface Lead {
 
 type Lookup = Array<{ id: string; name: string; code?: string }>;
 
-/** The follow-up chip the design shows on every card and row. */
+/**
+ * The design's follow-up block: OVERDUE, TODAY or UPCOMING, each with its own
+ * tint and a left border in its colour.
+ */
+const FU_BLOCK: Record<string, string> = {
+  bad: "border-bad-100 border-l-bad-700 bg-bad-050 text-bad-700",
+  warn: "border-[#F3DDBB] border-l-warn-700 bg-warn-050 text-warn-700",
+  brand: "border-[#BFE0F2] border-l-brand-700 bg-brand-100 text-brand-700",
+};
+
 function followUp(nextActionAt: string | null, nowMs: number) {
   if (!nextActionAt) return null;
   const due = new Date(nextActionAt).getTime();
   const days = Math.round((due - nowMs) / 86_400_000);
-  if (days < 0) return { text: formatDate(nextActionAt), badge: `${Math.abs(days)}d overdue`, tone: "bad" as const };
-  if (days === 0) return { text: formatDate(nextActionAt), badge: "today", tone: "warn" as const };
-  if (days <= 7) return { text: formatDate(nextActionAt), badge: `in ${days}d`, tone: "brand" as const };
-  return { text: formatDate(nextActionAt), badge: "scheduled", tone: "muted" as const };
+  const when = `${formatDate(nextActionAt)} · ${new Date(nextActionAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+  const base = { text: when, icon: "📞", kind: "CALL" };
+  if (days < 0) return { ...base, badge: "overdue", tone: "bad" as const };
+  if (days === 0) return { ...base, badge: "today", tone: "warn" as const };
+  return { ...base, badge: "upcoming", tone: "brand" as const };
 }
 
 export function LeadsScreen({
@@ -187,17 +203,17 @@ export function LeadsScreen({
         />
         <span className="text-[11px] font-semibold text-muted-400">Stage</span>
         <Select value={stateFilter} onChange={(e) => setParam({ state: e.target.value })} className="w-auto min-w-[140px]">
-          <option value="all">All stages</option>
+          <option value="all">All</option>
           {STAGES.map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
         </Select>
         <span className="text-[11px] font-semibold text-muted-400">Source</span>
         <Select value={sourceFilter} onChange={(e) => setParam({ source: e.target.value })} className="w-auto min-w-[140px]">
-          <option value="all">All sources</option>
+          <option value="all">All</option>
           {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </Select>
         <span className="text-[11px] font-semibold text-muted-400">Follow-up</span>
         <Select value={followUpFilter} onChange={(e) => setParam({ fu: e.target.value })} className="w-auto min-w-[140px]">
-          <option value="all">Any</option>
+          <option value="all">All</option>
           <option value="overdue">Overdue</option>
           <option value="today">Due today</option>
           <option value="week">Next 7 days</option>
@@ -221,37 +237,42 @@ export function LeadsScreen({
       {/* ------------------------------- Board -------------------------------- */}
       {view === "board" && (
         <div className="scroll-thin flex items-start gap-3 overflow-x-auto pb-2">
-          {BOARD_STAGES.map((stage) => {
-            const cards = byStage.get(stage) ?? [];
+          {BOARD_COLUMNS.map((col) => {
+            const cards = col.stages.flatMap((st) => byStage.get(st) ?? []);
             return (
               <div
-                key={stage}
+                key={col.key}
                 onDragOver={(e) => {
                   if (!can.changeStage) return;
                   e.preventDefault();
-                  setDropTarget(stage);
+                  setDropTarget(col.key);
                 }}
-                onDragLeave={() => setDropTarget((t) => (t === stage ? null : t))}
+                onDragLeave={() => setDropTarget((t) => (t === col.key ? null : t))}
                 onDrop={(e) => {
                   e.preventDefault();
-                  if (dragging && can.changeStage) moveTo(dragging, stage);
+                  if (dragging && can.changeStage) moveTo(dragging, col.drop);
                 }}
                 className={cn(
-                  "min-w-[210px] flex-1 rounded-[13px] p-2.5 transition-colors",
-                  dropTarget === stage ? "bg-brand-100 ring-2 ring-brand-500" : "bg-line-200",
+                  "min-w-[190px] flex-1 rounded-[13px] p-2.5 transition-colors",
+                  dropTarget === col.key ? "bg-brand-100 ring-2 ring-brand-500" : "bg-line-200",
                 )}
               >
                 <div className="flex items-center justify-between px-1.5 pb-2.5 pt-1">
                   <span className="text-[11.5px] font-bold uppercase tracking-[.04em] text-navy-600">
-                    {STAGE_LABEL[stage]}
+                    {col.label}
                   </span>
-                  <span className="num rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-navy-600">
+                  <span
+                    className={cn(
+                      "num rounded-full px-2.5 py-[3px] text-[10.5px] font-bold text-white",
+                      col.key === "booked" ? "bg-good-600" : col.key === "lost" ? "bg-bad-700" : "bg-navy-950",
+                    )}
+                  >
                     {cards.length}
                   </span>
                 </div>
 
                 <div className="flex min-h-[60px] flex-col gap-2">
-                  {cards.map((c) => {
+                  {cards.slice(0, 6).map((c) => {
                     const fu = followUp(c.nextActionAt, nowMs);
                     return (
                       <div
@@ -261,38 +282,55 @@ export function LeadsScreen({
                         onDragEnd={() => setDragging(null)}
                         onClick={() => router.push(`/sales/leads/${c.id}`)}
                         className={cn(
-                          "rounded-[11px] border border-line-400 bg-white px-3 py-3 transition-shadow",
+                          "rounded-[11px] border border-line-400 bg-white px-[13px] py-3 transition-shadow",
                           can.changeStage ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                           dragging === c.id && "opacity-40",
-                          "hover:shadow-[0_6px_18px_rgba(25,26,92,.08)]",
+                          "hover:border-[#BFD9F2] hover:shadow-[0_6px_18px_rgba(25,26,92,.1)]",
                         )}
                       >
                         <div className="mb-1.5 flex items-center justify-between gap-1.5">
-                          <span className="truncate text-[12.5px] font-bold text-navy-950">{c.name}</span>
-                          <span className="shrink-0 rounded-full bg-surface-field px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[.04em] text-muted-600">
+                          <span className="text-[12.5px] font-bold text-navy-950">{c.name}</span>
+                          <span className="shrink-0 rounded-full bg-surface-field px-2 py-0.5 text-[9px] font-bold uppercase tracking-[.04em] text-muted-600">
                             {c.source}
                           </span>
                         </div>
-                        {c.requirement && (
-                          <p className="line-clamp-2 text-[11.5px] font-medium text-navy-500">{c.requirement}</p>
-                        )}
-                        <div className="mt-1.5 text-[11.5px] font-semibold text-brand-700">
+                        <p className="text-[11.5px] font-medium text-navy-500">
+                          {[c.projectCode, c.requirement].filter(Boolean).join(" · ") || "—"}
+                        </p>
+                        <div className="mt-[7px] text-[11.5px] font-semibold text-brand-700">
                           📞 {can.viewContact ? c.phone : maskPhone(c.phone)}
                         </div>
-                        {fu && (
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-line-100 pt-2">
-                            <Badge tone={fu.tone}>{fu.badge}</Badge>
-                            <span className="text-[10.5px] font-medium text-muted-400">{fu.text}</span>
+
+                        {fu ? (
+                          <div className={cn("mt-2 flex flex-col gap-1 rounded-[8px] border border-l-[3px] px-[9px] py-[7px]", FU_BLOCK[fu.tone])}>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[12px]">{fu.icon}</span>
+                              <span className="text-[10px] font-extrabold tracking-[.06em]">{fu.kind}</span>
+                              <span className="rounded-full bg-current px-[7px] py-[3px] text-[8.5px] font-extrabold tracking-[.06em]">
+                                <span className="text-white">{fu.badge.toUpperCase()}</span>
+                              </span>
+                            </div>
+                            <span className="text-[10.5px] font-semibold opacity-85">{fu.text}</span>
+                          </div>
+                        ) : (
+                          <div className="mt-2 rounded-[8px] border border-dashed border-[#F3DDBB] bg-warn-050 px-[9px] py-1.5 text-[10.5px] font-semibold text-warn-700">
+                            No follow-up set
                           </div>
                         )}
-                        {c.isDuplicate && (
-                          <div className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-warn-700">
-                            <Copy className="h-3 w-3" /> possible duplicate
+
+                        {col.key === "lost" && c.lostReason && (
+                          <div className="mt-[7px] rounded-[7px] bg-bad-050 px-2 py-[5px] text-[10.5px] font-semibold text-bad-700">
+                            {c.lostReason}
                           </div>
                         )}
                       </div>
                     );
                   })}
+                  {cards.length > 6 && (
+                    <div className="rounded-[8px] border border-[#BFE0F2] bg-brand-100 py-2 text-center text-[11px] font-bold text-brand-700">
+                      + {cards.length - 6} more · switch to List view
+                    </div>
+                  )}
                   {cards.length === 0 && (
                     <p className="px-1.5 py-3 text-[11px] font-medium text-muted-400">Nothing here</p>
                   )}
@@ -303,7 +341,6 @@ export function LeadsScreen({
         </div>
       )}
 
-      {/* -------------------------------- List -------------------------------- */}
       {view === "list" && (
         <Card className="overflow-x-auto">
           <table className="w-full min-w-[700px] border-collapse">
