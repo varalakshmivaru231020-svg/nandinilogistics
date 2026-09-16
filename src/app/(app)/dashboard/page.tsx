@@ -49,7 +49,7 @@ export default async function DashboardPage() {
    */
   const kpis: Array<{
     label: string; value: string; delta?: string; sub?: string;
-    icon: React.ReactNode; href?: string;
+    icon: React.ReactNode;
     tone: "brand" | "good" | "warn" | "bad" | "navy";
     deltaTone: "brand" | "good" | "warn" | "bad" | "navy";
   }> = [];
@@ -81,7 +81,7 @@ export default async function DashboardPage() {
       delta: added > 0 ? `▲ ${added}` : added < 0 ? `▼ ${Math.abs(added)}` : "—",
       deltaTone: added > 0 ? "good" : added < 0 ? "bad" : "navy",
       sub: `${towers} tower${towers === 1 ? "" : "s"} · ${units.toLocaleString("en-IN")} units`,
-      icon: <Building2 className="h-3.5 w-3.5" />, href: "/projects", tone: "brand",
+      icon: <Building2 className="h-3.5 w-3.5" />, tone: "brand",
     });
   }
 
@@ -102,7 +102,7 @@ export default async function DashboardPage() {
       delta: `${pct.toFixed(1)}%`,
       deltaTone: pct > 100 ? "bad" : pct > 90 ? "warn" : "navy",
       sub: `of ${moneyShort(sanctioned)} sanctioned`,
-      icon: <IndianRupee className="h-3.5 w-3.5" />, href: "/reports/budgetVsActual", tone: "navy",
+      icon: <IndianRupee className="h-3.5 w-3.5" />, tone: "navy",
     });
   }
 
@@ -126,7 +126,7 @@ export default async function DashboardPage() {
       sub: waiting.length
         ? `oldest waiting ${oldestDays} day${oldestDays === 1 ? "" : "s"}`
         : "queue is clear",
-      icon: <Clock className="h-3.5 w-3.5" />, href: "/material/indents",
+      icon: <Clock className="h-3.5 w-3.5" />, 
       tone: waiting.length > 0 ? "warn" : "good",
     });
   }
@@ -151,7 +151,7 @@ export default async function DashboardPage() {
       delta: change === null ? "—" : change >= 0 ? `▲ ${change}%` : `▼ ${Math.abs(change)}%`,
       deltaTone: change !== null && change < 0 ? "bad" : "good",
       sub: `${bookings} booking${bookings === 1 ? "" : "s"} this month`,
-      icon: <TrendingUp className="h-3.5 w-3.5" />, href: "/sales/receipts", tone: "good",
+      icon: <TrendingUp className="h-3.5 w-3.5" />, tone: "good",
     });
   }
 
@@ -427,7 +427,7 @@ export default async function DashboardPage() {
         <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
           {kpis.map((k) => {
             const tile = (
-              <div className="flex h-full flex-col gap-[9px] rounded-[13px] border border-line-400 bg-white px-[18px] py-[17px] transition-colors hover:border-brand-300">
+              <div className="flex h-full flex-col gap-[9px] rounded-[13px] border border-line-400 bg-white px-[18px] py-[17px]">
                 <div className="flex items-center justify-between gap-2">
                   <StatLabel>{k.label}</StatLabel>
                   <span
@@ -455,7 +455,7 @@ export default async function DashboardPage() {
                 {k.sub && <p className="text-[11.5px] font-medium text-muted-400">{k.sub}</p>}
               </div>
             );
-            return k.href ? <Link key={k.label} href={k.href}>{tile}</Link> : <div key={k.label}>{tile}</div>;
+            return <div key={k.label}>{tile}</div>;
           })}
         </div>
       )}
