@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { Building2, ChevronRight } from "lucide-react";
+import { Building2 } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { Badge, Card, EmptyState } from "@/components/ui/primitives";
-import { cn, moneyShort } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { projectListWhere, readProjectListParams } from "@/lib/projects/list-filters";
 import { NewProjectButton } from "./new-project-button";
 
@@ -52,7 +52,6 @@ export default async function ProjectsPage({
     prisma.user.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
-  const showBudget = ctx.has(PERM.project.project.viewBudget);
   const totalUnits = projects.reduce((s, p) => s + p._count.units, 0);
   const totalTowers = projects.reduce((s, p) => s + p.totalTowers, 0);
 
@@ -149,9 +148,6 @@ export default async function ProjectsPage({
                       ) : (
                         <span className="text-[12px] font-medium text-warn-700">Unassigned</span>
                       )}
-                      <div className="mt-0.5 text-[11px] font-medium text-muted-400">
-                        {p._count.team} on the team
-                      </div>
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2.5">
@@ -166,27 +162,11 @@ export default async function ProjectsPage({
                         </div>
                         <span className="num w-[34px] text-[12px] font-bold text-brand-500">{pct}%</span>
                       </div>
-                      <div className="mt-1 text-[11px] font-medium text-muted-400">
-                        {p.activities.length} scheduled activit{p.activities.length === 1 ? "y" : "ies"}
-                      </div>
                     </td>
                     <td className="px-4 py-3.5">
                       <Badge tone={STATUS_TONE[p.status]}>{p.status.replace("_", " ")}</Badge>
-                      {showBudget && (
-                        <div className="num mt-1 text-[11px] font-semibold text-muted-500">
-                          {moneyShort(p.budgetAmount)}
-                        </div>
-                      )}
                     </td>
-                    <td className="px-4 py-3.5 text-right">
-                      <Link
-                        href={`/projects/${p.id}`}
-                        title="Open"
-                        className="inline-grid h-[26px] w-[26px] place-items-center rounded-[7px] text-muted-400 transition-colors hover:bg-surface-hover hover:text-navy-900"
-                      >
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </Link>
-                    </td>
+                    <td className="px-4 py-3.5" />
                   </tr>
                 );
               })}

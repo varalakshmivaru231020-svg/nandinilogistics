@@ -332,7 +332,7 @@ export function MasterScreen({
 
 /* ------------------------------- the form -------------------------------- */
 
-function MasterForm({
+export function MasterForm({
   def,
   options,
   record,

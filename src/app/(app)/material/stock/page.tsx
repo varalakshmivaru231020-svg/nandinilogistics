@@ -4,11 +4,14 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { readStockListParams, stockListWhere, stockState } from "@/lib/material/list-filters";
 import { categoryOptions, storeOptions } from "@/lib/material/list-options";
+import { loadOptions } from "@/lib/masters/service";
+import { MASTERS } from "@/lib/masters/registry";
+import { NewMasterButton } from "@/app/(app)/masters/new-master-button";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { cn, money, moneyShort, qty } from "@/lib/utils";
+import { cn, qty } from "@/lib/utils";
 
 export const metadata = { title: "Stock" };
 
@@ -27,12 +30,13 @@ export default async function StockPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const ctx = await requirePermission(PERM.material.stock.view);
-  const showValuation = ctx.has(PERM.material.stock.viewValuation);
   const raw = await searchParams;
   const params = readStockListParams(raw);
   const filtered = Boolean(params.q || params.store || params.category);
 
-  const [balances, stores, categories] = await Promise.all([
+  const itemMaster = MASTERS.find((m) => m.key === "items")!;
+
+  const [balances, stores, categories, itemOptions] = await Promise.all([
     prisma.stockBalance.findMany({
       // Shared with the export, so a download holds exactly what this screen shows.
       where: stockListWhere(params),
@@ -50,14 +54,13 @@ export default async function StockPage({
     }),
     storeOptions(),
     categoryOptions(),
+    loadOptions(itemMaster),
   ]);
 
-  const totalValue = balances.reduce((s, b) => s + Number(b.value), 0);
   // Strictly below the level, matching the design's "Restock now" band.
   const lowRows = balances.filter(
     (b) => Number(b.item.reorderLevel) > 0 && Number(b.quantity) < Number(b.item.reorderLevel),
   );
-  const belowReorder = lowRows.length;
   const canRaisePo = ctx.has(PERM.material.purchaseOrder.create);
 
   const columns: Column<StockRow>[] = [
@@ -76,7 +79,6 @@ export default async function StockPage({
       header: "Unit",
       render: (b) => <span className="text-[12px] font-medium text-muted-600">{b.item.uom.code}</span>,
     },
-    { key: "store", header: "Store", render: (b) => <span className="text-[12px] font-medium text-muted-600">{b.store.name}</span> },
     {
       key: "qty",
       header: "Available stock",
@@ -136,34 +138,17 @@ export default async function StockPage({
         );
       },
     },
-    {
-      key: "rate",
-      header: "Avg. rate",
-      align: "right",
-      className: "num",
-      visible: showValuation,
-      render: (b) => money(b.avgRate, true),
-    },
-    {
-      key: "value",
-      header: "Value",
-      align: "right",
-      className: "num",
-      visible: showValuation,
-      render: (b) => <span className="font-medium text-navy-950">{money(b.value)}</span>,
-    },
   ];
 
   return (
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Item Master · Stock"
-        description="Item-wise position per store, valued at weighted average. Stock moves on posted receipts and site issues."
+        description="Indent (internal request to store) → PM approval → store stock check → issue from stock, or PO to vendor for the shortfall → GRN → 3-way match"
         actions={
-          <div className="flex items-center gap-2">
-            {belowReorder > 0 && <Badge tone="bad">{belowReorder} below reorder</Badge>}
-            {showValuation && <Badge tone="brand">{moneyShort(totalValue)} on hand</Badge>}
-          </div>
+          ctx.has(PERM.masters.item.create) ? (
+            <NewMasterButton def={itemMaster} options={itemOptions} label="+ New item" />
+          ) : null
         }
       />
 

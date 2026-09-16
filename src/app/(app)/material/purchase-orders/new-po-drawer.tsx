@@ -7,7 +7,7 @@ import type { PoLookups } from "./lookups";
 export function NewPoDrawer({ projects, vendors, terms, items, openIndents }: PoLookups) {
   return (
     <NewRecordDrawer
-      label="New purchase order"
+      label="+ New purchase order"
       title="New purchase order"
       description="Raised against an approved indent, carrying only the shortfall the stock check left to buy."
     >

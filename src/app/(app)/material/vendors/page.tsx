@@ -5,6 +5,9 @@ import { onTimeStats, readVendorListParams, vendorListWhere } from "@/lib/materi
 import { categoryOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
+import { loadOptions } from "@/lib/masters/service";
+import { MASTERS } from "@/lib/masters/registry";
+import { NewMasterButton } from "@/app/(app)/masters/new-master-button";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +29,9 @@ export default async function VendorsPage({
   const params = readVendorListParams(raw);
   const filtered = Boolean(params.q || params.status || params.category);
 
-  const [vendors, categories] = await Promise.all([
+  const vendorMaster = MASTERS.find((m) => m.key === "vendors")!;
+
+  const [vendors, categories, vendorOptions] = await Promise.all([
     prisma.vendor.findMany({
       // Shared with the export, so a download holds exactly what this screen shows.
       where: vendorListWhere(params),
@@ -42,6 +47,7 @@ export default async function VendorsPage({
       },
     }),
     categoryOptions(),
+    loadOptions(vendorMaster),
   ]);
 
   const active = vendors.filter((v) => v.status === "ACTIVE").length;
@@ -56,6 +62,11 @@ export default async function VendorsPage({
   return (
     <div className="mx-auto max-w-[1400px]">
       <PageHeader
+        actions={
+          ctx.has(PERM.masters.vendor.create) ? (
+            <NewMasterButton def={vendorMaster} options={vendorOptions} label="+ New vendor" />
+          ) : null
+        }
         title="Vendors"
         description={`${vendors.length} vendor${vendors.length === 1 ? "" : "s"} · ${active} active · rating and on-time delivery are tracked from goods-receipt history`}
       />

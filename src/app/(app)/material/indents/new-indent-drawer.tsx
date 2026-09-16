@@ -10,7 +10,7 @@ export function NewIndentDrawer({
 }: IndentLookups & { canSubmit: boolean }) {
   return (
     <NewRecordDrawer
-      label="Raise indent"
+      label="+ New indent"
       title="Raise an indent"
       description="Item, quantity, required-by date and the activity it is for."
     >

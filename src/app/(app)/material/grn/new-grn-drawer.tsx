@@ -18,7 +18,7 @@ export function NewGrnDrawer({ openPos, stores }: GrnLookups) {
 
   return (
     <NewRecordDrawer
-      label="Receive material"
+      label="+ New GRN"
       title="Receive material"
       description="Record what actually arrived — accepted, rejected and short — against the challan."
     >
