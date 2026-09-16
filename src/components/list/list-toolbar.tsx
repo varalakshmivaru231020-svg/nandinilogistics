@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Search, X } from "lucide-react";
 
 import { Input, Select } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
@@ -12,34 +11,40 @@ export interface ListFilter {
   name: string;
   label: string;
   options: Array<{ value: string; label: string }>;
-  /** The "everything" option; defaults to "All <label>". */
+  /** The "everything" option; the design writes it "All". */
   allLabel?: string;
 }
 
 /**
- * Search, filters and a date range for a list, kept in the URL.
+ * The design's filter row: search, an optional date range, captioned
+ * dropdowns, the count, and Clear once something is applied.
  *
- * The page reads the parameters and filters on the server — so pagination,
- * counts and the export (which reads the same URL) all agree with what is on
- * screen. Parameters: `q` for search, each filter's `name`, `from`/`to` for
- * the range. Changing any of them drops `page`.
+ *   background:#FFFFFF; border:1px solid #E3E7F2; border-radius:12px;
+ *   padding:11px 14px; gap:9px
+ *
+ * Everything lives in the URL, so pagination, counts and the export (which
+ * reads the same URL) all agree with what is on screen. Parameters: `q` for
+ * search, each filter's `name`, `from`/`to` for the range. Changing any of
+ * them drops `page`.
  */
 export function ListToolbar({
   searchPlaceholder = "Search…",
   filters = [],
   dateRange,
   count,
+  countNoun,
   children,
   className,
 }: {
   /** Pass null for a list with no text search. */
   searchPlaceholder?: string | null;
   filters?: ListFilter[];
-  /** Shows From/To, e.g. { label: "Booked" }. */
+  /** Shows From/To. The design captions them "From" and "To". */
   dateRange?: { label: string };
-  /** Rows matching, shown on the right. */
+  /** Rows matching. The design writes it "12 indents", not "12 shown". */
   count?: number;
-  /** Actions on the right — typically the export menu. */
+  countNoun?: string;
+  /** Actions on the right, on the screens whose design draws them. */
   children?: React.ReactNode;
   className?: string;
 }) {
@@ -70,7 +75,7 @@ export function ListToolbar({
   return (
     <div
       className={cn(
-        "mb-3 flex flex-wrap items-center gap-2 rounded-[12px] border border-line-400 bg-white px-3 py-2.5 transition-opacity",
+        "mb-3.5 flex flex-wrap items-center gap-[9px] rounded-[12px] border border-line-400 bg-white px-3.5 py-[11px] transition-opacity",
         pending && "opacity-70",
         className,
       )}
@@ -84,67 +89,74 @@ export function ListToolbar({
             e.preventDefault();
             set({ q: String(new FormData(e.currentTarget).get("q") ?? "").trim() });
           }}
-          className="relative min-w-52 flex-1 sm:max-w-xs"
+          className="min-w-[230px] flex-1"
         >
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-400" />
-          <Input name="q" defaultValue={q} placeholder={searchPlaceholder} aria-label="Search" className="bg-white pl-8" />
+          <Input name="q" defaultValue={q} placeholder={searchPlaceholder} aria-label="Search" />
         </form>
       )}
 
-      {filters.map((f) => (
-        <Select
-          key={f.name}
-          aria-label={f.label}
-          value={params.get(f.name) ?? "all"}
-          onChange={(e) => set({ [f.name]: e.target.value })}
-          className="w-auto min-w-36 bg-white"
-        >
-          <option value="all">{f.allLabel ?? `All ${f.label.toLowerCase()}`}</option>
-          {f.options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </Select>
-      ))}
-
       {dateRange && (
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-muted-400">{dateRange.label}</span>
+        <>
+          <Caption>From</Caption>
           <Input
             type="date"
             key={`from-${params.get("from") ?? ""}`}
             aria-label={`${dateRange.label} from`}
             defaultValue={params.get("from") ?? ""}
             onChange={(e) => set({ from: e.target.value })}
-            className="w-auto bg-white"
+            className="w-auto cursor-pointer"
           />
-          <span className="text-muted-400">–</span>
+          <Caption>To</Caption>
           <Input
             type="date"
             key={`to-${params.get("to") ?? ""}`}
             aria-label={`${dateRange.label} to`}
             defaultValue={params.get("to") ?? ""}
             onChange={(e) => set({ to: e.target.value })}
-            className="w-auto bg-white"
+            className="w-auto cursor-pointer"
           />
-        </div>
+        </>
+      )}
+
+      {filters.map((f) => (
+        <React.Fragment key={f.name}>
+          <Caption>{f.label}</Caption>
+          <Select
+            aria-label={f.label}
+            value={params.get(f.name) ?? "all"}
+            onChange={(e) => set({ [f.name]: e.target.value })}
+            className="w-auto cursor-pointer"
+          >
+            <option value="all">{f.allLabel ?? "All"}</option>
+            {f.options.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </Select>
+        </React.Fragment>
+      ))}
+
+      {count !== undefined && (
+        <span className="text-[11.5px] font-medium text-muted-600">
+          {count.toLocaleString("en-IN")} {countNoun ?? "shown"}
+        </span>
       )}
 
       {active && (
         <button
           type="button"
           onClick={() => set(Object.fromEntries(keys.map((k) => [k, undefined])))}
-          className="inline-flex items-center gap-1 rounded-[8px] border border-bad-050 bg-bad-050 px-2.5 py-1.5 text-[11.5px] font-semibold text-bad-600 hover:brightness-95"
+          className="rounded-[8px] border border-bad-100 bg-bad-050 px-3 py-[7px] text-[11.5px] font-semibold text-bad-700 hover:brightness-95"
         >
-          <X className="h-3 w-3" />
           Clear
         </button>
       )}
 
-      <div className="flex-1" />
-      {count !== undefined && (
-        <span className="text-[11.5px] font-semibold text-muted-600">{count.toLocaleString("en-IN")} shown</span>
-      )}
       {children}
     </div>
   );
+}
+
+/** The small muted caption the design puts before each control. */
+function Caption({ children }: { children: React.ReactNode }) {
+  return <span className="text-[11px] font-semibold text-muted-400">{children}</span>;
 }

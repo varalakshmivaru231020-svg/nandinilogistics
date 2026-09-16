@@ -1,10 +1,10 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { onTimeStats, readVendorListParams, toSearchParams, vendorListWhere } from "@/lib/material/list-filters";
+import { onTimeStats, readVendorListParams, vendorListWhere } from "@/lib/material/list-filters";
 import { categoryOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
-import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ListNote } from "@/components/list/list-note";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +24,6 @@ export default async function VendorsPage({
   const showPerformance = ctx.has(PERM.material.vendor.viewPerformance);
   const raw = await searchParams;
   const params = readVendorListParams(raw);
-  const query = toSearchParams(raw);
   const filtered = Boolean(params.q || params.status || params.category);
 
   const [vendors, categories] = await Promise.all([
@@ -62,28 +61,19 @@ export default async function VendorsPage({
       />
 
       <ListToolbar
-        searchPlaceholder="Search name, code, contact, GSTIN…"
+        searchPlaceholder="Search vendor, contact, mobile, GSTIN…"
         filters={[
           {
             name: "status",
             label: "Status",
-            allLabel: "All statuses",
             options: [
               { value: "ACTIVE", label: "Active" },
-              { value: "INACTIVE", label: "Inactive" },
+              { value: "INACTIVE", label: "On hold" },
             ],
           },
-          { name: "category", label: "Categories", options: categories },
+          { name: "category", label: "Category", options: categories },
         ]}
-        count={vendors.length}
-      >
-        {ctx.has(PERM.masters.vendor.export) && (
-          <ExportMenu
-            href={(format) => exportHref("/api/material/vendors/export", format, query)}
-            disabled={vendors.length === 0}
-          />
-        )}
-      </ListToolbar>
+      />
 
       {rows.length === 0 ? (
         <Card>
@@ -167,6 +157,10 @@ export default async function VendorsPage({
           ))}
         </div>
       )}
+
+      <ListNote>
+        A PO can only be raised against an active vendor. Vendors on hold stay visible for history but cannot receive new orders.
+      </ListNote>
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import { ClipboardList } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
-import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import {
@@ -9,12 +8,12 @@ import {
 } from "@/lib/material/list-filters";
 import { projectOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
-import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ListNote } from "@/components/list/list-note";
 import { indentLookups } from "./lookups";
 import { NewIndentDrawer } from "./new-indent-drawer";
 import { IndentCard } from "./indent-card";
 import { Pagination } from "@/components/ui/data-table";
-import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 
 export const metadata = { title: "Requirement Indents" };
 
@@ -42,7 +41,7 @@ export default async function IndentsPage({
   // Shared with the export, so a download holds exactly what this screen shows.
   const where = indentListWhere(ctx, ownership, params);
 
-  const [indents, total, pendingCount, projects] = await Promise.all([
+  const [indents, total, projects] = await Promise.all([
     prisma.indent.findMany({
       where,
       orderBy: { raisedAt: "desc" },
@@ -62,9 +61,6 @@ export default async function IndentsPage({
       },
     }),
     prisma.indent.count({ where }),
-    prisma.indent.count({
-      where: { ...projectScopeFilter(ctx), status: { in: ["SUBMITTED", "PM_APPROVED"] } },
-    }),
     projectOptions(ctx),
   ]);
 
@@ -76,10 +72,9 @@ export default async function IndentsPage({
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Requirement Indents"
-        description="Nothing is purchased without an approved indent. The approval trail builds itself as it moves."
+        description="Indent (internal request to store) → PM approval → store stock check → issue from stock, or PO to vendor for the shortfall → GRN → 3-way match"
         actions={
           <div className="flex items-center gap-2">
-            {pendingCount > 0 && <Badge tone="warn">{pendingCount} awaiting approval</Badge>}
             {ctx.has(PERM.material.indent.create) && lookups && (
               <NewIndentDrawer
                 projects={lookups.projects}
@@ -94,20 +89,15 @@ export default async function IndentsPage({
       <div className="space-y-3">
         <ListToolbar
           className="mb-0"
-          searchPlaceholder="Search indent number or purpose…"
+          searchPlaceholder="Search indent no., item, project, activity…"
           filters={[
-            { name: "status", label: "Status", allLabel: "All statuses", options: enumOptions(INDENT_STATUSES) },
-            { name: "project", label: "Projects", options: projects },
+            { name: "project", label: "Project", options: projects },
+            { name: "status", label: "Status", options: enumOptions(INDENT_STATUSES) },
           ]}
           dateRange={{ label: "Raised" }}
-        >
-          {ctx.has(PERM.material.indent.export) && (
-            <ExportMenu
-              href={(format) => exportHref("/api/material/indents/export", format, query)}
-              disabled={total === 0}
-            />
-          )}
-        </ListToolbar>
+          count={total}
+          countNoun="indents"
+        />
 
         {indents.length === 0 ? (
           <Card>
@@ -157,6 +147,12 @@ export default async function IndentsPage({
               total={total}
               buildHref={(p) => pageHref(query, p)}
             />
+            <ListNote>
+              An indent is an internal request to the store, not a purchase. The store checks live
+              stock first: available quantity is issued straight away, and only the shortfall goes to
+              a vendor as a PO. Value-based routing still applies — indents under ₹2.00 L skip Owner
+              approval.
+            </ListNote>
           </>
         )}
       </div>

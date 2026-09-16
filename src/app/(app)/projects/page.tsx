@@ -5,12 +5,8 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { Badge, Card, EmptyState } from "@/components/ui/primitives";
-import { ListToolbar } from "@/components/list/list-toolbar";
-import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { cn, moneyShort } from "@/lib/utils";
-import {
-  PROJECT_STATUSES, PROJECT_STATUS_LABEL, projectListWhere, readProjectListParams,
-} from "@/lib/projects/list-filters";
+import { projectListWhere, readProjectListParams } from "@/lib/projects/list-filters";
 import { NewProjectButton } from "./new-project-button";
 
 export const metadata = { title: "Project Management" };
@@ -37,13 +33,6 @@ export default async function ProjectsPage({
   // Project-team scoping (you only see projects mapped to you), then the
   // search and status filter — the same function the export uses.
   const where = projectListWhere(ctx, listParams);
-
-  // The current query, for the export links.
-  const query = new URLSearchParams();
-  for (const [k, v] of Object.entries(raw)) {
-    const value = Array.isArray(v) ? v[0] : v;
-    if (value) query.set(k, value);
-  }
 
   const [projects, types, companies, cities, managers] = await Promise.all([
     prisma.project.findMany({
@@ -80,26 +69,6 @@ export default async function ProjectsPage({
           <NewProjectButton types={types} companies={companies} cities={cities} managers={managers} />
         )}
       </div>
-
-      <ListToolbar
-        searchPlaceholder="Search code, name, city, RERA or manager…"
-        filters={[
-          {
-            name: "status",
-            label: "Status",
-            allLabel: "All statuses",
-            options: PROJECT_STATUSES.map((s) => ({ value: s, label: PROJECT_STATUS_LABEL[s] })),
-          },
-        ]}
-        count={projects.length}
-      >
-        {ctx.has(PERM.project.project.export) && (
-          <ExportMenu
-            href={(format) => exportHref("/api/projects/projects/export", format, query)}
-            disabled={projects.length === 0}
-          />
-        )}
-      </ListToolbar>
 
       {projects.length === 0 ? (
         <Card>

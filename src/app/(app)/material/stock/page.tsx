@@ -2,10 +2,10 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { readStockListParams, stockListWhere, stockState, toSearchParams } from "@/lib/material/list-filters";
+import { readStockListParams, stockListWhere, stockState } from "@/lib/material/list-filters";
 import { categoryOptions, storeOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
-import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ListNote } from "@/components/list/list-note";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { cn, money, moneyShort, qty } from "@/lib/utils";
@@ -30,7 +30,6 @@ export default async function StockPage({
   const showValuation = ctx.has(PERM.material.stock.viewValuation);
   const raw = await searchParams;
   const params = readStockListParams(raw);
-  const query = toSearchParams(raw);
   const filtered = Boolean(params.q || params.store || params.category);
 
   const [balances, stores, categories] = await Promise.all([
@@ -194,20 +193,12 @@ export default async function StockPage({
       )}
 
       <ListToolbar
-        searchPlaceholder="Search item code or name…"
+        searchPlaceholder="Search item name, code, specification…"
         filters={[
-          { name: "store", label: "Stores", options: stores },
-          { name: "category", label: "Categories", options: categories },
+          { name: "store", label: "Store", options: stores },
+          { name: "category", label: "Category", options: categories },
         ]}
-        count={balances.length}
-      >
-        {ctx.has(PERM.material.stock.export) && (
-          <ExportMenu
-            href={(format) => exportHref("/api/material/stock/export", format, query)}
-            disabled={balances.length === 0}
-          />
-        )}
-      </ListToolbar>
+      />
 
       {balances.length === 0 ? (
         <Card>
@@ -219,6 +210,10 @@ export default async function StockPage({
       ) : (
         <DataTable columns={columns} rows={balances} rowKey={(b) => b.id} dense />
       )}
+
+      <ListNote>
+        Available stock updates from GRN receipts and site issues — items below their reorder level are flagged for a refill PO. The same records appear under Masters → Item Master.
+      </ListNote>
     </div>
   );
 }

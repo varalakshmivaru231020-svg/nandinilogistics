@@ -234,36 +234,7 @@ export function Alert({
   );
 }
 
-export function PageHeader({
-  title,
-  description,
-  breadcrumb,
-  actions,
-}: {
-  title: string;
-  description?: string;
-  breadcrumb?: React.ReactNode;
-  actions?: React.ReactNode;
-}) {
-  return (
-    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0">
-        {breadcrumb && (
-          <div className="mb-1.5 text-[11px] font-semibold text-muted-500">{breadcrumb}</div>
-        )}
-        <h1 className="font-display text-[19px] font-extrabold tracking-[-.02em] text-navy-950">
-          {title}
-        </h1>
-        {description && (
-          <p className="mt-1 max-w-3xl text-[12px] font-medium leading-relaxed text-muted-600">
-            {description}
-          </p>
-        )}
-      </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-    </div>
-  );
-}
+export { PageHeader } from "@/components/ui/page-header";
 
 /** The uppercase micro-label the design uses above figures. */
 export function StatLabel({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) {

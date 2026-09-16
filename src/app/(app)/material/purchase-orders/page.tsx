@@ -2,7 +2,6 @@ import Link from "next/link";
 import { FileText } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
-import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import {
@@ -10,7 +9,7 @@ import {
 } from "@/lib/material/list-filters";
 import { projectOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
-import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ListNote } from "@/components/list/list-note";
 import { poLookups } from "./lookups";
 import { NewPoDrawer } from "./new-po-drawer";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
@@ -55,8 +54,7 @@ export default async function PurchaseOrdersPage({
 
   // Shared with the export, so a download holds exactly what this screen shows.
   const where = poListWhere(ctx, params);
-
-  const [orders, total, pendingApproval, projects] = await Promise.all([
+  const [orders, total, projects] = await Promise.all([
     prisma.purchaseOrder.findMany({
       where,
       orderBy: { poDate: "desc" },
@@ -73,9 +71,6 @@ export default async function PurchaseOrdersPage({
       },
     }),
     prisma.purchaseOrder.count({ where }),
-    prisma.purchaseOrder.count({
-      where: { ...projectScopeFilter(ctx), status: { in: ["PENDING_APPROVAL", "PENDING_PM_APPROVAL", "PENDING_ADMIN_APPROVAL"] } },
-    }),
     projectOptions(ctx),
   ]);
 
@@ -190,10 +185,9 @@ export default async function PurchaseOrdersPage({
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Purchase Orders"
-        description="Ordered vs received vs pending, with overdue deliveries surfaced rather than discovered."
+        description="Indent (internal request to store) → PM approval → store stock check → issue from stock, or PO to vendor for the shortfall → GRN → 3-way match"
         actions={
           <div className="flex items-center gap-2">
-            {pendingApproval > 0 && <Badge tone="warn">{pendingApproval} awaiting approval</Badge>}
             {ctx.has(PERM.material.purchaseOrder.create) && (
               <NewPoDrawer
                 projects={lookups!.projects}
@@ -210,20 +204,15 @@ export default async function PurchaseOrdersPage({
       <div className="space-y-3">
         <ListToolbar
           className="mb-0"
-          searchPlaceholder="Search PO number or vendor…"
+          searchPlaceholder="Search PO no., vendor, item, indent…"
           filters={[
-            { name: "status", label: "Status", allLabel: "All statuses", options: enumOptions(PO_STATUSES) },
-            { name: "project", label: "Projects", options: projects },
+            { name: "project", label: "Project", options: projects },
+            { name: "status", label: "Status", options: enumOptions(PO_STATUSES) },
           ]}
           dateRange={{ label: "PO date" }}
-        >
-          {ctx.has(PERM.material.purchaseOrder.export) && (
-            <ExportMenu
-              href={(format) => exportHref("/api/material/purchase-orders/export", format, query)}
-              disabled={total === 0}
-            />
-          )}
-        </ListToolbar>
+          count={total}
+          countNoun="purchase orders"
+        />
 
         {orders.length === 0 ? (
           <Card>
@@ -245,6 +234,10 @@ export default async function PurchaseOrdersPage({
           </>
         )}
       </div>
+
+      <ListNote>
+        Every PO records who raised it and both approvals (Project Manager → Admin). Editing an approved PO creates a new revision and restarts approval.
+      </ListNote>
     </div>
   );
 }

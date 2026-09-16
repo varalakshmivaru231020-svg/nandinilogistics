@@ -51,6 +51,8 @@
   --color-warn-800: #8A5A12;
   --color-warn-050: #FDF3E7;
   --color-bad-600: #D8494A;
+  --color-bad-700: #B23334;
+  --color-bad-100: #F2CBCB;
   --color-bad-050: #FDECEC;
 
   --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;

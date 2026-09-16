@@ -6,66 +6,9 @@ import { usePathname } from "next/navigation";
 import { Bell, Building2, LogOut, Menu, Search, ShieldCheck, UserRound } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { NAVIGATION } from "@/lib/navigation";
+import { screenTitle } from "@/lib/screen-title";
 import { usePermissions } from "@/components/rbac/permission-provider";
 import { logoutAction } from "@/app/(auth)/login/actions";
-
-/**
- * The design keeps two names for a screen: a short one in the sidebar and a
- * fuller one at the head of the bar — "Projects" in the nav, "Project
- * Management" above it. This is the design's own TITLES map, keyed by route.
- */
-const SCREEN_TITLES: Array<[href: string, title: string]> = [
-  ["/dashboard", "Dashboard"],
-  ["/projects/progress", "Site Progress"],
-  ["/projects", "Project Management"],
-  ["/tasks", "Task Management"],
-  ["/checklists", "Checklist Management"],
-  ["/schedule", "Project Schedule"],
-  ["/material/indents", "Requirement Indents"],
-  ["/material/purchase-orders", "Purchase Orders"],
-  ["/material/grn", "Goods Receipt · GRN"],
-  ["/material/stock", "Item Master · Stock"],
-  ["/material", "Material & Inventory"],
-  ["/masters/vendors", "Vendors"],
-  ["/sales/leads", "Lead Management · Sales CRM"],
-  ["/sales/follow-ups", "Follow-ups"],
-  ["/units/board", "Available Flats · Unit Inventory"],
-  ["/units", "Available Flats · Unit Inventory"],
-  ["/hr", "Users & Attendance"],
-  ["/kb", "Knowledge Base"],
-  ["/masters", "Masters & Users"],
-  ["/notifications", "Notifications"],
-  ["/admin/settings", "Settings"],
-];
-
-/** The screen title the design shows at the head of the bar. */
-function useScreenTitle(): string {
-  const pathname = usePathname();
-  return React.useMemo(() => {
-    // Longest matching prefix wins, so /material/grn beats /material.
-    let best: [string, string] | null = null;
-    for (const entry of SCREEN_TITLES) {
-      if (pathname === entry[0] || pathname.startsWith(`${entry[0]}/`)) {
-        if (!best || entry[0].length > best[0].length) best = entry;
-      }
-    }
-    if (best) return best[1];
-
-    // Anything without a design title falls back to its navigation label.
-    let navBest: { href: string; label: string } | null = null;
-    for (const section of NAVIGATION) {
-      for (const item of section.items) {
-        if (pathname === item.href || pathname.startsWith(`${item.href}/`)) {
-          if (!navBest || item.href.length > navBest.href.length) navBest = item;
-        }
-      }
-    }
-    if (navBest) return navBest.label;
-    if (pathname.startsWith("/account")) return "My account";
-    return "Dashboard";
-  }, [pathname]);
-}
 
 export function Topbar({
   onOpenMobile,
@@ -75,7 +18,7 @@ export function Topbar({
   notificationCount?: number;
 }) {
   const perms = usePermissions();
-  const title = useScreenTitle();
+  const title = screenTitle(usePathname());
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
 

@@ -4,15 +4,14 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import {
-  enumOptions, GRN_STATUSES, grnListWhere, grnMatch, readGrnListParams, toSearchParams,
-} from "@/lib/material/list-filters";
+  enumOptions, GRN_STATUSES, grnListWhere, grnMatch, readGrnListParams, } from "@/lib/material/list-filters";
 import { projectOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
-import { ExportMenu, exportHref } from "@/components/export/export-menu";
+import { ListNote } from "@/components/list/list-note";
 import { grnLookups } from "./lookups";
 import { NewGrnDrawer } from "./new-grn-drawer";
 import { GrnCard } from "./grn-card";
-import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 
 export const metadata = { title: "Goods Receipt" };
 
@@ -24,7 +23,6 @@ export default async function GrnListPage({
   const ctx = await requirePermission(PERM.material.grn.view);
   const raw = await searchParams;
   const params = readGrnListParams(raw);
-  const query = toSearchParams(raw);
   const filtered = Boolean(params.q || params.status || params.project || params.from || params.to);
 
   const lookups = ctx.has(PERM.material.grn.create) ? await grnLookups(ctx) : null;
@@ -48,16 +46,14 @@ export default async function GrnListPage({
     projectOptions(ctx),
   ]);
 
-  const awaitingPost = grns.filter((g) => g.status === "INSPECTED").length;
 
   return (
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Goods Receipt"
-        description="Accepted, rejected and short quantities recorded against the challan. Only accepted stock enters the ledger."
+        description="Indent (internal request to store) → PM approval → store stock check → issue from stock, or PO to vendor for the shortfall → GRN → 3-way match"
         actions={
           <div className="flex items-center gap-2">
-            {awaitingPost > 0 && <Badge tone="warn">{awaitingPost} inspected, not posted</Badge>}
             {ctx.has(PERM.material.grn.create) && (
               <NewGrnDrawer openPos={lookups!.openPos} stores={lookups!.stores} />
             )}
@@ -66,21 +62,15 @@ export default async function GrnListPage({
       />
 
       <ListToolbar
-        searchPlaceholder="Search GRN, PO, vendor or challan…"
+        searchPlaceholder="Search GRN no., PO, vendor, receiver…"
         filters={[
-          { name: "status", label: "Status", allLabel: "All statuses", options: enumOptions(GRN_STATUSES) },
-          { name: "project", label: "Projects", options: projects },
+          { name: "project", label: "Project", options: projects },
+          { name: "status", label: "Status", options: enumOptions(GRN_STATUSES) },
         ]}
         dateRange={{ label: "Received" }}
         count={grns.length}
-      >
-        {ctx.has(PERM.material.grn.export) && (
-          <ExportMenu
-            href={(format) => exportHref("/api/material/grn/export", format, query)}
-            disabled={grns.length === 0}
-          />
-        )}
-      </ListToolbar>
+        countNoun="receipts"
+      />
 
       {grns.length === 0 ? (
         <Card>
@@ -122,6 +112,10 @@ export default async function GrnListPage({
           })}
         </div>
       )}
+
+      <ListNote>
+        Three-way match: PO ↔ GRN ↔ Invoice. A mismatch is blocked or flagged — never quietly paid. Only accepted stock enters the ledger.
+      </ListNote>
     </div>
   );
 }
