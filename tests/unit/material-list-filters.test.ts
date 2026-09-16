@@ -193,11 +193,13 @@ describe("valuation withheld without viewValuation", () => {
 });
 
 describe("derived columns", () => {
+  // The words are the design's own, and a rejection is not the same as a shortfall.
   it("places a receipt in the three-way match", () => {
-    expect(grnMatch("INSPECTED", 0, 0, 1).label).toBe("NOT POSTED");
-    expect(grnMatch("POSTED", 1, 0, 1).label).toBe("MATCH — WITH EXCEPTIONS");
-    expect(grnMatch("POSTED", 0, 0, 2).label).toBe("3-WAY MATCHED");
-    expect(grnMatch("POSTED", 0, 0, 0).label).toBe("AWAITING INVOICE");
+    expect(grnMatch("INSPECTED", 0, 0, 1).label).toBe("Not posted");
+    expect(grnMatch("POSTED", 1, 0, 1).label).toBe("Mismatch — invoice blocked");
+    expect(grnMatch("POSTED", 0, 5, 1).label).toBe("Part receipt — balance pending");
+    expect(grnMatch("POSTED", 0, 0, 2).label).toBe("Received & matched ✓");
+    expect(grnMatch("POSTED", 0, 0, 0).label).toBe("Awaiting invoice");
   });
 
   it("computes on-time delivery only where promise and receipt both exist", () => {

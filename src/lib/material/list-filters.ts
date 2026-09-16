@@ -191,11 +191,13 @@ export function grnListWhere(scope: ProjectScope, p: GrnListParams): Prisma.GrnW
  */
 export function grnMatch(
   status: string, rejected: number, short: number, invoiceCount: number,
-): { label: string; tone: "good" | "warn" | "muted" } {
-  if (status !== "POSTED") return { label: "NOT POSTED", tone: "muted" };
-  if (rejected > 0 || short > 0) return { label: "MATCH — WITH EXCEPTIONS", tone: "warn" };
-  if (invoiceCount > 0) return { label: "3-WAY MATCHED", tone: "good" };
-  return { label: "AWAITING INVOICE", tone: "muted" };
+): { label: string; tone: "good" | "warn" | "bad" | "muted" } {
+  // The design writes this in words, and it is the row's only state chip.
+  if (status !== "POSTED") return { label: "Not posted", tone: "muted" };
+  if (rejected > 0) return { label: "Mismatch — invoice blocked", tone: "bad" };
+  if (short > 0) return { label: "Part receipt — balance pending", tone: "warn" };
+  if (invoiceCount > 0) return { label: "Received & matched ✓", tone: "good" };
+  return { label: "Awaiting invoice", tone: "muted" };
 }
 
 // ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+import { qty } from "@/lib/utils";
 import { PackageCheck } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
@@ -12,7 +13,7 @@ import { NewGrnDrawer } from "./new-grn-drawer";
 import { GrnCard } from "./grn-card";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 
-export const metadata = { title: "Goods Receipt" };
+export const metadata = { title: "Goods Receipt · GRN" };
 
 export default async function GrnListPage({
   searchParams,
@@ -39,7 +40,13 @@ export default async function GrnListPage({
         purchaseOrder: {
           select: { poNo: true, id: true, _count: { select: { invoices: true } } },
         },
-        items: { select: { receivedQty: true, acceptedQty: true, rejectedQty: true, shortQty: true } },
+        items: {
+          select: {
+            receivedQty: true, acceptedQty: true, rejectedQty: true, shortQty: true,
+            poItem: { select: { orderedQty: true } },
+            item: { select: { name: true, uom: { select: { code: true } } } },
+          },
+        },
       },
     }),
     vendorOptions(),
@@ -49,7 +56,7 @@ export default async function GrnListPage({
   return (
     <div>
       <PageHeader
-        title="Goods Receipt"
+        title="Goods Receipt · GRN"
         description="Indent (internal request to store) → PM approval → store stock check → issue from stock, or PO to vendor for the shortfall → GRN → 3-way match"
         actions={
           <div className="flex items-center gap-2">
@@ -83,21 +90,28 @@ export default async function GrnListPage({
           <EmptyState
             icon={<PackageCheck className="h-8 w-8" />}
             title={filtered ? "No goods receipts match these filters" : "Nothing received yet"}
-            description="A goods receipt is recorded against an approved purchase order, with the challan photographed at the gate."
           />
         </Card>
       ) : (
-        <div className="space-y-2.5">
+        <div className="overflow-hidden rounded-[13px] border border-line-400 bg-white">
           {grns.map((g) => {
             const accepted = g.items.reduce((n, i) => n + Number(i.acceptedQty), 0);
             const rejected = g.items.reduce((n, i) => n + Number(i.rejectedQty), 0);
             const short = g.items.reduce((n, i) => n + Number(i.shortQty), 0);
+            // The design names the first line and what it delivered of its order.
+            const first = g.items[0];
+            const ordered = first ? Number(first.poItem?.orderedQty ?? 0) : 0;
+            const item = first
+              ? `${first.item.name} · ${qty(first.receivedQty, 3)}${ordered ? ` of ${qty(ordered, 3)}` : ""} ${first.item.uom.code}` +
+                (g.items.length > 1 ? ` +${g.items.length - 1}` : "")
+              : "—";
 
             return (
               <GrnCard
                 key={g.id}
                 grn={{
                   id: g.id,
+                  item,
                   grnNo: g.grnNo,
                   poNo: g.purchaseOrder.poNo,
                   poId: g.purchaseOrder.id,

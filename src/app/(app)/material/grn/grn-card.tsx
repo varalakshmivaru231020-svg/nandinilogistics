@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { Badge } from "@/components/ui/primitives";
 import { cn, formatDate, qty } from "@/lib/utils";
 
 /**
@@ -26,11 +25,10 @@ export interface GrnCardRow {
   status: string;
   /** Where this receipt stands in the three-way match. */
   match: { label: string; tone: "good" | "warn" | "bad" | "muted" };
+  /** What arrived, as the design writes it: "TMT steel 16 mm · 6.2 of 12 Ton". */
+  item: string;
 }
 
-const STATUS_TONE: Record<string, "slate" | "brand" | "good" | "warn" | "bad" | "muted"> = {
-  DRAFT: "muted", INSPECTED: "warn", POSTED: "good", CANCELLED: "muted",
-};
 
 const MATCH_TONE = {
   good: "bg-good-050 text-good-700",
@@ -41,7 +39,7 @@ const MATCH_TONE = {
 
 export function GrnCard({ grn }: { grn: GrnCardRow }) {
   return (
-    <div className="flex flex-wrap items-start gap-4 rounded-[13px] border border-line-400 bg-white px-[18px] py-4 transition-shadow hover:shadow-[0_6px_18px_rgba(25,26,92,.07)]">
+    <div className="flex flex-wrap items-center gap-4 border-b border-line-200 px-[18px] py-3.5 last:border-0 hover:bg-surface-tint">
       <div className="min-w-[190px] flex-[2_1_210px]">
         <Link
           href={`/material/grn/${grn.id}`}
@@ -55,10 +53,9 @@ export function GrnCard({ grn }: { grn: GrnCardRow }) {
       </div>
 
       <div className="min-w-[150px] flex-[1_1_170px] text-[12px] font-semibold text-navy-600">
-        {grn.lineCount} line{grn.lineCount === 1 ? "" : "s"} · {grn.store}
+        {grn.item}
         <div className="mt-0.5 text-[11px] font-medium text-muted-400">
           {grn.hasChallanPhoto ? "challan photo ✓" : "no challan photo"}
-          {grn.challanNo ? ` · challan ${grn.challanNo}` : ""}
           {grn.inspectedBy ? ` · insp. ${grn.inspectedBy}` : " · not inspected"}
         </div>
       </div>
@@ -89,15 +86,12 @@ export function GrnCard({ grn }: { grn: GrnCardRow }) {
         {grn.match.label}
       </span>
 
-      <div className="flex shrink-0 items-center gap-2.5">
-        <Badge tone={STATUS_TONE[grn.status] ?? "slate"}>{grn.status}</Badge>
-        <Link
-          href={`/material/grn/${grn.id}`}
-          className="rounded-[8px] border border-line-400 bg-white px-3 py-1.5 text-[11.5px] font-bold text-brand-700 transition-colors hover:bg-surface-hover"
-        >
-          View
-        </Link>
-      </div>
+      <Link
+        href={`/material/grn/${grn.id}`}
+        className="shrink-0 rounded-[7px] bg-brand-500 px-[11px] py-1.5 text-[10.5px] font-bold text-white transition-colors hover:bg-brand-600"
+      >
+        View
+      </Link>
     </div>
   );
 }
