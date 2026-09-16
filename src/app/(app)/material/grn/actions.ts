@@ -8,6 +8,7 @@ import { authorize, runAction, assertProjectAccess, type ActionResult } from "@/
 import { recordAudit } from "@/lib/audit";
 import { nextDocumentNumber } from "@/lib/numbering";
 import { postGrnToStock } from "@/lib/material/grn-posting";
+import { assertUnchanged, staleMessage } from "@/lib/material/procurement";
 import { PERM } from "@/lib/permissions/codes";
 
 const GrnLineSchema = z
@@ -68,9 +69,11 @@ export async function createGrnAction(input: GrnInput): Promise<ActionResult<{ i
       }
     }
 
+    // The design has no separate posting step: booking the receipt is what puts
+    // the accepted quantity into the store, so both happen in one transaction.
     const grn = await prisma.$transaction(async (tx) => {
       const grnNo = await nextDocumentNumber(tx, "GRN", po.projectId);
-      return tx.grn.create({
+      const created = await tx.grn.create({
         data: {
           grnNo,
           poId: po.id,
@@ -99,6 +102,10 @@ export async function createGrnAction(input: GrnInput): Promise<ActionResult<{ i
           },
         },
       });
+      // A receipt where everything was rejected has nothing to put in the
+      // store; it stays on record so the mismatch blocks the invoice.
+      if (v.items.some((l) => l.acceptedQty > 0)) await postGrnToStock(tx, created.id, ctx.id);
+      return created;
     });
 
     await recordAudit({
@@ -107,6 +114,8 @@ export async function createGrnAction(input: GrnInput): Promise<ActionResult<{ i
     });
 
     revalidatePath("/material/grn");
+    revalidatePath("/material/stock");
+    revalidatePath(`/material/purchase-orders/${po.id}`);
     return { id: grn.id, grnNo: grn.grnNo };
   });
 }
@@ -232,6 +241,95 @@ export async function cancelGrnAction(id: string, remarks: string): Promise<Acti
     await recordAudit({
       action: "CANCEL", entity: "Grn", entityId: id, userId: ctx.id, projectId: grn.purchaseOrder.projectId,
       summary: `Cancelled goods receipt ${grn.grnNo}: ${remarks}`,
+    });
+    revalidatePath("/material/grn");
+    revalidatePath(`/material/grn/${id}`);
+    return null;
+  });
+}
+
+/**
+ * Deletes a goods receipt, which is what the design's Delete does.
+ *
+ * A receipt already in the stock ledger is never deleted: the ledger is not
+ * rewritten, so correcting it means a stock adjustment instead.
+ */
+export async function deleteGrnAction(id: string, expectedUpdatedAt?: string): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.material.grn.delete);
+    const grn = await prisma.grn.findUnique({
+      where: { id },
+      include: { purchaseOrder: { select: { id: true, projectId: true } } },
+    });
+    if (!grn) throw new Error("Goods receipt not found.");
+    assertProjectAccess(ctx, grn.purchaseOrder.projectId);
+    assertUnchanged(grn.updatedAt, expectedUpdatedAt, grn.grnNo);
+
+    if (grn.status === "POSTED") {
+      throw new Error(
+        `${grn.grnNo} is already in the stock ledger. Post a stock adjustment to correct it — the ledger is never rewritten.`,
+      );
+    }
+
+    const { count } = await prisma.grn.deleteMany({ where: { id, updatedAt: grn.updatedAt } });
+    if (count === 0) throw new Error(staleMessage(grn.grnNo));
+
+    await recordAudit({
+      action: "DELETE", entity: "Grn", entityId: id, userId: ctx.id, projectId: grn.purchaseOrder.projectId,
+      summary: `Deleted goods receipt ${grn.grnNo}`,
+    });
+    revalidatePath("/material/grn");
+    revalidatePath(`/material/purchase-orders/${grn.purchaseOrder.id}`);
+    return null;
+  });
+}
+
+const GrnEditSchema = z.object({
+  challanNo: z.string().trim().optional(),
+  challanDate: z.string().optional(),
+  vehicleNo: z.string().trim().optional(),
+  remarks: z.string().trim().optional(),
+});
+
+/**
+ * Corrects the paperwork on a goods receipt: the challan, the vehicle and the
+ * remarks. Quantities are not editable once the receipt is in the stock
+ * ledger, which is every posted receipt — those are corrected with a stock
+ * adjustment.
+ */
+export async function updateGrnAction(
+  id: string,
+  input: z.infer<typeof GrnEditSchema>,
+  expectedUpdatedAt?: string,
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.material.grn.update);
+    const parsed = GrnEditSchema.safeParse(input);
+    if (!parsed.success) throw new Error(parsed.error.issues[0].message);
+    const v = parsed.data;
+
+    const grn = await prisma.grn.findUnique({
+      where: { id },
+      include: { purchaseOrder: { select: { projectId: true } } },
+    });
+    if (!grn) throw new Error("Goods receipt not found.");
+    assertProjectAccess(ctx, grn.purchaseOrder.projectId);
+    assertUnchanged(grn.updatedAt, expectedUpdatedAt, grn.grnNo);
+
+    const { count } = await prisma.grn.updateMany({
+      where: { id, updatedAt: grn.updatedAt },
+      data: {
+        challanNo: v.challanNo || null,
+        challanDate: v.challanDate ? new Date(v.challanDate) : null,
+        vehicleNo: v.vehicleNo || null,
+        remarks: v.remarks || null,
+      },
+    });
+    if (count === 0) throw new Error(staleMessage(grn.grnNo));
+
+    await recordAudit({
+      action: "UPDATE", entity: "Grn", entityId: id, userId: ctx.id, projectId: grn.purchaseOrder.projectId,
+      summary: `Updated the challan details on goods receipt ${grn.grnNo}`,
     });
     revalidatePath("/material/grn");
     revalidatePath(`/material/grn/${id}`);

@@ -64,8 +64,12 @@ export interface IndentEditState {
 }
 
 export function IndentForm({
-  projects, items, canSubmit, edit,
-}: { projects: ProjectOpt[]; items: ItemOpt[]; canSubmit: boolean; edit?: IndentEditState }) {
+  projects, items, canSubmit, edit, startWithItemId,
+}: {
+  projects: ProjectOpt[]; items: ItemOpt[]; canSubmit: boolean; edit?: IndentEditState;
+  /** Raised from the item master: the indent opens on that item. */
+  startWithItemId?: string;
+}) {
   const router = useRouter();
   const init = edit?.initial;
   const [projectId, setProjectId] = React.useState(projects[0]?.id ?? "");
@@ -85,7 +89,7 @@ export function IndentForm({
           estimatedRate: String(l.estimatedRate),
           specification: l.specification,
         }))
-      : [blankLine()],
+      : [{ ...blankLine(), itemId: startWithItemId ?? "" }],
   );
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);

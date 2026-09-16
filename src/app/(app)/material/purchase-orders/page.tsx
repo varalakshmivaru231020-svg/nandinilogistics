@@ -4,6 +4,7 @@ import { FileText } from "lucide-react";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { deliveryLabel, PO_STATUS_LABEL, PO_STATUS_TONE } from "@/lib/material/po-display";
 import {
   enumOptions, pageHref, PO_STATUSES, poListWhere, readPoListParams, toSearchParams,
 } from "@/lib/material/list-filters";
@@ -21,23 +22,6 @@ export const metadata = { title: "Purchase Orders" };
 const PAGE_SIZE = 30;
 
 /** The design writes each state in words. */
-const STATUS_LABEL: Record<string, string> = {
-  DRAFT: "Draft",
-  PENDING_APPROVAL: "Pending approval",
-  PENDING_PM_APPROVAL: "Pending PM approval",
-  PENDING_ADMIN_APPROVAL: "Pending admin approval",
-  APPROVED: "Approved · sent to vendor",
-  PARTIALLY_RECEIVED: "Partially received",
-  RECEIVED: "Received",
-  CLOSED: "Closed · matched",
-  CANCELLED: "Cancelled",
-};
-
-const STATUS_TONE: Record<string, "slate" | "warn" | "good" | "brand" | "violet" | "bad"> = {
-  DRAFT: "slate", PENDING_APPROVAL: "warn",
-  PENDING_PM_APPROVAL: "warn", PENDING_ADMIN_APPROVAL: "violet", APPROVED: "brand",
-  PARTIALLY_RECEIVED: "warn", RECEIVED: "good", CLOSED: "good", CANCELLED: "bad",
-};
 
 type PoRow = {
   id: string; poNo: string; status: string; poDate: Date; expectedDate: Date | null;
@@ -149,19 +133,15 @@ export default async function PurchaseOrdersPage({
       key: "delivery",
       header: "Delivery",
       render: (p) => {
-        if (!p.expectedDate) return <span className="text-[12px] text-muted-400">—</span>;
-        const done = ["RECEIVED", "CLOSED"].includes(p.status);
-        const late = new Date(p.expectedDate).getTime() < nowMs && !done && p.status !== "CANCELLED";
-        const day = new Date(p.expectedDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-        const lateDays = Math.floor((nowMs - new Date(p.expectedDate).getTime()) / 86_400_000);
+        const d = deliveryLabel(p.expectedDate, p.status, nowMs);
         return (
           <span
             className={cn(
               "text-[12px] font-semibold",
-              late ? "text-bad-600" : done ? "text-good-700" : "text-navy-600",
+              d.tone === "bad" ? "text-bad-600" : d.tone === "good" ? "text-good-700" : "text-navy-600",
             )}
           >
-            {done ? `Received ${day}` : late ? `Late by ${lateDays} day${lateDays === 1 ? "" : "s"}` : `Due ${day}`}
+            {d.text}
           </span>
         );
       },
@@ -170,7 +150,7 @@ export default async function PurchaseOrdersPage({
       key: "status",
       header: "Status",
       align: "center",
-      render: (p) => <Badge tone={STATUS_TONE[p.status] ?? "slate"}>{STATUS_LABEL[p.status] ?? p.status}</Badge>,
+      render: (p) => <Badge tone={PO_STATUS_TONE[p.status] ?? "slate"}>{PO_STATUS_LABEL[p.status] ?? p.status}</Badge>,
     },
     {
       key: "actions",

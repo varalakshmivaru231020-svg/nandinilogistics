@@ -15,6 +15,8 @@ const IssueSchema = z.object({
   projectId: z.string().min(1, "Project is required"),
   storeId: z.string().min(1, "Store is required"),
   workPackageId: z.string().optional(),
+  /** The indent this issue answers, when it was raised from one. */
+  indentId: z.string().optional(),
   issuedToId: z.string().min(1, "Choose who is receiving the material"),
   purpose: z.string().trim().optional(),
   remarks: z.string().trim().optional(),
@@ -62,6 +64,7 @@ export async function createIssueAction(
           projectId: v.projectId,
           storeId: v.storeId,
           workPackageId: v.workPackageId || null,
+          indentId: v.indentId || null,
           issuedToId: v.issuedToId,
           issuedById: ctx.id,
           purpose: v.purpose || null,
@@ -113,6 +116,10 @@ export async function createIssueAction(
 
     revalidatePath("/material/issues");
     revalidatePath("/material/stock");
+    if (v.indentId) {
+      revalidatePath("/material/indents");
+      revalidatePath(`/material/indents/${v.indentId}`);
+    }
     return result;
   });
 }

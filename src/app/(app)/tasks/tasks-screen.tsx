@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, Input } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { ListNote } from "@/components/list/list-note";
-import { cn } from "@/lib/utils";
+import { cn, formatDayMonth } from "@/lib/utils";
 import { advanceLabel, STATUS_LABEL } from "@/lib/tasks/flow";
 import {
   advanceTaskAction, advanceTasksAction, assignTaskAction, createTaskAction,
@@ -55,7 +55,7 @@ const COLUMNS = ["Task", "Location", "Assignee", "Due", "Priority", "Evidence", 
 
 /** The design's short due date: "04 Sep". */
 function dueLabel(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  return formatDayMonth(iso);
 }
 
 function isOverdue(task: Task, nowMs: number) {

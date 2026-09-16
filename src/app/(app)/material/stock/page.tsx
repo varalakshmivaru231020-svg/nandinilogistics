@@ -17,11 +17,11 @@ export const metadata = { title: "Stock" };
 
 type StockRow = {
   id: string;
-  quantity: unknown;
-  avgRate: unknown;
-  value: unknown;
-  item: { code: string; name: string; reorderLevel: unknown; uom: { code: string }; category: { name: string } };
-  store: { code: string; name: string };
+  code: string;
+  name: string;
+  uom: string;
+  quantity: number;
+  reorderLevel: number;
 };
 
 export default async function StockPage({
@@ -40,8 +40,10 @@ export default async function StockPage({
     prisma.stockBalance.findMany({
       // Shared with the export, so a download holds exactly what this screen shows.
       where: stockListWhere(params),
-      orderBy: [{ store: { name: "asc" } }, { item: { name: "asc" } }],
-      include: {
+      orderBy: [{ item: { name: "asc" } }],
+      select: {
+        itemId: true,
+        quantity: true,
         item: {
           select: {
             code: true, name: true, reorderLevel: true,
@@ -49,28 +51,43 @@ export default async function StockPage({
             category: { select: { name: true } },
           },
         },
-        store: { select: { code: true, name: true } },
       },
     }),
     unitOptions(),
     loadOptions(itemMaster),
   ]);
 
+  // The design lists the item master, one row per item, with the stock it holds
+  // across every store the filter allows.
+  const byItem = new Map<string, StockRow>();
+  for (const b of balances) {
+    const row = byItem.get(b.itemId) ?? {
+      id: b.itemId,
+      code: b.item.code,
+      name: b.item.name,
+      uom: b.item.uom.code,
+      quantity: 0,
+      reorderLevel: Number(b.item.reorderLevel),
+    };
+    row.quantity += Number(b.quantity);
+    byItem.set(b.itemId, row);
+  }
+  const items = [...byItem.values()].sort((a, b) => a.name.localeCompare(b.name));
+
   const rows = params.stock
-    ? balances.filter((b) => {
-        const state = stockState(Number(b.quantity), Number(b.item.reorderLevel));
+    ? items.filter((i) => {
+        const state = stockState(i.quantity, i.reorderLevel);
         return (
           (params.stock === "RESTOCK" && state.label === "Restock now") ||
           (params.stock === "SOON" && state.label === "Order soon") ||
           (params.stock === "HEALTHY" && state.label === "Healthy")
         );
       })
-    : balances;
+    : items;
 
   // Strictly below the level, matching the design's "Restock now" band.
-  const lowRows = balances.filter(
-    (b) => Number(b.item.reorderLevel) > 0 && Number(b.quantity) < Number(b.item.reorderLevel),
-  );
+  const lowRows = items.filter((i) => i.reorderLevel > 0 && i.quantity < i.reorderLevel);
+
   const canRaisePo = ctx.has(PERM.material.purchaseOrder.create);
 
   const columns: Column<StockRow>[] = [
@@ -79,15 +96,15 @@ export default async function StockPage({
       header: "Item",
       render: (b) => (
         <div>
-          <p className="text-[12.5px] font-bold text-navy-950">{b.item.name}</p>
-          <p className="num text-[11px] font-medium text-muted-400">{b.item.code}</p>
+          <p className="text-[12.5px] font-bold text-navy-950">{b.name}</p>
+          <p className="num text-[11px] font-medium text-muted-400">{b.code}</p>
         </div>
       ),
     },
     {
       key: "unit",
       header: "Unit",
-      render: (b) => <span className="text-[12px] font-medium text-muted-600">{b.item.uom.code}</span>,
+      render: (b) => <span className="text-[12px] font-medium text-muted-600">{b.uom}</span>,
     },
     {
       key: "qty",
@@ -95,8 +112,8 @@ export default async function StockPage({
       align: "right",
       className: "num",
       render: (b) => {
-        const onHand = Number(b.quantity);
-        const reorder = Number(b.item.reorderLevel);
+        const onHand = b.quantity;
+        const reorder = b.reorderLevel;
         const state = stockState(onHand, reorder);
         // The bar reads against the reorder level, which is what "enough" means
         // for this item — a full bar is 125% of it, where the design stops worrying.
@@ -129,31 +146,37 @@ export default async function StockPage({
       header: "Reorder",
       align: "right",
       className: "num",
-      render: (b) => <span className="text-[12px] font-medium text-muted-500">{qty(b.item.reorderLevel, 3)}</span>,
+      render: (b) => <span className="text-[12px] font-medium text-muted-500">{qty(b.reorderLevel, 3)}</span>,
     },
     {
       key: "status",
       header: "Stock status",
       render: (b) => {
-        const state = stockState(Number(b.quantity), Number(b.item.reorderLevel));
+        const state = stockState(b.quantity, b.reorderLevel);
         return (
-          <div>
-            <span
-              className={cn(
-                "inline-block whitespace-nowrap rounded-full px-[10px] py-[5px] text-[10px] font-extrabold uppercase tracking-[.06em] text-white",
-                state.tone === "bad" ? "bg-bad-600" : state.tone === "warn" ? "bg-warn-700" : "bg-good-600",
-              )}
-            >
-              {state.label}
-            </span>
-            {state.short > 0 && (
-              <div className="num mt-1 text-[11px] font-semibold text-bad-600">
-                short {qty(state.short, 3)} {b.item.uom.code}
-              </div>
+          <span
+            className={cn(
+              "inline-block whitespace-nowrap rounded-full px-[10px] py-[5px] text-[10px] font-extrabold uppercase tracking-[.06em] text-white",
+              state.tone === "bad" ? "bg-bad-600" : state.tone === "warn" ? "bg-warn-700" : "bg-good-600",
             )}
-          </div>
+          >
+            {state.label.toUpperCase()}
+          </span>
         );
       },
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      render: (b) => (
+        <Link
+          href={`/material/stock/${b.id}`}
+          className="inline-block rounded-[7px] bg-brand-500 px-[11px] py-1.5 text-[10.5px] font-bold text-white transition-colors hover:bg-brand-600"
+        >
+          View
+        </Link>
+      ),
     },
   ];
 
@@ -196,7 +219,7 @@ export default async function StockPage({
               {lowRows.length} item{lowRows.length === 1 ? "" : "s"} below reorder level — raise a PO to refill stock
             </p>
             <p className="mt-0.5 truncate text-[11.5px] font-medium text-bad-600/80">
-              {lowRows.map((b) => b.item.name).join(" · ")}
+              {lowRows.map((i) => i.name).join(" · ")}
             </p>
           </div>
           {canRaisePo && (

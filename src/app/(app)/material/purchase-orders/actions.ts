@@ -425,3 +425,43 @@ export async function closePurchaseOrderAction(id: string, expectedUpdatedAt?: s
     return null;
   });
 }
+
+/**
+ * Deletes a purchase order outright, which is what the design's Delete does.
+ *
+ * An order the store has already received against, or that a vendor invoice
+ * refers to, is part of the material trail and stays.
+ */
+export async function deletePurchaseOrderAction(id: string, expectedUpdatedAt?: string): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.material.purchaseOrder.delete);
+    const po = await prisma.purchaseOrder.findUnique({
+      where: { id },
+      select: {
+        id: true, poNo: true, projectId: true, updatedAt: true,
+        _count: { select: { grns: true, invoices: true } },
+      },
+    });
+    if (!po) throw new Error("Purchase order not found.");
+    assertProjectAccess(ctx, po.projectId);
+    assertUnchanged(po.updatedAt, expectedUpdatedAt, po.poNo);
+
+    if (po._count.grns > 0) {
+      throw new Error(`${po.poNo} already has material received against it, so it cannot be deleted.`);
+    }
+    if (po._count.invoices > 0) {
+      throw new Error(`${po.poNo} has a vendor invoice against it, so it cannot be deleted.`);
+    }
+
+    // The lines cascade with the order.
+    const { count } = await prisma.purchaseOrder.deleteMany({ where: { id, updatedAt: po.updatedAt } });
+    if (count === 0) throw new Error(staleMessage(po.poNo));
+
+    await recordAudit({
+      action: "DELETE", entity: "PurchaseOrder", entityId: id, userId: ctx.id, projectId: po.projectId,
+      summary: `Deleted purchase order ${po.poNo}`,
+    });
+    revalidatePath("/material/purchase-orders");
+    return null;
+  });
+}

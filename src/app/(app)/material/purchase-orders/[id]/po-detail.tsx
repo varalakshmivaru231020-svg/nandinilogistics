@@ -1,457 +1,388 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, Check, PackagePlus, Pencil, Printer, ReceiptText, XCircle } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, Field, Textarea } from "@/components/ui/primitives";
-import { DataTable, type Column } from "@/components/ui/data-table";
-import { cn, formatDate, money, qty } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/primitives";
 import {
-  approvePoAdminAction, approvePoPmAction,
-  cancelPurchaseOrderAction, closePurchaseOrderAction,
+  DetailAction, DetailActionLink, DetailScreen, Fact, PanelCard, SoftPill,
+  SummaryCard, TD, TH,
+} from "@/components/shell/detail-screen";
+import { cn, qty } from "@/lib/utils";
+import { PO_STATUS_LABEL, PO_STATUS_TONE, pendingApproval } from "@/lib/material/po-display";
+import {
+  approvePoAdminAction, approvePoPmAction, deletePurchaseOrderAction,
 } from "../actions";
 
-interface Po {
-  id: string; poNo: string; status: string; updatedAt: string; poDate: string; expectedDate: string | null;
-  approvedAt: string | null; subTotal: number; taxAmount: number; otherCharges: number;
-  totalAmount: number; deliveryAddress: string | null; terms: string | null;
-  projectName: string; projectCode: string; vendorName: string; vendorContact: string | null;
-  vendorPhone: string | null; vendorGstin: string | null; paymentTerm: string | null;
-  createdByName: string;
+interface TrailStep {
+  label: string;
+  who: string;
+  when: string;
+  done: boolean;
 }
 
-interface PoLine {
-  id: string; code: string; name: string; uom: string;
-  orderedQty: number; receivedQty: number; rate: number; discountPct: number;
-  taxPct: number; amount: number; specification: string | null;
-  indentNo: string | null; indentId: string | null;
+interface Po {
+  id: string; poNo: string; status: string; updatedAt: string; revision: number;
+  vendor: string; project: string; delivery: string; terms: string; remarks: string;
+  subTotal: string; taxLabel: string; taxAmount: string; totalAmount: string;
+  indentRefs: string[];
+  trail: TrailStep[];
+}
+
+interface Line {
+  id: string; code: string; name: string;
+  qty: string; rate: string; amount: string;
+  ordered: string; received: string; pending: string;
+  pct: number; state: "Fulfilled" | "Part received" | "Not received";
 }
 
 interface Receipt {
-  id: string; grnNo: string; grnDate: string; status: string; storeName: string; lineCount: number;
+  id: string; grnNo: string; at: string; by: string;
+  accepted: string; rejected: string; short: string; photo: string;
+  invoice: string; invoiced: boolean; match: string;
+  matchTone: "good" | "warn" | "bad" | "muted";
+  lines: string[];
 }
 
-interface Invoice {
-  id: string; invoiceNo: string; invoiceDate: string; status: string;
-  totalAmount: number; paidAmount: number;
+interface Revision {
+  id: string; what: string; meta: string;
 }
+
+const STATE_TONE = {
+  Fulfilled: "good",
+  "Part received": "warn",
+  "Not received": "muted",
+} as const;
 
 export function PoDetail({
-  po, items, receipts, invoices, can, approvalCeiling, editable,
+  po, lines, receipts, revisions, can,
 }: {
-  po: Po; items: PoLine[]; receipts: Receipt[]; invoices: Invoice[];
-  can: Record<string, boolean>; approvalCeiling: number;
-  /** Nobody has approved it yet — decided on the server from the approval fields. */
-  editable: boolean;
+  po: Po;
+  lines: Line[];
+  receipts: Receipt[];
+  revisions: Revision[];
+  can: { approvePm: boolean; approveAdmin: boolean; print: boolean; delete: boolean; update: boolean; createGrn: boolean };
 }) {
   const router = useRouter();
   const [error, setError] = React.useState<string | null>(null);
-  const [notice, setNotice] = React.useState<string | null>(null);
+  const [confirming, setConfirming] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
-  const [approving, setApproving] = React.useState(false);
-  const [cancelling, setCancelling] = React.useState(false);
 
-  // The design approves in two levels. Which one is outstanding decides both
-  // the label and the action; holding one permission does not imply the other.
-  const awaitingPm = ["DRAFT", "PENDING_APPROVAL", "PENDING_PM_APPROVAL"].includes(po.status);
-  const awaitingAdmin = po.status === "PENDING_ADMIN_APPROVAL";
-  const awaitingApproval = awaitingPm || awaitingAdmin;
-  const mayApproveNow = awaitingPm ? can.approvePm : awaitingAdmin ? can.approveAdmin : false;
-  const approvalLabel = awaitingPm ? "PM approve" : "Admin approve";
-  const receivable = ["APPROVED", "PARTIALLY_RECEIVED"].includes(po.status);
-  const aboveCeiling = approvalCeiling > 0 && po.totalAmount > approvalCeiling;
+  const waiting = pendingApproval(po.status);
+  const mayApprove = waiting === "PM" ? can.approvePm : waiting === "ADMIN" ? can.approveAdmin : false;
+  const pendingQty = lines.reduce((s, l) => s + Number(l.pending.split(" ")[0] || 0), 0);
+  const pendingLines = lines.filter((l) => l.state !== "Fulfilled").length;
+  const complete = lines.length > 0 && pendingLines === 0;
 
-  const orderedTotal = items.reduce((s, i) => s + i.orderedQty, 0);
-  const receivedTotal = items.reduce((s, i) => s + i.receivedQty, 0);
-  const pct = orderedTotal > 0 ? Math.round((receivedTotal / orderedTotal) * 100) : 0;
-
-  async function run(fn: () => Promise<{ ok: boolean; error?: string }>, msg: string) {
+  async function approve() {
     setBusy(true);
     setError(null);
-    setNotice(null);
-    const res = await fn();
+    const res = waiting === "PM"
+      ? await approvePoPmAction(po.id, "", po.updatedAt)
+      : await approvePoAdminAction(po.id, "", po.updatedAt);
     setBusy(false);
     if (!res.ok) setError(res.error ?? "Something went wrong.");
-    else { setNotice(msg); router.refresh(); }
+    else router.refresh();
   }
 
-  const columns: Column<PoLine>[] = [
-    {
-      key: "item",
-      header: "Item",
-      render: (l) => (
-        <div>
-          <p className="text-sm text-navy-900">{l.name}</p>
-          <p className="text-xs text-muted-500">
-            <code>{l.code}</code>
-            {l.specification && ` · ${l.specification}`}
-            {l.indentNo && (
-              <>
-                {" · from "}
-                <Link href={`/material/indents/${l.indentId}`} className="text-brand-600 hover:underline">
-                  {l.indentNo}
-                </Link>
-              </>
-            )}
-          </p>
-        </div>
-      ),
-    },
-    { key: "ordered", header: "Ordered", align: "right", className: "num", render: (l) => `${qty(l.orderedQty, 3)} ${l.uom}` },
-    {
-      key: "received",
-      header: "Received",
-      align: "right",
-      className: "num",
-      render: (l) => {
-        const full = l.receivedQty >= l.orderedQty;
-        return (
-          <span className={full ? "font-medium text-good-700" : l.receivedQty > 0 ? "text-warn-700" : "text-muted-400"}>
-            {qty(l.receivedQty, 3)}
-          </span>
-        );
-      },
-    },
-    {
-      key: "pending",
-      header: "Pending",
-      align: "right",
-      className: "num",
-      render: (l) => {
-        const pending = Math.max(0, l.orderedQty - l.receivedQty);
-        return pending > 0 ? <span className="text-navy-900">{qty(pending, 3)}</span> : <span className="text-muted-400">—</span>;
-      },
-    },
-    { key: "rate", header: "Rate", align: "right", className: "num", visible: can.viewRate, render: (l) => money(l.rate, true) },
-    { key: "tax", header: "GST %", align: "right", className: "num", visible: can.viewRate, render: (l) => `${l.taxPct}%` },
-    { key: "amount", header: "Amount", align: "right", className: "num", visible: can.viewRate, render: (l) => money(l.amount) },
-  ];
-
-  return (
-    <div className="space-y-4">
-      {error && <Alert tone="error">{error}</Alert>}
-      {notice && !error && <Alert tone="success">{notice}</Alert>}
-
-      <div className="grid gap-3 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader><CardTitle>Order details</CardTitle></CardHeader>
-          <CardBody>
-            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
-              {[
-                ["Project", `${po.projectCode} — ${po.projectName}`],
-                ["Vendor", po.vendorName],
-                ["Vendor contact", [po.vendorContact, po.vendorPhone].filter(Boolean).join(" · ") || "—"],
-                ["GSTIN", po.vendorGstin ?? "—"],
-                ["Payment term", po.paymentTerm ?? "—"],
-                ["Raised by", po.createdByName],
-                ["PO date", formatDate(po.poDate)],
-                ["Expected delivery", formatDate(po.expectedDate)],
-                ["Approved on", formatDate(po.approvedAt)],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <dt className="text-xs text-muted-500">{label}</dt>
-                  <dd className="mt-0.5 text-sm text-navy-900">{value}</dd>
-                </div>
-              ))}
-            </dl>
-
-            {po.deliveryAddress && (
-              <div className="mt-3 border-t border-line-200 pt-3">
-                <p className="text-xs text-muted-500">Delivery address</p>
-                <p className="mt-0.5 text-sm text-navy-600">{po.deliveryAddress}</p>
-              </div>
-            )}
-            {po.terms && (
-              <div className="mt-3 border-t border-line-200 pt-3">
-                <p className="text-xs text-muted-500">Terms</p>
-                <p className="mt-0.5 text-sm text-navy-600">{po.terms}</p>
-              </div>
-            )}
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle>Value &amp; actions</CardTitle></CardHeader>
-          <CardBody className="space-y-3">
-            {can.viewRate && (
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-500">Sub-total</span>
-                  <span className="num text-navy-600">{money(po.subTotal)}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-500">GST</span>
-                  <span className="num text-navy-600">{money(po.taxAmount)}</span>
-                </div>
-                {po.otherCharges > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-500">Other charges</span>
-                    <span className="num text-navy-600">{money(po.otherCharges)}</span>
-                  </div>
-                )}
-                <div className="flex items-baseline justify-between border-t border-line-200 pt-1.5">
-                  <span className="text-sm text-muted-600">Total</span>
-                  <span className="num text-xl font-semibold text-navy-950">{money(po.totalAmount)}</span>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <div className="mb-1 flex justify-between text-xs">
-                <span className="text-muted-500">Received</span>
-                <span className="num font-medium text-navy-600">{pct}%</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-line-400">
-                <div
-                  className={cn("h-full rounded-full", pct === 100 ? "bg-good-600" : "bg-brand-500")}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 border-t border-line-200 pt-3">
-              {editable && can.update && (
-                <Link href={`/material/purchase-orders/${po.id}/edit`}>
-                  <Button size="sm" variant="secondary" className="w-full">
-                    <Pencil className="h-3.5 w-3.5" />
-                    Edit order
-                  </Button>
-                </Link>
-              )}
-
-              {awaitingApproval && mayApproveNow && (
-                <>
-                  <Button size="sm" variant="success" onClick={() => setApproving(true)} disabled={aboveCeiling}>
-                    <Check className="h-3.5 w-3.5" />
-                    {approvalLabel}
-                  </Button>
-                  {aboveCeiling && (
-                    <p className="text-xs text-warn-700">
-                      {money(po.totalAmount)} is above your ceiling of {money(approvalCeiling)} — this
-                      must be approved at a higher level.
-                    </p>
-                  )}
-                </>
-              )}
-
-              {receivable && can.createGrn && (
-                <Link href={`/material/grn/new?po=${po.id}`}>
-                  <Button size="sm" className="w-full">
-                    <PackagePlus className="h-3.5 w-3.5" />
-                    Receive material
-                  </Button>
-                </Link>
-              )}
-
-              {receivedTotal > 0 && can.createInvoice && (
-                <Link href={`/material/invoices/new?po=${po.id}`}>
-                  <Button size="sm" variant="secondary" className="w-full">
-                    <ReceiptText className="h-3.5 w-3.5" />
-                    Record vendor invoice
-                  </Button>
-                </Link>
-              )}
-
-              {["PARTIALLY_RECEIVED", "RECEIVED", "APPROVED"].includes(po.status) && can.close && (
-                <Button size="sm" variant="ghost" loading={busy}
-                  onClick={() => run(() => closePurchaseOrderAction(po.id, po.updatedAt), "Purchase order closed.")}>
-                  Close purchase order
-                </Button>
-              )}
-
-              {can.print && (
-                <a href={`/print/purchase-orders/${po.id}`} target="_blank" rel="noopener noreferrer">
-                  <Button size="sm" variant="ghost" className="w-full">
-                    <Printer className="h-3.5 w-3.5" />
-                    Print
-                  </Button>
-                </a>
-              )}
-
-              {!["CANCELLED", "CLOSED"].includes(po.status) && can.cancel && (
-                <Button size="sm" variant="ghost" onClick={() => setCancelling(true)}>
-                  <Ban className="h-3.5 w-3.5" />
-                  Cancel
-                </Button>
-              )}
-
-              {awaitingApproval && !mayApproveNow && (
-                <p className="text-xs text-muted-500">
-                  Waiting for approval. You do not hold the PO approval permission.
-                </p>
-              )}
-            </div>
-          </CardBody>
-        </Card>
-      </div>
-
-      {can.tabItems && (
-        <Card>
-          <CardHeader><CardTitle>Items ({items.length})</CardTitle></CardHeader>
-          <CardBody className="p-0">
-            <DataTable columns={columns} rows={items} rowKey={(l) => l.id} dense />
-          </CardBody>
-        </Card>
-      )}
-
-      {can.tabReceipts && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Goods receipts ({receipts.length})</CardTitle>
-          </CardHeader>
-          <CardBody className="p-0">
-            {receipts.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-muted-500">
-                Nothing received against this PO yet.
-              </p>
-            ) : (
-              <ul className="divide-y divide-line-200">
-                {receipts.map((g) => (
-                  <li key={g.id} className="flex items-center justify-between px-4 py-2.5">
-                    <div>
-                      <Link href={`/material/grn/${g.id}`} className="text-sm font-medium text-navy-900 hover:text-brand-600">
-                        {g.grnNo}
-                      </Link>
-                      <p className="text-xs text-muted-500">
-                        {g.storeName} · {g.lineCount} line(s) · {formatDate(g.grnDate)}
-                      </p>
-                    </div>
-                    <Badge tone={g.status === "POSTED" ? "good" : g.status === "CANCELLED" ? "bad" : "warn"}>
-                      {g.status}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardBody>
-        </Card>
-      )}
-
-      {can.tabInvoices && (
-        <Card>
-          <CardHeader><CardTitle>Vendor invoices ({invoices.length})</CardTitle></CardHeader>
-          <CardBody className="p-0">
-            {invoices.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-muted-500">
-                No invoice recorded against this PO yet.
-              </p>
-            ) : (
-              <ul className="divide-y divide-line-200">
-                {invoices.map((i) => (
-                  <li key={i.id} className="flex items-center justify-between px-4 py-2.5">
-                    <div>
-                      <Link href={`/material/invoices/${i.id}`} className="text-sm font-medium text-navy-900 hover:text-brand-600">
-                        {i.invoiceNo}
-                      </Link>
-                      <p className="text-xs text-muted-500">
-                        {formatDate(i.invoiceDate)} · {money(i.paidAmount)} of {money(i.totalAmount)} paid
-                      </p>
-                    </div>
-                    <Badge tone={i.status === "PAID" ? "good" : i.status === "MISMATCH" ? "bad" : "slate"}>
-                      {i.status.replace(/_/g, " ")}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardBody>
-        </Card>
-      )}
-
-      {approving && (
-        <RemarkModal
-          title={`${approvalLabel} ${po.poNo}`}
-          description={
-            awaitingPm
-              ? `Passing ${po.poNo} to the Admin level. It commits nothing until that second approval.`
-              : `Approving commits ${money(po.totalAmount)} to ${po.vendorName}.`
-          }
-          confirmLabel={approvalLabel}
-          variant="success"
-          onClose={() => setApproving(false)}
-          onSubmit={async (remarks) => {
-            const res = awaitingPm
-              ? await approvePoPmAction(po.id, remarks, po.updatedAt)
-              : await approvePoAdminAction(po.id, remarks, po.updatedAt);
-            if (res.ok) {
-              setApproving(false);
-              setNotice(awaitingPm ? "Passed to the Admin level." : "Purchase order approved.");
-              router.refresh();
-            }
-            return res.ok ? null : res.error;
-          }}
-        />
-      )}
-
-      {cancelling && (
-        <RemarkModal
-          title={`Cancel ${po.poNo}`}
-          description="A reason is required and stays on the audit trail."
-          confirmLabel="Cancel purchase order"
-          variant="danger"
-          required
-          onClose={() => setCancelling(false)}
-          onSubmit={async (remarks) => {
-            const res = await cancelPurchaseOrderAction(po.id, remarks, po.updatedAt);
-            if (res.ok) { setCancelling(false); setNotice("Purchase order cancelled."); router.refresh(); }
-            return res.ok ? null : res.error;
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function RemarkModal({
-  title, description, confirmLabel, variant, required, onClose, onSubmit,
-}: {
-  title: string;
-  description: string;
-  confirmLabel: string;
-  variant: "success" | "danger";
-  required?: boolean;
-  onClose: () => void;
-  onSubmit: (remarks: string) => Promise<string | null>;
-}) {
-  const [remarks, setRemarks] = React.useState("");
-  const [error, setError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  async function submit() {
+  async function remove() {
     setBusy(true);
-    setError(null);
-    const err = await onSubmit(remarks);
+    const res = await deletePurchaseOrderAction(po.id, po.updatedAt);
     setBusy(false);
-    if (err) setError(err);
+    if (!res.ok) {
+      setConfirming(false);
+      setError(res.error ?? "Something went wrong.");
+      return;
+    }
+    router.push("/material/purchase-orders");
   }
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title={title}
-      description={description}
-      size="sm"
-      footer={
+    <DetailScreen
+      backHref="/material/purchase-orders"
+      title={po.poNo}
+      pills={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Back</Button>
-          <Button variant={variant} onClick={submit} loading={busy} disabled={required && !remarks.trim()}>
-            {variant === "danger" ? <XCircle className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
-            {confirmLabel}
-          </Button>
+          <SoftPill tone={PO_STATUS_TONE[po.status] ?? "muted"}>
+            {PO_STATUS_LABEL[po.status] ?? po.status}
+          </SoftPill>
+          <span className="rounded-full bg-warn-050 px-[9px] py-[3px] text-[10px] font-bold tracking-[.05em] text-warn-700">
+            {po.revision ? `Revision ${po.revision}` : "Original"}
+          </span>
+        </>
+      }
+      subtitle={`${po.vendor} · ${po.project} · ${po.delivery}`}
+      actions={
+        <>
+          {waiting && mayApprove && (
+            <DetailAction
+              tone="primary"
+              disabled={busy}
+              onClick={approve}
+              className={cn(
+                "border-transparent text-white",
+                waiting === "PM" ? "bg-[#E8A13A] hover:bg-[#D2901F]" : "bg-[#6A46C8] hover:bg-[#5A38B0]",
+              )}
+            >
+              {waiting === "PM" ? "✓ PM approve" : "✓ Admin approve"}
+            </DetailAction>
+          )}
+          {can.print && (
+            <DetailActionLink tone="plain" href={`/print/purchase-orders/${po.id}`} target="_blank" rel="noopener">
+              ⎙ Print
+            </DetailActionLink>
+          )}
+          {can.delete && (
+            <DetailAction tone="danger" onClick={() => setConfirming(true)}>🗑 Delete</DetailAction>
+          )}
+          {can.update && (
+            <DetailActionLink tone="primary" href={`/material/purchase-orders/${po.id}/edit`}>
+              ✎ Edit
+            </DetailActionLink>
+          )}
         </>
       }
     >
-      <div className="space-y-3">
-        {error && <Alert tone="error">{error}</Alert>}
-        <Field label="Remarks" required={required}>
-          <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} autoFocus />
-        </Field>
+      {error && <div className="mb-3.5"><Alert tone="error">{error}</Alert></div>}
+
+      <div className="grid items-start gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(290px,1fr))]">
+        <SummaryCard label="Order">
+          <div className="grid grid-cols-2 gap-3.5">
+            <Fact label="Vendor">{po.vendor}</Fact>
+            <Fact label="Project">{po.project}</Fact>
+            <Fact label="Delivery">{po.delivery}</Fact>
+            <Fact label="Terms">{po.terms}</Fact>
+            <div className="col-span-2">
+              <div className="mb-[5px] text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">
+                Linked indents
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {po.indentRefs.map((r) => (
+                  <span
+                    key={r}
+                    className="rounded-full border border-[#DDE4F3] bg-surface-hover px-[11px] py-[5px] text-[11px] font-bold text-navy-800"
+                  >
+                    {r}
+                  </span>
+                ))}
+                {po.indentRefs.length === 0 && (
+                  <span className="text-[12px] font-medium text-muted-400">
+                    Not linked to an indent — direct purchase
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="col-span-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">Remarks</div>
+              <div className="mt-[3px] text-[12.5px] font-medium text-navy-900">{po.remarks}</div>
+            </div>
+          </div>
+        </SummaryCard>
+
+        <SummaryCard label="Approval trail">
+          {po.trail.map((step) => (
+            <div key={step.label} className="flex items-start gap-[11px] border-b border-line-100 py-[9px] last:border-0">
+              <span
+                className={cn(
+                  "flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold",
+                  step.done ? "bg-good-600 text-white" : "bg-line-300 text-muted-400",
+                )}
+              >
+                {step.done ? "✓" : "•"}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] font-bold text-navy-900">{step.label}</div>
+                <div className="mt-0.5 text-[11.5px] font-semibold text-navy-500">{step.who}</div>
+                <div className="mt-px text-[10.5px] font-medium text-muted-300">{step.when}</div>
+              </div>
+            </div>
+          ))}
+        </SummaryCard>
+
+        <SummaryCard label="Revision history">
+          {revisions.map((r) => (
+            <div key={r.id} className="border-b border-line-100 py-[9px] last:border-0">
+              <div className="text-[12.5px] font-semibold text-navy-900">{r.what}</div>
+              <div className="mt-0.5 text-[11px] font-medium text-muted-400">{r.meta}</div>
+            </div>
+          ))}
+          {revisions.length === 0 && (
+            <div className="text-[12px] font-medium text-muted-600">
+              No revisions — this is the original order. Any edit after approval creates a new
+              revision and restarts approval at Project Manager.
+            </div>
+          )}
+        </SummaryCard>
       </div>
-    </Modal>
+
+      <PanelCard
+        title="Order lines"
+        right={<span className="text-[11.5px] font-semibold text-muted-600">{lines.length} {lines.length === 1 ? "line" : "lines"}</span>}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] border-collapse">
+            <thead>
+              <tr>
+                <th className={cn(TH, "text-left")}>Sl</th>
+                <th className={cn(TH, "text-left")}>Item</th>
+                <th className={cn(TH, "text-right")}>Qty</th>
+                <th className={cn(TH, "text-right")}>Rate</th>
+                <th className={cn(TH, "text-right")}>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l, i) => (
+                <tr key={l.id} className="hover:bg-surface-tint">
+                  <td className={cn(TD, "text-[11.5px] font-semibold text-muted-400")}>{i + 1}</td>
+                  <td className={TD}>
+                    <div className="text-[12.5px] font-semibold text-navy-900">{l.name}</div>
+                    <div className="mt-0.5 text-[11px] font-medium text-muted-400">{l.code}</div>
+                  </td>
+                  <td className={cn(TD, "text-right text-[12px] font-semibold text-navy-600")}>{l.qty}</td>
+                  <td className={cn(TD, "text-right text-[12px] font-semibold text-navy-600")}>{l.rate}</td>
+                  <td className={cn(TD, "text-right text-[12.5px] font-bold text-navy-950")}>{l.amount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex flex-wrap justify-end gap-[34px] bg-surface-sunken px-5 py-4">
+          <div className="text-right">
+            <div className="text-[10.5px] font-semibold uppercase tracking-[.07em] text-muted-400">Subtotal</div>
+            <div className="mt-[3px] text-[14px] font-bold text-navy-600">{po.subTotal}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10.5px] font-semibold uppercase tracking-[.07em] text-muted-400">{po.taxLabel}</div>
+            <div className="mt-[3px] text-[14px] font-bold text-navy-600">{po.taxAmount}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10.5px] font-semibold uppercase tracking-[.07em] text-navy-800">PO value</div>
+            <div className="mt-[3px] font-display text-[20px] font-extrabold text-navy-950">{po.totalAmount}</div>
+          </div>
+        </div>
+      </PanelCard>
+
+      <PanelCard
+        title="Fulfilment against this PO"
+        subtitle={
+          complete
+            ? "All ordered quantities received"
+            : `${qty(pendingQty, 2)} units still pending across ${pendingLines} line(s)`
+        }
+        right={
+          <>
+            {complete && (
+              <span className="rounded-full border border-[#9AD4B4] bg-good-050 px-3 py-1.5 text-[11px] font-bold text-good-700">
+                Fully received
+              </span>
+            )}
+            {!complete && can.createGrn && (
+              <DetailActionLink tone="primary" href={`/material/grn/new?po=${po.id}`} className="px-4 py-2.5 text-[12px]">
+                + Receive balance · new GRN
+              </DetailActionLink>
+            )}
+          </>
+        }
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] border-collapse">
+            <thead>
+              <tr>
+                <th className={cn(TH, "text-left")}>Item</th>
+                <th className={cn(TH, "text-right")}>Ordered</th>
+                <th className={cn(TH, "text-right")}>Received</th>
+                <th className={cn(TH, "text-right")}>Pending</th>
+                <th className={cn(TH, "text-left")}>Progress</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l) => (
+                <tr key={l.id} className="hover:bg-surface-tint">
+                  <td className={TD}>
+                    <div className="text-[12.5px] font-semibold text-navy-900">{l.name}</div>
+                    <div className="mt-0.5 text-[11px] font-medium text-muted-400">{l.code}</div>
+                  </td>
+                  <td className={cn(TD, "text-right text-[12px] font-semibold text-navy-600")}>{l.ordered}</td>
+                  <td className={cn(TD, "text-right text-[12.5px] font-bold text-good-700")}>{l.received}</td>
+                  <td className={cn(TD, "text-right text-[12.5px] font-bold text-warn-700")}>{l.pending}</td>
+                  <td className={cn(TD, "min-w-[180px]")}>
+                    <div className="flex items-center gap-2">
+                      <SoftPill tone={STATE_TONE[l.state]}>{l.state}</SoftPill>
+                      <span className="text-[11px] font-semibold text-muted-600">{l.pct}%</span>
+                    </div>
+                    <div className="mt-1.5 h-[7px] overflow-hidden rounded-full bg-line-200">
+                      <div
+                        className={cn(
+                          "h-full rounded-full",
+                          l.state === "Fulfilled"
+                            ? "bg-[linear-gradient(90deg,#1F9D66,#5BC8A2)]"
+                            : "bg-[linear-gradient(90deg,#E8A13A,#F2C063)]",
+                        )}
+                        style={{ width: `${l.pct}%` }}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </PanelCard>
+
+      <PanelCard
+        title="Goods receipts"
+        right={<span className="text-[11.5px] font-semibold text-muted-600">{receipts.length} {receipts.length === 1 ? "goods receipt" : "goods receipts"}</span>}
+      >
+        {receipts.length === 0 && (
+          <div className="px-7 py-7 text-center text-[12.5px] font-medium text-muted-400">
+            Nothing received yet against this PO. Each delivery is booked as its own GRN — partial
+            deliveries simply create more than one.
+          </div>
+        )}
+        {receipts.map((r) => (
+          <div key={r.id} className="border-b border-line-100 px-5 py-3.5 last:border-0">
+            <div className="flex flex-wrap items-center gap-[9px]">
+              <a
+                href={`/material/grn/${r.id}`}
+                className="text-[13px] font-extrabold text-brand-700 underline hover:text-brand-500"
+              >
+                {r.grnNo}
+              </a>
+              <SoftPill tone={r.matchTone} className="text-[9.5px]">{r.match}</SoftPill>
+              <SoftPill tone={r.invoiced ? "good" : "warn"}>{r.invoice}</SoftPill>
+              <div className="flex-1" />
+              <span className="text-[11.5px] font-medium text-muted-400">{r.at} · {r.by}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className="rounded-full bg-good-050 px-2.5 py-[5px] text-[11px] font-bold text-good-700">Accepted {r.accepted}</span>
+              <span className="rounded-full bg-bad-050 px-2.5 py-[5px] text-[11px] font-bold text-bad-700">Rejected {r.rejected}</span>
+              <span className="rounded-full bg-warn-050 px-2.5 py-[5px] text-[11px] font-bold text-warn-800">Short {r.short}</span>
+              <span className="rounded-full bg-surface-field px-2.5 py-[5px] text-[11px] font-semibold text-navy-500">⎙ {r.photo}</span>
+            </div>
+            {r.lines.map((t, i) => (
+              <div key={i} className="mt-[5px] text-[11.5px] font-medium text-navy-500">• {t}</div>
+            ))}
+          </div>
+        ))}
+      </PanelCard>
+
+      <Modal
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title={`Delete ${po.poNo}?`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirming(false)}>Keep it</Button>
+            <Button variant="danger" loading={busy} onClick={remove}>Delete</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-navy-600">
+          This removes the order and its lines. It cannot be undone.
+        </p>
+      </Modal>
+    </DetailScreen>
   );
 }

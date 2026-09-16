@@ -12,7 +12,7 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { Card, CardBody, CardHeader, CardSubtitle, CardTitle, Panel, PanelHeader, StatLabel, StatValue } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
-import { cn, formatDate, moneyShort, qty } from "@/lib/utils";
+import { cn, formatDate, moneyShort, qty, shortMonth } from "@/lib/utils";
 import { ApprovalQueue, type QueueRow } from "./approval-queue";
 
 export const metadata = { title: "Dashboard" };
@@ -146,7 +146,7 @@ export default async function DashboardPage() {
     const prev = Number(lastMonthTotal._sum?.amount ?? 0);
     const change = prev > 0 ? Math.round(((now - prev) / prev) * 100) : null;
     kpis.push({
-      label: `Collections · ${today.toLocaleDateString("en-GB", { month: "short" })}`,
+      label: `Collections · ${shortMonth(today)}`,
       value: moneyShort(now),
       delta: change === null ? "—" : change >= 0 ? `▲ ${change}%` : `▼ ${Math.abs(change)}%`,
       deltaTone: change !== null && change < 0 ? "bad" : "good",

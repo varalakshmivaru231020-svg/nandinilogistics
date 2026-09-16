@@ -24,22 +24,37 @@ function blankLine(): Line {
   return { key: Math.random().toString(36).slice(2), itemId: "", issuedQty: "" };
 }
 
+/** What an indent hands the form when the issue is raised from one. */
+export interface FromIndent {
+  id: string;
+  indentNo: string;
+  projectId: string;
+  workPackageId: string | null;
+  purpose: string | null;
+  lines: Array<{ itemId: string; quantity: number }>;
+}
+
 export function IssueForm({
-  projects, stores, recipients, stock, canViewValue,
+  projects, stores, recipients, stock, canViewValue, fromIndent,
 }: {
   projects: Array<{ id: string; name: string; code: string; workPackages: Array<{ id: string; code: string; name: string }> }>;
   stores: Array<{ id: string; name: string; projectId: string | null }>;
   recipients: Array<{ id: string; name: string; designation: string | null }>;
   stock: StockRow[];
   canViewValue: boolean;
+  fromIndent?: FromIndent | null;
 }) {
   const router = useRouter();
-  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? "");
-  const [workPackageId, setWorkPackageId] = React.useState("");
+  const [projectId, setProjectId] = React.useState(fromIndent?.projectId ?? projects[0]?.id ?? "");
+  const [workPackageId, setWorkPackageId] = React.useState(fromIndent?.workPackageId ?? "");
   const [issuedToId, setIssuedToId] = React.useState("");
-  const [purpose, setPurpose] = React.useState("");
+  const [purpose, setPurpose] = React.useState(fromIndent?.purpose ?? "");
   const [remarks, setRemarks] = React.useState("");
-  const [lines, setLines] = React.useState<Line[]>([blankLine()]);
+  const [lines, setLines] = React.useState<Line[]>(
+    fromIndent?.lines.length
+      ? fromIndent.lines.map((l) => ({ ...blankLine(), itemId: l.itemId, issuedQty: String(l.quantity) }))
+      : [blankLine()],
+  );
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -90,6 +105,7 @@ export function IssueForm({
       projectId,
       storeId,
       workPackageId: workPackageId || undefined,
+      indentId: fromIndent?.id,
       issuedToId,
       purpose: purpose || undefined,
       remarks: remarks || undefined,
@@ -99,7 +115,7 @@ export function IssueForm({
     });
     setBusy(false);
     if (!res.ok) setError(res.error);
-    else router.push("/material/issues");
+    else router.push(fromIndent ? `/material/indents/${fromIndent.id}` : "/material/issues");
   }
 
   return (

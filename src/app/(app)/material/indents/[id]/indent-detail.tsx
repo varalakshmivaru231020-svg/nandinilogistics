@@ -2,571 +2,321 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Ban, Check, PackageSearch, Pencil, Printer, Send, ThumbsDown, X } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, Field, Input, Textarea } from "@/components/ui/primitives";
-import { DataTable, type Column } from "@/components/ui/data-table";
-import { cn, formatDate, formatDateTime, money, qty } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/primitives";
 import {
-  approveIndentAction, cancelIndentAction, rejectIndentAction,
-  stockCheckAction, submitIndentAction,
-} from "../actions";
+  DetailAction, DetailActionLink, DetailScreen, Fact, PanelCard, SoftPill,
+  SummaryCard, TD, TH,
+} from "@/components/shell/detail-screen";
+import { cn } from "@/lib/utils";
+import {
+  chainStage, INDENT_CHAIN, INDENT_STATUS_LABEL, INDENT_STATUS_TONE,
+  indentFulfilment, q, type FulfilLine,
+} from "@/lib/material/indent-fulfilment";
+import { deleteIndentAction } from "../actions";
 
 interface Indent {
-  updatedAt: string;
-  id: string; indentNo: string; status: string; raisedAt: string; requiredByDate: string;
-  purpose: string | null; remarks: string | null; estimatedValue: number; raisedById: string;
-  projectName: string; projectCode: string; workPackage: string | null; raisedByName: string;
+  id: string; indentNo: string; status: string; updatedAt: string;
+  title: string; project: string; activity: string; requiredBy: string;
+  raisedBy: string; remarks: string;
 }
 
-interface ItemLine {
-  id: string; itemId: string; code: string; name: string; uom: string;
-  requestedQty: number; approvedQty: number | null; issueFromStockQty: number;
-  toPurchaseQty: number; estimatedRate: number; specification: string | null; onHand: number;
+interface Line extends FulfilLine {
+  code: string;
+  name: string;
 }
 
-interface Approval {
-  id: string; level: string; decision: string; approverName: string;
-  approvedAt: string; remarks: string | null;
-  changes: Record<string, { from: unknown; to: unknown }> | null;
+interface Movement {
+  id: string;
+  kind: "ISSUE" | "RETURN";
+  item: string;
+  qty: string;
+  at: string;
+  by: string;
+  to: string;
+  note: string;
 }
 
-/** The chain from the scope document, rendered as a live progress rail. */
-const CHAIN = [
-  { key: "RAISED", label: "Requirement Indent", who: "Supervisor" },
-  { key: "PM", label: "PM Approval", who: "Project Manager" },
-  { key: "ADMIN", label: "Admin Approval", who: "Owner / Admin" },
-  { key: "STORE", label: "Store Office", who: "Stock check first" },
-  { key: "PO", label: "Purchase Order", who: "Store · approved" },
-];
+const FULFIL_TONE = {
+  good: "bg-good-600",
+  brand: "bg-brand-500",
+  amber: "bg-[#E8A13A]",
+} as const;
 
-function chainStage(status: string): number {
-  switch (status) {
-    case "DRAFT": return 0;
-    case "SUBMITTED": return 1;
-    case "PM_APPROVED": return 2;
-    case "ADMIN_APPROVED": return 3;
-    case "PARTIALLY_ORDERED":
-    case "ORDERED":
-    case "CLOSED": return 4;
-    default: return -1;
-  }
-}
+const MOVEMENT_TONE = {
+  ISSUE: "bg-bad-050 text-bad-700",
+  RETURN: "bg-brand-100 text-brand-700",
+} as const;
 
 export function IndentDetail({
-  indent, items, approvals, can, currentUserId, approvalCeiling, editable,
+  indent, lines, movements, can,
 }: {
   indent: Indent;
-  items: ItemLine[];
-  approvals: Approval[];
-  can: Record<string, boolean>;
-  currentUserId: string;
-  approvalCeiling: number;
-  /** No approval step recorded yet — decided on the server. */
-  editable: boolean;
+  lines: Line[];
+  movements: Movement[];
+  can: { issue: boolean; raisePo: boolean; update: boolean; delete: boolean };
 }) {
   const router = useRouter();
   const [error, setError] = React.useState<string | null>(null);
-  const [notice, setNotice] = React.useState<string | null>(null);
+  const [confirming, setConfirming] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
-  const [approving, setApproving] = React.useState<"PM" | "ADMIN" | null>(null);
-  const [rejecting, setRejecting] = React.useState(false);
 
+  const fulfil = indentFulfilment(lines);
   const stage = chainStage(indent.status);
-  const terminal = ["REJECTED", "CANCELLED"].includes(indent.status);
+  const stopped = indent.status === "REJECTED" || indent.status === "CANCELLED";
+  const canIssueNow = fulfil.issuable > 0;
 
-  const awaitingPm = indent.status === "SUBMITTED";
-  const awaitingAdmin = indent.status === "PM_APPROVED";
-  const isOwnDraft = indent.status === "DRAFT" && indent.raisedById === currentUserId;
-
-  async function run(fn: () => Promise<{ ok: boolean; error?: string }>, successMsg: string) {
+  async function remove() {
     setBusy(true);
-    setError(null);
-    setNotice(null);
-    const res = await fn();
+    const res = await deleteIndentAction(indent.id, indent.updatedAt);
     setBusy(false);
-    if (!res.ok) setError(res.error ?? "Something went wrong.");
-    else { setNotice(successMsg); router.refresh(); }
+    if (!res.ok) {
+      setConfirming(false);
+      setError(res.error ?? "Something went wrong.");
+      return;
+    }
+    router.push("/material/indents");
   }
 
-  const columns: Column<ItemLine>[] = [
-    {
-      key: "item",
-      header: "Item",
-      render: (l) => (
-        <div>
-          <p className="text-sm text-navy-900">{l.name}</p>
-          <p className="text-xs text-muted-500">
-            <code>{l.code}</code>
-            {l.specification && ` · ${l.specification}`}
-          </p>
-        </div>
-      ),
-    },
-    {
-      key: "requested",
-      header: "Requested",
-      align: "right",
-      className: "num",
-      render: (l) => `${qty(l.requestedQty, 3)} ${l.uom}`,
-    },
-    {
-      key: "approved",
-      header: "Approved",
-      align: "right",
-      className: "num",
-      render: (l) => {
-        if (l.approvedQty === null) return <span className="text-muted-400">—</span>;
-        const revised = l.approvedQty !== l.requestedQty;
-        return (
-          <span className={revised ? "font-medium text-warn-700" : ""}>
-            {qty(l.approvedQty, 3)} {l.uom}
-            {revised && <span className="ml-1 text-[10px]">revised</span>}
-          </span>
-        );
-      },
-    },
-    {
-      key: "onHand",
-      header: "In store",
-      align: "right",
-      className: "num",
-      render: (l) => (
-        <span className={l.onHand > 0 ? "text-good-700" : "text-muted-400"}>
-          {qty(l.onHand, 3)}
-        </span>
-      ),
-    },
-    {
-      key: "fromStock",
-      header: "Issue from stock",
-      align: "right",
-      className: "num",
-      render: (l) =>
-        l.issueFromStockQty > 0 ? (
-          <span className="font-medium text-good-700">{qty(l.issueFromStockQty, 3)}</span>
-        ) : (
-          <span className="text-muted-400">—</span>
-        ),
-    },
-    {
-      key: "toPurchase",
-      header: "To purchase",
-      align: "right",
-      className: "num",
-      render: (l) =>
-        l.toPurchaseQty > 0 ? (
-          <span className="font-medium text-navy-900">{qty(l.toPurchaseQty, 3)}</span>
-        ) : (
-          <span className="text-muted-400">—</span>
-        ),
-    },
-    { key: "rate", header: "Rate", align: "right", className: "num", render: (l) => money(l.estimatedRate) },
-    {
-      key: "amount",
-      header: "Amount",
-      align: "right",
-      className: "num",
-      render: (l) => money((l.approvedQty ?? l.requestedQty) * l.estimatedRate),
-    },
-  ];
-
   return (
-    <div className="space-y-4">
-      {error && <Alert tone="error">{error}</Alert>}
-      {notice && !error && <Alert tone="success">{notice}</Alert>}
+    <DetailScreen
+      backHref="/material/indents"
+      title={indent.indentNo}
+      pills={
+        <>
+          <SoftPill tone={INDENT_STATUS_TONE[indent.status] ?? "muted"}>
+            {INDENT_STATUS_LABEL[indent.status] ?? indent.status}
+          </SoftPill>
+          <span
+            className={cn(
+              "inline-flex rounded-full px-[9px] py-[4px] text-[8.5px] font-extrabold uppercase tracking-[.07em] text-white",
+              FULFIL_TONE[fulfil.tone],
+            )}
+          >
+            {fulfil.label}
+          </span>
+        </>
+      }
+      subtitle={`${indent.title} · ${indent.project} · required by ${indent.requiredBy}`}
+      actions={
+        <>
+          {canIssueNow && can.issue && (
+            <DetailActionLink tone="success" href={`/material/issues/new?indent=${indent.id}`}>
+              ↗ Issue from stock
+            </DetailActionLink>
+          )}
+          {can.raisePo && (
+            <DetailActionLink tone="soft" href={`/material/purchase-orders/new?indent=${indent.id}`}>
+              → Raise PO for shortfall
+            </DetailActionLink>
+          )}
+          {can.delete && (
+            <DetailAction tone="danger" onClick={() => setConfirming(true)}>
+              🗑 Delete
+            </DetailAction>
+          )}
+          {can.update && (
+            <DetailActionLink tone="primary" href={`/material/indents/${indent.id}/edit`}>
+              ✎ Edit
+            </DetailActionLink>
+          )}
+        </>
+      }
+    >
+      {error && <div className="mb-3.5"><Alert tone="error">{error}</Alert></div>}
 
-      {/* Approval chain rail */}
-      <Card>
-        <CardBody className="py-4">
-          {terminal ? (
-            <Alert tone="error" title={`This indent was ${indent.status.toLowerCase()}`}>
-              {approvals.at(-1)?.remarks ?? "No reason recorded."}
-            </Alert>
-          ) : (
-            <ol className="flex flex-wrap items-center gap-y-3">
-              {CHAIN.map((step, i) => {
-                const done = i < stage;
-                const current = i === stage;
-                return (
-                  <li key={step.key} className="flex items-center">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-semibold",
-                          done ? "bg-good-600 text-white"
-                            : current ? "bg-brand-600 text-white ring-4 ring-brand-100"
-                            : "bg-line-400 text-muted-500",
-                        )}
-                      >
-                        {done ? <Check className="h-3.5 w-3.5" /> : i + 1}
-                      </span>
-                      <div className="mr-4">
-                        <p className={cn("text-xs font-medium", current ? "text-brand-800" : "text-navy-600")}>
-                          {step.label}
-                        </p>
-                        <p className="text-[11px] text-muted-400">{step.who}</p>
-                      </div>
-                    </div>
-                    {i < CHAIN.length - 1 && (
-                      <span className={cn("mr-4 hidden h-0.5 w-8 sm:block", done ? "bg-good-600" : "bg-line-400")} />
+      <div className="grid items-start gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(290px,1fr))]">
+        <SummaryCard label="Requirement">
+          <div className="grid grid-cols-2 gap-3.5">
+            <Fact label="Project">{indent.project}</Fact>
+            <Fact label="Required by">{indent.requiredBy}</Fact>
+            <Fact label="Activity">{indent.activity}</Fact>
+            <Fact label="Raised by">{indent.raisedBy}</Fact>
+            <div className="col-span-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">Remarks</div>
+              <div className="mt-[3px] text-[12.5px] font-medium text-navy-900">{indent.remarks}</div>
+            </div>
+          </div>
+        </SummaryCard>
+
+        <SummaryCard label="Approval chain">
+          <div className="flex flex-wrap items-center gap-[5px]">
+            {INDENT_CHAIN.map((step, i) => {
+              const done = !stopped && i < stage;
+              const now = !stopped && i === stage;
+              return (
+                <React.Fragment key={step.short}>
+                  <span
+                    title={step.name}
+                    className={cn(
+                      "inline-block rounded-md px-1.5 py-1 text-[9px] font-extrabold",
+                      done && "bg-good-600 text-white",
+                      now && "bg-[#E8A13A] text-white",
+                      !done && !now && "bg-line-200 text-muted-400",
                     )}
-                  </li>
+                  >
+                    {step.short}
+                  </span>
+                  {i < INDENT_CHAIN.length - 1 && <span className="inline-block h-0.5 w-3.5 bg-line-500" />}
+                </React.Fragment>
+              );
+            })}
+          </div>
+          <div className="mt-3 text-[11.5px] font-medium text-muted-600">
+            Raised → Project Manager → Store stock check → Issue or PO. Hover a step for its name.
+          </div>
+        </SummaryCard>
+
+        <SummaryCard label="Store fulfilment">
+          <span
+            className={cn(
+              "inline-flex rounded-full px-[9px] py-[4px] text-[8.5px] font-extrabold uppercase tracking-[.07em] text-white",
+              FULFIL_TONE[fulfil.tone],
+            )}
+          >
+            {fulfil.label}
+          </span>
+          <div className="mt-[9px] text-[12.5px] font-semibold text-navy-600">{fulfil.text}</div>
+          <div className="mt-2 text-[11.5px] font-medium text-muted-400">
+            Available quantity is issued from the store immediately; only the shortfall becomes a
+            purchase order.
+          </div>
+        </SummaryCard>
+      </div>
+
+      <PanelCard
+        title="Requested items"
+        right={<span className="text-[11.5px] font-semibold text-muted-600">{lines.length} {lines.length === 1 ? "item" : "items"}</span>}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[680px] border-collapse">
+            <thead>
+              <tr>
+                <th className={cn(TH, "text-left")}>Sl</th>
+                <th className={cn(TH, "text-left")}>Item</th>
+                <th className={cn(TH, "text-right")}>Required</th>
+                <th className={cn(TH, "text-right")}>In stock</th>
+                <th className={cn(TH, "text-right")}>Issued</th>
+                <th className={cn(TH, "text-right")}>Pending</th>
+                <th className={cn(TH, "text-left")}>Fulfilment</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fulfil.lines.map((l, i) => {
+                const src = lines[i];
+                return (
+                  <tr key={src.code + i} className="hover:bg-surface-tint">
+                    <td className={cn(TD, "text-[11.5px] font-semibold text-muted-400")}>{i + 1}</td>
+                    <td className={TD}>
+                      <div className="text-[12.5px] font-semibold text-navy-900">{src.name}</div>
+                      <div className="mt-0.5 text-[11px] font-medium text-muted-400">{src.code}</div>
+                    </td>
+                    <td className={cn(TD, "text-right text-[12.5px] font-bold text-navy-950")}>
+                      {q(l.required)} {l.uom}
+                    </td>
+                    <td className={cn(TD, "text-right text-[12px] font-semibold text-navy-600")}>
+                      {q(l.onHand)} {l.uom}
+                    </td>
+                    <td className={cn(TD, "text-right text-[12.5px] font-bold text-good-700")}>
+                      {q(l.issued)} {l.uom}
+                    </td>
+                    <td className={cn(TD, "text-right text-[12.5px] font-bold text-warn-700")}>
+                      {q(l.pending)} {l.uom}
+                    </td>
+                    <td className={TD}>
+                      <SoftPill tone={l.verdictTone}>{l.verdict}</SoftPill>
+                    </td>
+                  </tr>
                 );
               })}
-            </ol>
-          )}
-        </CardBody>
-      </Card>
-
-      {/* Summary + actions */}
-      <div className="grid gap-3 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader><CardTitle>Indent details</CardTitle></CardHeader>
-          <CardBody>
-            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
-              {[
-                ["Project", `${indent.projectCode} — ${indent.projectName}`],
-                ["Work package", indent.workPackage ?? "—"],
-                ["Raised by", indent.raisedByName],
-                ["Raised on", formatDate(indent.raisedAt)],
-                ["Required by", formatDate(indent.requiredByDate)],
-                ["For", indent.purpose ?? "—"],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <dt className="text-xs text-muted-500">{label}</dt>
-                  <dd className="mt-0.5 text-sm text-navy-900">{value}</dd>
-                </div>
-              ))}
-            </dl>
-            {indent.remarks && (
-              <p className="mt-3 border-t border-line-200 pt-3 text-sm text-muted-600">{indent.remarks}</p>
-            )}
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle>Value &amp; actions</CardTitle></CardHeader>
-          <CardBody className="space-y-3">
-            <div>
-              <p className="text-xs text-muted-500">Estimated value</p>
-              <p className="num text-2xl font-semibold text-navy-950">{money(indent.estimatedValue)}</p>
-              {approvalCeiling > 0 && (
-                <p className="mt-1 text-[11px] text-muted-500">
-                  Your approval ceiling is {money(approvalCeiling)}.
-                  {indent.estimatedValue <= approvalCeiling
-                    ? " This is within it, so approving here completes the chain."
-                    : " This is above it, so it must go to the next level."}
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2 border-t border-line-200 pt-3">
-              {editable && can.update && (
-                <Link href={`/material/indents/${indent.id}/edit`}>
-                  <Button size="sm" variant="secondary" className="w-full">
-                    <Pencil className="h-3.5 w-3.5" />
-                    Edit indent
-                  </Button>
-                </Link>
-              )}
-
-              {can.print && (
-                <Link href={`/print/indents/${indent.id}`} target="_blank" rel="noopener">
-                  <Button size="sm" variant="secondary" className="w-full">
-                    <Printer className="h-3.5 w-3.5" />
-                    Print indent
-                  </Button>
-                </Link>
-              )}
-
-              {isOwnDraft && can.submit && (
-                <Button size="sm" loading={busy} onClick={() => run(() => submitIndentAction(indent.id), "Submitted for approval.")}>
-                  <Send className="h-3.5 w-3.5" />
-                  Submit for approval
-                </Button>
-              )}
-
-              {awaitingPm && can.approvePm && (
-                <Button size="sm" variant="success" onClick={() => setApproving("PM")}>
-                  <Check className="h-3.5 w-3.5" />
-                  Approve — PM level
-                </Button>
-              )}
-
-              {awaitingAdmin && can.approveAdmin && (
-                <Button size="sm" variant="success" onClick={() => setApproving("ADMIN")}>
-                  <Check className="h-3.5 w-3.5" />
-                  Approve — Admin level
-                </Button>
-              )}
-
-              {(awaitingPm || awaitingAdmin) && can.reject && (
-                <Button size="sm" variant="danger" onClick={() => setRejecting(true)}>
-                  <ThumbsDown className="h-3.5 w-3.5" />
-                  Reject
-                </Button>
-              )}
-
-              {indent.status === "ADMIN_APPROVED" && can.stockCheck && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  loading={busy}
-                  onClick={() => run(() => stockCheckAction(indent.id), "Stock check complete — only the shortfall needs a PO.")}
-                >
-                  <PackageSearch className="h-3.5 w-3.5" />
-                  Run stock check
-                </Button>
-              )}
-
-              {!terminal && can.cancel && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  loading={busy}
-                  onClick={() => run(() => cancelIndentAction(indent.id, "", indent.updatedAt), "Indent cancelled.")}
-                >
-                  <Ban className="h-3.5 w-3.5" />
-                  Cancel indent
-                </Button>
-              )}
-
-              {awaitingPm && !can.approvePm && (
-                <p className="text-xs text-muted-500">
-                  Waiting on Project Manager approval. You do not hold that permission.
-                </p>
-              )}
-              {awaitingAdmin && !can.approveAdmin && (
-                <p className="text-xs text-muted-500">
-                  Waiting on Owner / Admin approval. You do not hold that permission.
-                </p>
-              )}
-            </div>
-          </CardBody>
-        </Card>
-      </div>
-
-      {/* Items */}
-      {can.tabItems && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Items ({items.length})</CardTitle>
-          </CardHeader>
-          <CardBody className="p-0">
-            <DataTable columns={columns} rows={items} rowKey={(l) => l.id} dense />
-          </CardBody>
-        </Card>
-      )}
-
-      {/* Approval trail */}
-      {can.tabApprovals && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Approval trail</CardTitle>
-            <span className="text-xs text-muted-500">Who approved, when, and what they changed.</span>
-          </CardHeader>
-          <CardBody className="p-0">
-            {approvals.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-muted-500">
-                No approval steps recorded yet.
-              </p>
-            ) : (
-              <ul className="divide-y divide-line-200">
-                {approvals.map((a) => (
-                  <li key={a.id} className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={a.decision === "APPROVED" ? "good" : "bad"}>
-                        {a.decision}
-                      </Badge>
-                      <Badge tone="brand">{a.level} level</Badge>
-                      <span className="text-sm text-navy-900">{a.approverName}</span>
-                      <span className="text-xs text-muted-400">{formatDateTime(a.approvedAt)}</span>
-                    </div>
-                    {a.remarks && <p className="mt-1 text-sm text-muted-600">{a.remarks}</p>}
-                    {a.changes && Object.keys(a.changes).length > 0 && (
-                      <ul className="mt-1.5 space-y-0.5 border-l-2 border-warn-700 pl-2">
-                        {Object.entries(a.changes).map(([key, v]) => (
-                          <li key={key} className="text-xs text-muted-600">
-                            Quantity revised from{" "}
-                            <span className="font-medium text-bad-600">{String(v.from)}</span> to{" "}
-                            <span className="font-medium text-good-700">{String(v.to)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardBody>
-        </Card>
-      )}
-
-      {approving && (
-        <ApproveModal
-          level={approving}
-          items={items}
-          canRevise={can.reviseQty}
-          onClose={() => setApproving(null)}
-          onDone={(msg) => { setApproving(null); setNotice(msg); router.refresh(); }}
-          indentId={indent.id} updatedAt={indent.updatedAt}
-        />
-      )}
-
-      {rejecting && (
-        <RejectModal
-          indentId={indent.id} updatedAt={indent.updatedAt}
-          onClose={() => setRejecting(false)}
-          onDone={(msg) => { setRejecting(false); setNotice(msg); router.refresh(); }}
-        />
-      )}
-    </div>
-  );
-}
-
-function ApproveModal({
-  indentId, updatedAt, level, items, canRevise, onClose, onDone,
-}: {
-  indentId: string;
-  /** What the approver is looking at — the approval refuses if the indent has changed since. */
-  updatedAt: string;
-  level: "PM" | "ADMIN";
-  items: ItemLine[];
-  canRevise: boolean;
-  onClose: () => void;
-  onDone: (message: string) => void;
-}) {
-  const [remarks, setRemarks] = React.useState("");
-  const [quantities, setQuantities] = React.useState<Record<string, string>>(
-    () => Object.fromEntries(items.map((i) => [i.id, String(i.approvedQty ?? i.requestedQty)])),
-  );
-  const [error, setError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  const revisions = items
-    .filter((i) => Number(quantities[i.id]) !== (i.approvedQty ?? i.requestedQty))
-    .map((i) => ({ itemId: i.id, approvedQty: Number(quantities[i.id]) }));
-
-  const total = items.reduce(
-    (sum, i) => sum + (Number(quantities[i.id]) || 0) * i.estimatedRate,
-    0,
-  );
-
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    const res = await approveIndentAction(indentId, level, remarks, revisions, updatedAt);
-    setBusy(false);
-    if (!res.ok) setError(res.error);
-    else {
-      onDone(
-        res.data.skippedAdmin
-          ? "Approved. The value is within your ceiling, so the Admin level was skipped."
-          : `Approved at ${level} level.`,
-      );
-    }
-  }
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={`Approve at ${level} level`}
-      description={canRevise ? "You can revise quantities before approving — the change is recorded on the trail." : undefined}
-      footer={
-        <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
-          <Button variant="success" onClick={submit} loading={busy}>
-            <Check className="h-3.5 w-3.5" />
-            Approve {money(total)}
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        {error && <Alert tone="error">{error}</Alert>}
-
-        <div className="space-y-2">
-          {items.map((i) => (
-            <div key={i.id} className="flex items-center gap-3 rounded-md border border-line-400 p-2.5">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-navy-900">{i.name}</p>
-                <p className="text-xs text-muted-500">
-                  Requested {qty(i.requestedQty, 3)} {i.uom} · {money(i.estimatedRate)}/{i.uom}
-                </p>
-              </div>
-              <div className="w-32 shrink-0">
-                <Input
-                  type="number"
-                  step="any"
-                  min={0}
-                  disabled={!canRevise}
-                  value={quantities[i.id] ?? ""}
-                  onChange={(e) => setQuantities((q) => ({ ...q, [i.id]: e.target.value }))}
-                  className="num text-right"
-                />
-              </div>
-            </div>
-          ))}
+            </tbody>
+          </table>
         </div>
+      </PanelCard>
 
-        {revisions.length > 0 && (
-          <Alert tone="warn">
-            {revisions.length} quantity revision(s) will be recorded against your approval.
-          </Alert>
+      <PanelCard
+        title="Issued to project"
+        subtitle={fulfil.summary}
+        right={
+          <>
+            <span className="text-[11.5px] font-semibold text-muted-600">
+              {movements.length} {movements.length === 1 ? "movement" : "movements"}
+            </span>
+            {canIssueNow && can.issue && (
+              <DetailActionLink tone="success" href={`/material/issues/new?indent=${indent.id}`} className="px-4 py-2.5 text-[12px]">
+                ↗ Issue from stock
+              </DetailActionLink>
+            )}
+            {fulfil.complete && (
+              <span className="rounded-full border border-[#9AD4B4] bg-good-050 px-3 py-1.5 text-[11px] font-bold text-good-700">
+                Fully issued
+              </span>
+            )}
+          </>
+        }
+      >
+        {movements.length === 0 && (
+          <div className="px-7 py-7 text-center text-[12.5px] font-medium text-muted-400">
+            Nothing issued yet. Use “Issue from stock” to hand over available quantity to the site —
+            the shortfall goes to a PO.
+          </div>
         )}
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] border-collapse">
+            <thead>
+              <tr>
+                <th className={cn(TH, "text-left")}>Movement</th>
+                <th className={cn(TH, "text-left")}>Item</th>
+                <th className={cn(TH, "text-right")}>Qty</th>
+                <th className={cn(TH, "text-left")}>Date &amp; time</th>
+                <th className={cn(TH, "text-left")}>Issued by</th>
+                <th className={cn(TH, "text-left")}>Issued to</th>
+                <th className={cn(TH, "text-left")}>Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {movements.map((m) => (
+                <tr key={m.id} className="hover:bg-surface-tint">
+                  <td className={TD}>
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-[10px] py-[5px] text-[9px] font-bold tracking-[.07em]",
+                        MOVEMENT_TONE[m.kind],
+                      )}
+                    >
+                      {m.kind === "RETURN" ? "↩ RETURNED" : "▲ ISSUED"}
+                    </span>
+                  </td>
+                  <td className={cn(TD, "text-[12.5px] font-semibold text-navy-900")}>{m.item}</td>
+                  <td className={cn(TD, "text-right font-display text-[13px] font-extrabold text-navy-950")}>{m.qty}</td>
+                  <td className={cn(TD, "whitespace-nowrap text-[12px] font-semibold text-navy-900")}>{m.at}</td>
+                  <td className={cn(TD, "text-[12px] font-semibold text-navy-600")}>{m.by}</td>
+                  <td className={cn(TD, "text-[12px] font-medium text-navy-500")}>{m.to}</td>
+                  <td className={cn(TD, "text-[11.5px] font-medium text-muted-400")}>{m.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </PanelCard>
 
-        <Field label="Remarks">
-          <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2} placeholder="Optional note for the trail" />
-        </Field>
-      </div>
-    </Modal>
-  );
-}
-
-function RejectModal({
-  indentId, updatedAt, onClose, onDone,
-}: { indentId: string; updatedAt: string; onClose: () => void; onDone: (message: string) => void }) {
-  const [remarks, setRemarks] = React.useState("");
-  const [error, setError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    const res = await rejectIndentAction(indentId, remarks, updatedAt);
-    setBusy(false);
-    if (!res.ok) setError(res.error);
-    else onDone("Indent rejected.");
-  }
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title="Reject this indent"
-      description="A reason is mandatory and stays on the approval trail."
-      size="sm"
-      footer={
-        <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
-          <Button variant="danger" onClick={submit} loading={busy} disabled={!remarks.trim()}>
-            <X className="h-3.5 w-3.5" />
-            Reject indent
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-3">
-        {error && <Alert tone="error">{error}</Alert>}
-        <Field label="Reason" required>
-          <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} autoFocus />
-        </Field>
-      </div>
-    </Modal>
+      <Modal
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title={`Delete ${indent.indentNo}?`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirming(false)}>Keep it</Button>
+            <Button variant="danger" loading={busy} onClick={remove}>Delete</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-navy-600">
+          This removes the indent and its lines. It cannot be undone.
+        </p>
+      </Modal>
+    </DetailScreen>
   );
 }

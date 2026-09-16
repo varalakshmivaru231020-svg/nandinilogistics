@@ -626,6 +626,8 @@ model Vendor {
   bankName      String?
   accountNumber String?
   ifsc          String?
+  /// Shown on the vendor's record, next to the bank details.
+  upiId         String?
   paymentTermId String?
   /// 1-5 internal quality/reliability rating.
   rating        Int?
@@ -1267,6 +1269,7 @@ model Indent {
   approvals      IndentApproval[]
   poItems        PurchaseOrderItem[]
   purchaseOrders PurchaseOrder[]     @relation("PoSourceIndent")
+  issues         MaterialIssue[]
 
   @@index([projectId, status])
   @@index([status, raisedAt])
@@ -1582,6 +1585,8 @@ model MaterialIssue {
   projectId        String
   storeId          String
   workPackageId    String?
+  /// The indent this issue satisfies, so the indent can show what reached site.
+  indentId         String?
   issuedToId       String
   issuedById       String
   issueDate        DateTime  @default(now())
@@ -1601,6 +1606,7 @@ model MaterialIssue {
   project     Project      @relation(fields: [projectId], references: [id])
   store       Store        @relation(fields: [storeId], references: [id])
   workPackage WorkPackage? @relation(fields: [workPackageId], references: [id])
+  indent      Indent?      @relation(fields: [indentId], references: [id])
   issuedBy    User         @relation(fields: [issuedById], references: [id])
 
   items       MaterialIssueItem[]
@@ -1608,6 +1614,7 @@ model MaterialIssue {
   returns     MaterialReturn[]
 
   @@index([projectId])
+  @@index([indentId])
   @@map("material_issues")
 }
 

@@ -30,6 +30,7 @@
 
   /* Lines */
   --color-line-100: #F2F5FB;
+  --color-line-150: #F0F3FA;
   --color-line-200: #EEF1F8;
   --color-line-300: #E9EDF6;
   --color-line-400: #E3E7F2;
@@ -45,15 +46,15 @@
 
   /* Status */
   --color-good-600: #1F9D66;
-  --color-good-700: #178555;
-  --color-good-050: #E8F6EF;
+  --color-good-700: #177049;
+  --color-good-050: #E4F6EC;
   --color-warn-700: #B4530A;
   --color-warn-800: #8A5A12;
   --color-warn-050: #FDF3E7;
   --color-bad-600: #D8494A;
   --color-bad-700: #B23334;
   --color-bad-100: #F2CBCB;
-  --color-bad-050: #FDECEC;
+  --color-bad-050: #FCEDED;
 
   --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-display: var(--font-sora), var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;

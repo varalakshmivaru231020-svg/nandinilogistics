@@ -13,10 +13,10 @@ export const metadata = { title: "New Purchase Order" };
 export default async function NewPoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ indent?: string }>;
+  searchParams: Promise<{ indent?: string; vendor?: string }>;
 }) {
   const ctx = await requirePermission(PERM.material.purchaseOrder.create);
-  const { indent: indentId } = await searchParams;
+  const { indent: indentId, vendor: vendorId } = await searchParams;
 
   const { projects, vendors, terms, items, openIndents } = await poLookups(ctx);
 
@@ -68,6 +68,7 @@ export default async function NewPoPage({
         items={items}
         openIndents={openIndents}
         prefill={prefill}
+        startWithVendorId={vendorId}
       />
     </div>
   );

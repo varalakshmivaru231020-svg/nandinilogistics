@@ -9,8 +9,13 @@ import { indentLookups } from "../lookups";
 
 export const metadata = { title: "Raise Indent" };
 
-export default async function NewIndentPage() {
+export default async function NewIndentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ item?: string }>;
+}) {
   const ctx = await requirePermission(PERM.material.indent.create);
+  const { item: startWithItemId } = await searchParams;
 
   const { projects, items } = await indentLookups(ctx);
 
@@ -32,6 +37,7 @@ export default async function NewIndentPage() {
         projects={projects}
         items={items}
         canSubmit={ctx.has(PERM.material.indent.submit)}
+        startWithItemId={startWithItemId}
       />
     </div>
   );

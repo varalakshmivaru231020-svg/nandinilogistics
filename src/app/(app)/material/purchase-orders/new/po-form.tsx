@@ -54,7 +54,7 @@ export interface PoEditState {
 }
 
 export function PoForm({
-  projects, vendors, terms, items, openIndents, prefill, edit,
+  projects, vendors, terms, items, openIndents, prefill, edit, startWithVendorId,
 }: {
   projects: Array<{ id: string; name: string; code: string }>;
   vendors: Array<{ id: string; name: string; paymentTermId: string | null }>;
@@ -62,6 +62,8 @@ export function PoForm({
   items: ItemOpt[];
   openIndents: Array<{ id: string; indentNo: string; purpose: string | null; projectId: string }>;
   prefill: { projectId: string; indentId: string; indentNo: string; lines: Array<{ itemId: string; qty: number; rate: number; specification: string }> } | null;
+  /** Raised from a vendor's record: the order opens on that vendor. */
+  startWithVendorId?: string;
   edit?: PoEditState;
 }) {
   const router = useRouter();
@@ -69,7 +71,7 @@ export function PoForm({
   const init = edit?.initial;
 
   const [projectId, setProjectId] = React.useState(prefill?.projectId ?? projects[0]?.id ?? "");
-  const [vendorId, setVendorId] = React.useState(init?.vendorId ?? "");
+  const [vendorId, setVendorId] = React.useState(init?.vendorId ?? startWithVendorId ?? "");
   const [paymentTermId, setPaymentTermId] = React.useState(init?.paymentTermId ?? "");
   const [expectedDate, setExpectedDate] = React.useState(init?.expectedDate ?? "");
   const [deliveryAddress, setDeliveryAddress] = React.useState(init?.deliveryAddress ?? "");

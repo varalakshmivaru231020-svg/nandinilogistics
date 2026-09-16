@@ -302,6 +302,7 @@ export const MASTERS: MasterDef[] = [
       { name: "bankName", label: "Bank name", type: "text" },
       { name: "accountNumber", label: "Account number", type: "text" },
       { name: "ifsc", label: "IFSC", type: "text", uppercase: true },
+      { name: "upiId", label: "UPI ID", type: "text" },
       { name: "rating", label: "Rating (1–5)", type: "number", min: 1, max: 5, align: "right" },
     ],
   },

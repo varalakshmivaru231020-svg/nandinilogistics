@@ -43,24 +43,41 @@ export function qty(value: unknown, precision = 2): string {
   });
 }
 
+/**
+ * The design's month abbreviations. Written out rather than left to the
+ * locale, because en-GB abbreviates September as "Sept" and the design does
+ * not.
+ */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "05 Sep 2026", as the design writes a date. */
 export function formatDate(value: Date | string | null | undefined): string {
   if (!value) return "—";
   const d = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+/** "Sep" — the month on its own. */
+export function shortMonth(value: Date): string {
+  return MONTHS[value.getMonth()];
+}
+
+/** "05 Sep", the design's short form where the year is understood. */
+export function formatDayMonth(value: Date | string | null | undefined): string {
+  if (!value) return "—";
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]}`;
+}
+
+/** "28 Aug 2026, 11:20". */
 export function formatDateTime(value: Date | string | null | undefined): string {
   if (!value) return "—";
   const d = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return `${formatDate(d)}, ${time}`;
 }
 
 export function daysBetween(from: Date | string, to: Date | string = new Date()): number {

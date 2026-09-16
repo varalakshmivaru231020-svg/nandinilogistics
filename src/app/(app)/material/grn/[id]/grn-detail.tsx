@@ -1,374 +1,201 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, ClipboardCheck, Warehouse } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Alert, Card, CardBody, CardHeader, CardTitle, Field, Input, Textarea } from "@/components/ui/primitives";
-import { DataTable, type Column } from "@/components/ui/data-table";
-import { formatDate, money, qty } from "@/lib/utils";
-import { cancelGrnAction, inspectGrnAction, postGrnAction } from "../actions";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/primitives";
+import {
+  DetailAction, DetailActionLink, DetailScreen, Fact, PanelCard, SoftPill,
+  SummaryCard, TD, TH,
+} from "@/components/shell/detail-screen";
+import { cn } from "@/lib/utils";
+import { deleteGrnAction } from "../actions";
 
 interface Grn {
-  id: string; grnNo: string; status: string; grnDate: string;
-  challanNo: string | null; challanDate: string | null; vehicleNo: string | null;
-  remarks: string | null; inspectedAt: string | null;
-  storeName: string; vendorName: string; receivedByName: string;
-  poId: string; poNo: string; projectCode: string;
+  id: string; grnNo: string; updatedAt: string;
+  poId: string; poNo: string; vendor: string; receiver: string;
+  match: string; matchTone: "good" | "warn" | "bad" | "muted";
+  poValue: string; poDelivery: string; poApproved: string; poIndents: string;
+  receivedAt: string; accepted: string; rejected: string; short: string;
+  photo: string | null; remarks: string;
+  invoiceNo: string | null;
 }
 
 interface Line {
-  id: string; code: string; name: string; uom: string;
-  receivedQty: number; acceptedQty: number; rejectedQty: number; shortQty: number;
-  rate: number; rejectionReason: string | null;
-}
-
-interface LedgerRow {
-  id: string; itemName: string; quantity: number; rate: number; value: number; balanceQty: number;
+  id: string; code: string; name: string;
+  ordered: string; received: string; rejected: string;
+  verdict: string; verdictTone: "good" | "warn" | "bad";
 }
 
 export function GrnDetail({
-  grn, items, ledger, can,
-}: { grn: Grn; items: Line[]; ledger: LedgerRow[]; can: Record<string, boolean> }) {
+  grn, lines, can,
+}: {
+  grn: Grn;
+  lines: Line[];
+  can: { delete: boolean; update: boolean; attachInvoice: boolean };
+}) {
   const router = useRouter();
   const [error, setError] = React.useState<string | null>(null);
-  const [notice, setNotice] = React.useState<string | null>(null);
+  const [confirming, setConfirming] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
-  const [inspecting, setInspecting] = React.useState(false);
-  const [cancelling, setCancelling] = React.useState(false);
 
-  const posted = grn.status === "POSTED";
-  const cancelled = grn.status === "CANCELLED";
-  const acceptedValue = items.reduce((s, l) => s + l.acceptedQty * l.rate, 0);
-  const totalRejected = items.reduce((s, l) => s + l.rejectedQty, 0);
-  const nothingAccepted = items.every((l) => l.acceptedQty <= 0);
-
-  async function post() {
+  async function remove() {
     setBusy(true);
-    setError(null);
-    const res = await postGrnAction(grn.id);
+    const res = await deleteGrnAction(grn.id, grn.updatedAt);
     setBusy(false);
-    if (!res.ok) setError(res.error);
-    else {
-      setNotice(`Posted to stock — ${res.data.postedLines} line(s) entered the ledger.`);
-      router.refresh();
+    if (!res.ok) {
+      setConfirming(false);
+      setError(res.error ?? "Something went wrong.");
+      return;
     }
-  }
-
-  const columns: Column<Line>[] = [
-    {
-      key: "item",
-      header: "Item",
-      render: (l) => (
-        <div>
-          <p className="text-sm text-navy-900">{l.name}</p>
-          <p className="text-xs text-muted-500"><code>{l.code}</code></p>
-        </div>
-      ),
-    },
-    { key: "received", header: "Received", align: "right", className: "num", render: (l) => `${qty(l.receivedQty, 3)} ${l.uom}` },
-    {
-      key: "accepted", header: "Accepted", align: "right", className: "num",
-      render: (l) => <span className="font-medium text-good-700">{qty(l.acceptedQty, 3)}</span>,
-    },
-    {
-      key: "rejected", header: "Rejected", align: "right", className: "num",
-      render: (l) =>
-        l.rejectedQty > 0
-          ? <span className="font-medium text-bad-600">{qty(l.rejectedQty, 3)}</span>
-          : <span className="text-muted-400">—</span>,
-    },
-    {
-      key: "short", header: "Short", align: "right", className: "num",
-      render: (l) => (l.shortQty > 0 ? <span className="text-warn-700">{qty(l.shortQty, 3)}</span> : <span className="text-muted-400">—</span>),
-    },
-    { key: "rate", header: "Rate", align: "right", className: "num", visible: can.viewValuation, render: (l) => money(l.rate, true) },
-    {
-      key: "value", header: "Accepted value", align: "right", className: "num", visible: can.viewValuation,
-      render: (l) => money(l.acceptedQty * l.rate),
-    },
-    {
-      key: "reason", header: "Rejection reason",
-      render: (l) => <span className="text-xs text-muted-600">{l.rejectionReason ?? "—"}</span>,
-    },
-  ];
-
-  return (
-    <div className="space-y-4">
-      {error && <Alert tone="error">{error}</Alert>}
-      {notice && !error && <Alert tone="success">{notice}</Alert>}
-
-      {posted && (
-        <Alert tone="success" title="Posted to stock">
-          The accepted quantity is in the ledger and the purchase order has been advanced. The ledger
-          is never rewritten — a correction is posted as a stock adjustment.
-        </Alert>
-      )}
-
-      <div className="grid gap-3 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader><CardTitle>Receipt details</CardTitle></CardHeader>
-          <CardBody>
-            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
-              {[
-                ["Purchase order", grn.poNo],
-                ["Project", grn.projectCode],
-                ["Vendor", grn.vendorName],
-                ["Received into", grn.storeName],
-                ["Received by", grn.receivedByName],
-                ["Received on", formatDate(grn.grnDate)],
-                ["Challan", grn.challanNo ?? "—"],
-                ["Challan date", formatDate(grn.challanDate)],
-                ["Vehicle", grn.vehicleNo ?? "—"],
-                ["Inspected on", formatDate(grn.inspectedAt)],
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <dt className="text-xs text-muted-500">{label}</dt>
-                  <dd className="mt-0.5 text-sm text-navy-900">
-                    {label === "Purchase order" ? (
-                      <Link href={`/material/purchase-orders/${grn.poId}`} className="text-brand-600 hover:underline">
-                        {value}
-                      </Link>
-                    ) : (
-                      value
-                    )}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            {grn.remarks && (
-              <p className="mt-3 border-t border-line-200 pt-3 text-sm text-muted-600">{grn.remarks}</p>
-            )}
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
-          <CardBody className="space-y-3">
-            {can.viewValuation && (
-              <div>
-                <p className="text-xs text-muted-500">Value of accepted stock</p>
-                <p className="num text-2xl font-semibold text-navy-950">{money(acceptedValue)}</p>
-                {totalRejected > 0 && (
-                  <p className="mt-0.5 text-xs text-bad-600">{qty(totalRejected, 3)} rejected, not stocked</p>
-                )}
-              </div>
-            )}
-
-            <div className="flex flex-col gap-2 border-t border-line-200 pt-3">
-              {!posted && !cancelled && can.inspect && (
-                <Button size="sm" variant="secondary" onClick={() => setInspecting(true)}>
-                  <ClipboardCheck className="h-3.5 w-3.5" />
-                  Record inspection
-                </Button>
-              )}
-
-              {!posted && !cancelled && can.post && (
-                <>
-                  <Button size="sm" variant="success" onClick={post} loading={busy} disabled={nothingAccepted}>
-                    <Warehouse className="h-3.5 w-3.5" />
-                    Post to stock
-                  </Button>
-                  {nothingAccepted && (
-                    <p className="text-xs text-warn-700">
-                      Nothing on this receipt is accepted, so there is nothing to post.
-                    </p>
-                  )}
-                </>
-              )}
-
-              {!posted && !cancelled && can.cancel && (
-                <Button size="sm" variant="ghost" onClick={() => setCancelling(true)}>
-                  <Ban className="h-3.5 w-3.5" />
-                  Cancel receipt
-                </Button>
-              )}
-
-              {!posted && !cancelled && !can.post && (
-                <p className="text-xs text-muted-500">
-                  You can see this receipt but not post it to stock.
-                </p>
-              )}
-            </div>
-          </CardBody>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader><CardTitle>Lines ({items.length})</CardTitle></CardHeader>
-        <CardBody className="p-0">
-          <DataTable columns={columns} rows={items} rowKey={(l) => l.id} dense />
-        </CardBody>
-      </Card>
-
-      {ledger.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Stock ledger entries</CardTitle>
-            <span className="text-xs text-muted-500">Written when this receipt was posted</span>
-          </CardHeader>
-          <CardBody className="p-0">
-            <ul className="divide-y divide-line-200">
-              {ledger.map((l) => (
-                <li key={l.id} className="flex items-center justify-between px-4 py-2">
-                  <span className="text-sm text-navy-600">{l.itemName}</span>
-                  <span className="num text-xs text-muted-600">
-                    +{qty(l.quantity, 3)} @ {money(l.rate, true)}
-                    {can.viewValuation && ` = ${money(l.value)}`}
-                    <span className="ml-2 text-muted-400">balance {qty(l.balanceQty, 3)}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </CardBody>
-        </Card>
-      )}
-
-      {inspecting && (
-        <InspectModal
-          grnId={grn.id}
-          items={items}
-          onClose={() => setInspecting(false)}
-          onDone={(msg) => { setInspecting(false); setNotice(msg); router.refresh(); }}
-        />
-      )}
-
-      {cancelling && (
-        <CancelModal
-          grnId={grn.id}
-          grnNo={grn.grnNo}
-          onClose={() => setCancelling(false)}
-          onDone={(msg) => { setCancelling(false); setNotice(msg); router.refresh(); }}
-        />
-      )}
-    </div>
-  );
-}
-
-function InspectModal({
-  grnId, items, onClose, onDone,
-}: { grnId: string; items: Line[]; onClose: () => void; onDone: (m: string) => void }) {
-  const [state, setState] = React.useState(() =>
-    Object.fromEntries(
-      items.map((l) => [
-        l.id,
-        { accepted: String(l.acceptedQty), rejected: String(l.rejectedQty), reason: l.rejectionReason ?? "" },
-      ]),
-    ),
-  );
-  const [error, setError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  const invalid = items.some((l) => {
-    const s = state[l.id];
-    return (Number(s.accepted) || 0) + (Number(s.rejected) || 0) > l.receivedQty + 0.0001;
-  });
-
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    const res = await inspectGrnAction(
-      grnId,
-      items.map((l) => ({
-        lineId: l.id,
-        acceptedQty: Number(state[l.id].accepted) || 0,
-        rejectedQty: Number(state[l.id].rejected) || 0,
-        rejectionReason: state[l.id].reason || undefined,
-      })),
-    );
-    setBusy(false);
-    if (!res.ok) setError(res.error);
-    else onDone("Inspection recorded.");
+    router.push("/material/grn");
   }
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title="Record inspection"
-      description="Only the accepted quantity will enter the stock ledger when this receipt is posted."
-      footer={
+    <DetailScreen
+      backHref="/material/grn"
+      title={grn.grnNo}
+      pills={<SoftPill tone={grn.matchTone}>{grn.match}</SoftPill>}
+      subtitle={`Against ${grn.poNo} · ${grn.vendor} · received by ${grn.receiver}`}
+      actions={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} loading={busy} disabled={invalid}>Save inspection</Button>
+          <DetailActionLink tone="plain" href={`/material/purchase-orders/${grn.poId}`}>
+            Open PO
+          </DetailActionLink>
+          {can.delete && (
+            <DetailAction tone="danger" onClick={() => setConfirming(true)}>🗑 Delete</DetailAction>
+          )}
+          {can.update && (
+            <DetailActionLink tone="primary" href={`/material/grn/${grn.id}/edit`}>✎ Edit</DetailActionLink>
+          )}
         </>
       }
     >
-      <div className="space-y-3">
-        {error && <Alert tone="error">{error}</Alert>}
-        {invalid && <Alert tone="error">Accepted plus rejected cannot exceed what was received.</Alert>}
+      {error && <div className="mb-3.5"><Alert tone="error">{error}</Alert></div>}
 
-        {items.map((l) => (
-          <div key={l.id} className="rounded-md border border-line-400 p-3">
-            <p className="text-sm text-navy-900">{l.name}</p>
-            <p className="mb-2 text-xs text-muted-500">
-              Received {qty(l.receivedQty, 3)} {l.uom}
-            </p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Accepted">
-                <Input type="number" step="any" min={0} className="num text-right"
-                  value={state[l.id].accepted}
-                  onChange={(e) => setState((s) => ({ ...s, [l.id]: { ...s[l.id], accepted: e.target.value } }))} />
-              </Field>
-              <Field label="Rejected">
-                <Input type="number" step="any" min={0} className="num text-right"
-                  value={state[l.id].rejected}
-                  onChange={(e) => setState((s) => ({ ...s, [l.id]: { ...s[l.id], rejected: e.target.value } }))} />
-              </Field>
-              <Field label="Reason">
-                <Input value={state[l.id].reason}
-                  disabled={(Number(state[l.id].rejected) || 0) <= 0}
-                  onChange={(e) => setState((s) => ({ ...s, [l.id]: { ...s[l.id], reason: e.target.value } }))} />
-              </Field>
+      <div className="grid items-start gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(290px,1fr))]">
+        <SummaryCard label="Purchase order">
+          <div className="grid grid-cols-2 gap-3.5">
+            <Fact label="PO number">{grn.poNo}</Fact>
+            <Fact label="Vendor">{grn.vendor}</Fact>
+            <Fact label="PO value">{grn.poValue}</Fact>
+            <Fact label="Delivery">{grn.poDelivery}</Fact>
+            <div className="col-span-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">PO approved by</div>
+              <div className="mt-[3px] text-[12.5px] font-semibold text-navy-900">{grn.poApproved}</div>
+            </div>
+            <div className="col-span-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">Linked indents</div>
+              <div className="mt-[3px] text-[12.5px] font-semibold text-navy-900">{grn.poIndents}</div>
             </div>
           </div>
-        ))}
+        </SummaryCard>
+
+        <SummaryCard label="Receipt">
+          <div className="grid grid-cols-2 gap-3.5">
+            <Fact label="Received by">{grn.receiver}</Fact>
+            <Fact label="Received at">{grn.receivedAt}</Fact>
+            <Fact label="Accepted">{grn.accepted}</Fact>
+            <Fact label="Rejected">{grn.rejected}</Fact>
+            <Fact label="Short">{grn.short}</Fact>
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">Challan photo</div>
+              {grn.photo ? (
+                <div className="mt-[3px] text-[12.5px] font-bold text-good-700">✓ {grn.photo}</div>
+              ) : (
+                <div className="mt-[3px] text-[12.5px] font-medium text-muted-400">Not attached</div>
+              )}
+            </div>
+            <div className="col-span-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">Remarks</div>
+              <div className="mt-[3px] text-[12.5px] font-medium text-navy-900">{grn.remarks}</div>
+            </div>
+          </div>
+        </SummaryCard>
+
+        <SummaryCard label="Vendor invoice">
+          {grn.invoiceNo ? (
+            <div className="rounded-[9px] border border-[#9AD4B4] bg-good-050 px-3.5 py-3">
+              <div className="text-[12.5px] font-bold text-good-700">✓ {grn.invoiceNo}</div>
+              <div className="mt-[3px] text-[11.5px] font-medium text-good-700">
+                Three-way match complete — PO ↔ GRN ↔ Invoice. Payment can be released.
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="rounded-[9px] border border-[#F3DDBB] bg-warn-050 px-3.5 py-3">
+                <div className="text-[12.5px] font-bold text-warn-800">Invoice pending</div>
+                <div className="mt-[3px] text-[11.5px] font-medium text-warn-800">
+                  Goods are in store, but payment stays blocked until the vendor invoice is attached
+                  and matched.
+                </div>
+              </div>
+              {can.attachInvoice && (
+                <a
+                  href={`/material/invoices/new?po=${grn.poId}`}
+                  className="mt-2.5 block w-full rounded-[9px] border border-dashed border-[#C6CFE8] bg-surface-sunken p-3.5 text-center text-[12px] font-semibold text-navy-500 transition-colors hover:border-brand-500 hover:bg-[#F3F8FE] hover:text-brand-700"
+                >
+                  ↑ Attach invoice now
+                </a>
+              )}
+            </>
+          )}
+        </SummaryCard>
       </div>
-    </Modal>
-  );
-}
 
-function CancelModal({
-  grnId, grnNo, onClose, onDone,
-}: { grnId: string; grnNo: string; onClose: () => void; onDone: (m: string) => void }) {
-  const [remarks, setRemarks] = React.useState("");
-  const [error, setError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
+      <PanelCard
+        title="Ordered vs received"
+        right={<span className="text-[11.5px] font-semibold text-muted-600">{lines.length} {lines.length === 1 ? "line" : "lines"}</span>}
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[680px] border-collapse">
+            <thead>
+              <tr>
+                <th className={cn(TH, "text-left")}>Sl</th>
+                <th className={cn(TH, "text-left")}>Item</th>
+                <th className={cn(TH, "text-right")}>Ordered</th>
+                <th className={cn(TH, "text-right")}>Received</th>
+                <th className={cn(TH, "text-right")}>Rejected</th>
+                <th className={cn(TH, "text-left")}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l, i) => (
+                <tr key={l.id} className="hover:bg-surface-tint">
+                  <td className={cn(TD, "text-[11.5px] font-semibold text-muted-400")}>{i + 1}</td>
+                  <td className={TD}>
+                    <div className="text-[12.5px] font-semibold text-navy-900">{l.name}</div>
+                    <div className="mt-0.5 text-[11px] font-medium text-muted-400">{l.code}</div>
+                  </td>
+                  <td className={cn(TD, "text-right text-[12px] font-semibold text-navy-600")}>{l.ordered}</td>
+                  <td className={cn(TD, "text-right text-[12.5px] font-bold text-good-700")}>{l.received}</td>
+                  <td className={cn(TD, "text-right text-[12.5px] font-bold text-bad-700")}>{l.rejected}</td>
+                  <td className={TD}><SoftPill tone={l.verdictTone}>{l.verdict}</SoftPill></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </PanelCard>
 
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    const res = await cancelGrnAction(grnId, remarks);
-    setBusy(false);
-    if (!res.ok) setError(res.error);
-    else onDone("Goods receipt cancelled.");
-  }
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={`Cancel ${grnNo}`}
-      description="Only an unposted receipt can be cancelled."
-      size="sm"
-      footer={
-        <>
-          <Button variant="secondary" type="button" onClick={onClose}>Back</Button>
-          <Button variant="danger" onClick={submit} loading={busy} disabled={!remarks.trim()}>
-            Cancel receipt
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-3">
-        {error && <Alert tone="error">{error}</Alert>}
-        <Field label="Reason" required>
-          <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} autoFocus />
-        </Field>
-      </div>
-    </Modal>
+      <Modal
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title={`Delete ${grn.grnNo}?`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirming(false)}>Keep it</Button>
+            <Button variant="danger" loading={busy} onClick={remove}>Delete</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-navy-600">
+          This removes the receipt. A receipt already in the stock ledger is corrected with a stock
+          adjustment instead, never deleted.
+        </p>
+      </Modal>
+    </DetailScreen>
   );
 }

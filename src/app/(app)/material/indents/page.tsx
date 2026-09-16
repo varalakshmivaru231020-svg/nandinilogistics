@@ -9,6 +9,7 @@ import {
 import { projectOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
+import { fulfilLines } from "@/lib/material/indent-lines";
 import { indentLookups } from "./lookups";
 import { NewIndentDrawer } from "./new-indent-drawer";
 import { IndentCard } from "./indent-card";
@@ -53,8 +54,8 @@ export default async function IndentsPage({
         workPackage: { select: { name: true } },
         items: {
           select: {
-            requestedQty: true, approvedQty: true,
-            issueFromStockQty: true, toPurchaseQty: true,
+            itemId: true, requestedQty: true, approvedQty: true,
+            item: { select: { uom: { select: { code: true } } } },
           },
         },
         _count: { select: { items: true } },
@@ -64,9 +65,9 @@ export default async function IndentsPage({
     projectOptions(ctx),
   ]);
 
-  const showAgeing = ctx.has(PERM.material.indent.viewAgeing);
-  // Read once, after fetching, so every row ages against the same instant.
-  const asOfMs = new Date().getTime();
+  // What the store is holding and what has already gone to site, for every
+  // indent on this page at once.
+  const lines = await fulfilLines(indents);
 
   return (
     <div>
@@ -127,16 +128,7 @@ export default async function IndentsPage({
                     requiredBy: i.requiredByDate?.toISOString() ?? null,
                     activity: i.workPackage?.name ?? null,
                     status: i.status,
-                    waitingDays:
-                      showAgeing && ["SUBMITTED", "PM_APPROVED"].includes(i.status)
-                        ? Math.floor((asOfMs - i.raisedAt.getTime()) / 86_400_000)
-                        : null,
-                    lines: i.items.map((l) => ({
-                      requestedQty: Number(l.requestedQty),
-                      approvedQty: l.approvedQty === null ? null : Number(l.approvedQty),
-                      issueFromStockQty: Number(l.issueFromStockQty),
-                      toPurchaseQty: Number(l.toPurchaseQty),
-                    })),
+                    lines: lines.get(i.id) ?? [],
                   }}
                 />
               ))}

@@ -7,6 +7,7 @@ import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
 import { loadOptions } from "@/lib/masters/service";
 import { MASTERS } from "@/lib/masters/registry";
+import Link from "next/link";
 import { NewMasterButton } from "@/app/(app)/masters/new-master-button";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { cn, moneyShort } from "@/lib/utils";
@@ -181,13 +182,12 @@ export default async function VendorsPage({
               </div>
 
               <div className="mt-[13px]">
-                <NewMasterButton
-                  def={vendorMaster}
-                  options={vendorOptions}
-                  label="View"
-                  record={v as unknown as Record<string, unknown>}
+                <Link
+                  href={`/material/vendors/${v.id}`}
                   className="block w-full rounded-[8px] bg-brand-500 py-2.5 text-center text-[11.5px] font-bold text-white transition-colors hover:bg-brand-600"
-                />
+                >
+                  View
+                </Link>
               </div>
             </div>
           ))}

@@ -418,3 +418,42 @@ export async function stockCheckAction(id: string): Promise<ActionResult<{ lines
     return { linesCovered };
   });
 }
+
+/**
+ * Deletes an indent outright, which is what the design's Delete does.
+ *
+ * Only an indent nothing else depends on can go: once it has been ordered or
+ * issued against, the record is part of the material trail and stays.
+ */
+export async function deleteIndentAction(id: string, expectedUpdatedAt?: string): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.material.indent.delete);
+    const indent = await prisma.indent.findUnique({
+      where: { id },
+      select: {
+        id: true, indentNo: true, projectId: true, updatedAt: true,
+        _count: { select: { poItems: true, purchaseOrders: true, issues: true } },
+      },
+    });
+    if (!indent) throw new Error("Indent not found.");
+    assertProjectAccess(ctx, indent.projectId);
+    assertUnchanged(indent.updatedAt, expectedUpdatedAt, `Indent ${indent.indentNo}`);
+
+    if (indent._count.poItems > 0 || indent._count.purchaseOrders > 0) {
+      throw new Error(`${indent.indentNo} is already on a purchase order, so it cannot be deleted.`);
+    }
+    if (indent._count.issues > 0) {
+      throw new Error(`${indent.indentNo} has material issued against it, so it cannot be deleted.`);
+    }
+
+    const { count } = await prisma.indent.deleteMany({ where: { id, updatedAt: indent.updatedAt } });
+    if (count === 0) throw new Error(staleMessage(`Indent ${indent.indentNo}`));
+
+    await recordAudit({
+      action: "DELETE", entity: "Indent", entityId: id, userId: ctx.id, projectId: indent.projectId,
+      summary: `Deleted indent ${indent.indentNo}`,
+    });
+    revalidatePath("/material/indents");
+    return null;
+  });
+}

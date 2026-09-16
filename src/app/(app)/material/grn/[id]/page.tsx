@@ -1,11 +1,11 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronRight } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { Badge, PageHeader } from "@/components/ui/primitives";
+import { grnMatch } from "@/lib/material/list-filters";
+import { deliveryLabel } from "@/lib/material/po-display";
+import { formatDateTime, money, qty } from "@/lib/utils";
 import { GrnDetail } from "./grn-detail";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -21,12 +21,22 @@ export default async function GrnDetailPage({ params }: { params: Promise<{ id: 
   const grn = await prisma.grn.findUnique({
     where: { id },
     include: {
-      store: { select: { name: true, code: true } },
       vendor: { select: { name: true } },
       receivedBy: { select: { name: true } },
-      purchaseOrder: { select: { id: true, poNo: true, projectId: true, project: { select: { code: true, name: true } } } },
+      purchaseOrder: {
+        select: {
+          id: true, poNo: true, projectId: true, totalAmount: true, expectedDate: true, status: true,
+          adminApprovedAt: true,
+          adminApprovedBy: { select: { name: true } },
+          sourceIndent: { select: { indentNo: true } },
+          items: { select: { indent: { select: { indentNo: true } } } },
+        },
+      },
       items: {
-        include: { item: { select: { code: true, name: true, uom: { select: { code: true } } } } },
+        include: {
+          item: { select: { code: true, name: true, uom: { select: { code: true } } } },
+          poItem: { select: { orderedQty: true } },
+        },
       },
     },
   });
@@ -36,80 +46,88 @@ export default async function GrnDetailPage({ params }: { params: Promise<{ id: 
     redirect(`/forbidden?code=${encodeURIComponent(PERM.project.project.accessAll)}`);
   }
 
-  // Where this stock landed, once posted.
-  const ledger =
-    grn.status === "POSTED"
-      ? await prisma.stockLedger.findMany({
-          where: { grnId: grn.id },
-          include: { item: { select: { name: true } } },
-        })
-      : [];
+  const invoice = await prisma.vendorInvoice.findFirst({
+    where: { poId: grn.purchaseOrder.id },
+    orderBy: { invoiceDate: "desc" },
+    select: { invoiceNo: true },
+  });
+
+  const accepted = grn.items.reduce((s, i) => s + Number(i.acceptedQty), 0);
+  const rejected = grn.items.reduce((s, i) => s + Number(i.rejectedQty), 0);
+  const short = grn.items.reduce((s, i) => s + Number(i.shortQty), 0);
+  const match = grnMatch(grn.status, rejected, short, invoice ? 1 : 0);
+
+  const uom = grn.items[0]?.item.uom.code ?? "";
+  const refs = [
+    ...new Set(
+      [
+        grn.purchaseOrder.sourceIndent?.indentNo,
+        ...grn.purchaseOrder.items.map((l) => l.indent?.indentNo),
+      ].filter((r): r is string => Boolean(r)),
+    ),
+  ];
+
+  const canSeeRate = ctx.has(PERM.material.purchaseOrder.viewRate);
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <PageHeader
-        title={grn.grnNo}
-        description={`${grn.vendor.name} · ${grn.store.name}`}
-        breadcrumb={
-          <span className="flex items-center gap-1">
-            <Link href="/material/grn" className="hover:text-brand-600">Goods Receipt</Link>
-            <ChevronRight className="h-3 w-3" />
-            <span>{grn.grnNo}</span>
-          </span>
-        }
-        actions={
-          <Badge tone={grn.status === "POSTED" ? "good" : grn.status === "CANCELLED" ? "bad" : "warn"}>
-            {grn.status}
-          </Badge>
-        }
-      />
-
-      <GrnDetail
-        grn={{
-          id: grn.id,
-          grnNo: grn.grnNo,
-          status: grn.status,
-          grnDate: grn.grnDate.toISOString(),
-          challanNo: grn.challanNo,
-          challanDate: grn.challanDate?.toISOString() ?? null,
-          vehicleNo: grn.vehicleNo,
-          remarks: grn.remarks,
-          inspectedAt: grn.inspectedAt?.toISOString() ?? null,
-          storeName: grn.store.name,
-          vendorName: grn.vendor.name,
-          receivedByName: grn.receivedBy.name,
-          poId: grn.purchaseOrder.id,
-          poNo: grn.purchaseOrder.poNo,
-          projectCode: grn.purchaseOrder.project.code,
-        }}
-        items={grn.items.map((l) => ({
+    <GrnDetail
+      grn={{
+        id: grn.id,
+        grnNo: grn.grnNo,
+        updatedAt: grn.updatedAt.toISOString(),
+        poId: grn.purchaseOrder.id,
+        poNo: grn.purchaseOrder.poNo,
+        vendor: grn.vendor.name,
+        receiver: grn.receivedBy.name,
+        match: match.label,
+        matchTone: match.tone,
+        poValue: canSeeRate ? money(Number(grn.purchaseOrder.totalAmount)) : "—",
+        poDelivery: deliveryLabel(
+          grn.purchaseOrder.expectedDate,
+          grn.purchaseOrder.status,
+          new Date().getTime(),
+        ).text,
+        poApproved: grn.purchaseOrder.adminApprovedBy
+          ? `${grn.purchaseOrder.adminApprovedBy.name} · ${formatDateTime(grn.purchaseOrder.adminApprovedAt!)}`
+          : "—",
+        poIndents: refs.length ? refs.join(" · ") : "—",
+        receivedAt: formatDateTime(grn.grnDate),
+        accepted: accepted ? `${qty(accepted, 3)} ${uom}` : "—",
+        rejected: rejected ? `${qty(rejected, 3)} ${uom}` : "None",
+        short: short ? `${qty(short, 3)} ${uom}` : "None",
+        photo: grn.challanPhotoUrl
+          ? (grn.challanPhotoUrl.split("/").pop() ?? "challan photo")
+          : grn.challanNo
+            ? `challan ${grn.challanNo}`
+            : null,
+        remarks: grn.remarks || "No remarks",
+        invoiceNo: invoice?.invoiceNo ?? null,
+      }}
+      lines={grn.items.map((l) => {
+        const ordered = Number(l.poItem?.orderedQty ?? 0);
+        const rej = Number(l.rejectedQty);
+        const sh = Number(l.shortQty);
+        const unit = l.item.uom.code;
+        return {
           id: l.id,
           code: l.item.code,
           name: l.item.name,
-          uom: l.item.uom.code,
-          receivedQty: Number(l.receivedQty),
-          acceptedQty: Number(l.acceptedQty),
-          rejectedQty: Number(l.rejectedQty),
-          shortQty: Number(l.shortQty),
-          rate: Number(l.rate),
-          rejectionReason: l.rejectionReason,
-        }))}
-        ledger={ledger.map((l) => ({
-          id: l.id,
-          itemName: l.item.name,
-          quantity: Number(l.quantity),
-          rate: Number(l.rate),
-          value: Number(l.value),
-          balanceQty: Number(l.balanceQty),
-        }))}
-        can={{
-          inspect: ctx.has(PERM.material.grn.inspect),
-          post: ctx.has(PERM.material.grn.post),
-          cancel: ctx.has(PERM.material.grn.cancel),
-          print: ctx.has(PERM.material.grn.print),
-          viewValuation: ctx.has(PERM.material.stock.viewValuation),
-        }}
-      />
-    </div>
+          ordered: `${qty(ordered, 3)} ${unit}`,
+          received: `${qty(Number(l.receivedQty), 3)} ${unit}`,
+          rejected: `${qty(rej, 3)} ${unit}`,
+          verdict: sh
+            ? `Short ${qty(sh, 3)} ${unit}`
+            : rej
+              ? "Received with rejection"
+              : "Fully received",
+          verdictTone: (sh ? "warn" : rej ? "bad" : "good") as "warn" | "bad" | "good",
+        };
+      })}
+      can={{
+        delete: ctx.has(PERM.material.grn.delete),
+        update: ctx.has(PERM.material.grn.update),
+        attachInvoice: ctx.has(PERM.material.vendorInvoice.create),
+      }}
+    />
   );
 }
