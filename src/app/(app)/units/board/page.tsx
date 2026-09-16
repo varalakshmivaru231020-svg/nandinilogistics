@@ -42,7 +42,7 @@ export default async function AvailabilityBoardPage({
     );
   }
 
-  const [blocks, statusCounts, leads] = await Promise.all([
+  const [blocks, statusCounts, customers] = await Promise.all([
     prisma.block.findMany({
       where: { projectId },
       orderBy: { code: "asc" },
@@ -61,14 +61,11 @@ export default async function AvailabilityBoardPage({
       },
     }),
     prisma.unit.groupBy({ by: ["status"], where: { projectId }, _count: true }),
-    ctx.has(PERM.unit.hold.create)
-      ? prisma.lead.findMany({
-          where: {
-            state: { notIn: ["BOOKED", "LOST"] },
-            ...(ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id }),
-          },
+    ctx.has(PERM.unit.hold.create) || ctx.has(PERM.sales.booking.create)
+      ? prisma.customer.findMany({
           orderBy: { name: "asc" },
-          select: { id: true, name: true, leadNo: true },
+          take: 200,
+          select: { id: true, name: true, phone: true },
         })
       : Promise.resolve([]),
   ]);
@@ -133,14 +130,14 @@ export default async function AvailabilityBoardPage({
               : null,
           })),
         }))}
-        leads={leads}
+        customers={customers}
         nowMs={new Date().getTime()}
         can={{
           hold: ctx.has(PERM.unit.hold.create),
           extend: ctx.has(PERM.unit.hold.extend),
           release: ctx.has(PERM.unit.hold.release),
           viewPrice: ctx.has(PERM.unit.unit.viewPrice),
-          quote: ctx.has(PERM.sales.costSheet.create),
+          book: ctx.has(PERM.sales.booking.create) && ctx.has(PERM.sales.costSheet.create),
         }}
       />
     </div>

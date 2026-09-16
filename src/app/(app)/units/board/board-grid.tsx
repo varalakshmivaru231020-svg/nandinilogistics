@@ -1,15 +1,15 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Calculator, Lock, LockOpen, TimerReset } from "lucide-react";
+import { LockOpen, TimerReset } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, Field, Select, Textarea } from "@/components/ui/primitives";
 import { cn, formatDate, qty } from "@/lib/utils";
-import { extendHoldAction, holdUnitAction, releaseHoldAction } from "../../sales/cost-sheets/actions";
+import { extendHoldAction, releaseHoldAction } from "../../sales/cost-sheets/actions";
+import { ReserveDrawer } from "./reserve-drawer";
 
 interface Hold {
   id: string; expiresAt: string; heldByName: string;
@@ -37,7 +37,7 @@ const STATUS_STYLE: Record<string, { cell: string; dot: string; label: string }>
 };
 
 export function BoardGrid({
-  projects, activeProjectId, blocks, statusCounts, leads, can, nowMs, projectType,
+  projects, activeProjectId, blocks, statusCounts, customers, can, nowMs, projectType,
 }: {
   nowMs: number;
   projects: Array<{ id: string; name: string; code: string }>;
@@ -46,7 +46,8 @@ export function BoardGrid({
   statusCounts: Array<{ status: string; count: number }>;
   /** Villa and plotted projects have clusters, not towers, as the design names them. */
   projectType: string | null;
-  leads: Array<{ id: string; name: string; leadNo: string }>;
+  /** Who a unit can be held or booked for, as the design's drawer lists them. */
+  customers: Array<{ id: string; name: string; phone: string }>;
   can: Record<string, boolean>;
 }) {
   const router = useRouter();
@@ -154,7 +155,7 @@ export function BoardGrid({
       {selected && (
         <UnitPanel
           unit={selected}
-          leads={leads}
+          customers={customers}
           can={can}
           onClose={() => setSelected(null)}
           nowMs={nowMs}
@@ -167,19 +168,18 @@ export function BoardGrid({
 }
 
 function UnitPanel({
-  unit, leads, can, nowMs, onClose, onDone, onError,
+  unit, customers, can, nowMs, onClose, onDone, onError,
 }: {
   unit: Unit;
   nowMs: number;
-  leads: Array<{ id: string; name: string; leadNo: string }>;
+  customers: Array<{ id: string; name: string; phone: string }>;
   can: Record<string, boolean>;
   onClose: () => void;
   onDone: (m: string) => void;
   onError: (e: string) => void;
 }) {
-  const [leadId, setLeadId] = React.useState("");
-  const [days, setDays] = React.useState("7");
   const [releaseNote, setReleaseNote] = React.useState("");
+  const [reserving, setReserving] = React.useState<"hold" | "book" | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -231,29 +231,18 @@ function UnitPanel({
           </Alert>
         )}
 
-        {unit.status === "AVAILABLE" && can.hold && (
-          <div className="space-y-3 border-t border-line-200 pt-3">
-            <Field label="Hold for lead">
-              <Select value={leadId} onChange={(e) => setLeadId(e.target.value)}>
-                <option value="">— Not linked —</option>
-                {leads.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.leadNo})</option>)}
-              </Select>
-            </Field>
-            <Field label="Hold for (days)" hint="The hold releases itself when it expires.">
-              <Input type="number" min={1} max={30} value={days} onChange={(e) => setDays(e.target.value)} />
-            </Field>
-            <Button
-              size="sm"
-              className="w-full"
-              loading={busy}
-              onClick={() => run(
-                () => holdUnitAction(unit.id, leadId || null, Number(days) || 7),
-                `Unit ${unit.unitNumber} held for ${days} day(s).`,
-              )}
-            >
-              <Lock className="h-3.5 w-3.5" />
-              Hold this unit
-            </Button>
+        {unit.status === "AVAILABLE" && (can.hold || can.book) && (
+          <div className="flex gap-2 border-t border-line-200 pt-3">
+            {can.hold && (
+              <Button size="sm" variant="secondary" className="flex-1" onClick={() => setReserving("hold")}>
+                Hold unit
+              </Button>
+            )}
+            {can.book && (
+              <Button size="sm" className="flex-1" onClick={() => setReserving("book")}>
+                Book unit
+              </Button>
+            )}
           </div>
         )}
 
@@ -298,15 +287,16 @@ function UnitPanel({
           </div>
         )}
 
-        {["AVAILABLE", "HELD"].includes(unit.status) && can.quote && (
-          <div className="border-t border-line-200 pt-3">
-            <Link href={`/sales/cost-sheets/new?unit=${unit.id}${leadId ? `&lead=${leadId}` : ""}`}>
-              <Button size="sm" variant="secondary" className="w-full">
-                <Calculator className="h-3.5 w-3.5" />
-                Generate a cost sheet
-              </Button>
-            </Link>
-          </div>
+        {reserving && (
+          <ReserveDrawer
+            mode={reserving}
+            unitId={unit.id}
+            unitNumber={unit.unitNumber}
+            unitPlan={unit.unitTypeName ?? "Unit"}
+            area={unit.superBuiltUpArea}
+            customers={customers}
+            onClose={() => setReserving(null)}
+          />
         )}
       </div>
     </Modal>
