@@ -130,6 +130,14 @@ export default async function LeadDetailPage({
     availableUnits.filter((u) => u.block).map((u) => [u.block!.id, u.block!.name]),
   )].map(([id, name]) => ({ id, name }));
 
+  const owners = ctx.has(PERM.sales.lead.assign)
+    ? await prisma.user.findMany({
+        where: { status: "ACTIVE" },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+
   return (
     <LeadDetail
       lead={{
@@ -239,6 +247,7 @@ export default async function LeadDetailPage({
         projects: editProjects,
         unitTypes: editUnitTypes,
       } : null}
+      owners={owners}
       can={{
         tabTimeline: ctx.has(PERM.sales.lead.tabTimeline),
         tabFollowUps: ctx.has(PERM.sales.lead.tabFollowUps),
@@ -251,6 +260,7 @@ export default async function LeadDetailPage({
         logFollowUp: ctx.has(PERM.sales.followUp.create),
         note: ctx.has(PERM.sales.lead.note),
         uploadFile: ctx.has(PERM.sales.lead.uploadFile),
+        assign: ctx.has(PERM.sales.lead.assign),
         block: ctx.has(PERM.unit.hold.create),
         release: ctx.has(PERM.unit.hold.release),
       }}

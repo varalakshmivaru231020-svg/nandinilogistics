@@ -2,12 +2,9 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { leadListWhere } from "@/lib/sales/lead-list";
-import { Card, CardBody, PageHeader } from "@/components/ui/primitives";
 import { LeadsScreen } from "./leads-screen";
 
 export const metadata = { title: "Lead Management · Sales CRM" };
-
-const STAGES = ["NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED", "LOST"] as const;
 
 export default async function LeadsPage({
   searchParams,
@@ -23,7 +20,7 @@ export default async function LeadsPage({
   // Shared with the export, so a download holds exactly what this screen shows.
   const where = leadListWhere(ownership, { q, state, source, fu }, now);
 
-  const [leads, stageCounts, sources, lostReasons, projects, owners, unitTypes] = await Promise.all([
+  const [leads, stageCounts, sources, lostReasons, projects, unitTypes] = await Promise.all([
     prisma.lead.findMany({
       where,
       orderBy: [{ nextActionAt: "asc" }, { createdAt: "desc" }],
@@ -40,38 +37,21 @@ export default async function LeadsPage({
     prisma.leadSource.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.lostReason.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.project.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
-    ctx.has(PERM.sales.lead.assign)
-      ? prisma.user.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } })
-      : Promise.resolve([]),
     prisma.unitType.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
-  const counts = Object.fromEntries(stageCounts.map((s) => [s.state, s._count]));
+  // The design's header counts: how many leads there are in all, and how many
+  // are still open — everything but booked and lost.
+  const totalLeads = stageCounts.reduce((n, s) => n + s._count, 0);
+  const openLeads = stageCounts
+    .filter((s) => s.state !== "BOOKED" && s.state !== "LOST")
+    .reduce((n, s) => n + s._count, 0);
 
   return (
     <div className="mx-auto max-w-7xl">
-      <PageHeader
-        title="Lead Management · Sales CRM"
-        description={
-          ctx.has(PERM.sales.lead.viewAll)
-            ? "The whole pipeline, worked against live availability."
-            : "Your pipeline. Nothing promised twice, nothing forgotten once."
-        }
-      />
-
-      {/* Pipeline summary */}
-      <Card className="mb-4">
-        <CardBody className="flex flex-wrap gap-x-8 gap-y-3 py-3">
-          {STAGES.map((s) => (
-            <div key={s}>
-              <p className="text-[11px] uppercase tracking-wide text-muted-400">{s.replace(/_/g, " ")}</p>
-              <p className="num text-lg font-semibold text-navy-950">{counts[s] ?? 0}</p>
-            </div>
-          ))}
-        </CardBody>
-      </Card>
-
       <LeadsScreen
+        totalLeads={totalLeads}
+        openLeads={openLeads}
         unitTypes={unitTypes}
         query={q}
         stateFilter={state}
@@ -103,7 +83,6 @@ export default async function LeadsPage({
         sources={sources}
         lostReasons={lostReasons}
         projects={projects}
-        owners={owners}
         can={{
           create: ctx.has(PERM.sales.lead.create),
           changeStage: ctx.has(PERM.sales.lead.changeStage),

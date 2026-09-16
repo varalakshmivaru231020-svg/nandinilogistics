@@ -13,6 +13,7 @@ import { formatResponse } from "@/lib/sales/assignment";
 import { addLeadNoteAction, blockUnitForLeadAction, releaseUnitForLeadAction } from "../actions";
 import { logFollowUpAction } from "../actions";
 import { EditLeadModal, type EditLeadValues } from "./lead-edit-modal";
+import { AssignModal } from "../assign-modal";
 
 /* --------------------------------- Types --------------------------------- */
 
@@ -49,9 +50,11 @@ const CHANNEL_ICON: Record<string, string> = {
 
 export function LeadDetail({
   lead, stepper, timeline, followUps, notes, stageHistory, files, blocked, available,
-  towers, tower, tab, projectName, edit, can, nowMs,
+  towers, tower, tab, projectName, edit, owners, can, nowMs,
 }: {
   lead: Lead;
+  /** Who the lead may be reassigned to; empty when the viewer may not reassign. */
+  owners: Array<{ id: string; name: string }>;
   stepper: Step[];
   timeline: TimelineRow[];
   followUps: FollowUpRow[];
@@ -76,6 +79,7 @@ export function LeadDetail({
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState(false);
+  const [assigning, setAssigning] = React.useState(false);
   const pathname = usePathname();
   const params = useSearchParams();
   const toast = useToast();
@@ -140,6 +144,12 @@ export function LeadDetail({
           </p>
         </div>
 
+        {can.assign && owners.length > 0 && (
+          <Button size="md" variant="secondary" onClick={() => setAssigning(true)}>
+            Assign
+          </Button>
+        )}
+
         {can.sendMail && (
           <Button
             size="md"
@@ -166,6 +176,17 @@ export function LeadDetail({
           unitTypes={edit.unitTypes}
           onClose={() => setEditing(false)}
           onSaved={(m) => { setEditing(false); toast(m); router.refresh(); }}
+        />
+      )}
+
+      {assigning && (
+        <AssignModal
+          leadId={lead.id}
+          leadName={lead.name}
+          ownerId={null}
+          owners={owners}
+          onClose={() => setAssigning(false)}
+          onSaved={(m) => { setAssigning(false); toast(m); router.refresh(); }}
         />
       )}
 

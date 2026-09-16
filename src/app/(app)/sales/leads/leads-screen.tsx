@@ -1,19 +1,19 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Copy, PhoneCall, Plus, Upload, UserCheck } from "lucide-react";
+import { Copy } from "lucide-react";
 
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { ImportDialog } from "@/components/import/import-dialog";
+import { ListNote } from "@/components/list/list-note";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { cn, formatDate, money, maskPhone } from "@/lib/utils";
 import { LEAD_IMPORT_COLUMNS } from "@/lib/sales/lead-import";
 import {
-  assignLeadAction, changeLeadStageAction, createLeadAction, importLeadsAction, logFollowUpAction,
+  changeLeadStageAction, createLeadAction, importLeadsAction, logFollowUpAction,
   previewLeadImportAction,
 } from "./actions";
 
@@ -63,15 +63,18 @@ function followUp(nextActionAt: string | null, nowMs: number) {
 }
 
 export function LeadsScreen({
-  leads, sources, lostReasons, projects, owners, unitTypes, can,
+  leads, sources, lostReasons, projects, unitTypes, can,
   query, stateFilter, sourceFilter, followUpFilter, view, nowMs,
+  totalLeads, openLeads,
 }: {
   leads: Lead[];
+  /** Every lead in the actor's scope, and those still open — for the header. */
+  totalLeads: number;
+  openLeads: number;
   sources: Lookup;
   unitTypes: Lookup;
   lostReasons: Lookup;
   projects: Lookup;
-  owners: Lookup;
   can: Record<string, boolean>;
   query: string;
   stateFilter: string;
@@ -85,7 +88,6 @@ export function LeadsScreen({
   const [creating, setCreating] = React.useState(false);
   const [staging, setStaging] = React.useState<Lead | null>(null);
   const [followingUp, setFollowingUp] = React.useState<Lead | null>(null);
-  const [assigning, setAssigning] = React.useState<Lead | null>(null);
   const [importing, setImporting] = React.useState(false);
   const [dragging, setDragging] = React.useState<string | null>(null);
   const [dropTarget, setDropTarget] = React.useState<string | null>(null);
@@ -133,8 +135,7 @@ export function LeadsScreen({
       {/* Header line, as in the design */}
       <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] font-medium text-muted-600">
-          {leads.length} lead{leads.length === 1 ? "" : "s"} in view
-          {view === "board" && " · drag a card to move it · click to open"}
+          {openLeads} open lead{openLeads === 1 ? "" : "s"} · drag a card to move it · click to open
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-1.5">
@@ -155,9 +156,8 @@ export function LeadsScreen({
             ))}
           </div>
           {can.import && (
-            <Button variant="ghost" size="md" onClick={() => setImporting(true)}>
-              <Upload className="h-3.5 w-3.5" />
-              Import
+            <Button variant="secondary" size="md" onClick={() => setImporting(true)}>
+              ↓ Import
             </Button>
           )}
           {can.export && (
@@ -169,8 +169,7 @@ export function LeadsScreen({
           )}
           {can.create && (
             <Button size="md" onClick={() => setCreating(true)}>
-              <Plus className="h-3.5 w-3.5" />
-              New lead
+              + Capture lead
             </Button>
           )}
         </div>
@@ -181,23 +180,23 @@ export function LeadsScreen({
         <Input
           defaultValue={query}
           placeholder="Search name, mobile, requirement…"
-          className="w-[250px] bg-white"
+          className="w-[250px]"
           onKeyDown={(e) => {
             if (e.key === "Enter") setParam({ q: (e.target as HTMLInputElement).value });
           }}
         />
         <span className="text-[11px] font-semibold text-muted-400">Stage</span>
-        <Select value={stateFilter} onChange={(e) => setParam({ state: e.target.value })} className="w-auto min-w-[140px] bg-white">
+        <Select value={stateFilter} onChange={(e) => setParam({ state: e.target.value })} className="w-auto min-w-[140px]">
           <option value="all">All stages</option>
           {STAGES.map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
         </Select>
         <span className="text-[11px] font-semibold text-muted-400">Source</span>
-        <Select value={sourceFilter} onChange={(e) => setParam({ source: e.target.value })} className="w-auto min-w-[140px] bg-white">
+        <Select value={sourceFilter} onChange={(e) => setParam({ source: e.target.value })} className="w-auto min-w-[140px]">
           <option value="all">All sources</option>
           {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </Select>
         <span className="text-[11px] font-semibold text-muted-400">Follow-up</span>
-        <Select value={followUpFilter} onChange={(e) => setParam({ fu: e.target.value })} className="w-auto min-w-[140px] bg-white">
+        <Select value={followUpFilter} onChange={(e) => setParam({ fu: e.target.value })} className="w-auto min-w-[140px]">
           <option value="all">Any</option>
           <option value="overdue">Overdue</option>
           <option value="today">Due today</option>
@@ -205,12 +204,14 @@ export function LeadsScreen({
           <option value="none">Not set</option>
         </Select>
         <div className="flex-1" />
-        <span className="text-[11.5px] font-semibold text-muted-600">{leads.length} shown</span>
+        <span className="text-[11.5px] font-semibold text-muted-600">
+          {leads.length} of {totalLeads} leads shown
+        </span>
         {filtersActive && (
           <button
             type="button"
             onClick={() => setParam({ q: undefined, state: undefined, source: undefined, fu: undefined })}
-            className="rounded-[8px] border border-bad-050 bg-bad-050 px-3 py-1.5 text-[11.5px] font-semibold text-bad-600 hover:brightness-95"
+            className="rounded-[8px] border border-bad-100 bg-bad-050 px-3 py-[7px] text-[11.5px] font-semibold text-bad-700 hover:brightness-95"
           >
             Clear filters
           </button>
@@ -305,11 +306,11 @@ export function LeadsScreen({
       {/* -------------------------------- List -------------------------------- */}
       {view === "list" && (
         <Card className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse">
+          <table className="w-full min-w-[700px] border-collapse">
             <thead>
               <tr className="bg-surface-sunken">
-                {["Lead", "Requirement", "Stage", "Follow-up", "Owner", ""].map((h) => (
-                  <th key={h || "act"} className="border-b border-line-300 px-4 py-3 text-left text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500">
+                {["Lead", "Requirement", "Stage", "Next follow-up"].map((h) => (
+                  <th key={h} className="border-b border-line-300 px-4 py-3 text-left text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500">
                     {h}
                   </th>
                 ))}
@@ -319,15 +320,14 @@ export function LeadsScreen({
               {leads.map((r) => {
                 const fu = followUp(r.nextActionAt, nowMs);
                 return (
-                  <tr key={r.id} className="border-b border-[#F0F3FA] last:border-0 hover:bg-surface-tint">
+                  <tr
+                    key={r.id}
+                    onClick={() => router.push(`/sales/leads/${r.id}`)}
+                    className="cursor-pointer border-b border-[#F0F3FA] last:border-0 hover:bg-surface-tint"
+                  >
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2">
-                        <Link
-                          href={`/sales/leads/${r.id}`}
-                          className="text-[13px] font-bold text-navy-950 transition-colors hover:text-brand-700"
-                        >
-                          {r.name}
-                        </Link>
+                        <span className="text-[13px] font-bold text-navy-950">{r.name}</span>
                         <span className="rounded-full bg-surface-field px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[.04em] text-muted-600">
                           {r.source}
                         </span>
@@ -352,56 +352,19 @@ export function LeadsScreen({
                       )}
                     </td>
                     <td className="px-4 py-3.5">
-                      {fu ? (
+                      {fu && (
                         <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[11.5px] font-semibold text-muted-600">{fu.text}</span>
                           <Badge tone={fu.tone}>{fu.badge}</Badge>
-                          <span className="text-[11px] font-medium text-muted-500">{fu.text}</span>
                         </div>
-                      ) : (
-                        <span className="text-[11.5px] font-medium text-muted-400">Not set</span>
                       )}
-                    </td>
-                    <td className="px-4 py-3.5 text-[11.5px] font-medium text-muted-600">
-                      {r.ownerName ?? "Unassigned"}
-                      <div className="text-[10.5px] text-muted-400">
-                        {r.followUpCount} FU · {r.visitCount} visit
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <div className="flex items-center justify-end gap-1">
-                        {can.followUp && !["BOOKED", "LOST"].includes(r.state) && (
-                          <button
-                            type="button"
-                            onClick={() => setFollowingUp(r)}
-                            className="rounded-[8px] p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-500"
-                            title="Log follow-up"
-                          >
-                            <PhoneCall className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                        {(can.changeStage || can.markLost) && (
-                          <Button size="xs" variant="secondary" onClick={() => setStaging(r)}>
-                            Move
-                          </Button>
-                        )}
-                        {can.assign && (
-                          <button
-                            type="button"
-                            onClick={() => setAssigning(r)}
-                            className="rounded-[8px] p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-500"
-                            title="Assign"
-                          >
-                            <UserCheck className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
                     </td>
                   </tr>
                 );
               })}
               {leads.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-[12.5px] font-medium text-muted-400">
+                  <td colSpan={4} className="px-4 py-12 text-center text-[12.5px] font-medium text-muted-400">
                     No leads match these filters.
                   </td>
                 </tr>
@@ -410,6 +373,11 @@ export function LeadsScreen({
           </table>
         </Card>
       )}
+
+      <ListNote>
+        Form fields, stages and lost reasons are configured in Masters → Lead Settings. Dropping a
+        card on Lost asks for a reason and remarks.
+      </ListNote>
 
       {creating && (
         <NewLeadModal
@@ -447,14 +415,6 @@ export function LeadsScreen({
           commit={importLeadsAction}
           onClose={() => setImporting(false)}
           onImported={(m) => { setImporting(false); setError(null); setNotice(m); router.refresh(); }}
-        />
-      )}
-      {assigning && (
-        <AssignModal
-          lead={assigning}
-          owners={owners}
-          onClose={() => setAssigning(null)}
-          onSaved={(m) => { setAssigning(null); setNotice(m); router.refresh(); }}
         />
       )}
     </div>
@@ -647,41 +607,3 @@ function FollowUpModal({
   );
 }
 
-function AssignModal({
-  lead, owners, onClose, onSaved,
-}: { lead: Lead; owners: Lookup; onClose: () => void; onSaved: (m: string) => void }) {
-  const [ownerId, setOwnerId] = React.useState(lead.ownerId ?? "");
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    const res = await assignLeadAction(lead.id, ownerId);
-    setBusy(false);
-    if (!res.ok) setError(res.error);
-    else onSaved("Lead reassigned.");
-  }
-
-  return (
-    <Modal
-      open onClose={onClose} title={`Assign ${lead.name}`} size="sm"
-      footer={
-        <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} loading={busy} disabled={!ownerId}>Assign</Button>
-        </>
-      }
-    >
-      <div className="space-y-3">
-        {error && <Alert tone="error">{error}</Alert>}
-        <Field label="Owner" required>
-          <Select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
-            <option value="">Select…</option>
-            {owners.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </Select>
-        </Field>
-      </div>
-    </Modal>
-  );
-}

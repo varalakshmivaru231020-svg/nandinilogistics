@@ -1,5 +1,3 @@
-import { Download, FileSpreadsheet, FileText } from "lucide-react";
-
 import { cn } from "@/lib/utils";
 
 export type ExportFormatOption = "xlsx" | "pdf" | "csv";
@@ -14,18 +12,24 @@ export type ExportFormatOption = "xlsx" | "pdf" | "csv";
 const BASE =
   "inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-sans font-bold transition-colors " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-offset-1 " +
-  "border border-line-400 bg-white text-brand-700 hover:bg-surface-hover hover:border-brand-300";
+  "border border-line-400 bg-white text-navy-600 hover:border-brand-500 hover:text-brand-700";
 const SIZE = {
-  sm: "h-8 rounded-[8px] px-3.5 text-[11.5px]",
-  md: "h-9 rounded-[9px] px-4 text-[12.5px]",
+  sm: "h-8 rounded-[8px] px-3.5 text-[11.5px] font-semibold",
+  md: "h-[38px] rounded-[9px] px-3.5 text-[12px] font-semibold",
 } as const;
 
 /**
- * Excel, PDF and CSV download links for a list or report.
+ * The design's single "↑ Export" button, with the formats behind it.
  *
- * Plain links to a server route, not client-built blobs: the route re-checks
- * permission, applies the same filters as the screen to *every* matching row
- * (not just the page on display), and records the export in the audit trail.
+ *   border:1px solid #E3E7F2; background:#fff; color:#3A3F5C;
+ *   font:600 12px 'Public Sans'; border-radius:9px; padding:9px 14px
+ *   hover -> border-color:#0089C9; color:#0672A6
+ *
+ * A <details> rather than a menu with state, so a server page can render it
+ * and it still opens with JavaScript off. The formats are plain links to a
+ * server route, not client-built blobs: the route re-checks permission,
+ * applies the same filters as the screen to *every* matching row (not just
+ * the page on display), and records the export in the audit trail.
  */
 export function ExportMenu({
   href,
@@ -39,29 +43,32 @@ export function ExportMenu({
   formats?: ExportFormatOption[];
   size?: "sm" | "md";
 }) {
-  const className = cn(
-    BASE,
-    SIZE[size],
-    disabled && "pointer-events-none opacity-50",
-  );
-  const meta: Record<ExportFormatOption, { label: string; Icon: typeof Download }> = {
-    xlsx: { label: "Excel", Icon: FileSpreadsheet },
-    pdf: { label: "PDF", Icon: FileText },
-    csv: { label: "CSV", Icon: Download },
+  const label: Record<ExportFormatOption, string> = {
+    xlsx: "Excel",
+    pdf: "PDF",
+    csv: "CSV",
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Export">
-      {formats.map((f) => {
-        const { label, Icon } = meta[f];
-        return (
-          <a key={f} href={href(f)} className={className} aria-disabled={disabled} title={`Export as ${label}`}>
-            <Icon className="h-3.5 w-3.5" />
-            {label}
+    <details className={cn("relative", disabled && "pointer-events-none opacity-50")}>
+      <summary
+        className={cn(BASE, SIZE[size], "cursor-pointer list-none [&::-webkit-details-marker]:hidden")}
+        aria-label="Export"
+      >
+        ↑ Export
+      </summary>
+      <div className="absolute right-0 z-30 mt-1.5 min-w-[132px] overflow-hidden rounded-[10px] border border-line-400 bg-white py-1 shadow-[0_14px_34px_rgba(25,26,92,.16)]">
+        {formats.map((f) => (
+          <a
+            key={f}
+            href={href(f)}
+            className="block px-3.5 py-2 text-[12px] font-semibold text-navy-600 hover:bg-surface-hover hover:text-brand-700"
+          >
+            {label[f]}
           </a>
-        );
-      })}
-    </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
