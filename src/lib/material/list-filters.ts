@@ -427,19 +427,27 @@ export interface StockListParams {
   q: string;
   store: string | null;
   category: string | null;
+  unit: string | null;
+  /** The design's Stock filter: restock now, order soon, or healthy. */
+  stock: "RESTOCK" | "SOON" | "HEALTHY" | null;
 }
+
+export const STOCK_STATES = ["RESTOCK", "SOON", "HEALTHY"] as const;
 
 export function readStockListParams(source: ParamSource): StockListParams {
   return {
     q: readParam(source, "q"),
     store: readId(source, "store"),
     category: readId(source, "category"),
+    unit: readId(source, "unit"),
+    stock: readEnum(source, "stock", STOCK_STATES),
   };
 }
 
 export function stockListWhere(p: StockListParams): Prisma.StockBalanceWhereInput {
   const item: Prisma.ItemWhereInput = {
     ...(p.category ? { categoryId: p.category } : {}),
+    ...(p.unit ? { uomId: p.unit } : {}),
     ...(p.q ? { OR: [{ code: ci(p.q) }, { name: ci(p.q) }] } : {}),
   };
   return {

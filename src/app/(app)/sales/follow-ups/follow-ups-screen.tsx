@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { Alert, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { cn, formatDate } from "@/lib/utils";
 import { logFollowUpAction } from "../leads/actions";
 
@@ -34,7 +34,7 @@ const BUCKETS: Array<{ key: BucketKey; name: string; tone: string }> = [
   { key: "overdue", name: "Overdue", tone: "text-bad-600" },
   { key: "today", name: "Today", tone: "text-warn-700" },
   { key: "tomorrow", name: "Tomorrow", tone: "text-brand-700" },
-  { key: "week", name: "This week", tone: "text-navy-600" },
+  { key: "week", name: "This Week", tone: "text-navy-600" },
   { key: "later", name: "Later", tone: "text-muted-600" },
 ];
 
@@ -49,14 +49,22 @@ function bucketOf(dueAt: string, nowMs: number): BucketKey {
   return "later";
 }
 
+/** The design writes "01/09/2026, 16:30" and one word beside it. */
 function whenLabel(dueAt: string, nowMs: number) {
   const bucket = bucketOf(dueAt, nowMs);
-  const days = Math.round((new Date(dueAt).getTime() - nowMs) / DAY);
-  if (bucket === "overdue") return { text: formatDate(dueAt), badge: `${Math.abs(days)}d overdue`, tone: "bad" as const };
-  if (bucket === "today") return { text: "Today", badge: "due now", tone: "warn" as const };
-  if (bucket === "tomorrow") return { text: "Tomorrow", badge: "next up", tone: "brand" as const };
-  return { text: formatDate(dueAt), badge: `in ${Math.max(1, days)}d`, tone: "muted" as const };
+  const text = new Date(dueAt).toLocaleString("en-GB", {
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+  if (bucket === "overdue") return { text, badge: "OVERDUE", pill: "bg-bad-700", tone: "text-bad-700" };
+  if (bucket === "today") return { text, badge: "TODAY", pill: "bg-warn-700", tone: "text-warn-700" };
+  return { text, badge: "UPCOMING", pill: "bg-brand-700", tone: "text-brand-700" };
 }
+
+/** The design's solid type chip: blue for a call, violet for a site visit. */
+const CHANNEL_PILL: Record<string, string> = {
+  CALL: "bg-brand-700", WHATSAPP: "bg-good-700", EMAIL: "bg-navy-800",
+  MEETING: "bg-navy-800", SITE_VISIT: "bg-[#6A46C8]",
+};
 
 export function FollowUpsScreen({
   rows, view, query, typeFilter, month, nowMs, canLog,
@@ -165,7 +173,12 @@ export function FollowUpsScreen({
                         onClick={() => setLogging(c)}
                         className="rounded-[11px] border border-line-400 bg-white px-3 py-3 text-left transition-shadow hover:shadow-[0_6px_18px_rgba(25,26,92,.08)]"
                       >
-                        <span className="inline-flex items-center gap-1 rounded-full bg-surface-field px-2 py-0.5 text-[10px] font-bold text-navy-600">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.06em] text-white",
+                            CHANNEL_PILL[c.channel] ?? "bg-brand-700",
+                          )}
+                        >
                           <span>{CHANNEL_ICON[c.channel] ?? "📞"}</span>
                           {CHANNEL_LABEL[c.channel] ?? c.channel}
                         </span>
@@ -180,8 +193,15 @@ export function FollowUpsScreen({
                           {c.remarks}
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <span className="text-[11px] font-semibold text-muted-600">🕒 {w.text}</span>
-                          <Badge tone={w.tone}>{w.badge}</Badge>
+                          <span className={cn("text-[11px] font-semibold", w.tone)}>🕒 {w.text}</span>
+                          <span
+                            className={cn(
+                              "rounded-full px-[7px] py-[3px] text-[8.5px] font-extrabold tracking-[.06em] text-white",
+                              w.pill,
+                            )}
+                          >
+                            {w.badge}
+                          </span>
                         </div>
                       </button>
                     );
@@ -246,8 +266,15 @@ export function FollowUpsScreen({
                     <td className="px-4 py-3.5 text-[12.5px] font-medium text-navy-500">{r.remarks}</td>
                     <td className="px-4 py-3.5">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[12px] font-semibold text-navy-600">{w.text}</span>
-                        <Badge tone={w.tone}>{w.badge}</Badge>
+                        <span className={cn("text-[12px] font-semibold", w.tone)}>{w.text}</span>
+                        <span
+                          className={cn(
+                            "rounded-full px-[7px] py-[3px] text-[8.5px] font-extrabold tracking-[.06em] text-white",
+                            w.pill,
+                          )}
+                        >
+                          {w.badge}
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-3.5">

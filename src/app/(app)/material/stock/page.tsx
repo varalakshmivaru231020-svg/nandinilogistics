@@ -3,13 +3,13 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { readStockListParams, stockListWhere, stockState } from "@/lib/material/list-filters";
-import { categoryOptions, storeOptions } from "@/lib/material/list-options";
+import { unitOptions } from "@/lib/material/list-options";
 import { loadOptions } from "@/lib/masters/service";
 import { MASTERS } from "@/lib/masters/registry";
 import { NewMasterButton } from "@/app/(app)/masters/new-master-button";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
-import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { cn, qty } from "@/lib/utils";
 
@@ -36,7 +36,7 @@ export default async function StockPage({
 
   const itemMaster = MASTERS.find((m) => m.key === "items")!;
 
-  const [balances, stores, categories, itemOptions] = await Promise.all([
+  const [balances, units, itemOptions] = await Promise.all([
     prisma.stockBalance.findMany({
       // Shared with the export, so a download holds exactly what this screen shows.
       where: stockListWhere(params),
@@ -52,10 +52,20 @@ export default async function StockPage({
         store: { select: { code: true, name: true } },
       },
     }),
-    storeOptions(),
-    categoryOptions(),
+    unitOptions(),
     loadOptions(itemMaster),
   ]);
+
+  const rows = params.stock
+    ? balances.filter((b) => {
+        const state = stockState(Number(b.quantity), Number(b.item.reorderLevel));
+        return (
+          (params.stock === "RESTOCK" && state.label === "Restock now") ||
+          (params.stock === "SOON" && state.label === "Order soon") ||
+          (params.stock === "HEALTHY" && state.label === "Healthy")
+        );
+      })
+    : balances;
 
   // Strictly below the level, matching the design's "Restock now" band.
   const lowRows = balances.filter(
@@ -92,7 +102,7 @@ export default async function StockPage({
         // for this item — a full bar is 125% of it, where the design stops worrying.
         const pct = reorder > 0 ? Math.min(100, Math.round((onHand / (reorder * 1.25)) * 100)) : 100;
         return (
-          <div className="min-w-[110px]">
+          <div>
             <span
               className={cn(
                 "text-[12.5px] font-bold",
@@ -101,7 +111,7 @@ export default async function StockPage({
             >
               {qty(b.quantity, 3)}
             </span>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line-300">
+            <div className="ml-auto mt-[5px] h-1.5 w-[110px] overflow-hidden rounded-full bg-[#EDF0F8]">
               <div
                 className={cn(
                   "h-full rounded-full",
@@ -128,7 +138,14 @@ export default async function StockPage({
         const state = stockState(Number(b.quantity), Number(b.item.reorderLevel));
         return (
           <div>
-            <Badge tone={state.tone}>{state.label}</Badge>
+            <span
+              className={cn(
+                "inline-block whitespace-nowrap rounded-full px-[10px] py-[5px] text-[10px] font-extrabold uppercase tracking-[.06em] text-white",
+                state.tone === "bad" ? "bg-bad-600" : state.tone === "warn" ? "bg-warn-700" : "bg-good-600",
+              )}
+            >
+              {state.label}
+            </span>
             {state.short > 0 && (
               <div className="num mt-1 text-[11px] font-semibold text-bad-600">
                 short {qty(state.short, 3)} {b.item.uom.code}
@@ -150,6 +167,22 @@ export default async function StockPage({
             <NewMasterButton def={itemMaster} options={itemOptions} label="+ New item" />
           ) : null
         }
+      />
+
+      <ListToolbar
+        searchPlaceholder="Search item name, code, specification…"
+        filters={[
+          { name: "unit", label: "Unit", options: units },
+          {
+            name: "stock",
+            label: "Stock",
+            options: [
+              { value: "RESTOCK", label: "Restock now" },
+              { value: "SOON", label: "Order soon" },
+              { value: "HEALTHY", label: "Healthy" },
+            ],
+          },
+        ]}
       />
 
       {/* The design's restock banner: what is short, by name, with the way out. */}
@@ -177,22 +210,14 @@ export default async function StockPage({
         </div>
       )}
 
-      <ListToolbar
-        searchPlaceholder="Search item name, code, specification…"
-        filters={[
-          { name: "store", label: "Store", options: stores },
-          { name: "category", label: "Category", options: categories },
-        ]}
-      />
-
-      {balances.length === 0 ? (
+      {rows.length === 0 ? (
         <Card>
           <EmptyState
             title={filtered ? "No stock matches these filters" : "No stock recorded yet"}
           />
         </Card>
       ) : (
-        <DataTable columns={columns} rows={balances} rowKey={(b) => b.id} dense />
+        <DataTable columns={columns} rows={rows} rowKey={(b) => b.id} dense />
       )}
 
       <ListNote>

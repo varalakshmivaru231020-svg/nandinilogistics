@@ -32,6 +32,16 @@ export async function storeOptions(): Promise<Option[]> {
   return stores.map((s) => ({ value: s.id, label: s.name }));
 }
 
+/** Units of measure, for the design's Unit filter on the item master. */
+export async function unitOptions(): Promise<Option[]> {
+  const uoms = await prisma.uom.findMany({
+    where: { status: "ACTIVE" },
+    orderBy: { code: "asc" },
+    select: { id: true, code: true },
+  });
+  return uoms.map((u) => ({ value: u.id, label: u.code }));
+}
+
 export async function categoryOptions(): Promise<Option[]> {
   const categories = await prisma.itemCategory.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } });
   return categories.map((c) => ({ value: c.id, label: c.name }));
