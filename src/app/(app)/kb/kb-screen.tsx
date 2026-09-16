@@ -2,16 +2,15 @@
 
 import * as React from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 
-import { Badge, Card, Field, Input, Textarea } from "@/components/ui/primitives";
+import { Card, Field, Input, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
-import { formatDate, formatDateTime } from "@/lib/utils";
+import { formatDateTime } from "@/lib/utils";
 import { FileChip } from "@/components/ui/file-tag";
 import {
-  createArticleAction, deleteArticleAction, toggleArticlePublishedAction, updateArticleAction,
+  createArticleAction, deleteArticleAction, updateArticleAction,
 } from "./actions";
 
 interface Article {
@@ -52,12 +51,6 @@ export function KbScreen({
 
   const open = openId ? articles.find((a) => a.id === openId) ?? null : null;
 
-  async function togglePublish(a: Article) {
-    const res = await toggleArticlePublishedAction(a.id);
-    if (!res.ok) { setError(res.error); return; }
-    flash(res.data.published ? `${a.title} published` : `${a.title} unpublished`);
-  }
-
   async function remove() {
     if (!removing) return;
     setBusy(true);
@@ -71,62 +64,92 @@ export function KbScreen({
 
   /* ------------------------------ Article view ----------------------------- */
   if (open) {
+    const viewable = (name: string) => /\.(pdf|png|jpe?g|gif|webp|svg|txt)$/i.test(name);
     return (
       <div className="animate-fade-up">
-        <div className="mb-3.5 flex flex-wrap items-start gap-3">
+        <div className="mb-3.5 flex flex-wrap items-center gap-3.5">
           <button
             type="button"
             onClick={() => setParam({ open: undefined })}
-            className="inline-flex h-9 items-center gap-1.5 rounded-[9px] border border-line-400 bg-white px-3.5 text-[12px] font-bold text-muted-600 transition-colors hover:bg-surface-hover hover:text-navy-900"
+            className="cursor-pointer rounded-[9px] border border-line-400 bg-white px-3.5 py-[9px] text-[12px] font-semibold text-navy-500 transition-colors hover:border-brand-500 hover:text-brand-700"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> Back
+            ← All articles
           </button>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-display text-[19px] font-bold text-navy-950">{open.title}</span>
-              {open.category && <Badge tone="slate">{open.category}</Badge>}
-              {!open.isPublished && <Badge tone="warn">Draft</Badge>}
-            </div>
-            <p className="mt-0.5 text-[11.5px] font-medium text-muted-500">
-              {open.author} · updated {formatDate(open.updatedAt)}
+            <div className="font-display text-[19px] font-bold text-navy-950">{open.title}</div>
+            <p className="mt-[3px] text-[12px] font-medium text-muted-500">
+              {open.attachments.length} {open.attachments.length === 1 ? "attachment" : "attachments"}
+              {" · last updated by "}{open.author} · {formatDateTime(open.updatedAt)}
             </p>
           </div>
-          {can.publish && (
-            <Button size="md" variant="secondary" onClick={() => togglePublish(open)}>
-              {open.isPublished ? "Unpublish" : "Publish"}
-            </Button>
-          )}
           {can.update && (
-            <Button size="md" onClick={() => setEditing(open)}>
+            <button
+              type="button"
+              onClick={() => setEditing(open)}
+              className="cursor-pointer rounded-[9px] bg-brand-500 px-4 py-2.5 text-[12.5px] font-bold text-white transition-colors hover:bg-brand-600"
+            >
               ✎ Edit
-            </Button>
+            </button>
+          )}
+          {can.delete && (
+            <button
+              type="button"
+              onClick={() => setRemoving(open)}
+              className="cursor-pointer rounded-[9px] border border-bad-100 bg-bad-050 px-4 py-2.5 text-[12.5px] font-semibold text-bad-700 transition-colors hover:bg-[#F8DBDB]"
+            >
+              Delete
+            </button>
           )}
         </div>
 
-        <Card className="px-5 py-5">
+        <div className="mb-3.5 rounded-[13px] border border-line-400 bg-white px-5 py-[18px]">
+          <div className="mb-3 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+            Attachments · {open.attachments.length} {open.attachments.length === 1 ? "attachment" : "attachments"}
+          </div>
+          <div className="flex flex-wrap gap-2.5">
+            {open.attachments.map((f) => (
+              <div
+                key={f.id}
+                className="flex items-center gap-2.5 rounded-[10px] border border-line-300 bg-surface-sunken px-3 py-2.5"
+              >
+                <FileChip fileName={f.fileName} />
+                <span className="num shrink-0 text-[11px] font-medium text-muted-500">
+                  {Math.round(f.fileSize / 1024)} KB
+                </span>
+                {viewable(f.fileName) && (
+                  <a
+                    href={`/api/kb/attachments/${f.id}`}
+                    target="_blank"
+                    rel="noopener"
+                    className="rounded-[7px] bg-brand-500 px-[11px] py-1.5 text-[10.5px] font-bold text-white transition-colors hover:bg-brand-600"
+                  >
+                    View
+                  </a>
+                )}
+                <a
+                  href={`/api/kb/attachments/${f.id}?download=1`}
+                  title={`Download ${f.fileName}`}
+                  className="rounded-[7px] border border-line-400 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-navy-500 transition-colors hover:border-brand-500 hover:text-brand-700"
+                >
+                  ↓
+                </a>
+              </div>
+            ))}
+            {open.attachments.length === 0 && (
+              <div className="py-2 text-[12px] font-medium text-muted-400">Nothing attached to this article.</div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-[13px] border border-line-400 bg-white px-5 py-[18px]">
+          <div className="mb-3 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">Description</div>
           {open.summary && (
             <p className="mb-3 border-l-[3px] border-brand-500 pl-3 text-[13px] font-semibold text-navy-800">
               {open.summary}
             </p>
           )}
           <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-navy-600">{open.body}</div>
-
-          {open.attachments.length > 0 && (
-            <div className="mt-4 border-t border-line-300 pt-3.5">
-              <p className="text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">Attachments</p>
-              <ul className="mt-2 space-y-1.5">
-                {open.attachments.map((f) => (
-                  <li key={f.id} className="flex items-center gap-2">
-                    <FileChip fileName={f.fileName} />
-                    <span className="num shrink-0 text-[11px] font-medium text-muted-500">
-                      {Math.round(f.fileSize / 1024)} KB
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </Card>
+        </div>
 
         {editing && (
           <ArticleForm
@@ -183,7 +206,6 @@ export function KbScreen({
                 >
                   {a.title}
                 </button>
-                {!a.isPublished && <Badge tone="warn">Draft</Badge>}
               </div>
 
               <p className="mt-[7px] line-clamp-4 flex-1 text-[12.5px] font-medium leading-relaxed text-navy-500">

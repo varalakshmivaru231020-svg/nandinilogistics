@@ -3,21 +3,28 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { maskPhone } from "@/lib/utils";
+import { maskPhone, formatDate } from "@/lib/utils";
 import { dateInputValue, editRefusal, identityLocked } from "@/lib/sales/lead-edit";
 import { LeadDetail } from "./lead-detail";
 
 export const metadata = { title: "Lead" };
 
-/** The pipeline as the design draws it in the stepper — LOST sits outside it. */
+/** The six stages the design draws, Lost included. */
 const STEPPER = [
   { key: "NEW", name: "New" },
   { key: "CONTACTED", name: "Contacted" },
-  { key: "SITE_VISIT_SCHEDULED", name: "Site visit" },
-  { key: "VISIT_DONE", name: "Visit done" },
+  { key: "SITE_VISIT_SCHEDULED", name: "Site Visit" },
   { key: "NEGOTIATION", name: "Negotiation" },
   { key: "BOOKED", name: "Booked" },
+  { key: "LOST", name: "Lost" },
 ] as const;
+
+/** A visit already done still sits on the Site Visit stage, as on the board. */
+function stageIndex(state: string): number {
+  if (state === "VISIT_DONE") return 2;
+  const i = STEPPER.findIndex((s) => s.key === state);
+  return i === -1 ? 0 : i;
+}
 
 export default async function LeadDetailPage({
   params,
@@ -39,6 +46,7 @@ export default async function LeadDetailPage({
       project: { select: { id: true, name: true } },
       owner: { select: { name: true } },
       lostReason: { select: { name: true } },
+      unitType: { select: { name: true } },
       followUps: {
         orderBy: { completedAt: "desc" },
         include: { user: { select: { name: true } } },
@@ -126,17 +134,18 @@ export default async function LeadDetailPage({
       })
     : [];
 
-  const towers = [...new Map(
-    availableUnits.filter((u) => u.block).map((u) => [u.block!.id, u.block!.name]),
-  )].map(([id, name]) => ({ id, name }));
-
-  const owners = ctx.has(PERM.sales.lead.assign)
-    ? await prisma.user.findMany({
+  // The configured reasons the stage rail asks for when moving a lead to Lost.
+  const lostReasons = ctx.has(PERM.sales.lead.markLost)
+    ? await prisma.lostReason.findMany({
         where: { status: "ACTIVE" },
         select: { id: true, name: true },
         orderBy: { name: "asc" },
       })
     : [];
+
+  const towers = [...new Map(
+    availableUnits.filter((u) => u.block).map((u) => [u.block!.id, u.block!.name]),
+  )].map(([id, name]) => ({ id, name }));
 
   return (
     <LeadDetail
@@ -155,16 +164,25 @@ export default async function LeadDetailPage({
         budgetMin: lead.budgetMin ? Number(lead.budgetMin) : null,
         budgetMax: lead.budgetMax ? Number(lead.budgetMax) : null,
         nextActionAt: lead.nextActionAt?.toISOString() ?? null,
+        unitTypeName: lead.unitType?.name ?? null,
+        // A site visit is planned when one is on the calendar ahead.
+        siteVisitPlanned: (() => {
+          const visit = lead.followUps.find(
+            (f) => f.channel === "SITE_VISIT" && f.nextActionAt && f.nextActionAt.getTime() >= now.getTime(),
+          );
+          return visit?.nextActionAt ? `Yes · ${formatDate(visit.nextActionAt)}` : "No";
+        })(),
         lostReason: lead.lostReason?.name ?? null,
         lostNotes: lead.lostNotes,
         createdAt: lead.createdAt.toISOString(),
       }}
+      lostReasons={lostReasons}
       stepper={STEPPER.map((s, i) => ({
         key: s.key,
         name: s.name,
         hasLine: i > 0,
-        done: STEPPER.findIndex((x) => x.key === lead.state) > i,
-        current: lead.state === s.key,
+        done: lead.state !== "LOST" && stageIndex(lead.state) > i,
+        current: stageIndex(lead.state) === i,
       }))}
       timeline={audit.map((a) => ({
         id: a.id,
@@ -247,7 +265,6 @@ export default async function LeadDetailPage({
         projects: editProjects,
         unitTypes: editUnitTypes,
       } : null}
-      owners={owners}
       can={{
         tabTimeline: ctx.has(PERM.sales.lead.tabTimeline),
         tabFollowUps: ctx.has(PERM.sales.lead.tabFollowUps),
