@@ -34,13 +34,17 @@ export interface HeadingFact {
 }
 
 export function Letterhead({
-  company, title, facts,
+  company, title, facts, reference, note,
 }: {
   company: LetterheadCompany | null | undefined;
   /** The document's name, printed large: "PURCHASE ORDER", "DEMAND LETTER". */
   title: string;
   /** Reference facts under the title: number, date, status. */
-  facts: HeadingFact[];
+  facts?: HeadingFact[];
+  /** The document's number, printed under its name — the design's heading. */
+  reference?: string;
+  /** One muted line under the number: "Original · Pending PM approval". */
+  note?: string;
 }) {
   const address = company
     ? place([company.addressLine, company.city?.name, company.city?.state.name, company.pincode])
@@ -65,10 +69,14 @@ export function Letterhead({
         )}
       </div>
       <div className="shrink-0 text-right">
-        <p className="font-display text-[18px] font-extrabold tracking-wide">{title}</p>
+        <p className="font-display text-[15px] font-extrabold tracking-[.06em]">{title}</p>
+        {reference && (
+          <p className="mt-1 font-display text-[19px] font-extrabold text-brand-700">{reference}</p>
+        )}
+        {note && <p className="mt-[3px] text-[11px] font-semibold text-muted-500">{note}</p>}
         <table className="mt-1 !w-auto text-[11px] [&_td]:!border-0 [&_td]:!px-0 [&_td]:!py-0.5">
           <tbody>
-            {facts.map((f) => (
+            {(facts ?? []).map((f) => (
               <tr key={f.label}>
                 <td className="pr-3 text-muted-600">{f.label}</td>
                 <td className={cn(f.emphasis === "bold" && "font-bold", f.emphasis === "semibold" && "font-semibold")}>
