@@ -6,16 +6,17 @@ import { PERM } from "@/lib/permissions/codes";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { expireStaleHolds } from "@/lib/sales/service";
 import { BoardGrid } from "./board-grid";
+import { UnitSetup } from "./unit-setup";
 
 export const metadata = { title: "Availability Board" };
 
 export default async function AvailabilityBoardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ project?: string }>;
+  searchParams: Promise<{ project?: string; setup?: string }>;
 }) {
   const ctx = await requirePermission(PERM.unit.board.view);
-  const { project: projectParam } = await searchParams;
+  const { project: projectParam, setup } = await searchParams;
 
   // Holds release themselves — sweep before anything is read.
   await prisma.$transaction((tx) => expireStaleHolds(tx));
@@ -72,13 +73,28 @@ export default async function AvailabilityBoardPage({
       : Promise.resolve([]),
   ]);
 
+  if (setup && ctx.has(PERM.unit.unit.create)) {
+    const unitTypes = await prisma.unitType.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    });
+    return (
+      <UnitSetup
+        projects={projects.map((p) => ({ id: p.id, code: p.code, name: p.name }))}
+        unitTypes={unitTypes}
+        initialProjectId={projectId}
+      />
+    );
+  }
+
   return (
     <div className="mx-auto max-w-7xl">
       {/* The design opens this screen with one button, right-aligned. */}
       {ctx.has(PERM.unit.unit.create) && (
         <div className="mb-3.5 flex justify-end">
           <Link
-            href="/units"
+            href={`/units/board?project=${projectId}&setup=1`}
             className="rounded-[9px] bg-brand-500 px-4 py-2.5 text-[12.5px] font-bold text-white transition-colors hover:bg-brand-600"
           >
             + Create units

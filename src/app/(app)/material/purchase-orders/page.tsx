@@ -7,7 +7,7 @@ import { PERM } from "@/lib/permissions/codes";
 import {
   enumOptions, pageHref, PO_STATUSES, poListWhere, readPoListParams, toSearchParams,
 } from "@/lib/material/list-filters";
-import { projectOptions } from "@/lib/material/list-options";
+import { vendorOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
 import { poLookups } from "./lookups";
@@ -54,7 +54,7 @@ export default async function PurchaseOrdersPage({
 
   // Shared with the export, so a download holds exactly what this screen shows.
   const where = poListWhere(ctx, params);
-  const [orders, total, projects] = await Promise.all([
+  const [orders, total, vendors] = await Promise.all([
     prisma.purchaseOrder.findMany({
       where,
       orderBy: { poDate: "desc" },
@@ -71,7 +71,7 @@ export default async function PurchaseOrdersPage({
       },
     }),
     prisma.purchaseOrder.count({ where }),
-    projectOptions(ctx),
+    vendorOptions(),
   ]);
 
   const showRate = ctx.has(PERM.material.purchaseOrder.viewRate);
@@ -206,7 +206,7 @@ export default async function PurchaseOrdersPage({
           className="mb-0"
           searchPlaceholder="Search PO no., vendor, item, indent…"
           filters={[
-            { name: "project", label: "Project", options: projects },
+            { name: "vendor", label: "Vendor", options: vendors },
             { name: "status", label: "Status", options: enumOptions(PO_STATUSES) },
           ]}
           dateRange={{ label: "PO date" }}

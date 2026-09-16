@@ -20,6 +20,12 @@ export async function projectOptions(scope: ProjectScope): Promise<Option[]> {
   return projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }));
 }
 
+/** Every vendor, on-hold ones included: their orders are still on the lists. */
+export async function vendorOptions(): Promise<Option[]> {
+  const vendors = await prisma.vendor.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } });
+  return vendors.map((v) => ({ value: v.id, label: v.name }));
+}
+
 /** Every store, inactive ones included: their history is still on the lists. */
 export async function storeOptions(): Promise<Option[]> {
   const stores = await prisma.store.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } });

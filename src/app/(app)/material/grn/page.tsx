@@ -3,9 +3,8 @@ import { PackageCheck } from "lucide-react";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import {
-  enumOptions, GRN_STATUSES, grnListWhere, grnMatch, readGrnListParams, } from "@/lib/material/list-filters";
-import { projectOptions } from "@/lib/material/list-options";
+import { grnListWhere, grnMatch, readGrnListParams } from "@/lib/material/list-filters";
+import { vendorOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ListNote } from "@/components/list/list-note";
 import { grnLookups } from "./lookups";
@@ -27,7 +26,7 @@ export default async function GrnListPage({
 
   const lookups = ctx.has(PERM.material.grn.create) ? await grnLookups(ctx) : null;
 
-  const [grns, projects] = await Promise.all([
+  const [grns, vendors] = await Promise.all([
     prisma.grn.findMany({
       // Shared with the export, so a download holds exactly what this screen shows.
       where: grnListWhere(ctx, params),
@@ -43,7 +42,7 @@ export default async function GrnListPage({
         items: { select: { receivedQty: true, acceptedQty: true, rejectedQty: true, shortQty: true } },
       },
     }),
-    projectOptions(ctx),
+    vendorOptions(),
   ]);
 
 
@@ -64,8 +63,15 @@ export default async function GrnListPage({
       <ListToolbar
         searchPlaceholder="Search GRN no., PO, vendor, receiver…"
         filters={[
-          { name: "project", label: "Project", options: projects },
-          { name: "status", label: "Status", options: enumOptions(GRN_STATUSES) },
+          { name: "vendor", label: "Vendor", options: vendors },
+          {
+            name: "invoice",
+            label: "Invoice",
+            options: [
+              { value: "PENDING", label: "Invoice pending" },
+              { value: "ATTACHED", label: "Invoice attached" },
+            ],
+          },
         ]}
         dateRange={{ label: "Received" }}
         count={grns.length}

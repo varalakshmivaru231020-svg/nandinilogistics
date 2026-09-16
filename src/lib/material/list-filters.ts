@@ -141,10 +141,15 @@ export const enumWords = (label: string, value: string | null) =>
 
 export const GRN_STATUSES = ["DRAFT", "INSPECTED", "POSTED", "CANCELLED"] as const satisfies readonly GrnStatus[];
 
+export const GRN_INVOICE_STATES = ["PENDING", "ATTACHED"] as const;
+
 export interface GrnListParams extends DateRange {
   q: string;
   status: GrnStatus | null;
   project: string | null;
+  vendor: string | null;
+  /** The design's Invoice filter: pending, or attached. */
+  invoice: (typeof GRN_INVOICE_STATES)[number] | null;
 }
 
 export function readGrnListParams(source: ParamSource): GrnListParams {
@@ -152,6 +157,8 @@ export function readGrnListParams(source: ParamSource): GrnListParams {
     q: readParam(source, "q"),
     status: readEnum(source, "status", GRN_STATUSES),
     project: readId(source, "project"),
+    vendor: readId(source, "vendor"),
+    invoice: readEnum(source, "invoice", GRN_INVOICE_STATES),
     ...readRange(source),
   };
 }
@@ -160,6 +167,10 @@ export function grnListWhere(scope: ProjectScope, p: GrnListParams): Prisma.GrnW
   return {
     purchaseOrder: withProject(scope, p.project),
     ...(p.status ? { status: p.status } : {}),
+    ...(p.vendor ? { vendorId: p.vendor } : {}),
+    ...(p.invoice
+      ? { purchaseOrder: { ...withProject(scope, p.project), invoices: p.invoice === "ATTACHED" ? { some: {} } : { none: {} } } }
+      : {}),
     ...range("grnDate", p),
     ...(p.q
       ? {
@@ -581,6 +592,7 @@ export interface PoListParams extends DateRange {
   q: string;
   status: PurchaseOrderStatus | null;
   project: string | null;
+  vendor: string | null;
 }
 
 export function readPoListParams(source: ParamSource): PoListParams {
@@ -588,6 +600,7 @@ export function readPoListParams(source: ParamSource): PoListParams {
     q: readParam(source, "q"),
     status: readEnum(source, "status", PO_STATUSES),
     project: readId(source, "project"),
+    vendor: readId(source, "vendor"),
     ...readRange(source),
   };
 }
@@ -596,6 +609,7 @@ export function poListWhere(scope: ProjectScope, p: PoListParams): Prisma.Purcha
   return {
     ...withProject(scope, p.project),
     ...(p.status ? { status: p.status } : {}),
+    ...(p.vendor ? { vendorId: p.vendor } : {}),
     ...range("poDate", p),
     ...(p.q ? { OR: [{ poNo: ci(p.q) }, { vendor: { name: ci(p.q) } }] } : {}),
   };
