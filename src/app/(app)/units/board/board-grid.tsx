@@ -75,14 +75,13 @@ export function BoardGrid({
   const types = [...new Set(blocks.flatMap((b) => b.units.map((u) => u.unitTypeName).filter(Boolean)))] as string[];
 
   const units = block?.units ?? [];
-  const shown = units.filter(
-    (u) =>
-      (status === "all" || u.status === status) &&
-      (type === "all" || u.unitTypeName === type),
-  );
+  // The design keeps every flat on the board and fades the ones a filter
+  // excludes, so a tower does not change shape as the filters are used.
+  const dimmed = (u: Unit) =>
+    !((status === "all" || u.status === status) && (type === "all" || u.unitTypeName === type));
 
   const floors = new Map<number, Unit[]>();
-  for (const u of shown) floors.set(u.floorNumber, [...(floors.get(u.floorNumber) ?? []), u]);
+  for (const u of units) floors.set(u.floorNumber, [...(floors.get(u.floorNumber) ?? []), u]);
   const rows = [...floors.entries()].sort((a, b) => b[0] - a[0]);
 
   const count = (s: string) => units.filter((u) => u.status === s).length;
@@ -108,10 +107,10 @@ export function BoardGrid({
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-muted-600">
-              {(["AVAILABLE", "HELD", "BOOKED"] as const).map((s) => (
-                <span key={s} className="flex items-center gap-[5px]">
-                  <span className={cn("inline-block h-[11px] w-[11px] rounded-[4px] border", LEGEND[s])} />
-                  {STATUS_STYLE[s].label}
+              {([["AVAILABLE", "Available"], ["HELD", "Held"], ["BOOKED", "Booked"]] as const).map(([key, label]) => (
+                <span key={key} className="flex items-center gap-[5px]">
+                  <span className={cn("inline-block h-[11px] w-[11px] rounded-[4px] border", LEGEND[key])} />
+                  {label}
                 </span>
               ))}
             </div>
@@ -152,13 +151,16 @@ export function BoardGrid({
                 <div className="text-center text-[11px] font-bold text-muted-400">Fl {floor}</div>
                 {floorUnits.map((u) => {
                   const style = STATUS_STYLE[u.status] ?? STATUS_STYLE.AVAILABLE;
+                  const faded = dimmed(u);
                   return (
                     <button
                       key={u.id}
                       type="button"
+                      disabled={faded}
                       onClick={() => setSelected(u)}
                       className={cn(
-                        "flex flex-col items-start rounded-[9px] border px-3 py-2 text-left transition-transform hover:-translate-y-px hover:shadow-[0_5px_14px_rgba(25,26,92,.13)]",
+                        "flex flex-col items-center gap-0.5 rounded-[9px] border px-1 py-2 text-center transition-transform hover:-translate-y-px hover:shadow-[0_5px_14px_rgba(25,26,92,.13)]",
+                        faded && "pointer-events-none opacity-[.18]",
                         style.cell,
                       )}
                     >
@@ -171,7 +173,7 @@ export function BoardGrid({
             ))}
             {rows.length === 0 && (
               <p className="py-10 text-center text-[12.5px] font-medium text-muted-400">
-                No units match these filters
+                No units in this tower yet
               </p>
             )}
           </div>
