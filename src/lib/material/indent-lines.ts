@@ -6,7 +6,7 @@ interface RawLine {
   itemId: string;
   requestedQty: unknown;
   approvedQty: unknown;
-  item: { uom: { code: string } };
+  item: { uom: { name: string } };
 }
 
 export interface RawIndent {
@@ -57,7 +57,7 @@ export async function fulfilLines(indents: RawIndent[]): Promise<Map<string, Ful
         required: Number(l.approvedQty ?? l.requestedQty),
         onHand: onHand.get(l.itemId) ?? 0,
         issued: done.get(`${i.id}:${l.itemId}`) ?? 0,
-        uom: l.item.uom.code,
+        uom: l.item.uom.name,
       })),
     ]),
   );

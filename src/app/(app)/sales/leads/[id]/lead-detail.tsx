@@ -124,7 +124,7 @@ export function LeadDetail({
   // The design's details list, in its order and its words.
   const fields: Array<[string, string]> = [
     ["Name", lead.name],
-    ["Mobile number", lead.phone],
+    ["Mobile number", phone(lead.phone)],
     ["Source", lead.sourceName],
     ["Email", lead.email || "—"],
     // Captured as one figure, so it reads as one; a range only when both are set.

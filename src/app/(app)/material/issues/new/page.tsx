@@ -28,7 +28,7 @@ export default async function NewIssuePage({
     include: {
       project: { select: { name: true } },
       workPackage: { select: { name: true } },
-      items: { include: { item: { select: { code: true, name: true, uom: { select: { code: true } } } } } },
+      items: { include: { item: { select: { code: true, name: true, uom: { select: { name: true } } } } } },
     },
   });
   if (!indent) redirect("/material/indents");
@@ -44,7 +44,7 @@ export default async function NewIssuePage({
       itemId: l.itemId,
       code: l.item.code,
       name: l.item.name,
-      uom: l.item.uom.code,
+      uom: l.item.uom.name,
       required: fulfil[i]?.required ?? Number(l.approvedQty ?? l.requestedQty),
       onHand: fulfil[i]?.onHand ?? 0,
       pending: fulfil[i]?.pending ?? 0,

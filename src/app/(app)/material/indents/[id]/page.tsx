@@ -28,9 +28,9 @@ export default async function IndentDetailPage({ params }: { params: Promise<{ i
     include: {
       project: { select: { id: true, name: true } },
       workPackage: { select: { name: true } },
-      raisedBy: { select: { name: true } },
+      raisedBy: { select: { name: true, designation: { select: { name: true } } } },
       items: {
-        include: { item: { select: { code: true, name: true, uom: { select: { code: true } } } } },
+        include: { item: { select: { code: true, name: true, uom: { select: { name: true } } } } },
       },
       _count: { select: { items: true, approvals: true } },
     },
@@ -105,11 +105,12 @@ export default async function IndentDetailPage({ params }: { params: Promise<{ i
     ),
   ].sort((a, b) => b.sortAt - a.sortAt);
 
-  const title =
-    indent.purpose ||
-    (indent.items[0]
-      ? `${indent.items[0].item.name} · ${qty(Number(indent.items[0].approvedQty ?? indent.items[0].requestedQty), 2)} ${indent.items[0].item.uom.code}`
-      : `${indent._count.items} items`);
+  // The design names an indent by what it asks for, not by its purpose line.
+  const first = indent.items[0];
+  const title = first
+    ? `${first.item.name} · ${qty(Number(first.approvedQty ?? first.requestedQty), 2)} ${first.item.uom.name}` +
+      (indent._count.items > 1 ? ` +${indent._count.items - 1} more` : "")
+    : "No lines";
 
   return (
     <IndentDetail
@@ -122,7 +123,9 @@ export default async function IndentDetailPage({ params }: { params: Promise<{ i
         project: indent.project.name,
         activity: indent.workPackage?.name ?? "—",
         requiredBy: isoDate(indent.requiredByDate),
-        raisedBy: indent.raisedBy.name,
+        raisedBy: indent.raisedBy.designation
+          ? `${indent.raisedBy.name} · ${indent.raisedBy.designation.name}`
+          : indent.raisedBy.name,
         remarks: indent.remarks || "No remarks",
       }}
       lines={indent.items.map((l, i) => ({

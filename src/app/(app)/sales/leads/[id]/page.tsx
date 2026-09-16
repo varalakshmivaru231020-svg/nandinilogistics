@@ -184,13 +184,25 @@ export default async function LeadDetailPage({
         done: lead.state !== "LOST" && stageIndex(lead.state) > i,
         current: stageIndex(lead.state) === i,
       }))}
-      timeline={audit.map((a) => ({
-        id: a.id,
-        text: a.summary,
-        by: a.user?.name ?? "System",
-        at: a.createdAt.toISOString(),
-        action: a.action,
-      }))}
+      timeline={[
+        ...audit.map((a) => ({
+          id: a.id,
+          text: a.summary,
+          by: a.user?.name ?? "System",
+          at: a.createdAt.toISOString(),
+          action: a.action,
+        })),
+        // The design opens every timeline with the moment the lead arrived.
+        ...(audit.some((a) => a.action === "CREATE")
+          ? []
+          : [{
+              id: "created",
+              text: "Created in New",
+              by: lead.owner?.name ?? "System",
+              at: lead.createdAt.toISOString(),
+              action: "CREATE",
+            }]),
+      ]}
       followUps={lead.followUps.map((f) => ({
         id: f.id,
         channel: f.channel,

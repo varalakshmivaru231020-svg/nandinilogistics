@@ -6,7 +6,7 @@ import { PERM } from "@/lib/permissions/codes";
 import { isPoEditable } from "@/lib/material/procurement";
 import { grnMatch } from "@/lib/material/list-filters";
 import { deliveryLabel } from "@/lib/material/po-display";
-import { formatDateTime, money, qty } from "@/lib/utils";
+import { formatDateTime, money, moneyShort, qty } from "@/lib/utils";
 import { PoDetail } from "./po-detail";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -36,7 +36,7 @@ export default async function PoDetailPage({
       project: { select: { id: true, name: true } },
       vendor: { select: { name: true } },
       paymentTerm: { select: { name: true } },
-      createdBy: { select: { name: true } },
+      createdBy: { select: { name: true, designation: { select: { name: true } } } },
       pmApprovedBy: { select: { name: true } },
       adminApprovedBy: { select: { name: true } },
       items: {
@@ -105,15 +105,17 @@ export default async function PoDetailPage({
         delivery: deliveryLabel(po.expectedDate, po.status, nowMs).text,
         terms: [po.paymentTerm?.name, po.terms].filter(Boolean).join(" · ") || "—",
         remarks: po.deliveryAddress || "No remarks",
-        subTotal: canSeeRate ? money(subTotal) : "—",
+        subTotal: canSeeRate ? moneyShort(subTotal) : "—",
         taxLabel: `GST ${taxPct}%`,
-        taxAmount: canSeeRate ? money(taxAmount) : "—",
-        totalAmount: canSeeRate ? money(Number(po.totalAmount)) : "—",
+        taxAmount: canSeeRate ? moneyShort(taxAmount) : "—",
+        totalAmount: canSeeRate ? moneyShort(Number(po.totalAmount)) : "—",
         indentRefs: refs,
         trail: [
           {
             label: "Raised",
-            who: po.createdBy.name,
+            who: po.createdBy.designation
+              ? `${po.createdBy.name} · ${po.createdBy.designation.name}`
+              : po.createdBy.name,
             when: formatDateTime(po.poDate),
             done: true,
           },
@@ -142,7 +144,7 @@ export default async function PoDetailPage({
           name: l.item.name,
           qty: `${qty(ordered, 3)} ${l.item.uom.code}`,
           rate: canSeeRate ? money(Number(l.rate)) : "—",
-          amount: canSeeRate ? money(Number(l.amount)) : "—",
+          amount: canSeeRate ? moneyShort(Number(l.amount)) : "—",
           ordered: `${qty(ordered, 3)} ${l.item.uom.code}`,
           received: `${qty(received, 3)} ${l.item.uom.code}`,
           pending: `${qty(pending, 3)} ${l.item.uom.code}`,
