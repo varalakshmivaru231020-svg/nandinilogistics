@@ -1,15 +1,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronRight } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { Badge, Card, CardBody, CardHeader, CardTitle, PageHeader } from "@/components/ui/primitives";
-import { cn, formatDate, money, qty } from "@/lib/utils";
+import { cn, formatDate, qty } from "@/lib/utils";
 import { DocumentsTab } from "./documents/documents-tab";
-import { WbsTab } from "./wbs-tab";
-import { TeamTab } from "./team-tab";
+import { WbsTab, type WbsRow } from "./wbs-tab";
+import { TeamTab, type TeamRole } from "./team-tab";
+import { EditProjectButton } from "./edit-project-button";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,14 +16,31 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: p?.name ?? "Project" };
 }
 
+/** The design's five tabs, in its words and its order. */
 const TABS = [
   { key: "overview", label: "Overview", perm: PERM.project.project.tabOverview },
-  { key: "wbs", label: "Work breakdown", perm: PERM.project.project.tabWbs },
-  { key: "team", label: "Team", perm: PERM.project.project.tabTeam },
-  { key: "documents", label: "Documents", perm: PERM.project.project.tabDocuments },
-  { key: "progress", label: "Site progress", perm: PERM.project.project.tabProgress },
-  { key: "units", label: "Units", perm: PERM.project.project.tabUnits },
+  { key: "wbs", label: "Work Breakdown", perm: PERM.project.project.tabWbs },
+  { key: "team", label: "Team Mapping", perm: PERM.project.project.tabTeam },
+  { key: "docs", label: "Documents", perm: PERM.project.project.tabDocuments },
+  { key: "log", label: "Site Progress", perm: PERM.project.project.tabProgress },
 ] as const;
+
+/** The roles the design maps a team against, and the dot each one carries. */
+const TEAM_ROLES: Array<{ role: string; dot: string; match: (d: string) => boolean }> = [
+  { role: "Project Manager", dot: "#0089C9", match: (d) => d.includes("project manager") },
+  { role: "Engineer", dot: "#6A46C8", match: (d) => d.includes("engineer") },
+  { role: "Supervisor", dot: "#5BC8F2", match: (d) => d.includes("supervisor") },
+  { role: "Store Manager", dot: "#E8A13A", match: (d) => d.includes("store") },
+  { role: "Sales", dot: "#1F9D66", match: (d) => d.includes("sales") },
+];
+
+const PROJECT_STATUS_LABEL: Record<string, string> = {
+  PLANNING: "Planned",
+  ACTIVE: "Ongoing",
+  ON_HOLD: "On hold",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+};
 
 export default async function ProjectDetailPage({
   params,
@@ -47,20 +63,20 @@ export default async function ProjectDetailPage({
     include: {
       projectType: { select: { name: true } },
       city: { select: { name: true } },
-      company: { select: { name: true } },
-      projectManager: { select: { name: true, email: true } },
       phases: { orderBy: { sequence: "asc" }, include: { workPackages: { orderBy: { sequence: "asc" } } } },
-      team: { include: { user: { select: { id: true, name: true, email: true, status: true, designation: { select: { name: true } } } } } },
+      team: {
+        include: {
+          user: { select: { id: true, name: true, designation: { select: { name: true } } } },
+        },
+      },
       documents: {
         orderBy: { createdAt: "desc" },
         include: {
-          documentType: { select: { name: true } },
+          documentType: { select: { id: true, name: true } },
           _count: { select: { versions: true } },
         },
       },
-      progressLogs: { orderBy: { logDate: "desc" }, take: 20, include: { loggedBy: { select: { name: true } } } },
-      blocks: { orderBy: { code: "asc" }, include: { _count: { select: { units: true } } } },
-      _count: { select: { units: true, indents: true, purchaseOrders: true, leads: true, bookings: true } },
+      progressLogs: { orderBy: { logDate: "desc" }, take: 24, include: { loggedBy: { select: { name: true } } } },
     },
   });
   if (!project) notFound();
@@ -68,21 +84,29 @@ export default async function ProjectDetailPage({
   const availableTabs = TABS.filter((t) => ctx.has(t.perm));
   const tab = availableTabs.find((t) => t.key === tabParam)?.key ?? availableTabs[0]?.key;
 
-  const showBudget = ctx.has(PERM.project.project.viewBudget);
-
-  // Candidates for the Team tab: active users not already mapped here.
   const assignableUsers = ctx.has(PERM.project.team.assign)
     ? (
         await prisma.user.findMany({
-          where: {
-            status: "ACTIVE",
-            NOT: { projectAccess: { some: { projectId: project.id } } },
-          },
+          where: { status: "ACTIVE", NOT: { projectAccess: { some: { projectId: project.id } } } },
           orderBy: { name: "asc" },
-          select: { id: true, name: true, email: true, designation: { select: { name: true } } },
+          select: { id: true, name: true, designation: { select: { name: true } } },
         })
-      ).map((u) => ({ id: u.id, name: u.name, email: u.email, designation: u.designation?.name ?? null }))
+      ).map((u) => ({ id: u.id, name: u.name, designation: u.designation?.name ?? null }))
     : [];
+
+  const [types, cities] = ctx.has(PERM.project.project.update)
+    ? await Promise.all([
+        prisma.projectType.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+        prisma.city.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+      ])
+    : [[], []];
+
+  // Uploader names: the column is a plain id, so they are resolved here.
+  const uploaderIds = [...new Set(project.documents.map((d) => d.uploadedById).filter((v): v is string => Boolean(v)))];
+  const uploaders = uploaderIds.length
+    ? await prisma.user.findMany({ where: { id: { in: uploaderIds } }, select: { id: true, name: true } })
+    : [];
+  const uploaderName = new Map(uploaders.map((u) => [u.id, u.name]));
 
   const documentTypes = ctx.has(PERM.project.project.tabDocuments)
     ? await prisma.documentType.findMany({
@@ -92,39 +116,120 @@ export default async function ProjectDetailPage({
       })
     : [];
 
-  const unitStatusCounts = ctx.has(PERM.project.project.tabUnits)
-    ? await prisma.unit.groupBy({ by: ["status"], where: { projectId: id }, _count: true })
-    : [];
+  // The breakdown, flattened the way the design draws it: each phase, then its
+  // packages indented under it.
+  const wbsRows: WbsRow[] = project.phases.flatMap((ph) => [
+    { id: ph.id, kind: "PHASE" as const, code: ph.code, name: ph.name, pct: ph.progressPct, phaseId: null },
+    ...ph.workPackages.map((w) => ({
+      id: w.id, kind: "WP" as const, code: w.code, name: w.name, pct: w.progressPct, phaseId: ph.id,
+    })),
+  ]);
+
+  const teamRoles: TeamRole[] = TEAM_ROLES.map((r) => ({
+    role: r.role,
+    dot: r.dot,
+    members: project.team
+      .filter((t) => r.match((t.user.designation?.name ?? "").toLowerCase()))
+      .map((t) => ({ id: t.id, userId: t.user.id, name: t.user.name })),
+  }));
+
+  // The design counts today's photos, and shows them as tiles.
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const todaysLogs = project.progressLogs.filter((l) => l.logDate.getTime() >= startOfDay.getTime());
+
+  const facts: Array<[string, string]> = [
+    ["Project name", project.name],
+    ["Project code", project.code],
+    ["Location", [project.addressLine, project.city?.name].filter(Boolean).join(", ") || "—"],
+    ["Project type", project.projectType?.name ?? "—"],
+    ["RERA registration no.", project.reraNumber ?? "—"],
+    ["Land area", project.landArea ? `${qty(project.landArea)} acres` : "—"],
+    [
+      "Towers & floors",
+      project.totalTowers || project.totalFloors
+        ? `${project.totalTowers} towers · ${project.totalFloors} fl`
+        : "—",
+    ],
+    ["Total units", project.totalUnits ? `${project.totalUnits} units` : "—"],
+    ["Approval details", project.approvalDetails ?? "—"],
+    ["Planned start", formatDate(project.startDate)],
+    ["Target completion", formatDate(project.targetDate)],
+    ["Status", PROJECT_STATUS_LABEL[project.status] ?? project.status],
+  ];
 
   return (
     <div>
-      <PageHeader
-        title={project.name}
-        description={[project.projectType?.name, project.city?.name, project.addressLine].filter(Boolean).join(" · ")}
-        breadcrumb={
-          <span className="flex items-center gap-1">
-            <Link href="/projects" className="hover:text-brand-600">Projects</Link>
-            <ChevronRight className="h-3 w-3" />
-            <code>{project.code}</code>
-          </span>
-        }
-        actions={<Badge tone={project.status === "ACTIVE" ? "good" : "slate"}>{project.status.replace("_", " ")}</Badge>}
-      />
+      <div className="mb-4 flex items-center gap-3.5">
+        <Link
+          href="/projects"
+          className="flex items-center gap-1.5 rounded-[9px] border border-line-400 bg-white px-3.5 py-[9px] text-[12px] font-semibold text-navy-500 transition-colors hover:border-brand-500 hover:text-brand-700"
+        >
+          ← All projects
+        </Link>
+        <div className="flex-1">
+          <div className="flex items-center gap-2.5">
+            <span className="font-display text-[19px] font-bold text-navy-950">{project.name}</span>
+            <span
+              className={cn(
+                "rounded-full px-[10px] py-[5px] text-[10.5px] font-bold",
+                project.status === "ACTIVE"
+                  ? "bg-brand-100 text-brand-700"
+                  : project.status === "COMPLETED"
+                    ? "bg-good-050 text-good-700"
+                    : "bg-surface-field text-navy-500",
+              )}
+            >
+              {PROJECT_STATUS_LABEL[project.status] ?? project.status}
+            </span>
+          </div>
+          <div className="mt-[3px] text-[12px] font-medium text-muted-500">
+            {[project.code, [project.addressLine, project.city?.name].filter(Boolean).join(", "), project.reraNumber]
+              .filter(Boolean)
+              .join(" · ")}
+          </div>
+        </div>
+        {ctx.has(PERM.project.project.update) && (
+          <EditProjectButton
+            projectId={project.id}
+            types={types}
+            cities={cities}
+            values={{
+              code: project.code,
+              name: project.name,
+              projectTypeId: project.projectTypeId,
+              cityId: project.cityId ?? "",
+              addressLine: project.addressLine ?? "",
+              reraNumber: project.reraNumber ?? "",
+              landArea: project.landArea ? String(Number(project.landArea)) : "",
+              totalTowers: String(project.totalTowers),
+              totalFloors: String(project.totalFloors),
+              totalUnits: String(project.totalUnits),
+              approvalDetails: project.approvalDetails ?? "",
+              startDate: project.startDate ? project.startDate.toISOString().slice(0, 10) : "",
+              targetDate: project.targetDate ? project.targetDate.toISOString().slice(0, 10) : "",
+              status: project.status,
+            }}
+          />
+        )}
+      </div>
 
       {availableTabs.length === 0 ? (
-        <Card><CardBody><p className="text-sm text-muted-500">Your role does not include any project tab.</p></CardBody></Card>
+        <div className="rounded-[13px] border border-line-400 bg-white px-5 py-4 text-sm text-muted-500">
+          Your role does not include any project tab.
+        </div>
       ) : (
         <>
-          <div className="mb-4 flex flex-wrap gap-1 border-b border-line-400">
+          <div className="mb-4 flex gap-[22px] border-b border-line-400">
             {availableTabs.map((t) => (
               <Link
                 key={t.key}
                 href={`/projects/${id}?tab=${t.key}`}
                 className={cn(
-                  "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+                  "-mb-px border-b-[2.5px] px-1 py-[11px] text-[13px] transition-colors",
                   tab === t.key
-                    ? "border-brand-600 text-brand-700"
-                    : "border-transparent text-muted-500 hover:border-line-500 hover:text-navy-600",
+                    ? "border-brand-500 font-bold text-navy-950"
+                    : "border-transparent font-semibold text-muted-600 hover:text-navy-950",
                 )}
               >
                 {t.label}
@@ -132,72 +237,27 @@ export default async function ProjectDetailPage({
             ))}
           </div>
 
-          {/* -------------------------------- Overview ------------------------------- */}
           {tab === "overview" && (
-            <div className="grid gap-3 lg:grid-cols-3">
-              <Card className="lg:col-span-2">
-                <CardHeader><CardTitle>Project details</CardTitle></CardHeader>
-                <CardBody>
-                  <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-                    {[
-                      ["Project code", project.code],
-                      ["Company", project.company?.name ?? "—"],
-                      ["RERA number", project.reraNumber ?? "—"],
-                      ["Land area", project.landArea ? `${qty(project.landArea)} sq.ft` : "—"],
-                      ["Towers", String(project.totalTowers)],
-                      ["Floors", String(project.totalFloors)],
-                      ["Start date", formatDate(project.startDate)],
-                      ["Target completion", formatDate(project.targetDate)],
-                      ["Project manager", project.projectManager?.name ?? "Unassigned"],
-                      ...(showBudget ? [["Sanctioned budget", money(project.budgetAmount)]] as Array<[string, string]> : []),
-                    ].map(([label, value]) => (
-                      <div key={label}>
-                        <dt className="text-xs text-muted-500">{label}</dt>
-                        <dd className="mt-0.5 text-sm text-navy-900">{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                  {project.description && (
-                    <p className="mt-4 border-t border-line-200 pt-3 text-sm leading-relaxed text-muted-600">
-                      {project.description}
-                    </p>
-                  )}
-                </CardBody>
-              </Card>
-
-              <Card>
-                <CardHeader><CardTitle>At a glance</CardTitle></CardHeader>
-                <CardBody className="space-y-2">
-                  {[
-                    ["Units", project._count.units],
-                    ["Phases", project.phases.length],
-                    ["Team members", project.team.length],
-                    ["Indents raised", project._count.indents],
-                    ["Purchase orders", project._count.purchaseOrders],
-                    ["Leads", project._count.leads],
-                    ["Bookings", project._count.bookings],
-                  ].map(([label, value]) => (
-                    <div key={String(label)} className="flex items-center justify-between border-b border-line-200 pb-1.5 last:border-0">
-                      <span className="text-xs text-muted-500">{label}</span>
-                      <span className="num text-sm font-medium text-navy-900">{value}</span>
-                    </div>
-                  ))}
-                </CardBody>
-              </Card>
+            <div className="rounded-[13px] border border-line-400 bg-white px-5 py-[18px]">
+              <div className="mb-[13px] text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+                Project master
+              </div>
+              <div className="grid gap-x-5 gap-y-3.5 sm:grid-cols-2 lg:grid-cols-4">
+                {facts.map(([k, v]) => (
+                  <div key={k}>
+                    <div className="text-[10.5px] font-semibold uppercase tracking-[.05em] text-muted-400">{k}</div>
+                    <div className="mt-1 break-words text-[13px] font-semibold text-navy-900">{v}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          {/* ------------------------------ Work breakdown --------------------------- */}
           {tab === "wbs" && (
             <WbsTab
               projectId={project.id}
-              phases={project.phases.map((ph) => ({
-                id: ph.id,
-                code: ph.code,
-                name: ph.name,
-                sequence: ph.sequence,
-                workPackages: ph.workPackages.map((w) => ({ id: w.id, code: w.code, name: w.name })),
-              }))}
+              rows={wbsRows}
+              phases={project.phases.map((p) => ({ id: p.id, name: p.name }))}
               can={{
                 createPhase: ctx.has(PERM.project.phase.create),
                 updatePhase: ctx.has(PERM.project.phase.update),
@@ -209,19 +269,10 @@ export default async function ProjectDetailPage({
             />
           )}
 
-          {/* ---------------------------------- Team --------------------------------- */}
           {tab === "team" && (
             <TeamTab
               projectId={project.id}
-              members={project.team.map((t) => ({
-                id: t.id,
-                userId: t.user.id,
-                name: t.user.name,
-                email: t.user.email,
-                designation: t.user.designation?.name ?? null,
-                status: t.user.status,
-                isProjectManager: project.projectManagerId === t.user.id,
-              }))}
+              roles={teamRoles}
               assignable={assignableUsers}
               can={{
                 assign: ctx.has(PERM.project.team.assign),
@@ -230,7 +281,7 @@ export default async function ProjectDetailPage({
             />
           )}
 
-          {tab === "documents" && (
+          {tab === "docs" && (
             <DocumentsTab
               projectId={id}
               nowMs={new Date().getTime()}
@@ -239,15 +290,15 @@ export default async function ProjectDetailPage({
                 id: d.id,
                 title: d.title,
                 fileName: d.fileName,
-                fileSize: d.fileSize,
-                mimeType: d.mimeType,
                 version: d.version,
                 supersedesId: d.supersedesId,
                 hasNewerVersion: d._count.versions > 0,
                 expiryDate: d.expiryDate?.toISOString() ?? null,
                 createdAt: d.createdAt.toISOString(),
+                typeId: d.documentType.id,
                 typeName: d.documentType.name,
-                uploadedByName: null,
+                access: d.access,
+                uploadedByName: d.uploadedById ? (uploaderName.get(d.uploadedById) ?? null) : null,
               }))}
               can={{
                 upload: ctx.has(PERM.project.document.upload),
@@ -258,78 +309,48 @@ export default async function ProjectDetailPage({
             />
           )}
 
-          {/* ------------------------------- Site progress --------------------------- */}
-          {tab === "progress" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Daily site progress log</CardTitle>
-                <span className="text-xs text-muted-500">Geo-tagged, date-stamped, from the mobile app.</span>
-              </CardHeader>
-              <CardBody className="p-0">
-                {project.progressLogs.length === 0 ? (
-                  <p className="px-4 py-10 text-center text-sm text-muted-500">
-                    No site logs captured yet. These are written from the supervisor&rsquo;s phone.
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-line-200">
-                    {project.progressLogs.map((log) => (
-                      <li key={log.id} className="px-4 py-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium text-navy-900">{log.title}</p>
-                          <span className="text-xs text-muted-500">{formatDate(log.logDate)}</span>
-                        </div>
-                        {log.notes && <p className="mt-1 text-xs text-muted-600">{log.notes}</p>}
-                        <p className="mt-1 text-[11px] text-muted-400">
-                          {log.loggedBy?.name ?? "—"}
-                          {log.manpowerCount > 0 && ` · ${log.manpowerCount} workers`}
-                          {log.latitude && ` · ${log.latitude}, ${log.longitude}`}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
+          {tab === "log" && (
+            <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+                  Daily site progress · {todaysLogs.length} photos today
+                </div>
+                {ctx.has(PERM.project.progressLog.create) && (
+                  <Link
+                    href={`/projects/progress?project=${id}`}
+                    className="rounded-[8px] bg-brand-500 px-3 py-[7px] text-[11px] font-bold text-white transition-colors hover:bg-brand-600"
+                  >
+                    + Log entry
+                  </Link>
                 )}
-              </CardBody>
-            </Card>
-          )}
-
-          {/* ---------------------------------- Units -------------------------------- */}
-          {tab === "units" && (
-            <div className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-                {unitStatusCounts.map((s) => (
-                  <Card key={s.status}>
-                    <CardBody className="py-3">
-                      <p className="text-xs text-muted-500">{s.status}</p>
-                      <p className="num mt-0.5 text-xl font-semibold text-navy-950">{s._count}</p>
-                    </CardBody>
-                  </Card>
+              </div>
+              <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(170px,1fr))]">
+                {project.progressLogs.map((l) => (
+                  <div
+                    key={l.id}
+                    className="flex aspect-[1.4] flex-col items-center justify-center gap-[5px] rounded-[10px] border border-line-400 bg-[linear-gradient(150deg,#E4EBF7,#CDD8EE)]"
+                    title={l.title}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A90B3" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="6" width="18" height="14" rx="2" />
+                      <circle cx="12" cy="13" r="3.4" />
+                      <path d="M8 6l1.5-2h5L16 6" />
+                    </svg>
+                    <span className="text-[9.5px] font-semibold text-muted-500">
+                      {l.logDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                      {l.latitude ? " · geo ✓" : ""}
+                    </span>
+                  </div>
                 ))}
               </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Blocks</CardTitle>
-                  <Link href={`/units/board?project=${id}`} className="text-xs text-brand-600 hover:underline">
-                    Open availability board
-                  </Link>
-                </CardHeader>
-                <CardBody className="p-0">
-                  <ul className="divide-y divide-line-200">
-                    {project.blocks.map((b) => (
-                      <li key={b.id} className="flex items-center justify-between px-4 py-2.5">
-                        <div>
-                          <p className="text-sm text-navy-900">{b.name}</p>
-                          <p className="text-xs text-muted-500">{b.totalFloors} floors</p>
-                        </div>
-                        <span className="num text-sm text-muted-600">{b._count.units} units</span>
-                      </li>
-                    ))}
-                    {project.blocks.length === 0 && (
-                      <li className="px-4 py-10 text-center text-sm text-muted-500">No blocks defined.</li>
-                    )}
-                  </ul>
-                </CardBody>
-              </Card>
+              {project.progressLogs.length === 0 && (
+                <div className="py-6 text-center text-[12px] font-medium text-muted-400">
+                  No site logs captured yet. These are written from the supervisor&rsquo;s phone.
+                </div>
+              )}
+              <div className="mt-[9px] text-[11px] font-medium text-muted-400">
+                Geo-tagged, date-stamped · captured from the mobile app
+              </div>
             </div>
           )}
         </>

@@ -2,153 +2,126 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X } from "lucide-react";
 
-import { Badge, Card, CardBody, CardHeader, CardTitle, Field, Select } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { Alert, Field } from "@/components/ui/primitives";
 import { mapUserToProjectAction, removeUserFromProjectAction } from "../actions";
 
-interface Member {
-  id: string; userId: string; name: string; email: string;
-  designation: string | null; status: string; isProjectManager: boolean;
+export interface TeamRole {
+  role: string;
+  dot: string;
+  members: Array<{ id: string; userId: string; name: string }>;
 }
 
+/**
+ * The design's team mapping: one row per role, the people mapped to it as
+ * chips, and a "+ Map user" that grants access by mapping — access follows the
+ * mapping, which is what the heading says.
+ */
 export function TeamTab({
-  projectId, members, assignable, can,
+  projectId, roles, assignable, can,
 }: {
   projectId: string;
-  members: Member[];
-  assignable: Array<{ id: string; name: string; email: string; designation: string | null }>;
+  roles: TeamRole[];
+  assignable: Array<{ id: string; name: string; designation: string | null }>;
   can: { assign: boolean; remove: boolean };
 }) {
   const router = useRouter();
-  const [adding, setAdding] = React.useState(false);
-  const [removing, setRemoving] = React.useState<Member | null>(null);
-  const [userId, setUserId] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
+  const [mapping, setMapping] = React.useState<string | null>(null);
+  const [pick, setPick] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
 
-  async function add() {
+  async function map() {
+    if (!pick) return;
     setBusy(true);
-    const res = await mapUserToProjectAction(projectId, userId);
+    setError(null);
+    const res = await mapUserToProjectAction(projectId, pick);
     setBusy(false);
-    if (!res.ok) { setError(res.error); return; }
-    setAdding(false); setUserId(""); setError(null); router.refresh();
+    if (!res.ok) setError(res.error);
+    else { setMapping(null); setPick(""); router.refresh(); }
   }
 
-  async function remove() {
-    if (!removing) return;
-    setBusy(true);
-    const res = await removeUserFromProjectAction(projectId, removing.userId);
-    setBusy(false);
-    if (!res.ok) { setError(res.error); setRemoving(null); return; }
-    setRemoving(null); setError(null); router.refresh();
+  async function unmap(userId: string) {
+    setError(null);
+    const res = await removeUserFromProjectAction(projectId, userId);
+    if (!res.ok) setError(res.error);
+    else router.refresh();
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="min-w-0">
-          <CardTitle>Project team ({members.length})</CardTitle>
-          <span className="text-xs text-muted-500">Access follows this mapping.</span>
-        </div>
-        {can.assign && assignable.length > 0 && (
-          <Button size="sm" variant="secondary" onClick={() => { setAdding(true); setError(null); }}>
-            <Plus className="mr-1 h-3.5 w-3.5" /> Map user
-          </Button>
-        )}
-      </CardHeader>
+    <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
+      <div className="mb-3 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+        Team mapping · access follows mapping
+      </div>
 
-      <CardBody className="p-0">
-        {error && !adding && (
-          <p className="border-b border-bad-050 bg-bad-050 px-4 py-2.5 text-[12px] font-bold text-bad-600">{error}</p>
-        )}
+      {error && <div className="mb-3"><Alert tone="error">{error}</Alert></div>}
 
-        {members.length === 0 ? (
-          <div className="px-4 py-10 text-center">
-            <p className="text-sm text-muted-500">Nobody mapped yet.</p>
-            <p className="mx-auto mt-1 max-w-sm text-[11.5px] font-medium text-muted-400">
-              Until someone is mapped, only users who can access every project will see this one.
-            </p>
-          </div>
-        ) : (
-          <ul className="divide-y divide-line-200">
-            {members.map((m) => (
-              <li key={m.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-1.5 text-sm text-navy-900">
-                    {m.name}
-                    {m.isProjectManager && <Badge tone="brand">Project manager</Badge>}
-                  </p>
-                  <p className="text-xs text-muted-500">
-                    {m.designation ?? "—"} · {m.email}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <Badge tone={m.status === "ACTIVE" ? "good" : "slate"}>{m.status}</Badge>
-                  {can.remove && !m.isProjectManager && (
-                    <button
-                      type="button"
-                      title="Remove from project"
-                      onClick={() => setRemoving(m)}
-                      className="grid h-[26px] w-[26px] place-items-center rounded-[7px] text-muted-400 transition-colors hover:bg-bad-050 hover:text-bad-600"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              </li>
+      {roles.map((r) => (
+        <div key={r.role} className="flex items-center gap-[11px] border-b border-line-100 py-2.5 last:border-0">
+          <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: r.dot }} />
+          <span className="w-[118px] shrink-0 text-[12px] font-bold text-navy-600">{r.role}</span>
+          <div className="flex flex-1 flex-wrap gap-1.5">
+            {r.members.map((m) => (
+              <span
+                key={m.id}
+                className="inline-flex items-center gap-1.5 rounded-full border border-line-400 bg-surface-field py-[5px] pl-[11px] pr-[6px] text-[11.5px] font-semibold text-navy-900"
+              >
+                {m.name}
+                {can.remove && (
+                  <button
+                    type="button"
+                    onClick={() => unmap(m.userId)}
+                    className="flex h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-[#E4E9F5] text-[10px] font-semibold text-muted-600 transition-colors hover:bg-bad-050 hover:text-bad-600"
+                  >
+                    ✕
+                  </button>
+                )}
+              </span>
             ))}
-          </ul>
-        )}
-      </CardBody>
+            {r.members.length === 0 && (
+              <span className="self-center text-[11.5px] font-medium text-[#C0C5DC]">not mapped</span>
+            )}
+          </div>
+          {can.assign && (
+            <button
+              type="button"
+              onClick={() => { setMapping(r.role); setPick(""); }}
+              className="shrink-0 cursor-pointer rounded-full border border-dashed border-[#C6CFE8] bg-surface-tint px-[11px] py-[5px] text-[11px] font-semibold text-brand-700 transition-colors hover:border-brand-500 hover:bg-brand-100"
+            >
+              + Map user
+            </button>
+          )}
+        </div>
+      ))}
 
       <Modal
-        open={adding}
-        onClose={() => setAdding(false)}
-        title="Map a user to this project"
-        description="Mapping grants access — the user will see this project's data."
-        size="sm"
+        open={mapping !== null}
+        onClose={() => setMapping(null)}
+        title={`Map a user as ${mapping ?? ""}`}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
-            <Button onClick={add} loading={busy} disabled={!userId}>Map user</Button>
+            <Button variant="ghost" onClick={() => setMapping(null)}>Cancel</Button>
+            <Button loading={busy} onClick={map} disabled={!pick}>Map user</Button>
           </>
         }
       >
-        {error && (
-          <p className="mb-3 rounded-[9px] bg-bad-050 px-3 py-2 text-[12px] font-bold text-bad-600">{error}</p>
-        )}
-        <Field label="User" required>
-          <Select value={userId} onChange={(e) => setUserId(e.target.value)}>
-            <option value="">Select a user…</option>
+        <Field label="User" hint="Access follows the mapping — a mapped user sees this project.">
+          <select
+            value={pick}
+            onChange={(e) => setPick(e.target.value)}
+            className="w-full rounded-[9px] border border-line-400 bg-surface-field px-3 py-2 text-[12.5px] text-navy-900"
+          >
+            <option value="">Pick a user…</option>
             {assignable.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name}{u.designation ? ` · ${u.designation}` : ""}
               </option>
             ))}
-          </Select>
+          </select>
         </Field>
       </Modal>
-
-      <Modal
-        open={Boolean(removing)}
-        onClose={() => setRemoving(null)}
-        title="Remove from project?"
-        size="sm"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setRemoving(null)}>Cancel</Button>
-            <Button variant="danger" onClick={remove} loading={busy}>Remove</Button>
-          </>
-        }
-      >
-        <p className="text-[12.5px] font-medium text-muted-600">
-          {removing?.name} will lose access to this project and everything under it,
-          unless their role lets them access every project.
-        </p>
-      </Modal>
-    </Card>
+    </div>
   );
 }

@@ -52,3 +52,6 @@ next-env.d.ts
 
 # Uploaded documents
 /storage
+
+# Temporary sign-in used only for design screenshots.
+src/app/shot-temp/

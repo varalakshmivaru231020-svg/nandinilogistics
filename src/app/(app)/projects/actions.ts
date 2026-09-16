@@ -130,6 +130,13 @@ export async function updateProjectAction(id: string, formData: FormData): Promi
 
 /* ------------------------------ Work breakdown ----------------------------- */
 
+/** The breakdown's progress figure: a whole percentage, clamped. */
+function pct(value: FormDataEntryValue | null): number {
+  const n = Math.round(Number(value ?? 0));
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(100, Math.max(0, n));
+}
+
 export async function createPhaseAction(projectId: string, formData: FormData): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.project.phase.create);
@@ -138,9 +145,10 @@ export async function createPhaseAction(projectId: string, formData: FormData): 
     const code = String(formData.get("code") ?? "").trim().toUpperCase();
     const name = String(formData.get("name") ?? "").trim();
     const sequence = Number(formData.get("sequence") ?? 0);
+    const progressPct = pct(formData.get("progressPct"));
     if (!code || !name) throw new Error("Phase code and name are required.");
 
-    await prisma.projectPhase.create({ data: { projectId, code, name, sequence } });
+    await prisma.projectPhase.create({ data: { projectId, code, name, sequence, progressPct } });
     await recordAudit({
       action: "CREATE", entity: "ProjectPhase", userId: ctx.id, projectId,
       summary: `Added phase ${code} — ${name}`,
@@ -161,7 +169,7 @@ export async function createWorkPackageAction(
     const name = String(formData.get("name") ?? "").trim();
     if (!code || !name) throw new Error("Work package code and name are required.");
 
-    await prisma.workPackage.create({ data: { phaseId, code, name } });
+    await prisma.workPackage.create({ data: { phaseId, code, name, progressPct: pct(formData.get("progressPct")) } });
     await recordAudit({
       action: "CREATE", entity: "WorkPackage", userId: ctx.id, projectId,
       summary: `Added work package ${code} — ${name}`,
@@ -188,7 +196,10 @@ export async function updatePhaseAction(
     const before = await prisma.projectPhase.findUnique({ where: { id: phaseId } });
     if (!before || before.projectId !== projectId) throw new Error("Phase not found.");
 
-    await prisma.projectPhase.update({ where: { id: phaseId }, data: { code, name, sequence } });
+    await prisma.projectPhase.update({
+      where: { id: phaseId },
+      data: { code, name, sequence, progressPct: pct(formData.get("progressPct")) },
+    });
     await recordAudit({
       action: "UPDATE", entity: "ProjectPhase", entityId: phaseId, userId: ctx.id, projectId,
       summary: `Renamed phase ${before.code} to ${code} — ${name}`,
@@ -255,7 +266,10 @@ export async function updateWorkPackageAction(
     });
     if (!before || before.phase.projectId !== projectId) throw new Error("Work package not found.");
 
-    await prisma.workPackage.update({ where: { id: workPackageId }, data: { code, name } });
+    await prisma.workPackage.update({
+      where: { id: workPackageId },
+      data: { code, name, progressPct: pct(formData.get("progressPct")) },
+    });
     await recordAudit({
       action: "UPDATE", entity: "WorkPackage", entityId: workPackageId, userId: ctx.id, projectId,
       summary: `Renamed work package ${before.code} to ${code} — ${name}`,

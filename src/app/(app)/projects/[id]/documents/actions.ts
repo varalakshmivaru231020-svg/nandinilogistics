@@ -30,6 +30,7 @@ export async function uploadDocumentAction(
     const documentTypeId = String(formData.get("documentTypeId") ?? "").trim();
     const supersedesId = String(formData.get("supersedesId") ?? "").trim() || null;
     const expiryDate = String(formData.get("expiryDate") ?? "").trim();
+    const access = String(formData.get("access") ?? "").trim() || null;
 
     if (!title) throw new Error("Give the document a title.");
     if (!documentTypeId) throw new Error("Choose a document type.");
@@ -73,6 +74,7 @@ export async function uploadDocumentAction(
         checksum: stored.checksum,
         version,
         supersedesId,
+        access,
         expiryDate: expiryDate ? new Date(expiryDate) : null,
         uploadedById: ctx.id,
       },
@@ -121,6 +123,40 @@ export async function deleteDocumentAction(id: string): Promise<ActionResult<nul
     });
 
     revalidatePath(`/projects/${document.projectId}`);
+    return null;
+  });
+}
+
+/**
+ * Corrects a document's own record — its title, its kind and who may open it —
+ * without touching the stored file. A new file is a new version, not an edit.
+ */
+export async function updateDocumentAction(
+  id: string,
+  input: { title: string; documentTypeId: string; access: string },
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.project.document.upload);
+    const doc = await prisma.projectDocument.findUnique({
+      where: { id },
+      select: { id: true, projectId: true, title: true },
+    });
+    if (!doc) throw new Error("Document not found.");
+    assertProjectAccess(ctx, doc.projectId);
+
+    const title = input.title.trim();
+    if (!title) throw new Error("Give the document a title.");
+    if (!input.documentTypeId) throw new Error("Choose a document type.");
+
+    await prisma.projectDocument.update({
+      where: { id },
+      data: { title, documentTypeId: input.documentTypeId, access: input.access.trim() || null },
+    });
+    await recordAudit({
+      action: "UPDATE", entity: "ProjectDocument", entityId: id, userId: ctx.id, projectId: doc.projectId,
+      summary: `Updated the record for "${doc.title}"`,
+    });
+    revalidatePath(`/projects/${doc.projectId}`);
     return null;
   });
 }

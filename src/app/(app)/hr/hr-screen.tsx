@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
@@ -327,14 +328,21 @@ function StaffTab({
                 <td className="px-4 py-3 text-[12px] font-medium text-navy-500">{e.address ?? "—"}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1.5">
-                    {can.update && (
+                    {isInactive(e.status) && can.update ? (
                       <button
                         type="button"
                         onClick={() => onStatus(e)}
                         className="rounded-[7px] bg-brand-500 px-[13px] py-1.5 text-[11px] font-bold text-white hover:bg-brand-600"
                       >
-                        {isInactive(e.status) ? "Activate" : "View"}
+                        Activate
                       </button>
+                    ) : (
+                      <Link
+                        href={`/hr/${e.id}`}
+                        className="rounded-[7px] bg-brand-500 px-[13px] py-1.5 text-[11px] font-bold text-white hover:bg-brand-600"
+                      >
+                        View
+                      </Link>
                     )}
                     {can.update && (
                       <button

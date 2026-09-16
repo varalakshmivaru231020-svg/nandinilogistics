@@ -879,16 +879,18 @@ model Project {
 }
 
 model ProjectPhase {
-  id        String       @id @default(cuid())
-  projectId String
-  code      String
-  name      String
-  sequence  Int          @default(0)
-  startDate DateTime?
-  endDate   DateTime?
-  status    RecordStatus @default(ACTIVE)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id          String       @id @default(cuid())
+  projectId   String
+  code        String
+  name        String
+  sequence    Int          @default(0)
+  /// How far along the breakdown says this phase is, as the design shows it.
+  progressPct Int          @default(0)
+  startDate   DateTime?
+  endDate     DateTime?
+  status      RecordStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workPackages WorkPackage[]
@@ -905,6 +907,8 @@ model WorkPackage {
   name         String
   description  String?
   sequence     Int          @default(0)
+  /// How far along the breakdown says this package is.
+  progressPct  Int          @default(0)
   startDate    DateTime?
   endDate      DateTime?
   budgetAmount Decimal      @default(0) @db.Decimal(16, 2)
@@ -967,6 +971,8 @@ model ProjectDocument {
   /// Documents are versioned rather than overwritten.
   version        Int       @default(1)
   supersedesId   String?
+  /// Who may open it, in the words the repository shows — "PM · Supervisor".
+  access         String?
   expiryDate     DateTime?
   uploadedById   String?
   createdAt      DateTime  @default(now())

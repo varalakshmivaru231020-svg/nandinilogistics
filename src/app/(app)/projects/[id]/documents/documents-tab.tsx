@@ -2,33 +2,44 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Download, FileText, History, Trash2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, Field, Input, Select } from "@/components/ui/primitives";
-import { formatDate } from "@/lib/utils";
-import { deleteDocumentAction, uploadDocumentAction } from "./actions";
+import { Alert, Field, Input, Select } from "@/components/ui/primitives";
+import { cn, formatDate } from "@/lib/utils";
+import { deleteDocumentAction, updateDocumentAction, uploadDocumentAction } from "./actions";
 
 export interface DocumentRow {
   id: string;
   title: string;
   fileName: string;
-  fileSize: number;
-  mimeType: string | null;
   version: number;
   supersedesId: string | null;
   hasNewerVersion: boolean;
   expiryDate: string | null;
   createdAt: string;
+  typeId: string;
   typeName: string;
+  access: string | null;
   uploadedByName: string | null;
 }
 
-function readableSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+/** The design's kinds, and the colour each one carries. */
+const TAG_TONE: Record<string, string> = {
+  DRAWING: "bg-brand-100 text-brand-700",
+  LICENCE: "bg-good-050 text-good-700",
+  APPROVAL: "bg-[#EFE9FC] text-[#6A46C8]",
+  AGREEMENT: "bg-warn-050 text-warn-700",
+  REPORT: "bg-[#EEF1F9] text-[#4A5077]",
+  CONTRACT: "bg-bad-050 text-bad-700",
+};
+
+function tagOf(typeName: string): { label: string; tone: string } {
+  const label = typeName.toUpperCase();
+  for (const key of Object.keys(TAG_TONE)) {
+    if (label.includes(key)) return { label: key, tone: TAG_TONE[key] };
+  }
+  return { label: label.slice(0, 12), tone: "bg-[#EEF1F9] text-[#4A5077]" };
 }
 
 export function DocumentsTab({
@@ -43,140 +54,111 @@ export function DocumentsTab({
   const router = useRouter();
   const [uploading, setUploading] = React.useState(false);
   const [superseding, setSuperseding] = React.useState<DocumentRow | null>(null);
+  const [editing, setEditing] = React.useState<DocumentRow | null>(null);
+  const [confirming, setConfirming] = React.useState<DocumentRow | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const [notice, setNotice] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
 
-  async function remove(doc: DocumentRow) {
-    setBusy(doc.id);
-    setError(null);
-    const res = await deleteDocumentAction(doc.id);
-    setBusy(null);
-    if (!res.ok) setError(res.error);
-    else { setNotice("Document deleted."); router.refresh(); }
-  }
-
-  // Only the newest version of each chain leads the list; older ones nest under it.
+  // Only the newest version of each chain leads the list.
   const current = documents.filter((d) => !d.hasNewerVersion);
-  const supersededBy = new Map<string, DocumentRow[]>();
-  for (const d of documents) {
-    if (d.supersedesId) {
-      supersededBy.set(d.supersedesId, [...(supersededBy.get(d.supersedesId) ?? []), d]);
-    }
-  }
 
-  function chainFor(doc: DocumentRow): DocumentRow[] {
-    const older: DocumentRow[] = [];
-    let cursor = doc.supersedesId;
-    while (cursor) {
-      const previous = documents.find((d) => d.id === cursor);
-      if (!previous) break;
-      older.push(previous);
-      cursor = previous.supersedesId;
-    }
-    return older;
+  async function remove() {
+    if (!confirming) return;
+    setBusy(true);
+    const res = await deleteDocumentAction(confirming.id);
+    setBusy(false);
+    setConfirming(null);
+    if (!res.ok) setError(res.error);
+    else router.refresh();
   }
 
   return (
-    <div className="space-y-3">
-      {error && <Alert tone="error">{error}</Alert>}
-      {notice && !error && <Alert tone="success">{notice}</Alert>}
+    <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+          Document repository · {current.length} files
+        </div>
+        {can.upload && (
+          <button
+            type="button"
+            onClick={() => { setSuperseding(null); setUploading(true); }}
+            className="cursor-pointer rounded-[8px] bg-brand-500 px-3 py-[7px] text-[11px] font-bold text-white transition-colors hover:bg-brand-600"
+          >
+            ↑ Upload
+          </button>
+        )}
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Document repository</CardTitle>
-          <div className="flex items-center gap-2">
-            <Badge tone="slate">{documents.length} file(s)</Badge>
+      {error && <div className="mb-3"><Alert tone="error">{error}</Alert></div>}
+
+      {current.map((d) => {
+        const tag = tagOf(d.typeName);
+        const expired = d.expiryDate ? new Date(d.expiryDate).getTime() < nowMs : false;
+        return (
+          <div
+            key={d.id}
+            className="flex items-center gap-[11px] border-b border-line-100 py-2.5 last:border-0 hover:bg-surface-tint"
+          >
+            <span className={cn("rounded-full px-[9px] py-1 text-[9px] font-bold tracking-[.06em]", tag.tone)}>
+              {tag.label}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[12.5px] font-semibold text-navy-900">
+                {can.download ? (
+                  <a href={`/api/documents/${d.id}`} className="hover:text-brand-600">{d.title}</a>
+                ) : (
+                  d.title
+                )}
+              </div>
+              <div className="mt-0.5 text-[11px] font-medium text-muted-400">
+                v{d.version} · {formatDate(d.createdAt)}
+                {d.uploadedByName ? ` · ${d.uploadedByName}` : ""}
+                {expired ? " · expired" : d.expiryDate ? ` · expires ${formatDate(d.expiryDate)}` : ""}
+              </div>
+            </div>
+            <span className="shrink-0 rounded-full bg-surface-field px-[9px] py-1 text-[10.5px] font-semibold text-muted-500">
+              {d.access || "All roles · view"}
+            </span>
+            {can.version && (
+              <button
+                type="button"
+                onClick={() => { setSuperseding(d); setUploading(true); }}
+                className="shrink-0 cursor-pointer rounded-[7px] border border-line-400 bg-white px-2.5 py-1 text-[10.5px] font-semibold text-brand-700 transition-colors hover:border-brand-500 hover:bg-brand-100"
+              >
+                + Version
+              </button>
+            )}
             {can.upload && (
-              <Button size="sm" onClick={() => { setSuperseding(null); setUploading(true); }}>
-                <Upload className="h-3.5 w-3.5" />
-                Upload
-              </Button>
+              <button
+                type="button"
+                onClick={() => setEditing(d)}
+                className="shrink-0 cursor-pointer rounded-[7px] border border-line-400 bg-white px-2.5 py-1 text-[10.5px] font-semibold text-navy-500 transition-colors hover:border-brand-500 hover:text-brand-700"
+              >
+                Edit
+              </button>
+            )}
+            {can.delete && (
+              <button
+                type="button"
+                onClick={() => setConfirming(d)}
+                className="shrink-0 cursor-pointer px-1 py-0.5 text-[13px] font-semibold text-[#C0C5DC] transition-colors hover:text-bad-600"
+              >
+                ✕
+              </button>
             )}
           </div>
-        </CardHeader>
-        <CardBody className="p-0">
-          {current.length === 0 ? (
-            <EmptyState
-              icon={<FileText className="h-8 w-8" />}
-              title="No documents yet"
-              description="Drawings, approvals, licences and agreements live here, with version history."
-            />
-          ) : (
-            <ul className="divide-y divide-line-200">
-              {current.map((doc) => {
-                const older = chainFor(doc);
-                const expired = doc.expiryDate ? new Date(doc.expiryDate).getTime() < nowMs : false;
-                return (
-                  <li key={doc.id} className="px-4 py-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-medium text-navy-950">{doc.title}</span>
-                          <Badge tone="slate">{doc.typeName}</Badge>
-                          {doc.version > 1 && <Badge tone="brand">v{doc.version}</Badge>}
-                          {expired && <Badge tone="bad">Expired</Badge>}
-                        </div>
-                        <p className="mt-0.5 text-xs text-muted-500">
-                          {doc.fileName} · {readableSize(doc.fileSize)} · {formatDate(doc.createdAt)}
-                          {doc.uploadedByName && ` · ${doc.uploadedByName}`}
-                          {doc.expiryDate && ` · expires ${formatDate(doc.expiryDate)}`}
-                        </p>
-                        {older.length > 0 && (
-                          <details className="mt-1">
-                            <summary className="flex cursor-pointer items-center gap-1 text-xs text-brand-600">
-                              <History className="h-3 w-3" />
-                              {older.length} earlier version(s)
-                            </summary>
-                            <ul className="mt-1 space-y-0.5 border-l-2 border-line-400 pl-3">
-                              {older.map((old) => (
-                                <li key={old.id} className="flex items-center justify-between py-0.5">
-                                  <span className="text-xs text-muted-500">
-                                    v{old.version} · {old.fileName} · {formatDate(old.createdAt)}
-                                  </span>
-                                  {can.download && (
-                                    <a href={`/api/documents/${old.id}`} className="text-xs text-brand-600 hover:underline">
-                                      Download
-                                    </a>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                          </details>
-                        )}
-                      </div>
+        );
+      })}
 
-                      <div className="flex shrink-0 items-center gap-1">
-                        {can.download && (
-                          <a href={`/api/documents/${doc.id}`}>
-                            <Button size="xs" variant="secondary">
-                              <Download className="h-3 w-3" />
-                              Download
-                            </Button>
-                          </a>
-                        )}
-                        {can.version && (
-                          <Button size="xs" variant="ghost"
-                            onClick={() => { setSuperseding(doc); setUploading(true); }}>
-                            <History className="h-3 w-3" />
-                            New version
-                          </Button>
-                        )}
-                        {can.delete && (
-                          <button type="button" disabled={busy === doc.id} onClick={() => remove(doc)}
-                            className="rounded p-1.5 text-muted-400 hover:bg-bad-050 hover:text-bad-600">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
+      {current.length === 0 && (
+        <div className="py-6 text-center text-[12px] font-medium text-muted-400">
+          Drawings, approvals, licences and agreements live here, with version history.
+        </div>
+      )}
+
+      <div className="mt-[9px] text-[11px] font-medium text-muted-400">
+        Version history kept per document · access is role-based
+      </div>
 
       {uploading && (
         <UploadModal
@@ -184,12 +166,44 @@ export function DocumentsTab({
           documentTypes={documentTypes}
           superseding={superseding}
           onClose={() => { setUploading(false); setSuperseding(null); }}
-          onDone={(m) => { setUploading(false); setSuperseding(null); setNotice(m); router.refresh(); }}
+          onDone={() => { setUploading(false); setSuperseding(null); router.refresh(); }}
         />
       )}
+
+      {editing && (
+        <EditModal
+          doc={editing}
+          documentTypes={documentTypes}
+          onClose={() => setEditing(null)}
+          onDone={() => { setEditing(null); router.refresh(); }}
+        />
+      )}
+
+      <Modal
+        open={confirming !== null}
+        onClose={() => setConfirming(null)}
+        title={confirming ? `Delete "${confirming.title}"?` : ""}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirming(null)}>Keep it</Button>
+            <Button variant="danger" loading={busy} onClick={remove}>Delete</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-navy-600">The file and its record go. It cannot be undone.</p>
+      </Modal>
     </div>
   );
 }
+
+/** Who may open a document, in the words the repository shows. */
+const ACCESS_CHOICES = [
+  "All roles · view",
+  "PM · Supervisor",
+  "PM · Engineers",
+  "Owner · PM",
+  "Owner only",
+];
 
 function UploadModal({
   projectId, documentTypes, superseding, onClose, onDone,
@@ -198,7 +212,7 @@ function UploadModal({
   documentTypes: Array<{ id: string; name: string; requiresExpiry: boolean }>;
   superseding: DocumentRow | null;
   onClose: () => void;
-  onDone: (m: string) => void;
+  onDone: () => void;
 }) {
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -212,7 +226,7 @@ function UploadModal({
     const res = await uploadDocumentAction(projectId, fd);
     setBusy(false);
     if (!res.ok) setError(res.error);
-    else onDone(superseding ? `Uploaded as version ${res.data.version}.` : "Document uploaded.");
+    else onDone();
   }
 
   return (
@@ -241,9 +255,15 @@ function UploadModal({
         </Field>
 
         <Field label="Document type" required>
-          <Select name="documentTypeId" required defaultValue="">
+          <Select name="documentTypeId" required defaultValue={superseding?.typeId ?? ""}>
             <option value="">Select…</option>
             {documentTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </Select>
+        </Field>
+
+        <Field label="Access">
+          <Select name="access" defaultValue={superseding?.access ?? ACCESS_CHOICES[0]}>
+            {ACCESS_CHOICES.map((a) => <option key={a} value={a}>{a}</option>)}
           </Select>
         </Field>
 
@@ -260,6 +280,63 @@ function UploadModal({
           />
         </Field>
       </form>
+    </Modal>
+  );
+}
+
+function EditModal({
+  doc, documentTypes, onClose, onDone,
+}: {
+  doc: DocumentRow;
+  documentTypes: Array<{ id: string; name: string }>;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [title, setTitle] = React.useState(doc.title);
+  const [typeId, setTypeId] = React.useState(doc.typeId);
+  const [access, setAccess] = React.useState(doc.access ?? ACCESS_CHOICES[0]);
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const res = await updateDocumentAction(doc.id, { title, documentTypeId: typeId, access });
+    setBusy(false);
+    if (!res.ok) setError(res.error);
+    else onDone();
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Edit "${doc.title}"`}
+      description="The stored file is unchanged — a new file is a new version."
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button loading={busy} onClick={save}>Save</Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && <Alert tone="error">{error}</Alert>}
+        <Field label="Title" required>
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+        </Field>
+        <Field label="Document type" required>
+          <Select value={typeId} onChange={(e) => setTypeId(e.target.value)}>
+            {documentTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Access">
+          <Select value={access} onChange={(e) => setAccess(e.target.value)}>
+            {ACCESS_CHOICES.map((a) => <option key={a} value={a}>{a}</option>)}
+          </Select>
+        </Field>
+      </div>
     </Modal>
   );
 }
