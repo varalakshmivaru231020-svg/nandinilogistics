@@ -4,7 +4,6 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { maskId } from "@/lib/hr/list-filters";
-import { formatDate } from "@/lib/utils";
 import { EmployeeDetail, type AttendanceDay, type AttendanceRow } from "./employee-detail";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -133,7 +132,6 @@ export default async function EmployeeDetailPage({
           { k: "Aadhaar number", v: (canIdentity ? employee.aadhaar : maskId(employee.aadhaar)) ?? "—" },
           { k: "PAN", v: (canIdentity ? employee.pan : maskId(employee.pan)) ?? "—" },
           { k: "Address", v: employee.address || "—" },
-          { k: "Joined on", v: formatDate(employee.joinedOn) },
         ],
       }}
       documents={

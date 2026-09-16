@@ -180,11 +180,6 @@ export function ItemDetail({
           </div>
         }
       >
-        {shown.length === 0 && (
-          <div className="px-7 py-7 text-center text-[12.5px] font-medium text-muted-400">
-            No movements of this kind recorded for this item
-          </div>
-        )}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[880px] border-collapse">
             <thead>
@@ -225,6 +220,11 @@ export function ItemDetail({
               ))}
             </tbody>
           </table>
+          {shown.length === 0 && (
+            <div className="px-7 py-7 text-center text-[12.5px] font-medium text-muted-400">
+              No movements of this kind recorded for this item
+            </div>
+          )}
         </div>
         <div className="border-t border-line-200 px-5 py-3.5 text-[11.5px] font-medium text-muted-400">
           Receipts are posted automatically from GRNs against purchase orders; issues, returns and
