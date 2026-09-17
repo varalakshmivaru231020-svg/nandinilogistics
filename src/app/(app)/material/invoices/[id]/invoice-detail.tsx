@@ -324,7 +324,7 @@ function ApproveModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Back</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Back</Button>
           <Button
             variant={mismatched ? "warning" : "success"}
             onClick={submit}
@@ -387,7 +387,7 @@ function PaymentModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button onClick={submit} loading={busy} disabled={!(Number(amount) > 0)}>
             Record payment
           </Button>
@@ -440,7 +440,7 @@ function CancelModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Back</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Back</Button>
           <Button variant="danger" onClick={submit} loading={busy} disabled={!remarks.trim()}>
             Cancel invoice
           </Button>

@@ -39,7 +39,7 @@ export function AssignModal({
       open onClose={onClose} title={`Assign ${leadName}`} size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button onClick={submit} loading={busy} disabled={!ownerId}>Assign</Button>
         </>
       }

@@ -87,7 +87,7 @@ function ClearModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button variant="success" onClick={submit} loading={busy} disabled={!clearedOn}>Mark cleared</Button>
         </>
       }
@@ -130,7 +130,7 @@ function BounceModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Back</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Back</Button>
           <Button variant="danger" onClick={submit} loading={busy} disabled={!reason.trim()}>Record bounce</Button>
         </>
       }

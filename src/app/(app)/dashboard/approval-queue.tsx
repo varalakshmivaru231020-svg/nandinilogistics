@@ -177,7 +177,7 @@ function RejectModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>
+          <Button variant="outline" type="button" onClick={onClose}>
             Cancel
           </Button>
           <Button variant="danger" onClick={submit} loading={busy} disabled={!remarks.trim()}>

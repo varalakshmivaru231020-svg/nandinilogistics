@@ -308,7 +308,7 @@ export function IndentDetail({
         title={`Delete ${indent.indentNo}?`}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setConfirming(false)}>Keep it</Button>
+            <Button variant="outline" onClick={() => setConfirming(false)}>Keep it</Button>
             <Button variant="danger" loading={busy} onClick={remove}>Delete</Button>
           </>
         }

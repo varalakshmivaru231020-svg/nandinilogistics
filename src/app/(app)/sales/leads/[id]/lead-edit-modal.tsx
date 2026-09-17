@@ -66,7 +66,7 @@ export function EditLeadModal({
       description="Changing the phone number re-runs duplicate detection. Stage, owner and follow-ups are changed from their own controls."
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" form="lead-edit-form" loading={busy}>Save changes</Button>
         </>
       }

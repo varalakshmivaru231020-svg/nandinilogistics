@@ -249,7 +249,7 @@ function CancelIssueModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Back</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Back</Button>
           <Button variant="danger" onClick={submit} loading={busy}
             disabled={!reason.trim() || issue.pendingReturns > 0}>
             Cancel issue

@@ -122,7 +122,7 @@ export const Textarea = React.forwardRef<
   HTMLTextAreaElement,
   React.TextareaHTMLAttributes<HTMLTextAreaElement>
 >(({ className, ...props }, ref) => (
-  <textarea ref={ref} className={cn(FIELD_BASE, "py-2.5", className)} {...props} />
+  <textarea ref={ref} className={cn(FIELD_BASE, "resize-y py-2.5", className)} {...props} />
 ));
 Textarea.displayName = "Textarea";
 
@@ -151,7 +151,8 @@ export function Label({
       {...props}
     >
       {children}
-      {required && <span className="text-bad-600">*</span>}
+      {/* The design writes the marker off on its own: "Name *", never "Name*". */}
+      {required && <> <span className="text-bad-600">*</span></>}
     </label>
   );
 }

@@ -82,7 +82,7 @@ export function NewProjectButton({
           description="Level 1 · Project master, then Level 2 · Work breakdown"
           footer={
             <>
-              <Button variant="secondary" type="button" onClick={reset}>Cancel</Button>
+              <Button variant="outline" type="button" onClick={reset}>Cancel</Button>
               <Button type="submit" form="project-form" loading={busy}>Create project</Button>
             </>
           }

@@ -64,7 +64,7 @@ export function EditProjectButton({
         description="The project master — what every other screen reads from."
         footer={
           <>
-            <Button variant="secondary" type="button" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
             <Button type="submit" form="edit-project" loading={busy}>Save</Button>
           </>
         }

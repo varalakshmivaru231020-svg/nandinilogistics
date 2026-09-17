@@ -470,7 +470,7 @@ function TaskDrawer({
         </form>
 
         <div className="flex shrink-0 justify-end gap-[9px] border-t border-line-200 bg-surface-sunken px-[22px] py-4">
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" form="task-form" loading={busy} disabled={!assigneeId}>
             {task ? "Save changes" : "Create task"}
           </Button>

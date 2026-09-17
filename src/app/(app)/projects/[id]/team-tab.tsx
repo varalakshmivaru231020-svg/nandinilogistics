@@ -102,7 +102,7 @@ export function TeamTab({
         title={`Map a user as ${mapping ?? ""}`}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setMapping(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setMapping(null)}>Cancel</Button>
             <Button loading={busy} onClick={map} disabled={!pick}>Map user</Button>
           </>
         }

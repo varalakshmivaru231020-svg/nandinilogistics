@@ -759,7 +759,7 @@ function LostModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button variant="danger" loading={busy} onClick={save} disabled={!reasonId}>Mark lost</Button>
         </>
       }

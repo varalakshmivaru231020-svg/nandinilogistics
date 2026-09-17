@@ -185,7 +185,7 @@ export function DocumentsTab({
         title={confirming ? `Delete "${confirming.title}"?` : ""}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setConfirming(null)}>Keep it</Button>
+            <Button variant="outline" onClick={() => setConfirming(null)}>Keep it</Button>
             <Button variant="danger" loading={busy} onClick={remove}>Delete</Button>
           </>
         }
@@ -242,7 +242,7 @@ function UploadModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" form="upload-form" loading={busy}>Upload</Button>
         </>
       }
@@ -316,7 +316,7 @@ function EditModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button loading={busy} onClick={save}>Save</Button>
         </>
       }

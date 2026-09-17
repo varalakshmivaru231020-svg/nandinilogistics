@@ -699,7 +699,7 @@ export function ScheduleScreen({
 
 /* ------------------------------ Inline panels ------------------------------ */
 
-const PANEL_LABEL = "mb-[5px] text-[11px] font-semibold text-muted-600";
+const PANEL_LABEL = "block mb-[5px] text-[11px] font-semibold text-muted-600";
 const PANEL_FIELD =
   "w-full rounded-[9px] border border-line-400 bg-surface-sunken px-3 py-2.5 text-[12.5px] font-medium text-navy-900 outline-none focus:border-brand-500 focus:bg-white";
 
@@ -931,7 +931,7 @@ function DecideModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Back</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Back</Button>
           <Button variant="danger" onClick={() => decide(false)} loading={busy === "reject"} disabled={!note.trim()}>
             <X className="h-3.5 w-3.5" />
             Refuse

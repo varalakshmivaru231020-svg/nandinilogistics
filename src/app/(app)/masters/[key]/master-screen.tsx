@@ -373,7 +373,7 @@ export function MasterForm({
       size="md"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} type="button">
+          <Button variant="outline" onClick={onClose} type="button">
             Cancel
           </Button>
           <Button type="submit" form="master-form" loading={busy}>

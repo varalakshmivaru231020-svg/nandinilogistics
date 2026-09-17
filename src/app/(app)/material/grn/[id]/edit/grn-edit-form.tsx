@@ -65,7 +65,7 @@ export function GrnEditForm({
       </Card>
 
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" onClick={() => router.push(`/material/grn/${grn.id}`)}>Cancel</Button>
+        <Button variant="outline" onClick={() => router.push(`/material/grn/${grn.id}`)}>Cancel</Button>
         <Button loading={busy} onClick={save}>Save</Button>
       </div>
     </div>

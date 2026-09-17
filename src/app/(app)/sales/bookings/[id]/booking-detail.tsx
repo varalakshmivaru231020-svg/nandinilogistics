@@ -324,7 +324,7 @@ function CollectModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button onClick={submit} loading={busy} disabled={!(Number(amount) > 0)}>Record receipt</Button>
         </>
       }
@@ -382,7 +382,7 @@ function CancelModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Back</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Back</Button>
           <Button variant="danger" onClick={submit} loading={busy} disabled={!remarks.trim()}>
             Cancel booking
           </Button>

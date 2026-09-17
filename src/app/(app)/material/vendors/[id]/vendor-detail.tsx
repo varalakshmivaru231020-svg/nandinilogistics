@@ -139,7 +139,7 @@ export function VendorDetail({
         title={`Delete ${vendor.name}?`}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setConfirming(false)}>Keep it</Button>
+            <Button variant="outline" onClick={() => setConfirming(false)}>Keep it</Button>
             <Button variant="danger" loading={busy} onClick={remove}>Delete</Button>
           </>
         }

@@ -122,7 +122,7 @@ export function ApprovalLimitsScreen({
           size="sm"
           footer={
             <>
-              <Button variant="secondary" type="button" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="submit" form="limit-form" loading={busy}>Save limit</Button>
             </>
           }

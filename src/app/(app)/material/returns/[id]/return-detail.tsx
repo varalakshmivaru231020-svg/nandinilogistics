@@ -227,7 +227,7 @@ function DecisionModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Back</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Back</Button>
           <Button variant={approving ? "success" : "danger"} onClick={submit} loading={busy}
             disabled={!approving && !note.trim()}>
             {approving ? "Approve return" : "Reject return"}

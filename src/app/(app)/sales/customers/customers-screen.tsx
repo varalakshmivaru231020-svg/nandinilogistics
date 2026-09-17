@@ -216,7 +216,7 @@ function CustomerForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =
       description="PAN is required before KYC can be verified."
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" form="customer-form" loading={busy}>Create customer</Button>
         </>
       }

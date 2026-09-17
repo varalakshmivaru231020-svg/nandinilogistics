@@ -222,7 +222,7 @@ function UnitFormModal({
       size="md"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" form="unit-form" loading={busy}>{unit ? "Save unit" : "Create unit"}</Button>
         </>
       }
@@ -340,7 +340,7 @@ function StatusModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button variant={blocking ? "warning" : "primary"} loading={busy} disabled={blocking && !reason.trim()} onClick={submit}>
             {blocking ? "Block unit" : "Unblock unit"}
           </Button>

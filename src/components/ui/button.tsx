@@ -23,6 +23,9 @@ const buttonVariants = cva(
         primary: "bg-brand-500 text-white hover:bg-brand-600",
         secondary: "border border-line-400 bg-white text-brand-700 hover:bg-surface-hover hover:border-brand-300",
         ghost: "border border-line-400 bg-white text-muted-600 hover:bg-surface-hover hover:text-navy-900",
+        // The quiet button beside a panel's call to action — the design's
+        // drawer footer Cancel: 600 12.5px in #5A6080 on white.
+        outline: "border border-line-400 bg-white font-semibold text-navy-500 hover:bg-surface-field",
         plain: "bg-transparent text-muted-600 hover:bg-surface-hover hover:text-navy-950",
         success: "bg-good-600 text-white hover:bg-good-700",
         danger: "bg-bad-600 text-white hover:brightness-95",

@@ -65,7 +65,7 @@ export function NewMasterRecord({
           open onClose={() => setOpen(false)} title={title} size="sm"
           footer={
             <>
-              <Button variant="secondary" type="button" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="submit" form="master-record" loading={busy}>Save</Button>
             </>
           }
@@ -108,7 +108,7 @@ export function NewUser({ roles }: { roles: Array<{ id: string; name: string }> 
           open onClose={() => setOpen(false)} title="New user" size="sm"
           footer={
             <>
-              <Button variant="secondary" type="button" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="submit" form="new-user" loading={busy}>Save</Button>
             </>
           }
@@ -158,7 +158,7 @@ export function NewApprovalLimit({ roles }: { roles: Array<{ id: string; name: s
           open onClose={() => setOpen(false)} title="New approval limit" size="sm"
           footer={
             <>
-              <Button variant="secondary" type="button" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="submit" form="new-limit" loading={busy}>Save</Button>
             </>
           }

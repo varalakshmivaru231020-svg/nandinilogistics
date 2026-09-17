@@ -167,7 +167,7 @@ function CreateModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" form="pricelist-form" loading={busy}>Publish version</Button>
         </>
       }

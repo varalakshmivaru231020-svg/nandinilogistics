@@ -95,7 +95,7 @@ export function ImportDialog({
       size="lg"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button onClick={runImport} loading={busy === "import"} disabled={!canImport || busy !== null}>
             {plan && plan.valid > 0 ? `Import ${plan.valid.toLocaleString("en-IN")} row${plan.valid === 1 ? "" : "s"}` : "Import"}
           </Button>

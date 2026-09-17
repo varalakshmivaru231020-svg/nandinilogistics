@@ -201,7 +201,7 @@ function CreateModal({
       description="Stock moves only when the transfer is approved."
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button onClick={submit} loading={busy} disabled={!ready}>Raise transfer</Button>
         </>
       }
@@ -309,7 +309,7 @@ function ReceiveModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button onClick={submit} loading={busy} disabled={invalid}>Confirm receipt</Button>
         </>
       }

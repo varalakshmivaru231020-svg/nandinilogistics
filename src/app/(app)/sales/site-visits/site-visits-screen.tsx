@@ -223,7 +223,7 @@ function ScheduleModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button onClick={submit} loading={busy} disabled={!leadId || !scheduledAt}>Schedule</Button>
         </>
       }
@@ -276,7 +276,7 @@ function CompleteModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button variant="success" onClick={submit} loading={busy}>Save outcome</Button>
         </>
       }

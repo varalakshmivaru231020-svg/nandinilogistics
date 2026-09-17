@@ -162,7 +162,7 @@ export function ReserveDrawer({
         </div>
 
         <div className="flex justify-end gap-[9px] border-t border-line-200 bg-surface-sunken px-6 py-4">
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button onClick={confirm} loading={busy} className="bg-good-600 hover:bg-good-700">
             {mode === "hold" ? "Reserve on hold" : "Confirm booking"}
           </Button>

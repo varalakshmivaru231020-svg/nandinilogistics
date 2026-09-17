@@ -255,7 +255,7 @@ function UserForm({
       description={isEdit ? undefined : "The user is asked to change this password at first sign-in."}
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" form="user-form" loading={busy}>{isEdit ? "Save changes" : "Create user"}</Button>
         </>
       }
@@ -339,7 +339,7 @@ function ResetPasswordForm({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" form="reset-form" variant="warning" loading={busy}>Reset password</Button>
         </>
       }

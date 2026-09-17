@@ -190,7 +190,7 @@ export function WbsTab({
         }
         footer={
           <>
-            <Button variant="ghost" onClick={() => setForm(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setForm(null)}>Cancel</Button>
             <Button loading={busy} onClick={save}>Save</Button>
           </>
         }
@@ -241,7 +241,7 @@ export function WbsTab({
         title={confirming ? `Remove ${confirming.name}?` : ""}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setConfirming(null)}>Keep it</Button>
+            <Button variant="outline" onClick={() => setConfirming(null)}>Keep it</Button>
             <Button variant="danger" loading={busy} onClick={remove}>Remove</Button>
           </>
         }

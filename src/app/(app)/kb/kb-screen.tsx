@@ -67,7 +67,7 @@ function RichText({ name, defaultValue }: { name: string; defaultValue: string }
             title={t.title}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => (t.command === "createLink" ? link() : run(t.command, t.value))}
-            className="cursor-pointer rounded-[7px] border border-line-400 bg-white px-[9px] py-1.5 text-[11.5px] font-semibold text-navy-600 transition-colors hover:border-brand-500 hover:text-brand-700"
+            className="min-w-[30px] cursor-pointer rounded-[7px] border border-line-400 bg-white px-[10px] py-1.5 text-[11.5px] font-semibold text-navy-600 transition-colors hover:border-brand-500 hover:text-brand-700"
           >
             {t.label}
           </button>
@@ -350,7 +350,7 @@ export function KbScreen({
         size="sm"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setRemoving(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setRemoving(null)}>Cancel</Button>
             <Button variant="danger" onClick={remove} loading={busy}>Delete</Button>
           </>
         }
@@ -393,9 +393,9 @@ function ArticleForm({
       size="base"
       footer={
         <>
-          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" form="article-form" loading={busy}>
-            {article ? "Save changes" : "Create article"}
+          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="submit" form="article-form" loading={busy} className="px-[18px]">
+            {article ? "Save changes" : "Publish article"}
           </Button>
         </>
       }
@@ -416,15 +416,15 @@ function ArticleForm({
         <div>
           <p className="mb-[5px] text-[11px] font-semibold text-muted-600">Description</p>
           <RichText name="body" defaultValue={article?.body ?? ""} />
-          <p className="mt-[5px] text-[11px] font-medium text-muted-400">
+          <p className="mt-[5px] text-[10.5px] font-medium text-muted-400">
             Bold, italic, underline, lists, headings and links are supported.
           </p>
         </div>
 
-        <div>
+        <div className="!mt-4">
           <div className="mb-[9px] flex items-center justify-between gap-3">
             <p className="text-[11px] font-semibold text-muted-600">Attachments</p>
-            <label className="cursor-pointer rounded-[8px] border border-line-400 bg-white px-3 py-[7px] text-[11px] font-bold text-brand-700 transition-colors hover:border-brand-500">
+            <label className="cursor-pointer rounded-[8px] border border-line-400 bg-white px-3 py-1.5 text-[11px] font-bold text-brand-700 transition-colors hover:border-brand-500">
               + Add file
               <input
                 type="file"
@@ -435,11 +435,11 @@ function ArticleForm({
               />
             </label>
           </div>
-          <label className="block cursor-pointer rounded-[10px] border border-dashed border-muted-200 bg-surface-sunken px-4 py-6 text-center transition-colors hover:border-brand-500">
-            <span className="block text-[12.5px] font-bold text-muted-500">
+          <label className="block cursor-pointer rounded-[11px] border border-dashed border-muted-200 bg-surface-sunken p-6 text-center transition-colors hover:border-brand-500">
+            <span className="block text-[12.5px] font-semibold text-muted-500">
               Drop files here — PDF, DOCX, XLSX, ZIP, images
             </span>
-            <span className="mt-[3px] block text-[11.5px] font-medium text-muted-400">
+            <span className="mt-1 block text-[11px] font-medium text-muted-400">
               {files.length > 0 ? files.join(" · ") : "Multiple attachments supported per article"}
             </span>
             <input

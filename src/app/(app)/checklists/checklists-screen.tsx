@@ -346,7 +346,7 @@ export function ChecklistsScreen({
                         >
                           <Input name="text" defaultValue={p.text} autoFocus className="flex-1" />
                           <Button type="submit" size="sm" loading={busy}>Save</Button>
-                          <Button type="button" size="sm" variant="secondary" onClick={() => setEditingPoint(null)}>
+                          <Button type="button" size="sm" variant="outline" onClick={() => setEditingPoint(null)}>
                             Cancel
                           </Button>
                         </form>
@@ -543,7 +543,7 @@ function InlineForm({
         ))}
         <div className="flex gap-2">
           <Button type="submit" loading={busy}>Save</Button>
-          <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
         </div>
       </div>
     </form>

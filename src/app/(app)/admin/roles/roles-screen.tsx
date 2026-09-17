@@ -247,7 +247,7 @@ function RoleForm({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" form="role-form" loading={busy}>{isEdit ? "Save changes" : "Create role"}</Button>
         </>
       }
@@ -301,7 +301,7 @@ function CloneForm({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" form="clone-form" loading={busy}>Create clone</Button>
         </>
       }

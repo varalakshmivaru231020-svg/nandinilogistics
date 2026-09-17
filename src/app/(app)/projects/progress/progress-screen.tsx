@@ -207,7 +207,7 @@ function LogModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" form="log-form" loading={busy}>Save log</Button>
         </>
       }

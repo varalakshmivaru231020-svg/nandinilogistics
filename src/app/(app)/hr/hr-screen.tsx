@@ -18,6 +18,11 @@ import {
   markAttendanceAction, setEmployeeStatusAction, updateEmployeeAction,
 } from "./actions";
 
+/** The design writes an attached file's weight in kilobytes: "740 KB". */
+function fileSize(bytes: number) {
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 interface Employee {
   id: string; code: string; name: string; mobile: string; altContact: string | null;
   aadhaar: string | null; pan: string | null; address: string | null;
@@ -216,7 +221,7 @@ export function HrScreen({
         size="sm"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setRemoving(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setRemoving(null)}>Cancel</Button>
             <Button variant="danger" onClick={removeEmployee} loading={busy}>Delete</Button>
           </>
         }
@@ -234,7 +239,7 @@ export function HrScreen({
         size="sm"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setStatusTarget(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setStatusTarget(null)}>Cancel</Button>
             <Button
               variant={deactivating ? "danger" : "primary"}
               onClick={changeStatus}
@@ -647,7 +652,7 @@ function EmployeeForm({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [photoName, setPhotoName] = React.useState<string | null>(null);
-  const [docNames, setDocNames] = React.useState<Record<string, string | null>>({});
+  const [docs, setDocs] = React.useState<Record<string, { name: string; size: string } | null>>({});
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -676,8 +681,8 @@ function EmployeeForm({
       size="base"
       footer={
         <>
-          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" form="employee-form" loading={busy}>
+          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="submit" form="employee-form" loading={busy} className="px-[18px]">
             {employee ? "Save changes" : "Create employee"}
           </Button>
         </>
@@ -686,7 +691,7 @@ function EmployeeForm({
       <form id="employee-form" onSubmit={submit} className="space-y-3.5">
         {error && <p className="rounded-[9px] bg-bad-050 px-3 py-2 text-[12px] font-bold text-bad-600">{error}</p>}
 
-        <div className="flex flex-wrap items-start gap-3.5">
+        <div className="flex flex-wrap items-start gap-4">
           <label
             className={cn(
               "flex h-[84px] w-[84px] shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-[12px] border-[1.5px] text-center text-[10px] font-semibold transition-colors",
@@ -710,7 +715,7 @@ function EmployeeForm({
 
           <div className="grid min-w-[240px] flex-1 gap-3">
             <Field label="Type of employment" required>
-              <Select name="employmentTypeId" defaultValue={employee?.employmentTypeId} required>
+              <Select name="employmentTypeId" defaultValue={employee?.employmentTypeId} className="font-semibold" required>
                 {employmentTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </Select>
             </Field>
@@ -718,7 +723,7 @@ function EmployeeForm({
               <Input name="name" defaultValue={employee?.name} placeholder="Full name" required autoFocus />
             </Field>
             <Field label="Designation">
-              <Select name="designationId" defaultValue={employee?.designationId ?? ""}>
+              <Select name="designationId" defaultValue={employee?.designationId ?? ""} className="font-semibold">
                 <option value="">Select designation…</option>
                 {designations.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </Select>
@@ -753,48 +758,72 @@ function EmployeeForm({
         </div>
 
         <Field label="Address">
-          <Textarea name="address" rows={2} defaultValue={employee?.address ?? ""} placeholder="House, area, city" />
+          <Textarea name="address" defaultValue={employee?.address ?? ""} placeholder="House, area, city" className="min-h-[74px]" />
         </Field>
 
-        <div>
-          <p className="mb-[5px] text-[11px] font-semibold text-muted-600">
-            Attachments <span className="font-medium text-muted-300">· optional</span>
+        <div className="!mt-4">
+          <p className="mb-1 text-[11px] font-semibold text-muted-600">
+            Attachments <span className="font-medium text-muted-400">· optional</span>
           </p>
-          <p className="mb-2 text-[11px] font-medium text-muted-400">Aadhaar card and PAN card copies only</p>
+          <p className="mb-[9px] text-[11px] font-medium text-muted-400">Aadhaar card and PAN card copies only</p>
           <div>
-            {(["Aadhaar card", "PAN card"] as const).map((kind) => (
-              <label
-                key={kind}
-                className={cn(
-                  "mb-2 flex cursor-pointer items-center gap-2.5 rounded-[10px] border px-3 py-[11px] transition-colors",
-                  docNames[kind]
-                    ? "border-solid border-line-300 bg-surface-tint"
-                    : "border-dashed border-muted-200 bg-surface-sunken hover:border-brand-500",
-                )}
-              >
-                <span className="rounded-[5px] bg-bad-700 px-1.5 py-1 text-[8px] font-extrabold text-white">PDF</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[12px] font-semibold text-navy-900">{kind}</span>
-                  {docNames[kind] && (
-                    <span className="mt-0.5 block truncate text-[11px] font-medium text-muted-400">
-                      {docNames[kind]}
-                    </span>
+            {(["Aadhaar card", "PAN card"] as const).map((kind) => {
+              const doc = docs[kind];
+              return (
+                <div
+                  key={kind}
+                  className={cn(
+                    "mb-2 flex items-center gap-2.5 rounded-[10px] border px-3 py-[11px]",
+                    doc
+                      ? "border-solid border-line-300 bg-surface-tint"
+                      : "border-dashed border-muted-200 bg-surface-sunken",
                   )}
-                </span>
-                <span className="shrink-0 rounded-[7px] border border-line-400 bg-white px-3 py-[5px] text-[10.5px] font-bold text-brand-700">
-                  {docNames[kind] ? "Replace" : "↑ Attach"}
-                </span>
-                <input
-                  type="file"
-                  name={`doc:${kind}`}
-                  accept="application/pdf,image/*"
-                  className="hidden"
-                  onChange={(e) =>
-                    setDocNames((d) => ({ ...d, [kind]: e.target.files?.[0]?.name ?? null }))
-                  }
-                />
-              </label>
-            ))}
+                >
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-[5px] px-1.5 py-1 text-[8.5px] font-extrabold tracking-[.05em] text-white",
+                      doc ? "bg-bad-700" : "bg-muted-250",
+                    )}
+                  >
+                    PDF
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[12px] font-semibold text-navy-900">{kind}</span>
+                    {doc && (
+                      <span className="mt-0.5 block truncate text-[11px] font-medium text-muted-400">
+                        {doc.name} · {doc.size}
+                      </span>
+                    )}
+                  </span>
+                  {doc ? (
+                    <button
+                      type="button"
+                      onClick={() => setDocs((d) => ({ ...d, [kind]: null }))}
+                      className="shrink-0 cursor-pointer rounded-[7px] border border-bad-100 bg-bad-050 px-[11px] py-[5px] text-[10.5px] font-semibold text-bad-700 transition-colors hover:bg-bad-100"
+                    >
+                      Remove
+                    </button>
+                  ) : (
+                    <label className="shrink-0 cursor-pointer rounded-[7px] border border-line-400 bg-white px-3 py-[5px] text-[10.5px] font-bold text-brand-700 transition-colors hover:border-brand-500 hover:bg-brand-100">
+                      ↑ Attach
+                      <input
+                        type="file"
+                        name={`doc:${kind}`}
+                        accept="application/pdf,image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          setDocs((d) => ({
+                            ...d,
+                            [kind]: f ? { name: f.name, size: fileSize(f.size) } : null,
+                          }));
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 

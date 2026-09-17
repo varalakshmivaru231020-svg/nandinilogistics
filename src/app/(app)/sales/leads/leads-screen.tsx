@@ -536,8 +536,8 @@ function NewLeadModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
-          <Button type="submit" form="lead-form" loading={busy}>Save lead</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
+          <Button type="submit" form="lead-form" loading={busy} className="px-[18px]">Save lead</Button>
         </>
       }
     >
@@ -549,10 +549,10 @@ function NewLeadModal({
             return (
               <Field key={f.id} label={f.label} required={f.required}>
                 {f.type === "DESCRIPTION" ? (
-                  <Textarea name={`custom:${f.id}`} rows={2} required={f.required} placeholder="Type here…" />
+                  <Textarea name={`custom:${f.id}`} required={f.required} placeholder="Type here…" className="min-h-[70px]" />
                 ) : f.type === "CHECKBOX" ? (
                   <label className="flex items-center gap-2 text-[12.5px] font-medium text-navy-900">
-                    <input type="checkbox" name={`custom:${f.id}`} className="h-4 w-4 accent-brand-500" />
+                    <input type="checkbox" name={`custom:${f.id}`} className="my-[3px] mr-[3px] ml-[4px] h-[15px] w-[15px] accent-brand-500" />
                     Yes
                   </label>
                 ) : (
@@ -630,14 +630,14 @@ function NewLeadModal({
             case "requirement":
               return (
                 <Field key={f.id} label={f.label} required={f.required}>
-                  <Textarea name="requirement" rows={2} required={f.required} placeholder="Type here…" />
+                  <Textarea name="requirement" required={f.required} placeholder="Type here…" className="min-h-[70px]" />
                 </Field>
               );
             case "siteVisitPlanned":
               return (
                 <Field key={f.id} label={f.label} required={f.required}>
                   <label className="flex items-center gap-2 text-[12.5px] font-medium text-navy-900">
-                    <input type="checkbox" name="siteVisitPlanned" className="h-4 w-4 accent-brand-500" />
+                    <input type="checkbox" name="siteVisitPlanned" className="my-[3px] mr-[3px] ml-[4px] h-[15px] w-[15px] accent-brand-500" />
                     Yes
                   </label>
                 </Field>
@@ -679,7 +679,7 @@ function StageModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
           <Button onClick={submit} loading={busy} disabled={state === "LOST" && !lostReasonId}>Move lead</Button>
         </>
       }
@@ -738,7 +738,7 @@ function FollowUpModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Close</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Close</Button>
           <Button onClick={submit} loading={busy} disabled={!notes.trim()}>Save follow-up</Button>
         </>
       }

@@ -443,7 +443,7 @@ function LogModal({
       size="sm"
       footer={
         <>
-          <Button variant="secondary" type="button" onClick={onClose}>Close</Button>
+          <Button variant="outline" type="button" onClick={onClose}>Close</Button>
           {canLog && (
             <Button onClick={submit} loading={busy} disabled={!notes.trim()}>Save follow-up</Button>
           )}
