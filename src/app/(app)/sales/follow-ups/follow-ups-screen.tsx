@@ -135,16 +135,16 @@ export function FollowUpsScreen({
       </div>
 
       {/* Filters */}
-      <div className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-[12px] border border-line-400 bg-white px-3.5 py-3">
+      <div className="mb-3.5 flex flex-wrap items-center gap-[9px] rounded-[12px] border border-line-400 bg-white px-3.5 py-[11px]">
         <Input
           defaultValue={query}
           placeholder="Search lead, purpose, remarks…"
-          className="w-[280px]"
+          className="w-[280px] py-[9px]"
           onKeyDown={(e) => {
             if (e.key === "Enter") setParam({ q: (e.target as HTMLInputElement).value });
           }}
         />
-        <Select value={typeFilter} onChange={(e) => setParam({ type: e.target.value })} className="w-auto min-w-[150px]">
+        <Select value={typeFilter} onChange={(e) => setParam({ type: e.target.value })} className="w-auto min-w-[150px] px-[11px] py-2 text-[12px] font-semibold">
           <option value="all">All types</option>
           {Object.entries(CHANNEL_LABEL).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
