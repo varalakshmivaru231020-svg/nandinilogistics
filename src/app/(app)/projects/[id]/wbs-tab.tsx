@@ -125,7 +125,7 @@ export function WbsTab({
           <span
             className={cn(
               "rounded-full px-[10px] py-[5px] text-[9px] font-bold tracking-[.07em]",
-              r.kind === "PHASE" ? "bg-[#EFE9FC] text-navy-800" : "bg-brand-100 text-brand-700",
+              r.kind === "PHASE" ? "bg-plum-050 text-navy-800" : "bg-brand-100 text-brand-700",
             )}
           >
             {r.kind}
@@ -164,7 +164,7 @@ export function WbsTab({
           <button
             type="button"
             onClick={() => open("PHASE")}
-            className="cursor-pointer rounded-[9px] border border-dashed border-[#C6CFE8] bg-surface-tint px-[13px] py-2 text-[11.5px] font-semibold text-navy-800 transition-colors hover:border-brand-500"
+            className="cursor-pointer rounded-[9px] border border-dashed border-muted-200 bg-surface-tint px-[13px] py-2 text-[11.5px] font-semibold text-navy-800 transition-colors hover:border-brand-500"
           >
             + Add phase
           </button>
@@ -173,7 +173,7 @@ export function WbsTab({
           <button
             type="button"
             onClick={() => open("WP")}
-            className="cursor-pointer rounded-[9px] border border-dashed border-[#C6CFE8] bg-surface-tint px-[13px] py-2 text-[11.5px] font-semibold text-brand-700 transition-colors hover:border-brand-500"
+            className="cursor-pointer rounded-[9px] border border-dashed border-muted-200 bg-surface-tint px-[13px] py-2 text-[11.5px] font-semibold text-brand-700 transition-colors hover:border-brand-500"
           >
             + Add work package
           </button>

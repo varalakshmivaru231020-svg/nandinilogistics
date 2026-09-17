@@ -410,7 +410,7 @@ export function PoForm({
                 <button
                   type="button"
                   onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}
-                  className="ml-auto shrink-0 cursor-pointer rounded-[7px] border border-bad-100 bg-bad-050 px-3 py-1.5 text-[11px] font-semibold text-bad-700 transition-colors hover:bg-[#F8DBDB]"
+                  className="ml-auto shrink-0 cursor-pointer rounded-[7px] border border-bad-100 bg-bad-050 px-3 py-1.5 text-[11px] font-semibold text-bad-700 transition-colors hover:bg-bad-100"
                 >
                   Remove
                 </button>

@@ -60,9 +60,9 @@ const ACTION_TONES = {
   /** The green one — anything that moves stock. */
   success: "border-transparent bg-good-600 px-[17px] py-[11px] text-white hover:bg-good-700",
   /** The pale blue outline — the sideways step, like raising a PO. */
-  soft: "border-[#BFD9F2] bg-brand-100 px-4 py-2.5 text-brand-700 hover:bg-[#CBE5F5]",
+  soft: "border-brand-150 bg-brand-100 px-4 py-2.5 text-brand-700 hover:bg-[#CBE5F5]",
   /** The pale red outline — delete. */
-  danger: "border-bad-100 bg-bad-050 px-4 py-2.5 text-bad-700 hover:bg-[#F8DBDB]",
+  danger: "border-bad-100 bg-bad-050 px-4 py-2.5 text-bad-700 hover:bg-bad-100",
   /** Plain white — a secondary such as Print. */
   plain: "border-line-400 bg-white px-4 py-2.5 text-navy-500 hover:border-brand-500 hover:text-brand-700",
 } as const;
@@ -183,7 +183,7 @@ export function SoftPill({
     brand: "bg-brand-100 text-brand-700",
     warn: "bg-warn-050 text-warn-700",
     bad: "bg-bad-050 text-bad-700",
-    violet: "bg-[#EFE9FC] text-[#6A46C8]",
+    violet: "bg-plum-050 text-plum-600",
     muted: "bg-surface-field text-muted-600",
   } as const;
   return (

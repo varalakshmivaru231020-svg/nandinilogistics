@@ -32,8 +32,8 @@ interface TypeRow { id: string; name: string; count: number; canDelete: boolean 
  * direct labour green. Anything else stays slate.
  */
 const TYPE_PILL: Record<string, string> = {
-  "company staff": "bg-[#EFF3FB] text-[#2F308C]",
-  "contract role": "bg-[#EFE9FC] text-[#5636A8]",
+  "company staff": "bg-surface-hover text-navy-800",
+  "contract role": "bg-plum-050 text-plum-700",
   "direct labour": "bg-good-050 text-good-700",
 };
 
@@ -664,7 +664,7 @@ function EmployeeForm({
         {error && <p className="rounded-[9px] bg-bad-050 px-3 py-2 text-[12px] font-bold text-bad-600">{error}</p>}
 
         <div className="flex flex-wrap items-start gap-3.5">
-          <label className="flex h-[120px] w-[120px] shrink-0 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-[12px] border border-dashed border-[#C6CFE8] bg-surface-tint text-center transition-colors hover:border-brand-500">
+          <label className="flex h-[120px] w-[120px] shrink-0 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-[12px] border border-dashed border-muted-200 bg-surface-tint text-center transition-colors hover:border-brand-500">
             <span className="text-[22px]">📷</span>
             <span className="px-2 text-[11px] font-semibold text-muted-600">
               {photoName ?? (employee ? "Replace photo" : "Add photo")}
@@ -725,7 +725,7 @@ function EmployeeForm({
             {(["Aadhaar card", "PAN card"] as const).map((kind) => (
               <label
                 key={kind}
-                className="flex cursor-pointer items-center gap-2.5 rounded-[10px] border border-dashed border-[#C6CFE8] bg-surface-sunken px-3 py-2.5 transition-colors hover:border-brand-500"
+                className="flex cursor-pointer items-center gap-2.5 rounded-[10px] border border-dashed border-muted-200 bg-surface-sunken px-3 py-2.5 transition-colors hover:border-brand-500"
               >
                 <span className="rounded-[5px] bg-bad-700 px-1.5 py-1 text-[8px] font-extrabold text-white">PDF</span>
                 <span className="min-w-0 flex-1">

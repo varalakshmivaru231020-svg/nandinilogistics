@@ -68,8 +68,8 @@ export interface LeadField {
  */
 const FU_BLOCK: Record<string, string> = {
   bad: "border-bad-100 border-l-bad-700 bg-bad-050 text-bad-700",
-  warn: "border-[#F3DDBB] border-l-warn-700 bg-warn-050 text-warn-700",
-  brand: "border-[#BFE0F2] border-l-brand-700 bg-brand-100 text-brand-700",
+  warn: "border-amber-200 border-l-warn-700 bg-warn-050 text-warn-700",
+  brand: "border-brand-200 border-l-brand-700 bg-brand-100 text-brand-700",
 };
 
 /**
@@ -79,12 +79,12 @@ const FU_BLOCK: Record<string, string> = {
 const SOURCE_TONE: Record<string, string> = {
   website: "bg-brand-100 text-brand-700",
   magicbricks: "bg-warn-050 text-warn-700",
-  "99acres": "bg-[#EFE9FC] text-[#6A46C8]",
+  "99acres": "bg-plum-050 text-plum-600",
   "walk-in": "bg-good-050 text-good-700",
   referral: "bg-bad-050 text-bad-700",
 };
 
-const sourceTone = (name: string) => SOURCE_TONE[name.trim().toLowerCase()] ?? "bg-[#EEF1F9] text-[#4A5077]";
+const sourceTone = (name: string) => SOURCE_TONE[name.trim().toLowerCase()] ?? "bg-slate-050 text-slate-600";
 
 function followUp(nextActionAt: string | null, nowMs: number, state?: string) {
   if (!nextActionAt) return null;
@@ -309,7 +309,7 @@ export function LeadsScreen({
                           "rounded-[11px] border border-line-400 bg-white px-[13px] py-3 transition-shadow",
                           can.changeStage ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                           dragging === c.id && "opacity-40",
-                          "hover:border-[#BFD9F2] hover:shadow-[0_6px_18px_rgba(25,26,92,.1)]",
+                          "hover:border-brand-150 hover:shadow-[0_6px_18px_rgba(25,26,92,.1)]",
                         )}
                       >
                         <div className="mb-1.5 flex items-center justify-between gap-1.5">
@@ -337,7 +337,7 @@ export function LeadsScreen({
                             <span className="text-[10.5px] font-semibold opacity-85">{fu.text}</span>
                           </div>
                         ) : (
-                          <div className="mt-2 rounded-[8px] border border-dashed border-[#F3DDBB] bg-warn-050 px-[9px] py-1.5 text-[10.5px] font-semibold text-warn-700">
+                          <div className="mt-2 rounded-[8px] border border-dashed border-amber-200 bg-warn-050 px-[9px] py-1.5 text-[10.5px] font-semibold text-warn-700">
                             No follow-up set
                           </div>
                         )}
@@ -351,7 +351,7 @@ export function LeadsScreen({
                     );
                   })}
                   {cards.length > 6 && (
-                    <div className="rounded-[8px] border border-[#BFE0F2] bg-brand-100 py-2 text-center text-[11px] font-bold text-brand-700">
+                    <div className="rounded-[8px] border border-brand-200 bg-brand-100 py-2 text-center text-[11px] font-bold text-brand-700">
                       + {cards.length - 6} more · switch to List view
                     </div>
                   )}
@@ -384,7 +384,7 @@ export function LeadsScreen({
                   <tr
                     key={r.id}
                     onClick={() => router.push(`/sales/leads/${r.id}`)}
-                    className="cursor-pointer border-b border-[#F0F3FA] last:border-0 hover:bg-surface-tint"
+                    className="cursor-pointer border-b border-line-150 last:border-0 hover:bg-surface-tint"
                   >
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2">
@@ -531,7 +531,7 @@ function NewLeadModal({
                   <Textarea name={`custom:${f.id}`} rows={2} required={f.required} placeholder="Type here…" />
                 ) : f.type === "CHECKBOX" ? (
                   <label className="flex items-center gap-2 text-[12.5px] font-medium text-navy-900">
-                    <input type="checkbox" name={`custom:${f.id}`} className="h-4 w-4 accent-[#0089C9]" />
+                    <input type="checkbox" name={`custom:${f.id}`} className="h-4 w-4 accent-brand-500" />
                     Yes
                   </label>
                 ) : (
@@ -596,7 +596,7 @@ function NewLeadModal({
               return (
                 <Field key={f.id} label={f.label} required={f.required}>
                   <label className="flex items-center gap-2 text-[12.5px] font-medium text-navy-900">
-                    <input type="checkbox" name="siteVisitPlanned" className="h-4 w-4 accent-[#0089C9]" />
+                    <input type="checkbox" name="siteVisitPlanned" className="h-4 w-4 accent-brand-500" />
                     Yes
                   </label>
                 </Field>

@@ -35,9 +35,9 @@ type Lookup = Array<{ id: string; name?: string; code?: string }>;
 const FILTERS = ["All", "Open", "In Progress", "Submitted", "Overdue"];
 
 const STATUS_PILL: Record<TaskStatus, string> = {
-  OPEN: "bg-[#EEF1F9] text-[#4A5077]",
+  OPEN: "bg-slate-050 text-slate-600",
   IN_PROGRESS: "bg-brand-100 text-brand-700",
-  SUBMITTED: "bg-[#EFE9FC] text-[#6A46C8]",
+  SUBMITTED: "bg-plum-050 text-plum-600",
   APPROVED: "bg-good-050 text-good-700",
   REOPENED: "bg-[#FDEEE7] text-[#C05621]",
 };
@@ -142,7 +142,7 @@ export function TasksScreen({
 
       {selected.length > 0 && (
         <>
-          <div className="mb-3 flex flex-wrap items-center gap-[9px] rounded-[12px] border border-[#BFD9F2] bg-surface-hover px-[15px] py-[11px]">
+          <div className="mb-3 flex flex-wrap items-center gap-[9px] rounded-[12px] border border-brand-150 bg-surface-hover px-[15px] py-[11px]">
             <span className="text-[12.5px] font-bold text-navy-800">
               {selected.length} selected
             </span>
@@ -175,7 +175,7 @@ export function TasksScreen({
           </div>
 
           {reassigning && (
-            <div className="mb-3 rounded-[12px] border border-[#BFD9F2] bg-white px-[15px] py-[13px]">
+            <div className="mb-3 rounded-[12px] border border-brand-150 bg-white px-[15px] py-[13px]">
               <p className="mb-[9px] text-[12px] font-bold text-navy-950">
                 Reassign {selected.length} selected to
               </p>
@@ -233,7 +233,7 @@ export function TasksScreen({
               return (
                 <tr
                   key={t.id}
-                  className={cn("border-b border-[#F0F3FA] last:border-0 hover:bg-surface-tint", overdue && "bg-[#FEF7F7]")}
+                  className={cn("border-b border-line-150 last:border-0 hover:bg-surface-tint", overdue && "bg-bad-025")}
                 >
                   <td className="py-[13px] pl-4">
                     <CheckBox

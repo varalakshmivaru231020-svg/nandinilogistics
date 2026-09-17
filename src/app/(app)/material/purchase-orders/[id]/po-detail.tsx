@@ -123,7 +123,7 @@ export function PoDetail({
               onClick={approve}
               className={cn(
                 "border-transparent text-white",
-                waiting === "PM" ? "bg-[#E8A13A] hover:bg-[#D2901F]" : "bg-[#6A46C8] hover:bg-[#5A38B0]",
+                waiting === "PM" ? "bg-amber-500 hover:bg-warn-700" : "bg-plum-600 hover:bg-plum-700",
               )}
             >
               {waiting === "PM" ? "✓ PM approve" : "✓ Admin approve"}
@@ -162,7 +162,7 @@ export function PoDetail({
                 {po.indentRefs.map((r) => (
                   <span
                     key={r}
-                    className="rounded-full border border-[#DDE4F3] bg-surface-hover px-[11px] py-[5px] text-[11px] font-bold text-navy-800"
+                    className="rounded-full border border-line-350 bg-surface-hover px-[11px] py-[5px] text-[11px] font-bold text-navy-800"
                   >
                     {r}
                   </span>

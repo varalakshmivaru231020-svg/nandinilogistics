@@ -50,7 +50,7 @@ const STATUS_STYLE: Record<string, { cell: string; dot: string; label: string }>
 
 /** The design's legend swatches: a tint with a stronger border. */
 const LEGEND: Record<string, string> = {
-  AVAILABLE: "border-[#77C39A] bg-good-050",
+  AVAILABLE: "border-good-400 bg-good-050",
   HELD: "border-[#E0B26A] bg-warn-050",
   BOOKED: "border-[#6FB6DE] bg-brand-100",
 };
@@ -221,7 +221,7 @@ export function BoardGrid({
               onError={(e) => { setError(e); setNotice(null); }}
             />
           ) : (
-            <div className="rounded-[13px] border border-dashed border-[#C6CFE8] px-5 py-7 text-center text-[12px] font-medium text-muted-500">
+            <div className="rounded-[13px] border border-dashed border-muted-200 px-5 py-7 text-center text-[12px] font-medium text-muted-500">
               Select a unit on the board to view details, hold or book it
             </div>
           )}

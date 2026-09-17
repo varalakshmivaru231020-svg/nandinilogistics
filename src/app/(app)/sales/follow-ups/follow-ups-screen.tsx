@@ -63,7 +63,7 @@ function whenLabel(dueAt: string, nowMs: number) {
 /** The design's solid type chip: blue for a call, violet for a site visit. */
 const CHANNEL_PILL: Record<string, string> = {
   CALL: "bg-brand-700", WHATSAPP: "bg-good-700", EMAIL: "bg-navy-800",
-  MEETING: "bg-navy-800", SITE_VISIT: "bg-[#6A46C8]",
+  MEETING: "bg-navy-800", SITE_VISIT: "bg-plum-600",
 };
 
 export function FollowUpsScreen({
@@ -248,7 +248,7 @@ export function FollowUpsScreen({
                   <tr
                     key={r.id}
                     onClick={() => setLogging(r)}
-                    className="cursor-pointer border-b border-[#F0F3FA] last:border-0 hover:bg-surface-tint"
+                    className="cursor-pointer border-b border-line-150 last:border-0 hover:bg-surface-tint"
                   >
                     <td className="px-4 py-3.5">
                       <span className="inline-flex items-center gap-1 rounded-full bg-surface-field px-2 py-0.5 text-[10px] font-bold text-navy-600">

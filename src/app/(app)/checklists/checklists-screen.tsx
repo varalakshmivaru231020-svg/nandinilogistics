@@ -155,7 +155,7 @@ export function ChecklistsScreen({
                   <div className="min-w-0 flex-[1_1_140px]">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-display text-[15px] font-bold text-navy-950">{activeCategory.name}</span>
-                      <span className="rounded-full border border-[#DDE4F3] bg-surface-hover px-2 py-[3px] text-[9.5px] font-extrabold tracking-[.07em] text-navy-800">
+                      <span className="rounded-full border border-line-350 bg-surface-hover px-2 py-[3px] text-[9.5px] font-extrabold tracking-[.07em] text-navy-800">
                         {activeCategory.code}
                       </span>
                     </div>
@@ -426,7 +426,7 @@ export function ChecklistsScreen({
                     <span>Score</span>
                     <span className="num">{r.score}%</span>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-[#EDF0F8]">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-track">
                     <div
                       className={cn(
                         "h-full rounded-full",
@@ -466,7 +466,7 @@ export function ChecklistsScreen({
 
       {/* The design says out loud what a failed inspection costs. */}
       {tab === "runs" && openSnags > 0 && (
-        <div className="mt-3.5 rounded-[12px] border border-[#F3DDBB] bg-warn-050 px-[17px] py-3.5 text-[12px] font-bold text-warn-800">
+        <div className="mt-3.5 rounded-[12px] border border-amber-200 bg-warn-050 px-[17px] py-3.5 text-[12px] font-bold text-warn-800">
           ⚠ {openSnags} failed inspection{openSnags === 1 ? "" : "s"} raised a snag — the checklist
           stays open until it is cleared.
         </div>
@@ -523,7 +523,7 @@ function InlineForm({
   busy: boolean;
 }) {
   return (
-    <form action={onSubmit} className="mt-3 rounded-[11px] border border-[#BFD9F2] bg-surface-sunken px-3.5 py-[13px]">
+    <form action={onSubmit} className="mt-3 rounded-[11px] border border-brand-150 bg-surface-sunken px-3.5 py-[13px]">
       <p className="mb-2.5 text-[12.5px] font-bold text-navy-950">{title}</p>
       <div className="flex flex-col gap-2.5">
         {fields.map((f) => (

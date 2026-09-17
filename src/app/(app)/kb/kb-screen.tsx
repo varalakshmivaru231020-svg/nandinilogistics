@@ -100,7 +100,7 @@ export function KbScreen({
             <button
               type="button"
               onClick={() => setRemoving(open)}
-              className="cursor-pointer rounded-[9px] border border-bad-100 bg-bad-050 px-4 py-2.5 text-[12.5px] font-semibold text-bad-700 transition-colors hover:bg-[#F8DBDB]"
+              className="cursor-pointer rounded-[9px] border border-bad-100 bg-bad-050 px-4 py-2.5 text-[12.5px] font-semibold text-bad-700 transition-colors hover:bg-bad-100"
             >
               Delete
             </button>

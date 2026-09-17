@@ -155,7 +155,7 @@ export function ReserveDrawer({
             />
           </div>
 
-          <p className="mt-3 rounded-[11px] border border-[#F3DDBB] bg-warn-050 px-3.5 py-[11px] text-[11.5px] font-semibold text-warn-800">
+          <p className="mt-3 rounded-[11px] border border-amber-200 bg-warn-050 px-3.5 py-[11px] text-[11.5px] font-semibold text-warn-800">
             Held units stay reserved until released or booked manually. Bookings proceed to token
             receipt and KYC.
           </p>

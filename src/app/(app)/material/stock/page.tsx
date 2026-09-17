@@ -127,7 +127,7 @@ export default async function StockPage({
             >
               {qty(b.quantity, 3)}
             </span>
-            <div className="ml-auto mt-[5px] h-1.5 w-[110px] overflow-hidden rounded-full bg-[#EDF0F8]">
+            <div className="ml-auto mt-[5px] h-1.5 w-[110px] overflow-hidden rounded-full bg-track">
               <div
                 className={cn(
                   "h-full rounded-full",

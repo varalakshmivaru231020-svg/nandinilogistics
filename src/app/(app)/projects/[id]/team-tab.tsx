@@ -73,7 +73,7 @@ export function TeamTab({
                   <button
                     type="button"
                     onClick={() => unmap(m.userId)}
-                    className="flex h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-[#E4E9F5] text-[10px] font-semibold text-muted-600 transition-colors hover:bg-bad-050 hover:text-bad-600"
+                    className="flex h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-line-250 text-[10px] font-semibold text-muted-600 transition-colors hover:bg-bad-050 hover:text-bad-600"
                   >
                     ✕
                   </button>
@@ -88,7 +88,7 @@ export function TeamTab({
             <button
               type="button"
               onClick={() => { setMapping(r.role); setPick(""); }}
-              className="shrink-0 cursor-pointer rounded-full border border-dashed border-[#C6CFE8] bg-surface-tint px-[11px] py-[5px] text-[11px] font-semibold text-brand-700 transition-colors hover:border-brand-500 hover:bg-brand-100"
+              className="shrink-0 cursor-pointer rounded-full border border-dashed border-muted-200 bg-surface-tint px-[11px] py-[5px] text-[11px] font-semibold text-brand-700 transition-colors hover:border-brand-500 hover:bg-brand-100"
             >
               + Map user
             </button>

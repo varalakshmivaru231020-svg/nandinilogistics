@@ -35,7 +35,7 @@ export function PoApproveButton({ id, level }: { id: string; level: "PM" | "ADMI
       title={error ?? undefined}
       className={cn(
         "cursor-pointer whitespace-nowrap rounded-[7px] px-[11px] py-1.5 text-[10.5px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60",
-        level === "ADMIN" ? "bg-[#6A46C8]" : "bg-[#E8A13A]",
+        level === "ADMIN" ? "bg-plum-600" : "bg-amber-500",
         error && "bg-bad-600",
       )}
     >

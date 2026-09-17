@@ -26,8 +26,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 const PRINT_CSS = `
   .rc-sheet { width: 210mm; max-width: 100%; position: relative; overflow: hidden; }
   .rc-sheet table { border-collapse: collapse; width: 100%; }
-  .rc-sheet th, .rc-sheet td { border: 1px solid #cfd3e0; padding: 6px 8px; vertical-align: top; text-align: left; }
-  .rc-sheet th { background: #f1f3f8; width: 34%; font-weight: 600; }
+  .rc-sheet th, .rc-sheet td { border: 1px solid #E3E7F2; padding: 6px 8px; vertical-align: top; text-align: left; }
+  .rc-sheet th { background: #FAFBFE; width: 34%; font-weight: 600; }
   .rc-keep { break-inside: avoid; page-break-inside: avoid; }
   .rc-watermark {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;

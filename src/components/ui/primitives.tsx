@@ -75,7 +75,7 @@ const BADGE_TONES = {
   bad: "bg-bad-050 text-bad-700",
   muted: "bg-surface-tint text-muted-600",
   /** The design's "Planned" violet. */
-  violet: "bg-[#EFE9FC] text-[#6A46C8]",
+  violet: "bg-plum-050 text-plum-600",
 } as const;
 
 export type BadgeTone = keyof typeof BADGE_TONES;

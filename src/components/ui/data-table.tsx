@@ -79,7 +79,7 @@ export function DataTable<T>({
           {rows.map((row, i) => (
             <tr
               key={rowKey(row, i)}
-              className="border-b border-[#F0F3FA] transition-colors last:border-0 hover:bg-surface-tint"
+              className="border-b border-line-150 transition-colors last:border-0 hover:bg-surface-tint"
             >
               {cols.map((c) => (
                 <td

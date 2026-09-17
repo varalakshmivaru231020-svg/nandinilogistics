@@ -125,7 +125,7 @@ export function GrnDetail({
             </div>
           ) : (
             <>
-              <div className="rounded-[9px] border border-[#F3DDBB] bg-warn-050 px-3.5 py-3">
+              <div className="rounded-[9px] border border-amber-200 bg-warn-050 px-3.5 py-3">
                 <div className="text-[12.5px] font-bold text-warn-800">Invoice pending</div>
                 <div className="mt-[3px] text-[11.5px] font-medium text-warn-800">
                   Goods are in store, but payment stays blocked until the vendor invoice is attached
@@ -135,7 +135,7 @@ export function GrnDetail({
               {can.attachInvoice && (
                 <a
                   href={`/material/invoices/new?po=${grn.poId}`}
-                  className="mt-2.5 block w-full rounded-[9px] border border-dashed border-[#C6CFE8] bg-surface-sunken p-3.5 text-center text-[12px] font-semibold text-navy-500 transition-colors hover:border-brand-500 hover:bg-[#F3F8FE] hover:text-brand-700"
+                  className="mt-2.5 block w-full rounded-[9px] border border-dashed border-muted-200 bg-surface-sunken p-3.5 text-center text-[12px] font-semibold text-navy-500 transition-colors hover:border-brand-500 hover:bg-[#F3F8FE] hover:text-brand-700"
                 >
                   ↑ Attach invoice now
                 </a>

@@ -350,7 +350,7 @@ export function ProcurementScreen({
                     new Date(o.expectedDate).getTime() < nowMs &&
                     !["RECEIVED", "CLOSED", "CANCELLED"].includes(o.status);
                   return (
-                    <tr key={o.id} className="border-b border-[#F0F3FA] last:border-0 hover:bg-surface-tint">
+                    <tr key={o.id} className="border-b border-line-150 last:border-0 hover:bg-surface-tint">
                       <td className="px-4 py-3">
                         <Link href={`/material/purchase-orders/${o.id}`} className="text-[12.5px] font-bold text-navy-950 hover:text-brand-500">
                           {o.no}
@@ -368,7 +368,7 @@ export function ProcurementScreen({
                       </td>
                       <td className="px-4 py-3">
                         <div className="num text-[12px] font-semibold text-navy-600">{pct}%</div>
-                        <div className="mt-1 h-[5px] w-[70px] overflow-hidden rounded-full bg-[#EDF0F8]">
+                        <div className="mt-1 h-[5px] w-[70px] overflow-hidden rounded-full bg-track">
                           <div
                             className={cn("h-full rounded-full", pct === 100 ? "bg-good-600" : "bg-brand-500")}
                             style={{ width: `${Math.max(3, pct)}%` }}
@@ -454,7 +454,7 @@ export function ProcurementScreen({
               </thead>
               <tbody>
                 {vendors.map((v) => (
-                  <tr key={v.id} className="border-b border-[#F0F3FA] last:border-0 hover:bg-surface-tint">
+                  <tr key={v.id} className="border-b border-line-150 last:border-0 hover:bg-surface-tint">
                     <td className="px-4 py-3">
                       <div className="text-[12.5px] font-bold text-navy-950">{v.name}</div>
                       <div className="text-[11px] font-medium text-muted-400">
@@ -501,7 +501,7 @@ export function ProcurementScreen({
                 {items.map((i) => {
                   const low = i.reorderLevel > 0 && i.onHand <= i.reorderLevel;
                   return (
-                    <tr key={i.id} className="border-b border-[#F0F3FA] last:border-0 hover:bg-surface-tint">
+                    <tr key={i.id} className="border-b border-line-150 last:border-0 hover:bg-surface-tint">
                       <td className="px-4 py-3">
                         <div className="text-[12.5px] font-bold text-navy-950">{i.name}</div>
                         <div className="text-[11px] font-medium text-muted-400">{i.code}</div>

@@ -25,8 +25,8 @@ export interface AttendanceRow {
 }
 
 const CELL_TONE: Record<string, string> = {
-  PRESENT: "border-[#C4E8D4] bg-good-050 text-good-700",
-  HALF_DAY: "border-[#F3DDBB] bg-warn-050 text-warn-700",
+  PRESENT: "border-good-200 bg-good-050 text-good-700",
+  HALF_DAY: "border-amber-200 bg-warn-050 text-warn-700",
   ABSENT: "border-bad-100 bg-bad-050 text-bad-700",
 };
 
@@ -127,7 +127,7 @@ export function EmployeeDetail({
           <button
             type="button"
             onClick={() => setConfirming(true)}
-            className="cursor-pointer rounded-[9px] border border-bad-100 bg-bad-050 px-4 py-2.5 text-[12.5px] font-semibold text-bad-700 transition-colors hover:bg-[#F8DBDB]"
+            className="cursor-pointer rounded-[9px] border border-bad-100 bg-bad-050 px-4 py-2.5 text-[12.5px] font-semibold text-bad-700 transition-colors hover:bg-bad-100"
           >
             Delete
           </button>
@@ -201,8 +201,8 @@ export function EmployeeDetail({
             <>
               <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
                 {[
-                  { v: stats.present, l: "Present", cls: "border-[#C4E8D4] bg-good-050 text-good-700" },
-                  { v: stats.half, l: "Half day", cls: "border-[#F3DDBB] bg-warn-050 text-warn-700" },
+                  { v: stats.present, l: "Present", cls: "border-good-200 bg-good-050 text-good-700" },
+                  { v: stats.half, l: "Half day", cls: "border-amber-200 bg-warn-050 text-warn-700" },
                   { v: stats.absent, l: "Absent", cls: "border-bad-100 bg-bad-050 text-bad-700" },
                   { v: stats.ot, l: "Total OT", cls: "border-line-400 bg-white text-navy-800" },
                   { v: stats.pay, l: "Pay days", cls: "border-navy-950 bg-navy-950 text-white" },
@@ -221,8 +221,8 @@ export function EmployeeDetail({
                   </div>
                   <div className="flex flex-wrap gap-3 text-[10.5px] font-semibold text-muted-500">
                     {[
-                      ["Present", "bg-good-050 border-[#C4E8D4]"],
-                      ["Half day", "bg-warn-050 border-[#F3DDBB]"],
+                      ["Present", "bg-good-050 border-good-200"],
+                      ["Half day", "bg-warn-050 border-amber-200"],
                       ["Absent", "bg-bad-050 border-bad-100"],
                       ["Not marked", "bg-surface-sunken border-line-200"],
                     ].map(([l, cls]) => (

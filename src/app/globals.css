@@ -53,11 +53,45 @@
   --color-warn-050: #FDF3E7;
   --color-bad-600: #D8494A;
   --color-bad-700: #B23334;
+  --color-bad-300: #E8827F;
   --color-bad-100: #F2CBCB;
   --color-bad-050: #FCEDED;
+  --color-bad-025: #FEF7F7;
 
-  --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: var(--font-sora), var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
+  /* Amber — the design's warning solid, its light end and its border */
+  --color-amber-500: #E8A13A;
+  --color-amber-300: #F2C063;
+  --color-amber-200: #F3DDBB;
+  --color-amber-100: #F8E6C8;
+
+  /* Plum — the second approval level, and anything the design paints purple */
+  --color-plum-700: #5636A8;
+  --color-plum-600: #6A46C8;
+  --color-plum-050: #EFE9FC;
+
+  /* The lighter ends of green and blue, used for bars and borders */
+  --color-good-300: #5BC8A2;
+  --color-good-200: #C4E8D4;
+  --color-good-400: #77C39A;
+  --color-brand-200: #BFE0F2;
+  --color-brand-150: #BFD9F2;
+
+  /* Slate — a chip with no colour of its own, and the line under a bar */
+  --color-slate-600: #4A5077;
+  --color-slate-050: #EEF1F9;
+  --color-track: #EDF0F8;
+  --color-muted-200: #C6CFE8;
+  --color-line-250: #E4E9F5;
+  --color-line-350: #DDE4F3;
+
+  /*
+   * The design's stacks exactly: 'Public Sans', sans-serif and 'Sora',
+   * sans-serif. The fallback matters — glyphs Public Sans does not carry (▲ ✓
+   * ✗ ₹) come from the next font in the stack, and a different fallback gives
+   * them different metrics, which changes the height of every pill they sit in.
+   */
+  --font-sans: var(--font-public-sans), sans-serif;
+  --font-display: var(--font-sora), sans-serif;
 
   --radius-card: 13px;
   --radius-panel: 12px;
@@ -79,6 +113,19 @@
   html,
   body {
     height: 100%;
+  }
+
+  /*
+   * The design writes every rule as a `font:` shorthand, which resets
+   * line-height to `normal` on each element. Tailwind's preflight instead sets
+   * 1.5 on the root, which makes every line box about four pixels taller and
+   * pushes everything below it down the page. Matching the design means
+   * matching its leading: normal here, and an explicit `leading-*` only where
+   * the design sets one.
+   */
+  html,
+  body {
+    line-height: normal;
   }
 
   body {

@@ -15,8 +15,8 @@ import { PrintButton } from "./print-button";
 const PRINT_CSS = `
   .print-sheet { width: 210mm; max-width: 100%; }
   .print-sheet table { border-collapse: collapse; width: 100%; }
-  .print-sheet th, .print-sheet td { border: 1px solid #cfd3e0; padding: 5px 7px; vertical-align: top; }
-  .print-sheet thead th { background: #f1f3f8; font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; }
+  .print-sheet th, .print-sheet td { border: 1px solid #E3E7F2; padding: 5px 7px; vertical-align: top; }
+  .print-sheet thead th { background: #FAFBFE; font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; }
   .print-keep { break-inside: avoid; page-break-inside: avoid; }
   @media print {
     html, body { height: auto !important; background: #fff !important; }

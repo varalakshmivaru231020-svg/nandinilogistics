@@ -28,7 +28,7 @@ const TAG_TONE = {
   RECEIPT: { pill: "bg-good-050 text-good-700", qty: "text-good-700" },
   ISSUE: { pill: "bg-bad-050 text-bad-700", qty: "text-bad-700" },
   RETURN: { pill: "bg-brand-100 text-brand-700", qty: "text-brand-700" },
-  TRANSFER: { pill: "bg-[#EFE9FC] text-[#6A46C8]", qty: "text-[#6A46C8]" },
+  TRANSFER: { pill: "bg-plum-050 text-plum-600", qty: "text-plum-600" },
   OTHER: { pill: "bg-surface-field text-navy-500", qty: "text-navy-500" },
 } as const;
 
@@ -62,7 +62,7 @@ export function ItemDetail({
   const shown = tab === "all" ? movements : movements.filter((m) => m.kind === tab);
 
   const flagClass =
-    item.flag === "RESTOCK NOW" ? "bg-bad-600" : item.flag === "ORDER SOON" ? "bg-[#E8A13A]" : "bg-good-600";
+    item.flag === "RESTOCK NOW" ? "bg-bad-600" : item.flag === "ORDER SOON" ? "bg-amber-500" : "bg-good-600";
   const barClass =
     item.flag === "RESTOCK NOW"
       ? "bg-[linear-gradient(90deg,#D8494A,#E8827F)]"

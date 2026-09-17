@@ -81,7 +81,7 @@ export function Drawer({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[8px] bg-surface-field text-[14px] font-semibold text-muted-600 transition-colors hover:bg-[#E4E9F5]"
+            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[8px] bg-surface-field text-[14px] font-semibold text-muted-600 transition-colors hover:bg-line-250"
           >
             ✕
           </button>

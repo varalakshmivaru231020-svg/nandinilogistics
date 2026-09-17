@@ -118,7 +118,7 @@ export default async function VendorsPage({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-[9px]">
                     <span className="font-display text-[14.5px] font-bold text-navy-950">{v.name}</span>
-                    <span className="num rounded-full border border-[#DDE4F3] bg-surface-hover px-2 py-[3px] text-[10px] font-bold tracking-[.05em] text-navy-800">
+                    <span className="num rounded-full border border-line-350 bg-surface-hover px-2 py-[3px] text-[10px] font-bold tracking-[.05em] text-navy-800">
                       {v.code}
                     </span>
                     <Badge tone={v.status === "ACTIVE" ? "good" : "warn"}>

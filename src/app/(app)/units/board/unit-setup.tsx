@@ -269,10 +269,10 @@ export function UnitSetup({
  */
 function TYPE_TONE(type: string): string {
   const key = type.toLowerCase();
-  if (key.includes("1 bhk")) return "border-[#BFE0F2] bg-brand-100 text-brand-700";
-  if (key.includes("2 bhk")) return "border-[#C4E8D4] bg-good-050 text-good-700";
-  if (key.includes("3 bhk")) return "border-[#D7CDF3] bg-[#EFE9FC] text-[#6A46C8]";
-  if (key.includes("4 bhk") || key.includes("villa")) return "border-[#F3DDBB] bg-warn-050 text-warn-700";
+  if (key.includes("1 bhk")) return "border-brand-200 bg-brand-100 text-brand-700";
+  if (key.includes("2 bhk")) return "border-good-200 bg-good-050 text-good-700";
+  if (key.includes("3 bhk")) return "border-plum-050 bg-plum-050 text-plum-600";
+  if (key.includes("4 bhk") || key.includes("villa")) return "border-amber-200 bg-warn-050 text-warn-700";
   return "border-line-400 bg-surface-sunken text-navy-600";
 }
 

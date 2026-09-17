@@ -113,7 +113,7 @@ export default async function ProjectsPage({
                     )
                   : 0;
                 return (
-                  <tr key={p.id} className="border-b border-[#F0F3FA] last:border-0 hover:bg-surface-tint">
+                  <tr key={p.id} className="border-b border-line-150 last:border-0 hover:bg-surface-tint">
                     <td className="px-4 py-3.5">
                       <Link href={`/projects/${p.id}`} className="text-[13.5px] font-bold text-navy-950 hover:text-brand-500">
                         {p.name}
@@ -157,7 +157,7 @@ export default async function ProjectsPage({
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-[7px] flex-1 overflow-hidden rounded-full bg-[#EDF0F8]">
+                        <div className="h-[7px] flex-1 overflow-hidden rounded-full bg-track">
                           <div
                             className="h-full rounded-full"
                             style={{

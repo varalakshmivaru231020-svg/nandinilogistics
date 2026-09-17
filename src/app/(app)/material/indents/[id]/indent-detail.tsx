@@ -42,7 +42,7 @@ interface Movement {
 const FULFIL_TONE = {
   good: "bg-good-600",
   brand: "bg-brand-500",
-  amber: "bg-[#E8A13A]",
+  amber: "bg-amber-500",
 } as const;
 
 const MOVEMENT_TONE = {
@@ -153,7 +153,7 @@ export function IndentDetail({
                     className={cn(
                       "inline-block rounded-md px-1.5 py-1 text-[9px] font-extrabold",
                       done && "bg-good-600 text-white",
-                      now && "bg-[#E8A13A] text-white",
+                      now && "bg-amber-500 text-white",
                       !done && !now && "bg-line-200 text-muted-400",
                     )}
                   >

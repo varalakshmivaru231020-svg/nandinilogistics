@@ -226,7 +226,7 @@ function rolePill(role: string | undefined): string {
   if (name.includes("project manager")) return "bg-brand-100 text-brand-700";
   if (name.includes("supervisor")) return "bg-good-050 text-good-700";
   if (name.includes("store")) return "bg-warn-050 text-warn-700";
-  if (name.includes("sales")) return "bg-[#EFE9FC] text-[#6A46C8]";
+  if (name.includes("sales")) return "bg-plum-050 text-plum-600";
   return "bg-surface-field text-navy-500";
 }
 
@@ -324,7 +324,7 @@ async function Limits() {
           </div>
         ))}
       </div>
-      <div className="mt-3 rounded-[11px] border border-[#DDE4F3] bg-surface-hover px-4 py-3 text-[12px] font-semibold text-navy-800">
+      <div className="mt-3 rounded-[11px] border border-line-350 bg-surface-hover px-4 py-3 text-[12px] font-semibold text-navy-800">
         Below the configured limit the second approval level is skipped automatically. Limits are
         editable here without code changes.
       </div>
@@ -337,9 +337,9 @@ async function Limits() {
  * employee list.
  */
 const TYPE_PILL: Record<string, string> = {
-  "company staff": "border-[#DDE4F3] bg-[#EFF3FB] text-[#2F308C]",
-  "contract role": "border-[#DFD4F5] bg-[#EFE9FC] text-[#5636A8]",
-  "direct labour": "border-[#C4E8D4] bg-good-050 text-good-700",
+  "company staff": "border-line-350 bg-surface-hover text-navy-800",
+  "contract role": "border-plum-050 bg-plum-050 text-plum-700",
+  "direct labour": "border-good-200 bg-good-050 text-good-700",
 };
 
 const typePill = (name: string) => TYPE_PILL[name.trim().toLowerCase()];

@@ -30,9 +30,29 @@ export const metadata: Metadata = {
     "Construction & Real Estate ERP and Sales CRM for NN Infrastructure Developers — projects, material, sales, one system of record.",
 };
 
+/**
+ * next/font hands back "<family>, <family> Fallback, sans-serif" and injects the
+ * metric-overridden fallback in the middle. The design's stack is plain
+ * "'Public Sans', sans-serif", and the difference is visible: glyphs neither
+ * family carries — ▲ ✓ ✗ — are drawn by whatever comes next, and the adjusted
+ * fallback gives them Public Sans's line box instead of the system sans-serif's,
+ * which made every pill holding one three pixels shorter than the design's. So
+ * the variables carry the loaded family alone, and globals.css adds the
+ * design's own fallback after it.
+ */
+const family = (stack: string) => stack.split(",")[0].trim();
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${publicSans.variable} ${sora.variable}`}>
+    <html
+      lang="en"
+      style={
+        {
+          "--font-public-sans": family(publicSans.style.fontFamily),
+          "--font-sora": family(sora.style.fontFamily),
+        } as React.CSSProperties
+      }
+    >
       <body className="min-h-full antialiased">{children}</body>
     </html>
   );

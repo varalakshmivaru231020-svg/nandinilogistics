@@ -472,16 +472,16 @@ export default async function DashboardPage() {
 
   const healthTone: Record<string, string> = {
     good: "bg-good-050 text-good-700",
-    bad: "bg-bad-050 text-bad-600",
+    bad: "bg-bad-050 text-bad-700",
     warn: "bg-warn-050 text-warn-700",
-    brand: "bg-brand-100 text-brand-700",
-    navy: "bg-[#EFE9FC] text-navy-800",
+    brand: "bg-brand-100 text-brand-500",
+    navy: "bg-plum-050 text-navy-800",
   };
 
   /** The design's delta pill beside each KPI value. */
   const deltaTone: Record<string, string> = {
     good: "bg-good-050 text-good-700",
-    bad: "bg-bad-050 text-bad-600",
+    bad: "bg-bad-050 text-bad-700",
     warn: "bg-warn-050 text-warn-700",
     brand: "bg-brand-100 text-brand-700",
     navy: "bg-surface-hover text-navy-800",
@@ -514,7 +514,7 @@ export default async function DashboardPage() {
                   <StatLabel>{k.label}</StatLabel>
                   <span
                     className={cn(
-                      "grid h-7 w-7 shrink-0 place-items-center rounded-[8px]",
+                      "grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px]",
                       healthTone[k.tone] ?? "bg-brand-100 text-brand-500",
                     )}
                   >
@@ -612,7 +612,7 @@ export default async function DashboardPage() {
                     <span className="text-[12.5px] font-semibold text-navy-900">{p.name}</span>
                     <span className="num text-[12.5px] font-bold text-brand-500">{p.pct}%</span>
                   </div>
-                  <div className="h-[7px] overflow-hidden rounded-full bg-[#EDF0F8]">
+                  <div className="h-[7px] overflow-hidden rounded-full bg-track">
                     <div
                       className="h-full rounded-full"
                       style={{ width: `${p.pct}%`, background: p.bar }}
@@ -689,7 +689,7 @@ export default async function DashboardPage() {
                 );
               })}
             </div>
-            <div className="mt-3.5 flex flex-wrap justify-between gap-2 border-t border-[#F0F3FA] pt-3 text-[12px] font-semibold text-muted-600">
+            <div className="mt-3.5 flex flex-wrap justify-between gap-2 border-t border-line-150 pt-3 text-[12px] font-semibold text-muted-600">
               <span>
                 Conversion {conversion === null ? "—" : `${conversion.toFixed(1)}%`}
                 {conversionDelta !== null && Math.abs(conversionDelta) >= 0.05 && (

@@ -45,8 +45,8 @@ interface Extension {
 
 /** The design's words for where a request has got to. */
 const EXT_STAGE: Record<string, { label: string; pill: string }> = {
-  AWAITING_PM: { label: "AWAITING PROJECT MANAGER", pill: "bg-[#E8A13A] text-white" },
-  AWAITING_ADMIN: { label: "AWAITING ADMIN", pill: "bg-[#6A46C8] text-white" },
+  AWAITING_PM: { label: "AWAITING PROJECT MANAGER", pill: "bg-amber-500 text-white" },
+  AWAITING_ADMIN: { label: "AWAITING ADMIN", pill: "bg-plum-600 text-white" },
 };
 
 const DAY = 86_400_000;
@@ -309,7 +309,7 @@ export function ScheduleScreen({
                         <div className="text-[12px] font-bold text-brand-700">
                           {pct}% · {doneN} of {g.items.length} sub-activities complete
                         </div>
-                        <div className="mt-[7px] h-[7px] max-w-[220px] overflow-hidden rounded-full bg-[#EEF1F8]">
+                        <div className="mt-[7px] h-[7px] max-w-[220px] overflow-hidden rounded-full bg-line-200">
                           <div
                             className="h-full rounded-full"
                             style={{
@@ -320,7 +320,7 @@ export function ScheduleScreen({
                             }}
                           />
                         </div>
-                        <div className="mt-[5px] text-[10.5px] font-medium text-[#A8AEC8]">
+                        <div className="mt-[5px] text-[10.5px] font-medium text-muted-300">
                           {allDone
                             ? "Auto-completed — every sub-activity is closed"
                             : "Completes automatically when all sub-activities are closed"}
@@ -344,7 +344,7 @@ export function ScheduleScreen({
                         const flag = m.overdue
                           ? { text: "OVERDUE", bg: "bg-bad-600" }
                           : m.dueToday
-                            ? { text: "DUE TODAY", bg: "bg-[#E8A13A]" }
+                            ? { text: "DUE TODAY", bg: "bg-amber-500" }
                             : m.startToday
                               ? { text: "START TODAY", bg: "bg-brand-500" }
                               : m.startDue && state === "Not started"
@@ -357,8 +357,8 @@ export function ScheduleScreen({
                           <div
                             key={a.id}
                             className={cn(
-                              "grid min-w-[1150px] grid-cols-[minmax(200px,1.5fr)_190px_150px_190px_minmax(180px,1fr)_210px] items-center gap-3 border-b border-[#F2F5FB] py-[13px] pl-11 pr-5 last:border-0",
-                              m.overdue && "bg-[#FEF7F7]",
+                              "grid min-w-[1150px] grid-cols-[minmax(200px,1.5fr)_190px_150px_190px_minmax(180px,1fr)_210px] items-center gap-3 border-b border-line-100 py-[13px] pl-11 pr-5 last:border-0",
+                              m.overdue && "bg-bad-025",
                             )}
                           >
                             <div>
@@ -484,7 +484,7 @@ export function ScheduleScreen({
                                 <button
                                   type="button"
                                   onClick={() => setExtending(a)}
-                                  className="cursor-pointer whitespace-nowrap rounded-[8px] border border-[#F3DDBB] bg-warn-050 px-[13px] py-[9px] text-[11.5px] font-bold text-warn-800 transition-colors hover:bg-[#F8E6C8]"
+                                  className="cursor-pointer whitespace-nowrap rounded-[8px] border border-amber-200 bg-warn-050 px-[13px] py-[9px] text-[11.5px] font-bold text-warn-800 transition-colors hover:bg-amber-100"
                                 >
                                   ⏱ Extension
                                 </button>
@@ -951,7 +951,7 @@ function ScheduleReports({
   const score = Math.max(0, base - avoidable * 10);
 
   const TH_R = "border-b border-line-300 bg-surface-sunken px-[13px] py-[11px] text-[10px] font-bold uppercase tracking-[.08em] text-muted-500 whitespace-nowrap";
-  const TD_R = "border-b border-[#F0F3FA] px-[13px] py-3 text-[12px] font-semibold text-navy-600";
+  const TD_R = "border-b border-line-150 px-[13px] py-3 text-[12px] font-semibold text-navy-600";
 
   return (
     <div>
@@ -984,7 +984,7 @@ function ScheduleReports({
               <div className="font-display text-[18px] font-extrabold text-navy-950">{actualDays} d</div>
               <div className="mt-[3px] text-[11.5px] font-semibold text-muted-600">Actual duration · completed only</div>
             </div>
-            <div className="rounded-[12px] border border-[#F3DDBB] bg-warn-050 px-4 py-3.5">
+            <div className="rounded-[12px] border border-amber-200 bg-warn-050 px-4 py-3.5">
               <div className="font-display text-[18px] font-extrabold text-warn-800">+{grantedDays} d</div>
               <div className="mt-[3px] text-[11.5px] font-semibold text-warn-800 opacity-85">Extensions granted by Admin</div>
             </div>
@@ -1056,7 +1056,7 @@ function ScheduleReports({
                         <td
                           className={cn(
                             TD_R, "text-center text-[13px] font-extrabold",
-                            !a.actualStart ? "text-[#C6CFE8]" : m.onStart ? "text-good-700" : "text-bad-700",
+                            !a.actualStart ? "text-muted-200" : m.onStart ? "text-good-700" : "text-bad-700",
                           )}
                         >
                           {!a.actualStart ? "—" : m.onStart ? "✓" : "✗"}
@@ -1064,7 +1064,7 @@ function ScheduleReports({
                         <td
                           className={cn(
                             TD_R, "text-center text-[13px] font-extrabold",
-                            a.status !== "COMPLETED" ? "text-[#C6CFE8]" : m.onDone ? "text-good-700" : "text-bad-700",
+                            a.status !== "COMPLETED" ? "text-muted-200" : m.onDone ? "text-good-700" : "text-bad-700",
                           )}
                         >
                           {a.status !== "COMPLETED" ? "—" : m.onDone ? "✓" : "✗"}
@@ -1109,7 +1109,7 @@ function ScheduleReports({
                   <div className="text-[10px] font-semibold tracking-[.06em] text-muted-400">SCORE</div>
                 </div>
               </div>
-              <div className="mt-[7px] h-2 overflow-hidden rounded-full bg-[#EEF1F8]">
+              <div className="mt-[7px] h-2 overflow-hidden rounded-full bg-line-200">
                 <div
                   className="h-full rounded-full"
                   style={{
@@ -1139,13 +1139,13 @@ function ScheduleReports({
                     On-time completion · {onDone} of {finished.length}
                   </div>
                 </div>
-                <div className="rounded-[9px] border border-[#C4E8D4] bg-good-050 px-3 py-2.5">
+                <div className="rounded-[9px] border border-good-200 bg-good-050 px-3 py-2.5">
                   <div className="font-display text-[14px] font-bold text-good-700">{genuine}</div>
                   <div className="mt-0.5 text-[10.5px] font-semibold text-good-700 opacity-85">
                     Genuine extensions · excluded
                   </div>
                 </div>
-                <div className="rounded-[9px] border border-[#F3DDBB] bg-warn-050 px-3 py-2.5">
+                <div className="rounded-[9px] border border-amber-200 bg-warn-050 px-3 py-2.5">
                   <div className="font-display text-[14px] font-bold text-warn-800">
                     {avoidable} ({avoidable ? `−${avoidable * 10}` : "—"})
                   </div>
@@ -1154,14 +1154,14 @@ function ScheduleReports({
                   </div>
                 </div>
               </div>
-              <div className="mt-[11px] text-[11px] font-medium text-[#A8AEC8]">
+              <div className="mt-[11px] text-[11px] font-medium text-muted-300">
                 {avoidable
                   ? `${avoidable} avoidable extension${avoidable === 1 ? "" : "s"} counted against the score`
                   : "No avoidable extensions — genuine delays excluded"}
               </div>
             </div>
           </div>
-          <div className="mt-3 rounded-[12px] border border-[#DDE4F3] bg-[#EFF3FB] px-[17px] py-3.5 text-[12px] font-medium text-[#2F308C]">
+          <div className="mt-3 rounded-[12px] border border-line-350 bg-surface-hover px-[17px] py-3.5 text-[12px] font-medium text-navy-800">
             On-time start and on-time completion are scored equally. Extensions the Admin marked
             “Genuine” are excluded; each “Avoidable” extension costs 10 points.
           </div>

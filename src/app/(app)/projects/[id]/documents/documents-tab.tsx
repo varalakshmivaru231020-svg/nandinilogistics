@@ -28,9 +28,9 @@ export interface DocumentRow {
 const TAG_TONE: Record<string, string> = {
   DRAWING: "bg-brand-100 text-brand-700",
   LICENCE: "bg-good-050 text-good-700",
-  APPROVAL: "bg-[#EFE9FC] text-[#6A46C8]",
+  APPROVAL: "bg-plum-050 text-plum-600",
   AGREEMENT: "bg-warn-050 text-warn-700",
-  REPORT: "bg-[#EEF1F9] text-[#4A5077]",
+  REPORT: "bg-slate-050 text-slate-600",
   CONTRACT: "bg-bad-050 text-bad-700",
 };
 
@@ -39,7 +39,7 @@ function tagOf(typeName: string): { label: string; tone: string } {
   for (const key of Object.keys(TAG_TONE)) {
     if (label.includes(key)) return { label: key, tone: TAG_TONE[key] };
   }
-  return { label: label.slice(0, 12), tone: "bg-[#EEF1F9] text-[#4A5077]" };
+  return { label: label.slice(0, 12), tone: "bg-slate-050 text-slate-600" };
 }
 
 export function DocumentsTab({

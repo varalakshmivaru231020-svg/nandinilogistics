@@ -227,7 +227,7 @@ export function LeadDetail({
                     ? "bg-good-050 text-good-700"
                     : s.current
                       ? "bg-white/25 text-white"
-                      : "bg-[#EEF1F9] text-muted-500",
+                      : "bg-slate-050 text-muted-500",
                 )}
               >
                 {s.done ? "✓" : String(i + 1)}
