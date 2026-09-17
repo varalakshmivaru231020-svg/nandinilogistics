@@ -33,7 +33,7 @@ export function PageHeader({
   const named = screenTitle(pathname) === title;
 
   return (
-    <div className="mb-[15px] flex flex-wrap items-center justify-between gap-3">
+    <div className="mb-[15px] flex flex-wrap items-center justify-between gap-[7px]">
       <div className="min-w-0 flex-1">
         {breadcrumb && (
           <div className="mb-1.5 text-[11px] font-semibold text-muted-500">{breadcrumb}</div>
@@ -43,8 +43,14 @@ export function PageHeader({
             {title}
           </h1>
         )}
+        {/*
+          * The design lets this line take the row — `flex:1`, no width cap — so
+          * a chain like "Indent → PM approval → …" stays on one line the way it
+          * does in the design, instead of wrapping into two and pushing
+          * everything below it down.
+          */}
         {description && (
-          <p className={`max-w-3xl text-[13px] font-medium text-muted-600 ${named ? "" : "mt-1"}`}>
+          <p className={`text-[11.5px] font-medium text-muted-400 ${named ? "" : "mt-1"}`}>
             {description}
           </p>
         )}
