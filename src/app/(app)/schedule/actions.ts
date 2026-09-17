@@ -12,58 +12,138 @@ import { isLinkType } from "@/lib/schedule/engine";
 import { buildTemplate, clashingCodes, instantiateTemplate, type TemplateShape } from "@/lib/schedule/template";
 import { assertLinkIsAcyclic, reschedule } from "@/lib/schedule/service";
 
-const ActivitySchema = z.object({
+/**
+ * The design's schedule builds itself: "+ Main category" names a package of
+ * work and the dates it should run between, "+ Sub-activity" puts an activity
+ * inside it. Neither asks for a code — the code is derived here, the way every
+ * other document number is, so two people adding at once cannot collide.
+ */
+function codeFrom(name: string, taken: Set<string>): string {
+  const base =
+    name
+      .toUpperCase()
+      .replace(/[^A-Z0-9 ]/g, "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => w.slice(0, 3))
+      .join("-")
+      .slice(0, 14) || "WP";
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n += 1) {
+    const next = `${base}-${n}`;
+    if (!taken.has(next)) return next;
+  }
+}
+
+const AddSchema = z.object({
   projectId: z.string().min(1, "Project is required"),
-  workPackageId: z.string().optional(),
-  code: z.string().trim().min(1, "Activity code is required"),
-  name: z.string().trim().min(2, "Activity name is required"),
+  name: z.string().trim().min(2, "Name is required"),
   plannedStart: z.string().min(1, "Planned start is required"),
-  plannedEnd: z.string().min(1, "Planned finish is required"),
-  isMilestone: z.coerce.boolean().default(false),
-  sequence: z.coerce.number().int().min(0).default(0),
+  plannedEnd: z.string().min(1, "Planned end is required"),
 });
 
-export async function createActivityAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
+export async function addMainCategoryAction(
+  projectId: string, name: string, plannedStart: string, plannedEnd: string, manager = "",
+): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
-    const ctx = await authorize(PERM.schedule.activity.create);
-    const parsed = ActivitySchema.safeParse({
-      ...Object.fromEntries(formData),
-      isMilestone: formData.get("isMilestone") === "on",
-    });
-    if (!parsed.success) throw new Error(parsed.error.issues[0].message);
-    const v = parsed.data;
-
+    const ctx = await authorize(PERM.project.workPackage.create);
+    const v = AddSchema.parse({ projectId, name, plannedStart, plannedEnd });
     assertProjectAccess(ctx, v.projectId);
+
     const start = new Date(v.plannedStart);
     const end = new Date(v.plannedEnd);
-    if (end < start) throw new Error("The finish date cannot be before the start date.");
+    if (end < start) throw new Error("Planned end cannot be before planned start.");
 
+    // The design types the manager's name. An empty box means the project's own
+    // manager runs it; a name that belongs to nobody is a typo, not a new user.
+    const wanted = manager.trim();
+    let managerId: string | null = null;
+    if (wanted) {
+      const person = await prisma.user.findFirst({
+        where: { name: { equals: wanted, mode: "insensitive" }, status: "ACTIVE" },
+        select: { id: true },
+      });
+      if (!person) throw new Error(`No one on this project is called "${wanted}".`);
+      managerId = person.id;
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      // A main category lives under a phase; a project that has never had one
+      // gets a single phase to hold its schedule.
+      const phase =
+        (await tx.projectPhase.findFirst({ where: { projectId: v.projectId }, orderBy: { sequence: "asc" } })) ??
+        (await tx.projectPhase.create({
+          data: { projectId: v.projectId, code: "SCHEDULE", name: "Schedule", sequence: 0 },
+        }));
+
+      const siblings = await tx.workPackage.findMany({
+        where: { phaseId: phase.id },
+        select: { code: true, sequence: true },
+      });
+      return tx.workPackage.create({
+        data: {
+          phaseId: phase.id,
+          code: codeFrom(v.name, new Set(siblings.map((w) => w.code))),
+          name: v.name,
+          sequence: siblings.length,
+          managerId,
+          startDate: start,
+          endDate: end,
+        },
+      });
+    });
+
+    await recordAudit({
+      action: "CREATE", entity: "WorkPackage", entityId: created.id, userId: ctx.id, projectId: v.projectId,
+      summary: `Added main category ${created.code} — ${created.name}`,
+    });
+    revalidatePath("/schedule");
+    return { id: created.id };
+  });
+}
+
+export async function addSubActivityAction(
+  projectId: string, workPackageId: string, name: string, plannedStart: string, plannedEnd: string,
+): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.schedule.activity.create);
+    const v = AddSchema.parse({ projectId, name, plannedStart, plannedEnd });
+    assertProjectAccess(ctx, v.projectId);
+    if (!workPackageId) throw new Error("Pick the main category it belongs to.");
+
+    const start = new Date(v.plannedStart);
+    const end = new Date(v.plannedEnd);
+    if (end < start) throw new Error("Planned end cannot be before planned start.");
+
+    const siblings = await prisma.scheduleActivity.findMany({
+      where: { projectId: v.projectId },
+      select: { code: true, sequence: true },
+    });
     const activity = await prisma.scheduleActivity.create({
       data: {
         projectId: v.projectId,
-        workPackageId: v.workPackageId || null,
-        code: v.code.toUpperCase(),
+        workPackageId,
+        code: codeFrom(v.name, new Set(siblings.map((a) => a.code))),
         name: v.name,
-        sequence: v.sequence,
+        sequence: siblings.length,
         plannedStart: start,
         plannedEnd: end,
         // The baseline is captured at creation and never edited afterwards.
         baselineStart: start,
         baselineEnd: end,
-        isMilestone: v.isMilestone,
       },
     });
 
     await recordAudit({
       action: "CREATE", entity: "ScheduleActivity", entityId: activity.id, userId: ctx.id,
       projectId: v.projectId,
-      summary: `Added schedule activity ${activity.code} — ${activity.name}`,
+      summary: `Added sub-activity ${activity.code} — ${activity.name}`,
     });
-
     revalidatePath("/schedule");
     return { id: activity.id };
   });
 }
+
 
 /**
  * Records progress. Slipping past the planned finish requires a delay reason,

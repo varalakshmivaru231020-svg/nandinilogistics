@@ -6,9 +6,11 @@ import { AlertTriangle, Check, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Alert, Card, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { Alert, Card, EmptyState, Field, Select, Textarea } from "@/components/ui/primitives";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
-import { completeActivityAction, createActivityAction, startActivityAction } from "./actions";
+import {
+  addMainCategoryAction, addSubActivityAction, completeActivityAction, startActivityAction,
+} from "./actions";
 import {
   decideExtensionAdminAction, decideExtensionPmAction, requestExtensionAction,
 } from "./extension-actions";
@@ -20,7 +22,7 @@ interface Activity {
   plannedStart: string | null; plannedEnd: string | null;
   actualStart: string | null; actualEnd: string | null;
   delayReason: string | null; delayNotes: string | null;
-  groupId: string; groupName: string; phaseName: string | null;
+  groupId: string; groupName: string; groupManager: string | null; phaseName: string | null;
   pendingExtension: boolean;
   extensions: Array<{
     id: string; days: number; reason: string; status: string;
@@ -119,7 +121,7 @@ function metrics(a: Activity, todayMs: number) {
 
 export function ScheduleScreen({
   projects, activeProjectId, projectManager, tab, reportTab, activities, extensions,
-  workPackages, can, nowMs,
+  can, nowMs,
 }: {
   projects: Array<{ id: string; name: string; code: string }>;
   activeProjectId: string;
@@ -128,7 +130,6 @@ export function ScheduleScreen({
   reportTab: "plan" | "performance";
   activities: Activity[];
   extensions: Extension[];
-  workPackages: Array<{ id: string; code: string; name: string; phase: string }>;
   can: Record<string, boolean>;
   nowMs: number;
 }) {
@@ -169,9 +170,11 @@ export function ScheduleScreen({
   ];
 
   // Group into the design's main-category tree.
-  const groups = new Map<string, { name: string; phase: string | null; items: Activity[] }>();
+  const groups = new Map<string, { name: string; phase: string | null; manager: string | null; items: Activity[] }>();
   for (const a of activities) {
-    const g = groups.get(a.groupId) ?? { name: a.groupName, phase: a.phaseName, items: [] };
+    const g = groups.get(a.groupId) ?? {
+      name: a.groupName, phase: a.phaseName, manager: a.groupManager, items: [],
+    };
     g.items.push(a);
     groups.set(a.groupId, g);
   }
@@ -257,7 +260,26 @@ export function ScheduleScreen({
             ))}
           </div>
 
-          {activities.length === 0 ? (
+          {adding !== null && (
+            <AddPanel
+              projectId={activeProjectId}
+              workPackageId={adding}
+              projectManager={projectManager}
+              onClose={() => setAdding(null)}
+              onDone={(m) => { setAdding(null); setNotice(m); router.refresh(); }}
+            />
+          )}
+
+          {extending && (
+            <ExtensionPanel
+              activity={extending}
+              target={metrics(extending, todayMs).re}
+              onClose={() => setExtending(null)}
+              onDone={(m) => { setExtending(null); setNotice(m); router.refresh(); }}
+            />
+          )}
+
+          {activities.length === 0 && adding === null ? (
             <Card>
               <EmptyState
                 title="No schedule activities yet"
@@ -286,7 +308,7 @@ export function ScheduleScreen({
                           <span className={cn(PILL, STATE_PILL[state])}>{state}</span>
                         </div>
                         <div className="mt-0.5 text-[11px] font-medium text-muted-400">
-                          Main category · PM {projectManager ?? "unassigned"}
+                          Main category · PM {g.manager ?? projectManager ?? "unassigned"}
                         </div>
                       </div>
                       <div className="min-w-[150px]">
@@ -664,22 +686,6 @@ export function ScheduleScreen({
         />
       )}
 
-      {adding !== null && (
-        <ActivityModal
-          projectId={activeProjectId}
-          workPackages={workPackages}
-          defaultWorkPackageId={adding}
-          onClose={() => setAdding(null)}
-          onDone={(m) => { setAdding(null); setNotice(m); router.refresh(); }}
-        />
-      )}
-      {extending && (
-        <ExtensionModal
-          activity={extending}
-          onClose={() => setExtending(null)}
-          onDone={(m) => { setExtending(null); setNotice(m); router.refresh(); }}
-        />
-      )}
       {deciding && (
         <DecideModal
           request={deciding}
@@ -691,131 +697,205 @@ export function ScheduleScreen({
   );
 }
 
-/* -------------------------------- Modals ---------------------------------- */
+/* ------------------------------ Inline panels ------------------------------ */
 
-function ActivityModal({
-  projectId, workPackages, defaultWorkPackageId, onClose, onDone,
+const PANEL_LABEL = "mb-[5px] text-[11px] font-semibold text-muted-600";
+const PANEL_FIELD =
+  "w-full rounded-[9px] border border-line-400 bg-surface-sunken px-3 py-2.5 text-[12.5px] font-medium text-navy-900 outline-none focus:border-brand-500 focus:bg-white";
+
+/** Whole days between two dates, both ends counted, as the design counts them. */
+function spanLabel(from: string, to: string): string {
+  if (!from || !to) return "Pick both dates";
+  const n = spanDays(from, to);
+  return n > 0 ? `${n} days` : "Check the dates";
+}
+
+/**
+ * The design adds to the plan in place, not in a dialog: a bordered card above
+ * the tree asking for the name, the dates, and — for a main category — who is
+ * running it, with the total days counted beside them.
+ */
+function AddPanel({
+  projectId, workPackageId, projectManager, onClose, onDone,
 }: {
   projectId: string;
-  workPackages: Array<{ id: string; code: string; name: string; phase: string }>;
-  /** The category the design opened this from, already chosen. */
-  defaultWorkPackageId: string;
-  onClose: () => void; onDone: (m: string) => void;
+  /** Who runs the project — the name the box falls back to. */
+  projectManager: string | null;
+  /** "" adds a main category; an id adds a sub-activity inside it. */
+  workPackageId: string;
+  onClose: () => void;
+  onDone: (m: string) => void;
 }) {
+  const isMain = workPackageId === "";
+  const [name, setName] = React.useState("");
+  const [pm, setPm] = React.useState("");
+  const [start, setStart] = React.useState("");
+  const [end, setEnd] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function save() {
     setBusy(true);
     setError(null);
-    const fd = new FormData(e.currentTarget);
-    fd.set("projectId", projectId);
-    const res = await createActivityAction(fd);
+    const res = isMain
+      ? await addMainCategoryAction(projectId, name, start, end, pm)
+      : await addSubActivityAction(projectId, workPackageId, name, start, end);
     setBusy(false);
-    if (!res.ok) setError(res.error);
-    else onDone("Activity added — its baseline is now locked.");
+    if (!res.ok) { setError(res.error); return; }
+    onDone(isMain ? "Main category added." : "Sub-activity added — its baseline is now locked.");
   }
 
   return (
-    <Modal
-      open onClose={onClose} title="Add schedule activity"
-      description="The dates you enter become the baseline. It is never edited afterwards — only the planned date can move, and only through an approved extension."
-      size="sm"
-      footer={
-        <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
-          <Button type="submit" form="activity-form" loading={busy}>Add activity</Button>
-        </>
-      }
-    >
-      <form id="activity-form" onSubmit={onSubmit} className="space-y-4">
-        {error && <Alert tone="error">{error}</Alert>}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Code" required><Input name="code" required className="uppercase" placeholder="SLB-07" /></Field>
-          <Field label="Sequence"><Input name="sequence" type="number" min={0} defaultValue={0} /></Field>
-          <Field label="Activity name" required className="sm:col-span-2">
-            <Input name="name" required placeholder="Slab casting — 7th floor" />
-          </Field>
-          <Field label="Main category" className="sm:col-span-2" hint="Groups the activity in the plan.">
-            <Select name="workPackageId" defaultValue={defaultWorkPackageId}>
-              <option value="">— Unassigned —</option>
-              {workPackages.map((w) => (
-                <option key={w.id} value={w.id}>{w.phase} · {w.code} — {w.name}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Planned start" required><Input name="plannedStart" type="date" required /></Field>
-          <Field label="Planned finish" required><Input name="plannedEnd" type="date" required /></Field>
-          <Field label="" className="sm:col-span-2">
-            <label className="flex items-center gap-2 text-[12.5px] font-medium text-navy-600">
-              <input type="checkbox" name="isMilestone" className="h-4 w-4 rounded border-line-400 text-brand-500" />
-              This is a milestone
-            </label>
-          </Field>
+    <div className="mb-3.5 rounded-[13px] border border-brand-150 bg-white px-[18px] py-4">
+      <div className="mb-3 font-display text-[13.5px] font-bold text-navy-950">
+        {isMain ? "New main category" : "New sub-activity"}
+      </div>
+      {error && <div className="mb-3"><Alert tone="error">{error}</Alert></div>}
+      <div className="grid items-end gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+        <label className="block">
+          <span className={PANEL_LABEL}>Name <span className="text-bad-600">*</span></span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Slab 4"
+            className={PANEL_FIELD}
+          />
+        </label>
+        {isMain && (
+          <label className="block">
+            <span className={PANEL_LABEL}>Project Manager</span>
+            <input
+              value={pm}
+              onChange={(e) => setPm(e.target.value)}
+              placeholder={projectManager ?? "Anil Deshpande"}
+              className={PANEL_FIELD}
+            />
+          </label>
+        )}
+        <label className="block">
+          <span className={PANEL_LABEL}>Planned start <span className="text-bad-600">*</span></span>
+          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={PANEL_FIELD} />
+        </label>
+        <label className="block">
+          <span className={PANEL_LABEL}>Planned end <span className="text-bad-600">*</span></span>
+          <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={PANEL_FIELD} />
+        </label>
+        <div>
+          <div className={PANEL_LABEL}>Total days</div>
+          <div className="py-[9px] font-display text-[15px] font-extrabold text-brand-700">
+            {spanLabel(start, end)}
+          </div>
         </div>
-      </form>
-    </Modal>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={save}
+            className="cursor-pointer rounded-[9px] bg-brand-500 px-4 py-[11px] text-[12px] font-bold text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-[9px] border border-line-400 bg-white px-[15px] py-[11px] text-[12px] font-semibold text-navy-500 transition-colors hover:border-brand-500"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
-function ExtensionModal({
-  activity, onClose, onDone,
-}: { activity: Activity; onClose: () => void; onDone: (m: string) => void }) {
-  const [days, setDays] = React.useState("7");
+/**
+ * Asking for more time, in the design's amber card: how many days, why, and
+ * the date it would move to — said plainly before it is sent.
+ */
+function ExtensionPanel({
+  activity, target, onClose, onDone,
+}: {
+  activity: Activity;
+  /** The date the activity is working to now. */
+  target: string | null;
+  onClose: () => void;
+  onDone: (m: string) => void;
+}) {
+  const [days, setDays] = React.useState("");
   const [reason, setReason] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
-  const base = activity.plannedEnd ?? activity.baselineEnd;
-  const projected = base
-    ? new Date(new Date(base).getTime() + (Number(days) || 0) * DAY).toISOString()
-    : null;
+  const asked = Number(days) || 0;
+  const newDate =
+    target && asked > 0 ? new Date(new Date(target).getTime() + asked * DAY).toISOString() : null;
 
-  async function submit() {
+  async function send() {
     setBusy(true);
     setError(null);
-    const res = await requestExtensionAction(activity.id, Number(days), reason);
+    const res = await requestExtensionAction(activity.id, asked, reason);
     setBusy(false);
-    if (!res.ok) setError(res.error);
-    else onDone("Extension requested — it now sits with the Project Manager.");
+    if (!res.ok) { setError(res.error); return; }
+    onDone(`Extension requested for ${activity.name}.`);
   }
 
   return (
-    <Modal
-      open onClose={onClose}
-      title={`Request extension · ${activity.name}`}
-      description={`Current target ${formatDate(base)} — the request goes to the Project Manager first, then to Admin for the revised date. The baseline does not move.`}
-      size="sm"
-      footer={
-        <>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
-          <Button variant="warning" onClick={submit} loading={busy} disabled={!reason.trim() || !(Number(days) > 0)}>
-            Send request
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        {error && <Alert tone="error">{error}</Alert>}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Extension days" required>
-            <Input type="number" min={1} value={days} onChange={(e) => setDays(e.target.value)} className="num text-right" />
-          </Field>
-          <Field label="Requested new date">
-            <div className="num flex h-[38px] items-center rounded-[9px] bg-warn-050 px-3 font-display text-[14px] font-extrabold text-warn-800">
-              {formatDate(projected)}
-            </div>
-          </Field>
-        </div>
-        <Field label="Reason" required hint="This is what the variance report shows against the slip.">
-          <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} autoFocus
-            placeholder="Three weeks lost to unseasonal rain in the casting window" />
-        </Field>
+    <div className="mb-3.5 rounded-[13px] border border-amber-200 bg-warn-050 px-[18px] py-4">
+      <div className="font-display text-[13.5px] font-bold text-warn-800">
+        Request extension · {activity.name}
       </div>
-    </Modal>
+      <div className="mb-3 mt-[3px] text-[11.5px] font-medium text-warn-800 opacity-85">
+        Current target {formatDate(target)} — the request goes to the Project Manager first, then to
+        Admin for the revised date.
+      </div>
+      {error && <div className="mb-3"><Alert tone="error">{error}</Alert></div>}
+      <div className="grid items-end gap-3 [grid-template-columns:150px_minmax(220px,1fr)_170px_auto] max-md:[grid-template-columns:1fr]">
+        <label className="block">
+          <span className={PANEL_LABEL}>Extension days <span className="text-bad-600">*</span></span>
+          <input
+            value={days}
+            onChange={(e) => setDays(e.target.value.replace(/[^\d]/g, ""))}
+            placeholder="5"
+            className={cn(PANEL_FIELD, "bg-white")}
+          />
+        </label>
+        <label className="block">
+          <span className={PANEL_LABEL}>Reason <span className="text-bad-600">*</span></span>
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Continuous rain — 3 pour days lost"
+            className={cn(PANEL_FIELD, "bg-white")}
+          />
+        </label>
+        <div>
+          <div className={PANEL_LABEL}>Requested new date</div>
+          <div className="py-[9px] font-display text-[14px] font-extrabold text-warn-800">
+            {newDate ? formatDate(newDate) : "—"}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={busy || asked <= 0 || reason.trim().length < 3}
+            onClick={send}
+            className="cursor-pointer rounded-[9px] bg-amber-500 px-4 py-[11px] text-[12px] font-bold text-white transition-colors hover:bg-[#C9862B] disabled:opacity-60"
+          >
+            Send request
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-[9px] border border-amber-200 bg-white px-[15px] py-[11px] text-[12px] font-semibold text-warn-800 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
+
 
 function DecideModal({
   request, onClose, onDone,

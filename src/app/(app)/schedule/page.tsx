@@ -47,7 +47,13 @@ export default async function SchedulePage({
       where: { projectId },
       orderBy: [{ sequence: "asc" }, { plannedStart: "asc" }],
       include: {
-        workPackage: { select: { id: true, code: true, name: true, phase: { select: { id: true, name: true } } } },
+        workPackage: {
+          select: {
+            id: true, code: true, name: true,
+            manager: { select: { name: true } },
+            phase: { select: { id: true, name: true } },
+          },
+        },
         delayReason: { select: { name: true } },
         predecessors: {
           select: {
@@ -99,9 +105,6 @@ export default async function SchedulePage({
       tab={tab === "extensions" ? "extensions" : tab === "reports" ? "reports" : "plan"}
       reportTab={report === "performance" ? "performance" : "plan"}
       nowMs={new Date().getTime()}
-      workPackages={active.phases.flatMap((ph) =>
-        ph.workPackages.map((w) => ({ id: w.id, code: w.code, name: w.name, phase: ph.name })),
-      )}
       activities={activities.map((a) => ({
         id: a.id,
         code: a.code,
@@ -121,6 +124,7 @@ export default async function SchedulePage({
         delayNotes: a.delayNotes,
         groupId: a.workPackage?.id ?? "unassigned",
         groupName: a.workPackage ? `${a.workPackage.code} — ${a.workPackage.name}` : "Unassigned activities",
+        groupManager: a.workPackage?.manager?.name ?? null,
         phaseName: a.workPackage?.phase.name ?? null,
         pendingExtension: a.extensions.some((e) => e.status === "AWAITING_PM" || e.status === "AWAITING_ADMIN"),
         // The design prints the extension history under the activity's name.

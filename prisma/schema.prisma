@@ -221,6 +221,7 @@ model User {
   tasksAssigned          Task[]              @relation("TaskAssignee")
   tasksCreated           Task[]              @relation("TaskCreatedBy")
   checklistRuns          ChecklistRun[]      @relation("ChecklistRunBy")
+  workPackagesManaged    WorkPackage[]       @relation("WorkPackageManager")
 
   @@index([status])
   @@index([departmentId])
@@ -904,6 +905,9 @@ model ProjectPhase {
 model WorkPackage {
   id           String       @id @default(cuid())
   phaseId      String
+  /// Who runs this package of work. The design names a Project Manager on each
+  /// main category; without one the project's own manager stands.
+  managerId    String?
   code         String
   name         String
   description  String?
@@ -918,6 +922,7 @@ model WorkPackage {
   updatedAt    DateTime     @updatedAt
 
   phase      ProjectPhase       @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  manager    User?              @relation("WorkPackageManager", fields: [managerId], references: [id])
   activities ScheduleActivity[]
   indents    Indent[]
   issues     MaterialIssue[]
