@@ -138,14 +138,14 @@ export function HrScreen({
   return (
     <div className="animate-fade-up">
       {/* Tabs, underlined as the design draws them */}
-      <div className="mb-3.5 flex flex-wrap items-center gap-4 border-b border-line-300">
+      <div className="mb-4 flex flex-wrap items-center gap-[22px] border-b border-line-400">
         {visibleTabs.map((t) => (
           <button
             key={t.key}
             type="button"
             onClick={() => setParam({ tab: t.key })}
             className={cn(
-              "border-b-[2.5px] px-1 py-2.5 text-[13px] transition-colors",
+              "border-b-[2.5px] px-1 py-[11px] text-[13px] transition-colors",
               active === t.key
                 ? "border-brand-500 font-bold text-navy-950"
                 : "border-transparent font-semibold text-muted-600 hover:text-navy-900",

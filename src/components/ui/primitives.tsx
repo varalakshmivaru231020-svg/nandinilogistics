@@ -113,7 +113,7 @@ const FIELD_BASE =
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...props }, ref) => (
-    <input ref={ref} className={cn(FIELD_BASE, "h-[38px]", className)} {...props} />
+    <input ref={ref} className={cn(FIELD_BASE, "py-2.5", className)} {...props} />
   ),
 );
 Input.displayName = "Input";
@@ -130,7 +130,7 @@ export const Select = React.forwardRef<
   HTMLSelectElement,
   React.SelectHTMLAttributes<HTMLSelectElement>
 >(({ className, ...props }, ref) => (
-  <select ref={ref} className={cn(FIELD_BASE, "h-[38px] pr-8", className)} {...props} />
+  <select ref={ref} className={cn(FIELD_BASE, "py-2.5 pr-8", className)} {...props} />
 ));
 Select.displayName = "Select";
 

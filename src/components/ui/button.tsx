@@ -30,14 +30,37 @@ const buttonVariants = cva(
         dark: "bg-navy-950 text-brand-300 hover:bg-navy-700",
         link: "text-brand-500 hover:text-navy-800 underline-offset-4 hover:underline",
       },
+      /*
+       * The design sizes a button by its padding and its type, never by a fixed
+       * height — 10px/16px at 12.5px comes out 34px tall, and that is the
+       * number every screen is laid out against.
+       */
       size: {
-        xs: "h-7 rounded-[8px] px-2.5 text-[11px]",
-        sm: "h-8 rounded-[8px] px-3.5 text-[11.5px]",
-        md: "h-9 rounded-[9px] px-4 text-[12.5px]",
-        lg: "h-10 rounded-[9px] px-[18px] text-[12.5px]",
+        xs: "rounded-[7px] px-[11px] py-1.5 text-[10.5px]",
+        sm: "rounded-[9px] px-[15px] py-[9px] text-[12px]",
+        md: "rounded-[9px] px-4 py-2.5 text-[12.5px]",
+        lg: "rounded-[9px] px-[17px] py-[11px] text-[12.5px]",
         icon: "h-9 w-9 rounded-[9px]",
       },
     },
+    /*
+     * A bordered button carries its own 1px on each edge, so the design gives
+     * it a pixel less padding and a smaller type size to land on the same
+     * height as the filled one: 9px/14px at 12px reads 34px tall, exactly like
+     * 10px/16px at 12.5px does without a border.
+     */
+    compoundVariants: [
+      {
+        size: "md",
+        variant: ["secondary", "ghost"],
+        className: "px-[14px] py-[9px] text-[12px]",
+      },
+      {
+        size: "lg",
+        variant: ["secondary", "ghost"],
+        className: "px-4 py-2.5 text-[12.5px]",
+      },
+    ],
     defaultVariants: { variant: "primary", size: "md" },
   },
 );

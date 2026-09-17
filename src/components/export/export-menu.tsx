@@ -14,8 +14,8 @@ const BASE =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:ring-offset-1 " +
   "border border-line-400 bg-white text-navy-600 hover:border-brand-500 hover:text-brand-700";
 const SIZE = {
-  sm: "h-8 rounded-[8px] px-3.5 text-[11.5px] font-semibold",
-  md: "h-[38px] rounded-[9px] px-3.5 text-[12px] font-semibold",
+  sm: "rounded-[9px] px-[13px] py-[9px] text-[11.5px] font-semibold",
+  md: "rounded-[9px] px-3.5 py-[9px] text-[12px] font-semibold",
 } as const;
 
 /**

@@ -67,7 +67,7 @@ export default async function ProjectsPage({
   return (
     <div className="animate-fade-up">
       {/* Summary line, as in the design */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-[15px] flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] font-medium text-muted-600">
           {projects.length} project{projects.length === 1 ? "" : "s"} · {totalTowers} tower
           {totalTowers === 1 ? "" : "s"} · {totalUnits.toLocaleString("en-IN")} units under management

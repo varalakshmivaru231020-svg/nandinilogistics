@@ -185,7 +185,7 @@ export function LeadsScreen({
                 type="button"
                 onClick={() => setParam({ view: v === "board" ? undefined : v })}
                 className={cn(
-                  "rounded-[9px] border px-3.5 py-2 text-[12px] font-bold transition-colors",
+                  "rounded-[8px] border px-[13px] py-2 text-[12px] font-bold transition-colors",
                   view === v
                     ? "border-brand-500 bg-brand-100 text-brand-700"
                     : "border-line-400 bg-white text-muted-600 hover:border-brand-300",

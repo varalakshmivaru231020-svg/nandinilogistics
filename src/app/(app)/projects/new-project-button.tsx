@@ -70,7 +70,7 @@ export function NewProjectButton({
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
+      <Button onClick={() => setOpen(true)}>
 + New project
       </Button>
 

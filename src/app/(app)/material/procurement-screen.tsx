@@ -151,7 +151,7 @@ export function ProcurementScreen({
   return (
     <div className="animate-fade-up">
       {/* Chain explainer, as in the design */}
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-[15px] flex items-center gap-[7px]">
         <p className="flex-1 text-[11.5px] font-medium leading-relaxed text-muted-400">
           Indent (internal request to store) → PM approval → store stock check → issue from stock, or
           purchase order to vendor for the shortfall → goods receipt → three-way match → payment.
