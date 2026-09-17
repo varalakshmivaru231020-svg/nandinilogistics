@@ -54,23 +54,28 @@ export function DetailScreen({
   );
 }
 
+/*
+ * The design gives a solid action no border and an outlined one a pixel on each
+ * edge, and pads each so they finish the same height: Edit is 10px/16px, the
+ * green step 11px/17px, an outlined one 10px/16px on top of its border.
+ */
 const ACTION_TONES = {
   /** The blue primary — Edit, Save. */
-  primary: "border-transparent bg-brand-500 px-[17px] py-[11px] text-white hover:bg-brand-600",
+  primary: "bg-brand-500 px-[17px] py-[11px] text-white hover:bg-brand-600",
   /** The green one — anything that moves stock. */
-  success: "border-transparent bg-good-600 px-[17px] py-[11px] text-white hover:bg-good-700",
+  success: "bg-good-600 px-[17px] py-[11px] text-white hover:bg-good-700",
   /** The pale blue outline — the sideways step, like raising a PO. */
-  soft: "border-brand-150 bg-brand-100 px-4 py-2.5 text-brand-700 hover:bg-[#CBE5F5]",
+  soft: "border border-brand-150 bg-brand-100 px-4 py-2.5 text-brand-700 hover:bg-[#CBE5F5]",
   /** The pale red outline — delete. */
-  danger: "border-bad-100 bg-bad-050 px-4 py-2.5 text-bad-700 hover:bg-bad-100",
+  danger: "border border-bad-100 bg-bad-050 px-4 py-2.5 font-semibold text-bad-700 hover:bg-bad-100",
   /** Plain white — a secondary such as Print. */
-  plain: "border-line-400 bg-white px-4 py-2.5 text-navy-500 hover:border-brand-500 hover:text-brand-700",
+  plain: "border border-line-400 bg-white px-4 py-2.5 text-navy-500 hover:border-brand-500 hover:text-brand-700",
 } as const;
 
 export type ActionTone = keyof typeof ACTION_TONES;
 
 const ACTION_BASE =
-  "inline-flex shrink-0 cursor-pointer items-center whitespace-nowrap rounded-[9px] border text-[12.5px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex shrink-0 cursor-pointer items-center whitespace-nowrap rounded-[9px] text-[12.5px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60";
 
 /** A header-bar action, as the design draws them. */
 export function DetailAction({
