@@ -27,6 +27,14 @@ export interface ListFilter {
  * search, each filter's `name`, `from`/`to` for the range. Changing any of
  * them drops `page`.
  */
+/**
+ * The design's filter row carries a smaller field than a form does: the search
+ * is 9px of padding at 12.5px, and a dropdown or date is 8px/11px at 12px —
+ * which is what makes the row 58px tall rather than 62.
+ */
+const FILTER_INPUT = "py-[9px]";
+const FILTER_FIELD = "px-[11px] py-2 text-[12px] font-semibold";
+
 export function ListToolbar({
   searchPlaceholder = "Search…",
   filters = [],
@@ -91,7 +99,7 @@ export function ListToolbar({
           }}
           className="min-w-[230px] flex-1"
         >
-          <Input name="q" defaultValue={q} placeholder={searchPlaceholder} aria-label="Search" />
+          <Input name="q" defaultValue={q} placeholder={searchPlaceholder} aria-label="Search" className={FILTER_INPUT} />
         </form>
       )}
 
@@ -104,7 +112,7 @@ export function ListToolbar({
             aria-label={`${dateRange.label} from`}
             defaultValue={params.get("from") ?? ""}
             onChange={(e) => set({ from: e.target.value })}
-            className="w-auto cursor-pointer"
+            className={cn(FILTER_FIELD, "w-auto cursor-pointer")}
           />
           <Caption>To</Caption>
           <Input
@@ -113,7 +121,7 @@ export function ListToolbar({
             aria-label={`${dateRange.label} to`}
             defaultValue={params.get("to") ?? ""}
             onChange={(e) => set({ to: e.target.value })}
-            className="w-auto cursor-pointer"
+            className={cn(FILTER_FIELD, "w-auto cursor-pointer")}
           />
         </>
       )}
@@ -125,7 +133,7 @@ export function ListToolbar({
             aria-label={f.label}
             value={params.get(f.name) ?? "all"}
             onChange={(e) => set({ [f.name]: e.target.value })}
-            className="w-auto cursor-pointer"
+            className={cn(FILTER_FIELD, "w-auto cursor-pointer")}
           >
             <option value="all">{f.allLabel ?? "All"}</option>
             {f.options.map((o) => (

@@ -351,6 +351,12 @@ function BulkButton({ children, onClick, busy }: { children: React.ReactNode; on
   );
 }
 
+/**
+ * The design's own box: 16px square, 1.5px border, filled brand when it is on.
+ *
+ *   width:16px; height:16px; border-radius:4px; border:1.5px solid #C6CFE8
+ *   on -> border and background #0089C9, the mark in white at 800 10px
+ */
 function CheckBox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
   return (
     <button
@@ -359,8 +365,8 @@ function CheckBox({ checked, onChange, label }: { checked: boolean; onChange: ()
       aria-label={label}
       aria-pressed={checked}
       className={cn(
-        "grid h-[17px] w-[17px] place-items-center rounded-[5px] border text-[11px] font-bold",
-        checked ? "border-brand-500 bg-brand-500 text-white" : "border-line-400 bg-white text-transparent",
+        "flex h-4 w-4 cursor-pointer items-center justify-center rounded-[4px] border-[1.5px] p-0 text-[10px] font-extrabold",
+        checked ? "border-brand-500 bg-brand-500 text-white" : "border-muted-200 bg-white text-transparent",
       )}
     >
       ✓
