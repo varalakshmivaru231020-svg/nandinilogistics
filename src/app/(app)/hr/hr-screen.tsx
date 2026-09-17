@@ -8,6 +8,7 @@ import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components
 import { Button } from "@/components/ui/button";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { useToast } from "@/components/ui/toast";
+import { Drawer } from "@/components/ui/drawer";
 import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 import type { AttendanceSummaryRow } from "@/lib/hr/attendance-report";
@@ -31,6 +32,14 @@ interface TypeRow { id: string; name: string; count: number; canDelete: boolean 
  * The design colours the employment type: staff navy, a contract purple, and
  * direct labour green. Anything else stays slate.
  */
+/** The country codes the design's forms offer, in its order. */
+const COUNTRY_CODES = [
+  "+91 India", "+971 UAE", "+966 Saudi Arabia", "+974 Qatar", "+965 Kuwait", "+973 Bahrain",
+  "+968 Oman", "+65 Singapore", "+60 Malaysia", "+1 USA / Canada", "+44 UK", "+61 Australia",
+  "+64 New Zealand", "+49 Germany", "+33 France", "+81 Japan", "+86 China", "+94 Sri Lanka",
+  "+977 Nepal", "+880 Bangladesh",
+];
+
 const TYPE_PILL: Record<string, string> = {
   "company staff": "bg-surface-hover text-navy-800",
   "contract role": "bg-plum-050 text-plum-700",
@@ -644,6 +653,12 @@ function EmployeeForm({
     e.preventDefault();
     setBusy(true);
     const fd = new FormData(e.currentTarget);
+    // The design asks for the country code beside the number; the record keeps
+    // the two together.
+    const dial = String(fd.get("mobileCode") ?? "").split(" ")[0];
+    const typed = String(fd.get("mobile") ?? "").trim();
+    if (dial && typed && !typed.startsWith("+")) fd.set("mobile", `${dial} ${typed}`);
+    fd.delete("mobileCode");
     const res = employee
       ? await updateEmployeeAction(employee.id, fd)
       : await createEmployeeAction(fd);
@@ -653,21 +668,36 @@ function EmployeeForm({
   }
 
   return (
-    <Modal
+    <Drawer
       open
       onClose={onClose}
       title={employee ? "Edit employee" : "New employee"}
       description="Name, mobile, photo and Aadhaar are mandatory"
-      size="lg"
+      size="base"
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" form="employee-form" loading={busy}>
+            {employee ? "Save changes" : "Create employee"}
+          </Button>
+        </>
+      }
     >
-      <form onSubmit={submit} className="space-y-3.5">
+      <form id="employee-form" onSubmit={submit} className="space-y-3.5">
         {error && <p className="rounded-[9px] bg-bad-050 px-3 py-2 text-[12px] font-bold text-bad-600">{error}</p>}
 
         <div className="flex flex-wrap items-start gap-3.5">
-          <label className="flex h-[120px] w-[120px] shrink-0 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-[12px] border border-dashed border-muted-200 bg-surface-tint text-center transition-colors hover:border-brand-500">
-            <span className="text-[22px]">📷</span>
-            <span className="px-2 text-[11px] font-semibold text-muted-600">
-              {photoName ?? (employee ? "Replace photo" : "Add photo")}
+          <label
+            className={cn(
+              "flex h-[84px] w-[84px] shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-[12px] border-[1.5px] text-center text-[10px] font-semibold transition-colors",
+              photoName
+                ? "border-solid border-good-400 bg-good-050 text-good-700"
+                : "border-dashed border-muted-200 bg-surface-sunken text-muted-400 hover:border-brand-500",
+            )}
+          >
+            <span className="text-[20px]">📷</span>
+            <span className="px-1.5">
+              {photoName ? "✓ Photo added" : "Upload photo"}
             </span>
             <input
               type="file"
@@ -697,7 +727,17 @@ function EmployeeForm({
         </div>
 
         <Field label="Mobile number" required>
-          <Input name="mobile" defaultValue={employee?.mobile} placeholder="+91 98765 43210" required />
+          <div className="flex gap-2">
+            <Select
+              name="mobileCode"
+              defaultValue="+91 India"
+              aria-label="Country code"
+              className="w-[132px] shrink-0 px-2 text-[12px]"
+            >
+              {COUNTRY_CODES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </Select>
+            <Input name="mobile" defaultValue={employee?.mobile} placeholder="98765 43210" required />
+          </div>
         </Field>
 
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
@@ -721,18 +761,28 @@ function EmployeeForm({
             Attachments <span className="font-medium text-muted-300">· optional</span>
           </p>
           <p className="mb-2 text-[11px] font-medium text-muted-400">Aadhaar card and PAN card copies only</p>
-          <div className="grid gap-2.5 sm:grid-cols-2">
+          <div>
             {(["Aadhaar card", "PAN card"] as const).map((kind) => (
               <label
                 key={kind}
-                className="flex cursor-pointer items-center gap-2.5 rounded-[10px] border border-dashed border-muted-200 bg-surface-sunken px-3 py-2.5 transition-colors hover:border-brand-500"
+                className={cn(
+                  "mb-2 flex cursor-pointer items-center gap-2.5 rounded-[10px] border px-3 py-[11px] transition-colors",
+                  docNames[kind]
+                    ? "border-solid border-line-300 bg-surface-tint"
+                    : "border-dashed border-muted-200 bg-surface-sunken hover:border-brand-500",
+                )}
               >
                 <span className="rounded-[5px] bg-bad-700 px-1.5 py-1 text-[8px] font-extrabold text-white">PDF</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[12px] font-bold text-navy-900">{kind}</span>
-                  <span className="block truncate text-[11px] font-medium text-muted-400">
-                    {docNames[kind] ?? "Choose a file"}
-                  </span>
+                  <span className="block text-[12px] font-semibold text-navy-900">{kind}</span>
+                  {docNames[kind] && (
+                    <span className="mt-0.5 block truncate text-[11px] font-medium text-muted-400">
+                      {docNames[kind]}
+                    </span>
+                  )}
+                </span>
+                <span className="shrink-0 rounded-[7px] border border-line-400 bg-white px-3 py-[5px] text-[10.5px] font-bold text-brand-700">
+                  {docNames[kind] ? "Replace" : "↑ Attach"}
                 </span>
                 <input
                   type="file"
@@ -748,11 +798,7 @@ function EmployeeForm({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={busy}>{employee ? "Save changes" : "Create employee"}</Button>
-        </div>
       </form>
-    </Modal>
+    </Drawer>
   );
 }

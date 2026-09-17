@@ -7,13 +7,42 @@ import { prisma } from "@/lib/db";
 import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
+import { put, FileTooLargeError, UnsupportedFileTypeError } from "@/lib/storage";
+import { richTextToPlain, sanitiseRichText } from "@/lib/rich-text";
 
 const ArticleSchema = z.object({
-  title: z.string().trim().min(3, "A title is required"),
-  summary: z.string().trim().optional(),
-  body: z.string().trim().min(10, "Write something useful in the body"),
-  category: z.string().trim().optional(),
+  /** The design calls it Name; it is the article's title. */
+  title: z.string().trim().min(3, "A name is required"),
+  body: z.string().trim().min(10, "Write something useful in the description"),
 });
+
+/**
+ * Stores the files the design's drawer attaches, turning the storage rules into
+ * form errors rather than exceptions.
+ */
+async function attach(articleId: string, formData: FormData, uploadedById: string) {
+  const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+  for (const file of files) {
+    try {
+      const stored = await put(`kb-${articleId}`, file.name, Buffer.from(await file.arrayBuffer()), file.type);
+      await prisma.kbAttachment.create({
+        data: {
+          articleId,
+          storageKey: stored.key,
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: file.type || null,
+          uploadedById,
+        },
+      });
+    } catch (err) {
+      if (err instanceof FileTooLargeError || err instanceof UnsupportedFileTypeError) {
+        throw new Error(err.message);
+      }
+      throw err;
+    }
+  }
+}
 
 export async function createArticleAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
@@ -22,15 +51,17 @@ export async function createArticleAction(formData: FormData): Promise<ActionRes
     if (!parsed.success) throw new Error(parsed.error.issues[0].message);
     const v = parsed.data;
 
+    const body = sanitiseRichText(v.body);
     const article = await prisma.kbArticle.create({
       data: {
         title: v.title,
-        summary: v.summary || null,
-        body: v.body,
-        category: v.category || null,
+        // The card shows the opening words; the design has no separate summary.
+        summary: richTextToPlain(body).slice(0, 180) || null,
+        body,
         authorId: ctx.id,
       },
     });
+    await attach(article.id, formData, ctx.id);
     await recordAudit({
       action: "CREATE", entity: "KbArticle", entityId: article.id, userId: ctx.id,
       summary: `Published knowledge base article — ${article.title}`,
@@ -50,10 +81,12 @@ export async function updateArticleAction(id: string, formData: FormData): Promi
     const before = await prisma.kbArticle.findUnique({ where: { id } });
     if (!before) throw new Error("Article not found.");
 
+    const body = sanitiseRichText(v.body);
     await prisma.kbArticle.update({
       where: { id },
-      data: { title: v.title, summary: v.summary || null, body: v.body, category: v.category || null },
+      data: { title: v.title, summary: richTextToPlain(body).slice(0, 180) || null, body },
     });
+    await attach(id, formData, ctx.id);
     await recordAudit({
       action: "UPDATE", entity: "KbArticle", entityId: id, userId: ctx.id,
       summary: `Updated article — ${v.title}`,

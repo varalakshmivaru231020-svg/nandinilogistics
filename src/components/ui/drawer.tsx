@@ -17,7 +17,11 @@ import { lockAppScroll } from "@/lib/scroll-lock";
  * Portalled to <body>, so a page wrapper with a transform cannot become its
  * containing block and clip it.
  */
+/* The widths the design uses: capture a lead at 460, a record at 520, a build
+ * at 560, and the wider sheets beyond that. */
 const WIDTHS = {
+  sm: "w-[460px]",
+  base: "w-[520px]",
   md: "w-[560px]",
   lg: "w-[720px]",
   xl: "w-[880px]",
@@ -90,7 +94,7 @@ export function Drawer({
         <div className="scroll-thin flex-1 overflow-y-auto px-6 py-5">{children}</div>
 
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-line-200 bg-white px-6 py-4">
+          <div className="flex items-center justify-end gap-[9px] border-t border-line-200 bg-surface-sunken px-6 py-4">
             {footer}
           </div>
         )}

@@ -18,7 +18,13 @@ import { applyLeadEdit } from "@/lib/sales/lead-edit-service";
 export async function createLeadAction(formData: FormData): Promise<ActionResult<{ id: string; duplicate: boolean }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.sales.lead.create);
-    const parsed = LeadSchema.safeParse(Object.fromEntries(formData));
+    // The design asks for the country code beside the number; the lead keeps
+    // the two together, which is how every screen reads it back.
+    const raw = Object.fromEntries(formData);
+    const dialCode = String(formData.get("phoneCode") ?? "").split(" ")[0];
+    const typed = String(formData.get("phone") ?? "").trim();
+    if (dialCode && typed && !typed.startsWith("+")) raw.phone = `${dialCode} ${typed}`;
+    const parsed = LeadSchema.safeParse(raw);
     if (!parsed.success) throw new Error(parsed.error.issues[0].message);
 
     // Whatever Lead Settings added to the form comes back under "custom:<id>",

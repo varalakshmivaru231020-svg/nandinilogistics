@@ -151,7 +151,7 @@ export function Label({
       {...props}
     >
       {children}
-      {required && <span className="ml-0.5 text-bad-600">*</span>}
+      {required && <span className="text-bad-600">*</span>}
     </label>
   );
 }

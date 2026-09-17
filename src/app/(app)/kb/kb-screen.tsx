@@ -3,9 +3,11 @@
 import * as React from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
-import { Card, Field, Input, Textarea } from "@/components/ui/primitives";
+import { Card, Field, Input } from "@/components/ui/primitives";
+import { richTextToPlain } from "@/lib/rich-text";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
+import { Drawer } from "@/components/ui/drawer";
 import { Modal } from "@/components/ui/modal";
 /** The design stamps an article in figures: 02/09/2026, 11:20. */
 function stamp(value: string) {
@@ -17,6 +19,72 @@ import { FileChip } from "@/components/ui/file-tag";
 import {
   createArticleAction, deleteArticleAction, updateArticleAction,
 } from "./actions";
+
+/** The design's toolbar, in its order. */
+const TOOLS: Array<{ label: React.ReactNode; command: string; value?: string; title: string }> = [
+  { label: <b>B</b>, command: "bold", title: "Bold" },
+  { label: <i>I</i>, command: "italic", title: "Italic" },
+  { label: <u>U</u>, command: "underline", title: "Underline" },
+  { label: "• List", command: "insertUnorderedList", title: "Bulleted list" },
+  { label: "1. List", command: "insertOrderedList", title: "Numbered list" },
+  { label: <b>H</b>, command: "formatBlock", value: "<h3>", title: "Heading" },
+  { label: "🔗", command: "createLink", title: "Link" },
+  { label: "⌫ Clear", command: "removeFormat", title: "Clear formatting" },
+];
+
+/**
+ * The design's description box: a small toolbar over a writing area, with what
+ * was written kept in a hidden field so the form posts it like any other value.
+ *
+ *   B · I · U · • List · 1. List · H · link · ⌫ Clear
+ */
+function RichText({ name, defaultValue }: { name: string; defaultValue: string }) {
+  const area = React.useRef<HTMLDivElement>(null);
+  const [html, setHtml] = React.useState(defaultValue);
+
+  // execCommand is the only editing API every browser still agrees on, and the
+  // toolbar is exactly the set of commands the design draws.
+  function run(command: string, value?: string) {
+    const el = area.current;
+    if (!el) return;
+    el.focus();
+    document.execCommand(command, false, value);
+    setHtml(el.innerHTML);
+  }
+
+  function link() {
+    const url = window.prompt("Link to");
+    if (url) run("createLink", url);
+  }
+
+  return (
+    <div className="overflow-hidden rounded-[9px] border border-line-400 bg-white">
+      <div className="flex flex-wrap gap-[5px] border-b border-line-200 bg-surface-sunken px-[9px] py-2">
+        {TOOLS.map((t) => (
+          <button
+            key={t.title}
+            type="button"
+            title={t.title}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => (t.command === "createLink" ? link() : run(t.command, t.value))}
+            className="cursor-pointer rounded-[7px] border border-line-400 bg-white px-[9px] py-1.5 text-[11.5px] font-semibold text-navy-600 transition-colors hover:border-brand-500 hover:text-brand-700"
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div
+        ref={area}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={() => setHtml(area.current?.innerHTML ?? "")}
+        className="min-h-[150px] max-h-[280px] overflow-y-auto px-[13px] py-3 text-[12.5px] font-medium leading-[1.65] text-navy-900 outline-none"
+        dangerouslySetInnerHTML={{ __html: defaultValue }}
+      />
+      <input type="hidden" name={name} value={html} />
+    </div>
+  );
+}
 
 interface Article {
   id: string; title: string; summary: string | null; body: string;
@@ -153,7 +221,12 @@ export function KbScreen({
               {open.summary}
             </p>
           )}
-          <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-navy-600">{open.body}</div>
+          {/* Written with the design's toolbar and cut to its tags before it was
+              stored, so what is rendered here is only what that toolbar makes. */}
+          <div
+            className="kb-body whitespace-pre-wrap text-[13px] leading-relaxed text-navy-600"
+            dangerouslySetInnerHTML={{ __html: open.body }}
+          />
         </div>
 
         {editing && (
@@ -214,7 +287,7 @@ export function KbScreen({
               </div>
 
               <p className="mt-[7px] line-clamp-4 flex-1 text-[12.5px] font-medium leading-relaxed text-navy-500">
-                {a.summary ?? a.body.slice(0, 180)}
+                {a.summary ?? richTextToPlain(a.body).slice(0, 180)}
               </p>
 
               {a.attachments.length > 0 && (
@@ -297,6 +370,7 @@ function ArticleForm({
 }) {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [files, setFiles] = React.useState<string[]>([]);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -311,26 +385,73 @@ function ArticleForm({
   }
 
   return (
-    <Modal open onClose={onClose} title={article ? "Edit article" : "New article"} size="lg">
-      <form onSubmit={submit} className="space-y-3">
+    <Drawer
+      open
+      onClose={onClose}
+      title={article ? "Edit article" : "New article"}
+      description="Name, description and any number of attachments"
+      size="base"
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" form="article-form" loading={busy}>
+            {article ? "Save changes" : "Create article"}
+          </Button>
+        </>
+      }
+    >
+      <form id="article-form" onSubmit={submit} className="space-y-3.5">
         {error && <p className="rounded-[9px] bg-bad-050 px-3 py-2 text-[12px] font-bold text-bad-600">{error}</p>}
-        <Field label="Title" required>
-          <Input name="title" defaultValue={article?.title} placeholder="e.g. Site safety induction" required autoFocus />
+
+        <Field label="Name" required>
+          <Input
+            name="title"
+            defaultValue={article?.title}
+            placeholder="e.g. Sales pitch — NN Riverview"
+            required
+            autoFocus
+          />
         </Field>
-        <Field label="Category">
-          <Input name="category" defaultValue={article?.category ?? ""} placeholder="e.g. Safety, Procurement, Sales" />
-        </Field>
-        <Field label="Summary" hint="One line, shown on the card and above the article.">
-          <Input name="summary" defaultValue={article?.summary ?? ""} />
-        </Field>
-        <Field label="Body" required>
-          <Textarea name="body" defaultValue={article?.body} rows={10} required />
-        </Field>
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={busy}>{article ? "Save changes" : "Create article"}</Button>
+
+        <div>
+          <p className="mb-[5px] text-[11px] font-semibold text-muted-600">Description</p>
+          <RichText name="body" defaultValue={article?.body ?? ""} />
+          <p className="mt-[5px] text-[11px] font-medium text-muted-400">
+            Bold, italic, underline, lists, headings and links are supported.
+          </p>
+        </div>
+
+        <div>
+          <div className="mb-[9px] flex items-center justify-between gap-3">
+            <p className="text-[11px] font-semibold text-muted-600">Attachments</p>
+            <label className="cursor-pointer rounded-[8px] border border-line-400 bg-white px-3 py-[7px] text-[11px] font-bold text-brand-700 transition-colors hover:border-brand-500">
+              + Add file
+              <input
+                type="file"
+                name="files"
+                multiple
+                className="hidden"
+                onChange={(e) => setFiles(Array.from(e.target.files ?? []).map((f) => f.name))}
+              />
+            </label>
+          </div>
+          <label className="block cursor-pointer rounded-[10px] border border-dashed border-muted-200 bg-surface-sunken px-4 py-6 text-center transition-colors hover:border-brand-500">
+            <span className="block text-[12.5px] font-bold text-muted-500">
+              Drop files here — PDF, DOCX, XLSX, ZIP, images
+            </span>
+            <span className="mt-[3px] block text-[11.5px] font-medium text-muted-400">
+              {files.length > 0 ? files.join(" · ") : "Multiple attachments supported per article"}
+            </span>
+            <input
+              type="file"
+              name="files"
+              multiple
+              className="hidden"
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []).map((f) => f.name))}
+            />
+          </label>
         </div>
       </form>
-    </Modal>
+    </Drawer>
   );
 }

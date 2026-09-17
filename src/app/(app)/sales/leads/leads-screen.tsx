@@ -8,6 +8,7 @@ import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { ImportDialog } from "@/components/import/import-dialog";
 import { ListNote } from "@/components/list/list-note";
 import { Button } from "@/components/ui/button";
+import { Drawer } from "@/components/ui/drawer";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { cn, money, maskPhone, phone } from "@/lib/utils";
@@ -56,6 +57,26 @@ interface Lead {
 }
 
 type Lookup = Array<{ id: string; name: string; code?: string }>;
+
+/**
+ * The country codes the design's capture form offers, in its order. The number
+ * is stored with the code in front of it, which is how every screen reads it
+ * back and how duplicate detection strips it again.
+ */
+const COUNTRY_CODES = [
+  "+91 India", "+971 UAE", "+966 Saudi Arabia", "+974 Qatar", "+965 Kuwait", "+973 Bahrain",
+  "+968 Oman", "+65 Singapore", "+60 Malaysia", "+1 USA / Canada", "+44 UK", "+61 Australia",
+  "+64 New Zealand", "+49 Germany", "+33 France", "+81 Japan", "+86 China", "+94 Sri Lanka",
+  "+977 Nepal", "+880 Bangladesh",
+];
+
+/** What the design puts in an empty box, by the kind of thing it asks for. */
+const PLACEHOLDER: Record<string, string> = {
+  PHONE: "98765 43210 (without country code)",
+  NUMBER: "e.g. 85,00,000",
+  DATE: "dd-mm-yyyy",
+};
+const placeholderFor = (type: string) => PLACEHOLDER[type] ?? "Type here";
 
 /** A row of Masters → Lead Settings: what the capture form asks, and how. */
 export interface LeadField {
@@ -509,7 +530,7 @@ function NewLeadModal({
   }
 
   return (
-    <Modal
+    <Drawer
       open onClose={onClose} title="Capture lead"
       description="Form is built from Masters → Lead Settings"
       size="sm"
@@ -520,7 +541,7 @@ function NewLeadModal({
         </>
       }
     >
-      <form id="lead-form" onSubmit={onSubmit} className="space-y-3.5">
+      <form id="lead-form" onSubmit={onSubmit} className="space-y-[13px]">
         {error && <Alert tone="error">{error}</Alert>}
 
         {formFields.map((f) => {
@@ -538,6 +559,7 @@ function NewLeadModal({
                   <Input
                     name={`custom:${f.id}`}
                     required={f.required}
+                    placeholder={placeholderFor(f.type)}
                     type={
                       f.type === "NUMBER" ? "number"
                         : f.type === "DATE" ? "date"
@@ -552,9 +574,28 @@ function NewLeadModal({
           }
           switch (f.fieldKey) {
             case "name":
-              return <Field key={f.id} label={f.label} required={f.required}><Input name="name" required={f.required} /></Field>;
+              return <Field key={f.id} label={f.label} required={f.required}><Input name="name" required={f.required} placeholder="Type here" /></Field>;
             case "phone":
-              return <Field key={f.id} label={f.label} required={f.required}><Input name="phone" type="tel" required={f.required} /></Field>;
+              return (
+                <Field key={f.id} label={f.label} required={f.required}>
+                  <div className="flex gap-2">
+                    <Select
+                      name="phoneCode"
+                      defaultValue="+91 India"
+                      className="w-[132px] shrink-0 px-2 text-[12px]"
+                      aria-label="Country code"
+                    >
+                      {COUNTRY_CODES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </Select>
+                    <Input
+                      name="phone"
+                      type="tel"
+                      required={f.required}
+                      placeholder={placeholderFor("PHONE")}
+                    />
+                  </div>
+                </Field>
+              );
             case "sourceId":
               return (
                 <Field key={f.id} label={f.label} required={f.required}>
@@ -565,14 +606,14 @@ function NewLeadModal({
                 </Field>
               );
             case "email":
-              return <Field key={f.id} label={f.label} required={f.required}><Input name="email" type="email" required={f.required} /></Field>;
+              return <Field key={f.id} label={f.label} required={f.required}><Input name="email" type="email" required={f.required} placeholder="Type here" /></Field>;
             case "budgetMax":
-              return <Field key={f.id} label={f.label} required={f.required}><Input name="budgetMax" type="number" min={0} step="any" required={f.required} /></Field>;
+              return <Field key={f.id} label={f.label} required={f.required}><Input name="budgetMax" type="number" min={0} step="any" required={f.required} placeholder={placeholderFor("NUMBER")} /></Field>;
             case "unitTypeId":
               return (
                 <Field key={f.id} label={f.label} required={f.required}>
                   <Select name="unitTypeId" required={f.required} defaultValue="">
-                    <option value="">Any unit type</option>
+                    <option value="">Select…</option>
                     {unitTypes.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                   </Select>
                 </Field>
@@ -581,7 +622,7 @@ function NewLeadModal({
               return (
                 <Field key={f.id} label={f.label} required={f.required}>
                   <Select name="projectId" required={f.required} defaultValue="">
-                    <option value="">— Not specified —</option>
+                    <option value="">Select…</option>
                     {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </Select>
                 </Field>
@@ -606,7 +647,7 @@ function NewLeadModal({
           }
         })}
       </form>
-    </Modal>
+    </Drawer>
   );
 }
 
