@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Alert } from "@/components/ui/primitives";
 import { DetailAction, DetailScreen } from "@/components/shell/detail-screen";
 import { cn, qty } from "@/lib/utils";
+import { chooseStore, heldIn, issuable } from "@/lib/material/issue-plan";
 import { createIssueAction } from "../actions";
 
 interface StockRow {
@@ -48,31 +49,32 @@ export function IssueForm({
   issuedByName: string;
 }) {
   const router = useRouter();
+
+  // Which store this comes out of, and what it can actually hand over.
+  const storeId = React.useMemo(
+    () => chooseStore(stores, stock, fromIndent.projectId, fromIndent.lines),
+    [stores, stock, fromIndent.projectId, fromIndent.lines],
+  );
+  const storeName = stores.find((x) => x.id === storeId)?.name ?? "the store";
+
   const [issuedToId, setIssuedToId] = React.useState("");
   const [remarks, setRemarks] = React.useState("");
   const [amounts, setAmounts] = React.useState<Record<string, string>>(() =>
-    Object.fromEntries(fromIndent.lines.map((l) => [l.itemId, l.canIssue > 0 ? String(l.canIssue) : ""])),
+    Object.fromEntries(
+      fromIndent.lines.map((l) => {
+        const most = issuable(stock, storeId, l);
+        return [l.itemId, most > 0 ? String(most) : ""];
+      }),
+    ),
   );
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
-  // The store serving this project, else the central one.
-  const storeId =
-    stores.find((s) => s.projectId === fromIndent.projectId)?.id ??
-    stores.find((s) => s.projectId === null)?.id ??
-    stores[0]?.id ??
-    "";
-
-  const stockInStore = React.useMemo(
-    () => new Map(stock.filter((s) => s.storeId === storeId).map((s) => [s.itemId, s])),
-    [stock, storeId],
-  );
-
   const rows = fromIndent.lines.map((l) => {
     const value = Number(amounts[l.itemId]) || 0;
-    const inStore = stockInStore.get(l.itemId)?.available ?? l.onHand;
-    const max = Math.min(inStore, l.pending);
-    return { line: l, value, max, over: value > max + 0.0001 };
+    const inStore = heldIn(stock, storeId, l.itemId);
+    const max = issuable(stock, storeId, l);
+    return { line: l, value, inStore, max, over: value > max + 0.0001 };
   });
 
   const issuing = rows.filter((r) => r.value > 0);
@@ -154,11 +156,11 @@ export function IssueForm({
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-200 px-5 py-3.5">
           <span className="font-display text-[13.5px] font-bold text-navy-950">Quantity to issue</span>
           <span className="text-[11.5px] font-medium text-muted-600">
-            Pre-filled with the most that can be issued from current stock — adjust as needed
+            Pre-filled with the most {storeName} can issue — adjust as needed
           </span>
         </div>
 
-        {rows.map(({ line, value, max, over }) => {
+        {rows.map(({ line, value, inStore, max, over }) => {
           const effect =
             value <= 0
               ? { text: "Nothing goes out on this line", tone: "bg-surface-field text-navy-500" }
@@ -180,7 +182,9 @@ export function IssueForm({
               </div>
               <div className="w-[90px]">
                 <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">In stock</div>
-                <div className="mt-1 text-[12.5px] font-semibold text-navy-600">{qty(line.onHand, 3)} {line.uom}</div>
+                <div className={cn("mt-1 text-[12.5px] font-semibold", inStore > 0 ? "text-navy-600" : "text-bad-600")}>
+                  {qty(inStore, 3)} {line.uom}
+                </div>
               </div>
               <div className="w-[90px]">
                 <div className="text-[10px] font-semibold uppercase tracking-[.06em] text-muted-400">Pending</div>

@@ -37,7 +37,9 @@ function codeFrom(name: string, taken: Set<string>): string {
 
 const AddSchema = z.object({
   projectId: z.string().min(1, "Project is required"),
-  name: z.string().trim().min(2, "Name is required"),
+  // "5" is a name someone typed, not a missing one — say what is actually wrong.
+  name: z.string().trim().min(1, "Name is required")
+    .refine((v) => v.trim().length >= 2, "Give the activity a name of at least two characters."),
   plannedStart: z.string().min(1, "Planned start is required"),
   plannedEnd: z.string().min(1, "Planned end is required"),
 });

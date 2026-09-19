@@ -1,6 +1,7 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
+import { ZodError } from "zod";
 
 import { getAuthContext, type AuthContext } from "./context";
 
@@ -98,6 +99,13 @@ export async function runAction<T>(fn: () => Promise<T>): Promise<ActionResult<T
     if (err instanceof PermissionError) return { ok: false, error: err.message, code: err.code };
     if (err instanceof AuthRequiredError) return { ok: false, error: err.message };
     if (err && typeof err === "object" && "digest" in err) throw err; // Next redirect/notFound
+    // A ZodError's own message is the whole issue list as JSON. What belongs on
+    // screen is the first issue's message — "Name is required", not
+    // [{"origin":"string","code":"too_small",…}].
+    if (err instanceof ZodError) {
+      const first = err.issues[0];
+      return { ok: false, error: first?.message ?? "That does not look right." };
+    }
     const message = err instanceof Error ? err.message : "Something went wrong.";
     return { ok: false, error: message };
   }
