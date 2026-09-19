@@ -45,14 +45,24 @@ describe("page-wrapper animations leave no containing block behind", () => {
   });
 });
 
-describe("the modal escapes its ancestors regardless", () => {
-  const MODAL = readFileSync(
-    join(__dirname, "..", "..", "src", "components", "ui", "modal.tsx"),
-    "utf8",
-  );
+/*
+ * Every fixed overlay portals to the body. The work-breakdown dialog did not,
+ * and opened behind the Create project drawer: the drawer portals to the body
+ * at z-81, while the dialog stayed in the page tree where its z-97 could not
+ * reach past it.
+ */
+describe("a fixed overlay escapes its ancestors regardless", () => {
+  const OVERLAYS: Array<[string, string[]]> = [
+    ["the modal", ["src", "components", "ui", "modal.tsx"]],
+    ["the drawer", ["src", "components", "ui", "drawer.tsx"]],
+    ["the work-breakdown dialog", ["src", "app", "(app)", "projects", "new-project-button.tsx"]],
+  ];
 
-  it("renders through a portal to the document body", () => {
-    expect(MODAL).toContain("createPortal");
-    expect(MODAL).toContain("document.body");
-  });
+  for (const [name, path] of OVERLAYS) {
+    it(`${name} renders through a portal to the document body`, () => {
+      const source = readFileSync(join(__dirname, "..", "..", ...path), "utf8");
+      expect(source, `${name} draws a fixed overlay but does not portal it`).toContain("createPortal");
+      expect(source).toContain("document.body");
+    });
+  }
 });

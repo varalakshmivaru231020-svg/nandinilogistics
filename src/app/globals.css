@@ -197,6 +197,14 @@
 .animate-pulse-dot { animation: pulse 2.4s ease infinite; }
 
 /* Wide tables scroll inside their own panel rather than the page. */
+/*
+ * A date field shows the design's example while it is empty. The native
+ * control's own dd/mm/yyyy cannot be replaced, only hidden, so it is painted
+ * transparent and the placeholder is drawn over it — see DateField.
+ */
+.date-field[data-empty]::-webkit-datetime-edit { color: transparent; }
+.date-field[data-empty]:focus::-webkit-datetime-edit { color: inherit; }
+
 .scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
 .scroll-thin::-webkit-scrollbar-thumb { background: var(--color-line-500); border-radius: 9999px; }
 .scroll-thin::-webkit-scrollbar-track { background: transparent; }

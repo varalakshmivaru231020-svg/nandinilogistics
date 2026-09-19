@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Alert } from "@/components/ui/primitives";
 import { DetailAction, DetailScreen, PanelCard } from "@/components/shell/detail-screen";
+import { DateField } from "@/components/ui/date-field";
 import { cn, money, qty } from "@/lib/utils";
 import { poTotals, priceLine } from "@/lib/material/procurement";
 import { createPurchaseOrderAction, updatePurchaseOrderAction } from "../actions";
@@ -345,11 +346,11 @@ export function PoForm({
 
             <label className="block">
               <span className={LABEL}>Delivery due</span>
-              <input
+              <DateField
                 value={expectedDate}
                 onChange={(e) => setExpectedDate(e.target.value)}
                 placeholder="Due 14 Sep"
-                className={cn(FIELD, "mt-1.5")}
+                wrapperClassName="mt-1.5"
               />
             </label>
 
