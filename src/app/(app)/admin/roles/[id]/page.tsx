@@ -53,18 +53,21 @@ export default async function RoleDetailPage({ params }: { params: Promise<{ id:
         }
       />
 
-      <PermissionMatrix
-        roleId={role.id}
-        roleName={role.name}
-        granted={granted}
-        permissions={PERMISSIONS.map((p) => ({
-          code: p.code, module: p.module, resource: p.resource, action: p.action,
-          label: p.label, description: p.description ?? null, group: p.group, kind: p.kind,
-        }))}
-        modules={MODULES}
-        readOnly={!ctx.has(PERM.admin.role.managePermissions)}
-        users={role.users.map((u) => u.user)}
-      />
+      {ctx.has(PERM.admin.role.tabPermissions) && (
+        <PermissionMatrix
+          roleId={role.id}
+          roleName={role.name}
+          granted={granted}
+          permissions={PERMISSIONS.map((p) => ({
+            code: p.code, module: p.module, resource: p.resource, action: p.action,
+            label: p.label, description: p.description ?? null, group: p.group, kind: p.kind,
+          }))}
+          modules={MODULES}
+          readOnly={!ctx.has(PERM.admin.role.managePermissions)}
+          // The people holding the role are a panel of their own permission.
+          users={ctx.has(PERM.admin.role.tabUsers) ? role.users.map((u) => u.user) : []}
+        />
+      )}
     </div>
   );
 }

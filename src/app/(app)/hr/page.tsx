@@ -117,6 +117,7 @@ export default async function WorkforcePage({
         }))}
         report={report}
         can={{
+          tabStaff: ctx.has(PERM.hr.employee.tabStaff),
           create: ctx.has(PERM.hr.employee.create),
           update: ctx.has(PERM.hr.employee.update),
           remove: ctx.has(PERM.hr.employee.delete),

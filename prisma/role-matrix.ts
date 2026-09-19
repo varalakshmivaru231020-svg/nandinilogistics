@@ -133,6 +133,7 @@ export const ROLES: RoleSeed[] = [
       "project.document.view",
       "project.document.download",
       "hr.employee.view",
+      "hr.employee.tabStaff",
       "hr.employee.create",
       "hr.employee.update",
       "hr.employmentType.view",

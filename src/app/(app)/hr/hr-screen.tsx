@@ -112,7 +112,10 @@ export function HrScreen({
   }
 
   const visibleTabs = TABS.filter(
-    (t) => (t.key !== "mark" || can.viewAttendance) && (t.key !== "report" || can.report),
+    (t) =>
+      (t.key !== "staff" || can.tabStaff) &&
+      (t.key !== "mark" || can.viewAttendance) &&
+      (t.key !== "report" || can.report),
   );
   const active = visibleTabs.some((t) => t.key === tab) ? tab : (visibleTabs[0]?.key ?? "staff");
 
