@@ -143,7 +143,10 @@ async function seedDemoProject() {
       cityId: cityIds.get("Bengaluru") ?? null,
       addressLine: "Sarjapur Road, Bengaluru",
       reraNumber: "PRM/KA/RERA/1251/446/PR/260830/001234",
-      landArea: 218000,
+      // The design's NN Skyline is 4.20 acres; 218000 was its area in square
+      // feet, shown as acres by a screen that assumed the unit.
+      landArea: 4.2,
+      landAreaText: "4.20 acres",
       totalTowers: 2,
       totalFloors: 14,
       budgetAmount: 1850000000,

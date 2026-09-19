@@ -144,8 +144,10 @@ export default async function ProjectDetailPage({
     ["Location", [project.addressLine, project.city?.name].filter(Boolean).join(", ") || "—"],
     ["Project type", project.projectType?.name ?? "—"],
     ["RERA registration no.", project.reraNumber ?? "—"],
-    // What was typed, as the design shows it; older rows fall back to the number.
-    ["Land area", project.landAreaText || (project.landArea ? `${qty(project.landArea)} acres` : "—")],
+    // What was typed, as the design shows it. A row from before the field took
+    // words has only a number, and no record of what it counts — so it is shown
+    // bare rather than being called acres on its behalf.
+    ["Land area", project.landAreaText || (project.landArea ? qty(project.landArea) : "—")],
     [
       "Towers & floors",
       project.totalTowers || project.totalFloors
@@ -202,7 +204,7 @@ export default async function ProjectDetailPage({
               cityId: project.cityId ?? "",
               addressLine: project.addressLine ?? "",
               reraNumber: project.reraNumber ?? "",
-              landArea: project.landAreaText || (project.landArea ? `${Number(project.landArea)} acres` : ""),
+              landArea: project.landAreaText || (project.landArea ? String(Number(project.landArea)) : ""),
               totalTowers: String(project.totalTowers),
               totalFloors: String(project.totalFloors),
               totalUnits: String(project.totalUnits),
