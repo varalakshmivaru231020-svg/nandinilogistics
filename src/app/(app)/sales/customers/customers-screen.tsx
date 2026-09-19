@@ -123,13 +123,12 @@ export function CustomersScreen({
   ];
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
       {error && <Alert tone="error">{error}</Alert>}
       {notice && !error && <Alert tone="success">{notice}</Alert>}
 
       <ListToolbar
-        className="mb-0"
-        searchPlaceholder={can.viewKyc ? "Search name, phone, email, PAN, booking, unit…" : "Search name, email, booking, unit…"}
+                searchPlaceholder={can.viewKyc ? "Search name, phone, email, PAN, booking, unit…" : "Search name, email, booking, unit…"}
         filters={[
           {
             name: "kyc",

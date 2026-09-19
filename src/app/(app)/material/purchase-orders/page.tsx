@@ -203,10 +203,9 @@ export default async function PurchaseOrdersPage({
         }
       />
 
-      <div className="space-y-3">
+      <div className="space-y-3.5">
         <ListToolbar
-          className="mb-0"
-          searchPlaceholder="Search PO no., vendor, item, indent…"
+                    searchPlaceholder="Search PO no., vendor, item, indent…"
           filters={[
             { name: "vendor", label: "Vendor", options: vendors },
             { name: "status", label: "Status", options: enumOptions(PO_STATUSES) },

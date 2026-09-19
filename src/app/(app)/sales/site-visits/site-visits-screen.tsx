@@ -49,13 +49,12 @@ export function SiteVisitsScreen({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
       {error && <Alert tone="error">{error}</Alert>}
       {notice && !error && <Alert tone="success">{notice}</Alert>}
 
       <ListToolbar
-        className="mb-0"
-        searchPlaceholder={can.viewContact ? "Search lead, lead no, phone, executive…" : "Search lead, lead no, executive…"}
+                searchPlaceholder={can.viewContact ? "Search lead, lead no, phone, executive…" : "Search lead, lead no, executive…"}
         filters={[
           {
             name: "status",

@@ -94,9 +94,13 @@ export default async function IndentsPage({
         }
       />
 
-      <div className="space-y-3">
+      {/*
+       * 14px between the filter row and the list, as every other list has.
+       * space-y sets margin-bottom in Tailwind 4, so an mb-0 on the toolbar
+       * cancelled it and the two cards met with no gap at all.
+       */}
+      <div className="space-y-3.5">
         <ListToolbar
-          className="mb-0"
           searchPlaceholder="Search indent no., item, project, activity…"
           filters={[
             { name: "project", label: "Project", options: projects },

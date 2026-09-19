@@ -157,12 +157,11 @@ export function RolesScreen({
   ];
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
       {error && <Alert tone="error">{error}</Alert>}
 
       <ListToolbar
-        className="mb-0"
-        searchPlaceholder="Search name, code or description…"
+                searchPlaceholder="Search name, code or description…"
         filters={[
           {
             name: "status",

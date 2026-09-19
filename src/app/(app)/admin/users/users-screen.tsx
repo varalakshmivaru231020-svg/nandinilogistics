@@ -161,13 +161,12 @@ export function UsersScreen({
   ];
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
       {error && <Alert tone="error">{error}</Alert>}
       {notice && !error && <Alert tone="success">{notice}</Alert>}
 
       <ListToolbar
-        className="mb-0"
-        searchPlaceholder="Search by name, email or employee code…"
+                searchPlaceholder="Search by name, email or employee code…"
         filters={[
           {
             name: "status",
