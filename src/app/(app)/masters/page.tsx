@@ -1,6 +1,7 @@
 import { requireAuth } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { PERMISSIONS } from "@/lib/permissions/registry";
 import { Card, EmptyState } from "@/components/ui/primitives";
 import { cn, moneyShort } from "@/lib/utils";
 import { ListNote } from "@/components/list/list-note";
@@ -231,6 +232,7 @@ function rolePill(role: string | undefined): string {
 }
 
 async function Users() {
+  const ctx = await requireAuth();
   const users = await prisma.user.findMany({
     orderBy: { name: "asc" },
     select: {
@@ -244,8 +246,9 @@ async function Users() {
     <>
       <div className="overflow-x-auto rounded-[13px] border border-line-400 bg-white">
         {users.map((u) => (
-          <div
+          <Link
             key={u.id}
+            href={`/admin/users/${u.id}`}
             className="grid items-center gap-3 border-b border-line-200 px-[18px] py-[13px] last:border-0 hover:bg-surface-tint [grid-template-columns:1.4fr_1fr_1.2fr_100px]"
           >
             <div className="flex items-center gap-[11px]">
@@ -276,14 +279,75 @@ async function Users() {
             >
               {u.status === "ACTIVE" ? "Active" : "Inactive"}
             </span>
-          </div>
+          </Link>
         ))}
       </div>
       <ListNote>
-        Every user belongs to exactly one role and is mapped to specific projects — access follows
-        the mapping.
+        Open a person to change their roles, grant a permission on top of them, or map the projects
+        they can reach.
       </ListNote>
+
+      {ctx.has(PERM.admin.role.view) && <Roles />}
     </>
+  );
+}
+
+/* --------------------------------- Roles ---------------------------------- */
+
+/**
+ * The roles themselves, under the people who hold them — this section is
+ * "Users & Roles", and a role is where its permissions are actually set.
+ */
+async function Roles() {
+  const roles = await prisma.role.findMany({
+    orderBy: [{ isSystem: "desc" }, { name: "asc" }],
+    select: {
+      id: true, code: true, name: true, description: true, isSystem: true, status: true,
+      _count: { select: { permissions: true, users: true } },
+    },
+  });
+
+  return (
+    <div className="mt-5">
+      <div className="mb-[13px] flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-display text-[15px] font-bold text-navy-950">Roles</h2>
+        <Link
+          href="/admin/roles"
+          className="rounded-[9px] border border-line-400 bg-white px-[14px] py-[9px] text-[12px] font-bold text-brand-700 transition-colors hover:border-brand-500"
+        >
+          Manage roles
+        </Link>
+      </div>
+
+      <div className="overflow-x-auto rounded-[13px] border border-line-400 bg-white">
+        {roles.map((r) => (
+          <Link
+            key={r.id}
+            href={`/admin/roles/${r.id}`}
+            className="grid items-center gap-3 border-b border-line-200 px-[18px] py-[13px] last:border-0 hover:bg-surface-tint [grid-template-columns:1.4fr_1.4fr_130px_110px]"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-semibold text-navy-900">{r.name}</p>
+              <p className="num truncate text-[11px] font-medium text-muted-400">{r.code}</p>
+            </div>
+            <p className="truncate text-[11.5px] font-medium text-navy-500">
+              {r.description ?? "—"}
+            </p>
+            <p className="num text-[11.5px] font-semibold text-navy-600">
+              {r._count.permissions} permission{r._count.permissions === 1 ? "" : "s"}
+            </p>
+            <p className="num text-[11.5px] font-medium text-muted-600">
+              {r._count.users} user{r._count.users === 1 ? "" : "s"}
+            </p>
+          </Link>
+        ))}
+      </div>
+      <ListNote>
+        Open a role to set exactly what it can reach, across all {" "}
+        <span className="num">{PERMISSIONS.length}</span> permissions. A system role can be cloned
+        and the copy changed freely.
+      </ListNote>
+    </div>
   );
 }
 

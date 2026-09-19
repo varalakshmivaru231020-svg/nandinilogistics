@@ -113,10 +113,26 @@ export function visibleNavigation(has: (code: string) => boolean): NavSection[] 
  * reached from inside another (a purchase order from an indent, say) lights up
  * the one menu entry it sits under.
  */
+/**
+ * Screens that live under a menu entry without sharing its path. Access
+ * control is reached from Masters & Users and belongs to it.
+ */
+const BELONGS_TO: ReadonlyArray<[prefix: string, href: string]> = [
+  ["/admin/roles", "/masters"],
+  ["/admin/users", "/masters"],
+  ["/admin/permissions", "/masters"],
+  ["/admin/approval-limits", "/masters"],
+  ["/admin/sessions", "/masters"],
+  ["/admin/audit", "/masters"],
+];
+
 export function activeNavHref(
   pathname: string,
   sections: ReadonlyArray<{ items: ReadonlyArray<{ href: string }> }>,
 ): string | null {
+  for (const [prefix, href] of BELONGS_TO) {
+    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return href;
+  }
   let best: string | null = null;
   for (const section of sections) {
     for (const item of section.items) {

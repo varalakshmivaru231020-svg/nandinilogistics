@@ -28,6 +28,14 @@ const SCREEN_TITLES: Array<[href: string, title: string]> = [
   ["/masters", "Masters & Users"],
   ["/notifications", "Notifications"],
   ["/admin/settings", "Settings"],
+  // Access control sits under Masters & Users in the menu, so its screens keep
+  // that name in the topbar rather than falling through to "Dashboard".
+  ["/admin/roles", "Masters & Users"],
+  ["/admin/users", "Masters & Users"],
+  ["/admin/permissions", "Masters & Users"],
+  ["/admin/approval-limits", "Masters & Users"],
+  ["/admin/sessions", "Masters & Users"],
+  ["/admin/audit", "Masters & Users"],
 ];
 
 /** The title the topbar shows for a route. */
