@@ -46,7 +46,17 @@ export async function poLookups(ctx: AuthContext) {
       },
       orderBy: { raisedAt: "asc" },
       take: 50,
-      select: { id: true, indentNo: true, purpose: true, projectId: true },
+      select: {
+        id: true, indentNo: true, purpose: true, projectId: true,
+        // The design pulls an indent's lines into the order when it is ticked,
+        // so they travel with the list rather than a second round trip.
+        items: {
+          select: {
+            itemId: true, toPurchaseQty: true, approvedQty: true,
+            requestedQty: true, estimatedRate: true, specification: true,
+          },
+        },
+      },
     }),
   ]);
 
@@ -63,7 +73,24 @@ export async function poLookups(ctx: AuthContext) {
       standardRate: Number(i.standardRate),
       taxPct: i.taxRate ? Number(i.taxRate.percentage) : 0,
     })),
-    openIndents,
+    openIndents: openIndents.map((i) => ({
+      id: i.id,
+      indentNo: i.indentNo,
+      purpose: i.purpose,
+      projectId: i.projectId,
+      lines: i.items
+        .map((l) => ({
+          itemId: l.itemId,
+          // toPurchaseQty is what the stock check left to buy; before that runs,
+          // the approved quantity stands.
+          qty: Number(l.toPurchaseQty) > 0
+            ? Number(l.toPurchaseQty)
+            : Number(l.approvedQty ?? l.requestedQty),
+          rate: Number(l.estimatedRate),
+          specification: l.specification ?? "",
+        }))
+        .filter((l) => l.qty > 0),
+    })),
   };
 }
 

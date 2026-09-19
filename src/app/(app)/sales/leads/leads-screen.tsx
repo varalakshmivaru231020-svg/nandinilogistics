@@ -237,27 +237,27 @@ export function LeadsScreen({
       </div>
 
       {/* Filter bar */}
-      <div className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-[12px] border border-line-400 bg-white px-3.5 py-3">
+      <div className="mb-3.5 flex flex-wrap items-center gap-[9px] rounded-[12px] border border-line-400 bg-white px-3.5 py-[11px]">
         <Input
           defaultValue={query}
           placeholder="Search name, mobile, requirement…"
-          className="w-[250px]"
+          className="w-[250px] py-[9px]"
           onKeyDown={(e) => {
             if (e.key === "Enter") setParam({ q: (e.target as HTMLInputElement).value });
           }}
         />
         <span className="text-[11px] font-semibold text-muted-400">Stage</span>
-        <Select value={stateFilter} onChange={(e) => setParam({ state: e.target.value })} className="w-auto min-w-[140px]">
+        <Select value={stateFilter} onChange={(e) => setParam({ state: e.target.value })} className="w-auto min-w-[140px] px-[11px] py-[9px] text-[12px] font-semibold">
           <option value="all">All</option>
           {STAGES.map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
         </Select>
         <span className="text-[11px] font-semibold text-muted-400">Source</span>
-        <Select value={sourceFilter} onChange={(e) => setParam({ source: e.target.value })} className="w-auto min-w-[140px]">
+        <Select value={sourceFilter} onChange={(e) => setParam({ source: e.target.value })} className="w-auto min-w-[140px] px-[11px] py-[9px] text-[12px] font-semibold">
           <option value="all">All</option>
           {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </Select>
         <span className="text-[11px] font-semibold text-muted-400">Follow-up</span>
-        <Select value={followUpFilter} onChange={(e) => setParam({ fu: e.target.value })} className="w-auto min-w-[140px]">
+        <Select value={followUpFilter} onChange={(e) => setParam({ fu: e.target.value })} className="w-auto min-w-[140px] px-[11px] py-[9px] text-[12px] font-semibold">
           <option value="all">All</option>
           <option value="overdue">Overdue</option>
           <option value="today">Due today</option>

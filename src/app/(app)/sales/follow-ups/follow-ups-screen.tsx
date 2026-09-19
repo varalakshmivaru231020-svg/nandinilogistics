@@ -31,11 +31,11 @@ const DAY = 86_400_000;
 type BucketKey = "overdue" | "today" | "tomorrow" | "week" | "later";
 
 const BUCKETS: Array<{ key: BucketKey; name: string; tone: string }> = [
-  { key: "overdue", name: "Overdue", tone: "text-bad-600" },
+  { key: "overdue", name: "Overdue", tone: "text-bad-700" },
   { key: "today", name: "Today", tone: "text-warn-700" },
   { key: "tomorrow", name: "Tomorrow", tone: "text-brand-700" },
-  { key: "week", name: "This Week", tone: "text-navy-600" },
-  { key: "later", name: "Later", tone: "text-muted-600" },
+  { key: "week", name: "This Week", tone: "text-plum-700" },
+  { key: "later", name: "Later", tone: "text-slate-600" },
 ];
 
 function bucketOf(dueAt: string, nowMs: number): BucketKey {
@@ -144,7 +144,7 @@ export function FollowUpsScreen({
             if (e.key === "Enter") setParam({ q: (e.target as HTMLInputElement).value });
           }}
         />
-        <Select value={typeFilter} onChange={(e) => setParam({ type: e.target.value })} className="w-auto min-w-[150px] px-[11px] py-2 text-[12px] font-semibold">
+        <Select value={typeFilter} onChange={(e) => setParam({ type: e.target.value })} className="w-auto min-w-[150px] px-[11px] py-[9px] text-[12px] font-semibold">
           <option value="all">All types</option>
           {Object.entries(CHANNEL_LABEL).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
@@ -159,8 +159,8 @@ export function FollowUpsScreen({
             const cards = grouped.get(b.key) ?? [];
             return (
               <div key={b.key} className="rounded-[13px] bg-line-200 p-3">
-                <div className={cn("text-[12.5px] font-bold", b.tone)}>{b.name}</div>
-                <div className="mb-2.5 mt-1 text-[11.5px] font-medium text-muted-500">
+                <div className={cn("font-display text-[15px] font-extrabold", b.tone)}>{b.name}</div>
+                <div className="mb-[11px] mt-[3px] text-[11.5px] font-medium text-muted-500">
                   {cards.length} follow-up{cards.length === 1 ? "" : "s"}
                 </div>
                 <div className="flex flex-col gap-2">
@@ -171,7 +171,7 @@ export function FollowUpsScreen({
                         key={c.id}
                         type="button"
                         onClick={() => setLogging(c)}
-                        className="rounded-[11px] border border-line-400 bg-white px-3 py-3 text-left transition-shadow hover:shadow-[0_6px_18px_rgba(25,26,92,.08)]"
+                        className="rounded-[11px] border border-line-400 bg-white px-[13px] py-3 text-left transition-shadow hover:border-brand-150 hover:shadow-[0_6px_18px_rgba(25,26,92,.1)]"
                       >
                         <span
                           className={cn(

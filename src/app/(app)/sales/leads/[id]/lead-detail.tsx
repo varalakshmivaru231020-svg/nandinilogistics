@@ -77,7 +77,18 @@ export function LeadDetail({
     projects: Array<{ id: string; name: string }>;
     unitTypes: Array<{ id: string; name: string }>;
   } | null;
-  can: Record<string, boolean>;
+  /*
+   * Named, not Record<string, boolean>: a missing key used to read as
+   * `undefined` and quietly disable the control it guarded — which is how the
+   * stepper stopped moving leads at all.
+   */
+  can: {
+    tabTimeline: boolean; tabFollowUps: boolean; tabNotes: boolean;
+    tabStageHistory: boolean; tabFiles: boolean; tabFlats: boolean;
+    changeStage: boolean; markLost: boolean; edit: boolean; sendMail: boolean;
+    logFollowUp: boolean; note: boolean; uploadFile: boolean; assign: boolean;
+    block: boolean; release: boolean;
+  };
   nowMs: number;
 }) {
   const router = useRouter();

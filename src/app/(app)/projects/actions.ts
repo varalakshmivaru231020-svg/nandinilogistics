@@ -7,6 +7,33 @@ import { prisma } from "@/lib/db";
 import { authorize, runAction, assertProjectAccess, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit, diff } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
+import { dateFrom, integerFrom, numberFrom } from "@/lib/parse-input";
+
+/*
+ * The design labels these with examples — "4.2 acres", "01 Apr 2027" — so the
+ * value that arrives is whatever the example led someone to type. Reading it
+ * strictly is what stopped a project being created.
+ */
+const measure = (label: string) =>
+  z.string().trim().optional().transform((v, ctx) => {
+    const n = numberFrom(v);
+    if (n === null) { ctx.addIssue({ code: "custom", message: `${label} needs a number — for example 4.2.` }); return z.NEVER; }
+    return n;
+  });
+
+const count = (label: string) =>
+  z.string().trim().optional().transform((v, ctx) => {
+    const n = integerFrom(v);
+    if (n === null) { ctx.addIssue({ code: "custom", message: `${label} needs a number.` }); return z.NEVER; }
+    return n;
+  });
+
+const when = (label: string) =>
+  z.string().trim().optional().transform((v, ctx) => {
+    const d = dateFrom(v);
+    if (d === null) { ctx.addIssue({ code: "custom", message: `${label} is not a date I can read — try 01 Apr 2027.` }); return z.NEVER; }
+    return d;
+  });
 
 const ProjectSchema = z.object({
   code: z.string().trim().min(2, "Project code is required").toUpperCase(),
@@ -16,14 +43,14 @@ const ProjectSchema = z.object({
   cityId: z.string().trim().optional(),
   addressLine: z.string().trim().optional(),
   reraNumber: z.string().trim().optional(),
-  landArea: z.coerce.number().min(0).optional(),
-  totalTowers: z.coerce.number().int().min(0).optional(),
-  totalFloors: z.coerce.number().int().min(0).optional(),
-  totalUnits: z.coerce.number().int().min(0).optional(),
+  landArea: measure("Land area"),
+  totalTowers: count("Towers / blocks"),
+  totalFloors: count("Floors per tower"),
+  totalUnits: count("Total units"),
   approvalDetails: z.string().trim().optional(),
-  budgetAmount: z.coerce.number().min(0).optional(),
-  startDate: z.string().trim().optional(),
-  targetDate: z.string().trim().optional(),
+  budgetAmount: measure("Budget"),
+  startDate: when("Planned start"),
+  targetDate: when("Target completion"),
   projectManagerId: z.string().trim().optional(),
   description: z.string().trim().optional(),
   status: z.enum(["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"]).optional(),
@@ -44,8 +71,8 @@ function toData(v: z.infer<typeof ProjectSchema>) {
     totalUnits: v.totalUnits ?? 0,
     approvalDetails: v.approvalDetails || null,
     budgetAmount: v.budgetAmount ?? 0,
-    startDate: v.startDate ? new Date(v.startDate) : null,
-    targetDate: v.targetDate ? new Date(v.targetDate) : null,
+    startDate: v.startDate ?? null,
+    targetDate: v.targetDate ?? null,
     projectManagerId: v.projectManagerId || null,
     description: v.description || null,
     ...(v.status ? { status: v.status } : {}),
@@ -57,7 +84,11 @@ export interface DraftWbsRow {
   kind: "PHASE" | "WP";
   code: string;
   name: string;
+  /** How far along the breakdown says it is, as the design's dialog asks. */
+  progressPct?: number;
 }
+
+const clampPct = (v: number | undefined) => Math.min(100, Math.max(0, Math.round(v ?? 0)));
 
 export async function createProjectAction(
   formData: FormData,
@@ -82,12 +113,15 @@ export async function createProjectAction(
       for (const row of wbs) {
         if (row.kind === "PHASE") {
           const phase = await prisma.projectPhase.create({
-            data: { projectId: project.id, code: row.code, name: row.name, sequence: phaseSeq++ },
+            data: {
+              projectId: project.id, code: row.code, name: row.name,
+              sequence: phaseSeq++, progressPct: clampPct(row.progressPct),
+            },
           });
           phaseId = phase.id;
         } else if (phaseId) {
           await prisma.workPackage.create({
-            data: { phaseId, code: row.code, name: row.name },
+            data: { phaseId, code: row.code, name: row.name, progressPct: clampPct(row.progressPct) },
           });
         }
       }

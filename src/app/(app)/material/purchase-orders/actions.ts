@@ -13,6 +13,7 @@ import {
 import { diff, recordAudit } from "@/lib/audit";
 import { nextDocumentNumber } from "@/lib/numbering";
 import { PERM } from "@/lib/permissions/codes";
+import { dateFrom } from "@/lib/parse-input";
 import { isPoEditable, poTotals, priceLine } from "@/lib/material/procurement";
 import { applyPurchaseOrderEdit } from "@/lib/material/procurement-edit";
 
@@ -56,6 +57,18 @@ const PoEditSchema = z.object({
 
 export type PoEditInput = z.infer<typeof PoEditSchema>;
 
+/**
+ * The design's delivery field is a plain one carrying its own example — "Due
+ * 14 Sep" — so what arrives is whatever that led someone to write.
+ */
+function readDue(raw: string | undefined): Date | null {
+  const d = dateFrom(raw);
+  if (d === null) {
+    throw new Error("Delivery due is not a date I can read — try 14 Sep, or 01 Apr 2027.");
+  }
+  return d ?? null;
+}
+
 export async function createPurchaseOrderAction(
   input: PoInput,
   submitForApproval: boolean,
@@ -78,7 +91,7 @@ export async function createPurchaseOrderAction(
           projectId: v.projectId,
           vendorId: v.vendorId,
           paymentTermId: v.paymentTermId || null,
-          expectedDate: v.expectedDate ? new Date(v.expectedDate) : null,
+          expectedDate: readDue(v.expectedDate),
           deliveryAddress: v.deliveryAddress || null,
           terms: v.terms || null,
           createdById: ctx.id,
@@ -148,8 +161,7 @@ export async function updatePurchaseOrderAction(
       );
     }
 
-    const expectedDate = v.expectedDate ? new Date(v.expectedDate) : null;
-    if (expectedDate && Number.isNaN(expectedDate.getTime())) throw new Error("Expected delivery is not a valid date.");
+    const expectedDate = readDue(v.expectedDate);
 
     const result = await prisma.$transaction((tx) =>
       applyPurchaseOrderEdit(tx, id, {

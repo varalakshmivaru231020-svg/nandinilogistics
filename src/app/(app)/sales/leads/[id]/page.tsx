@@ -297,6 +297,8 @@ export default async function LeadDetailPage({
         tabFiles: ctx.has(PERM.sales.lead.tabFiles),
         tabFlats: ctx.has(PERM.sales.lead.tabFlats),
         edit: canEdit,
+        changeStage: ctx.has(PERM.sales.lead.changeStage),
+        markLost: ctx.has(PERM.sales.lead.markLost),
         sendMail: ctx.has(PERM.sales.lead.sendMail),
         logFollowUp: ctx.has(PERM.sales.followUp.create),
         note: ctx.has(PERM.sales.lead.note),

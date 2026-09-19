@@ -43,7 +43,7 @@ export default async function ProjectsPage({
   // search and status filter — the same function the export uses.
   const where = projectListWhere(ctx, listParams);
 
-  const [projects, types, companies, cities, managers] = await Promise.all([
+  const [projects, types] = await Promise.all([
     prisma.project.findMany({
       where,
       orderBy: [{ status: "asc" }, { name: "asc" }],
@@ -56,9 +56,6 @@ export default async function ProjectsPage({
       },
     }),
     prisma.projectType.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
-    prisma.company.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
-    prisma.city.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.user.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
   const totalUnits = projects.reduce((s, p) => s + p._count.units, 0);
@@ -74,7 +71,7 @@ export default async function ProjectsPage({
           {!ctx.canAccessAllProjects && " · scoped to your mapping"}
         </p>
         {ctx.has(PERM.project.project.create) && (
-          <NewProjectButton types={types} companies={companies} cities={cities} managers={managers} />
+          <NewProjectButton types={types} />
         )}
       </div>
 

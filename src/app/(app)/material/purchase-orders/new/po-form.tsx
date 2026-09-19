@@ -12,6 +12,12 @@ interface ItemOpt {
   id: string; code: string; name: string; uom: string; onHand: number; standardRate: number; taxPct: number;
 }
 
+/** An approved indent offered to the order, with what it still needs bought. */
+export interface OpenIndent {
+  id: string; indentNo: string; purpose: string | null; projectId: string;
+  lines: Array<{ itemId: string; qty: number; rate: number; specification: string }>;
+}
+
 interface Line {
   key: string;
   /** Set for a line that already exists on the order being edited. */
@@ -23,6 +29,8 @@ interface Line {
   discountPct: string;
   taxPct: string;
   specification: string;
+  /** The indent this line was pulled from, when it was. */
+  indentId?: string;
 }
 
 
@@ -45,15 +53,17 @@ export interface PoEditState {
 }
 
 export function PoForm({
-  projects, vendors, items, openIndents, prefill, edit, startWithVendorId,
+  projects, vendors, items, openIndents, prefill, edit, startWithVendorId, nextPoNo,
 }: {
   projects: Array<{ id: string; name: string; code: string }>;
   vendors: Array<{ id: string; name: string; paymentTermId: string | null }>;
   items: ItemOpt[];
-  openIndents: Array<{ id: string; indentNo: string; purpose: string | null; projectId: string }>;
+  openIndents: OpenIndent[];
   prefill: { projectId: string; indentId: string; indentNo: string; lines: Array<{ itemId: string; qty: number; rate: number; specification: string }> } | null;
   /** Raised from a vendor's record: the order opens on that vendor. */
   startWithVendorId?: string;
+  /** The number this order will take, shown beside the title as the design does. */
+  nextPoNo?: string | null;
   edit?: PoEditState;
 }) {
   const router = useRouter();
@@ -89,6 +99,7 @@ export function PoForm({
     return prefill.lines.map((l) => ({
       key: Math.random().toString(36).slice(2),
       receivedQty: 0,
+      indentId: prefill.indentId,
       itemId: l.itemId,
       orderedQty: String(l.qty),
       rate: String(l.rate),
@@ -99,6 +110,37 @@ export function PoForm({
   });
 
   const [pick, setPick] = React.useState("");
+
+  // The design links as many indents to one order as it needs, pulling each
+  // one's outstanding lines in as it is ticked and taking them back out again
+  // when it is unticked.
+  const [linked, setLinked] = React.useState<string[]>(prefill ? [prefill.indentId] : []);
+
+  function toggleIndent(indent: OpenIndent) {
+    if (linked.includes(indent.id)) {
+      setLinked((ids) => ids.filter((x) => x !== indent.id));
+      setLines((ls) => ls.filter((l) => l.indentId !== indent.id));
+      return;
+    }
+    setLinked((ids) => [...ids, indent.id]);
+    setLines((ls) => {
+      const fresh = indent.lines
+        .filter((l) => !ls.some((x) => x.itemId === l.itemId))
+        .map((l) => ({
+          key: `${indent.id}:${l.itemId}`,
+          receivedQty: 0,
+          indentId: indent.id,
+          itemId: l.itemId,
+          orderedQty: String(l.qty),
+          rate: String(l.rate),
+          discountPct: "0",
+          taxPct: String(items.find((i) => i.id === l.itemId)?.taxPct ?? 0),
+          specification: l.specification,
+        }));
+      return [...ls, ...fresh];
+    });
+    if (!projectId) setProjectId(indent.projectId);
+  }
 
   // What is left to add, narrowed by the search box.
   const pool = items.filter(
@@ -184,7 +226,7 @@ export function PoForm({
         ...header,
         items: lines
           .filter((l) => l.itemId && Number(l.orderedQty) > 0)
-          .map((l) => ({ ...toPayload(l), indentId: prefill?.indentId })),
+          .map((l) => ({ ...toPayload(l), indentId: l.indentId })),
       },
       submit,
     );
@@ -203,6 +245,13 @@ export function PoForm({
     <DetailScreen
       backHref="/material/purchase-orders"
       title={edit ? "Edit purchase order" : "Raise purchase order"}
+      pills={
+        nextPoNo ? (
+          <span className="rounded-full bg-surface-field px-[10px] py-[5px] text-[10.5px] font-bold text-navy-500">
+            {nextPoNo}
+          </span>
+        ) : null
+      }
       subtitle="Raised POs go to Project Manager, then Admin."
       actions={
         <>
@@ -235,30 +284,46 @@ export function PoForm({
               <div className="flex flex-wrap items-center gap-2">
                 <span className={LABEL}>Against indents</span>
                 <span className="rounded-full bg-brand-100 px-2 py-[3px] text-[9.5px] font-bold text-brand-700">
-                  {prefill ? `linked to ${prefill.indentNo}` : "Optional — none linked"}
+                  {linked.length
+                    ? `${linked.length} ${linked.length === 1 ? "indent" : "indents"} linked`
+                    : "Optional — none linked"}
                 </span>
               </div>
               <div className="mt-1.5 max-h-[120px] space-y-1.5 overflow-y-auto">
                 {openIndents.length === 0 && (
                   <div className="text-[11.5px] font-medium text-muted-400">No approved indents waiting.</div>
                 )}
-                {openIndents.slice(0, 12).map((i) => (
-                  <a
-                    key={i.id}
-                    href={`/material/purchase-orders/new?indent=${i.id}`}
-                    className={cn(
-                      "block rounded-[9px] border px-3 py-2 transition-colors",
-                      prefill?.indentId === i.id
-                        ? "border-brand-500 bg-brand-100"
-                        : "border-line-300 bg-surface-sunken hover:border-brand-500",
-                    )}
-                  >
-                    <div className="text-[12px] font-bold text-navy-950">{i.indentNo}</div>
-                    {i.purpose && (
-                      <div className="mt-0.5 text-[11px] font-medium text-muted-400">{i.purpose}</div>
-                    )}
-                  </a>
-                ))}
+                {openIndents.slice(0, 12).map((i) => {
+                  const on = linked.includes(i.id);
+                  return (
+                    <button
+                      key={i.id}
+                      type="button"
+                      onClick={() => toggleIndent(i)}
+                      className={cn(
+                        "flex w-full cursor-pointer items-center gap-2 rounded-[9px] border px-[11px] py-2 text-left transition-colors",
+                        on ? "border-brand-500 bg-brand-100" : "border-line-300 bg-surface-sunken hover:border-brand-500",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "grid h-[15px] w-[15px] shrink-0 place-items-center rounded-[4px] border-[1.5px] text-[9px] font-extrabold text-white",
+                          on ? "border-brand-500 bg-brand-500" : "border-muted-200 bg-white",
+                        )}
+                      >
+                        {on ? "✓" : ""}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[12px] font-bold text-navy-950">{i.indentNo}</span>
+                        {i.purpose && (
+                          <span className="mt-0.5 block truncate text-[11px] font-medium text-muted-400">
+                            {i.purpose}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -281,9 +346,9 @@ export function PoForm({
             <label className="block">
               <span className={LABEL}>Delivery due</span>
               <input
-                type="date"
                 value={expectedDate}
                 onChange={(e) => setExpectedDate(e.target.value)}
+                placeholder="Due 14 Sep"
                 className={cn(FIELD, "mt-1.5")}
               />
             </label>
@@ -321,13 +386,13 @@ export function PoForm({
             placeholder="Search item name or code…"
             className={FIELD}
           />
-          <div className="mt-2.5 max-h-[280px] overflow-y-auto">
+          <div className="mt-2.5 flex max-h-[210px] flex-col gap-1.5 overflow-y-auto">
             {pool.slice(0, 40).map((i) => (
               <button
                 key={i.id}
                 type="button"
                 onClick={() => addItem(i)}
-                className="flex w-full cursor-pointer items-center gap-2 border-b border-line-100 px-1 py-2.5 text-left last:border-0 hover:bg-surface-tint"
+                className="flex w-full cursor-pointer items-center gap-2.5 rounded-[9px] border border-line-300 bg-surface-sunken px-[11px] py-[9px] text-left transition-colors hover:border-brand-500 hover:bg-brand-100"
               >
                 <span className="min-w-0 flex-1">
                   <span className="block text-[12.5px] font-semibold text-navy-900">{i.name}</span>

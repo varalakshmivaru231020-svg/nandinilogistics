@@ -16,6 +16,23 @@ export default async function NewPoPage({
 
   const { projects, vendors, items, openIndents } = await poLookups(ctx);
 
+  // The design names the order before it is raised. This reads the series
+  // without taking from it — the number the order actually gets is issued
+  // inside the transaction that writes it.
+  const firstProjectId = projects[0]?.id ?? null;
+  const series =
+    (await prisma.numberingSeries.findFirst({
+      where: { documentKey: "PO", projectId: firstProjectId, status: "ACTIVE" },
+    })) ??
+    (await prisma.numberingSeries.findFirst({
+      where: { documentKey: "PO", projectId: null, status: "ACTIVE" },
+    }));
+  const nextPoNo = series
+    ? [series.prefix, series.fiscalYear, String(series.nextNumber).padStart(series.padding, "0")]
+        .filter(Boolean)
+        .join("/")
+    : null;
+
   const sourceIndent = indentId
     ? await prisma.indent.findUnique({
         where: { id: indentId },
@@ -51,6 +68,7 @@ export default async function NewPoPage({
       openIndents={openIndents}
       prefill={prefill}
       startWithVendorId={vendorId}
+      nextPoNo={nextPoNo}
     />
   );
 }
