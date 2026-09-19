@@ -74,6 +74,9 @@
   --color-good-300: #5BC8A2;
   --color-good-200: #C4E8D4;
   --color-good-400: #77C39A;
+  /* The edge each status tint is drawn with on the flats board. */
+  --color-brand-400: #6FB6DE;
+  --color-warn-400: #E0B26A;
   --color-brand-200: #BFE0F2;
   --color-brand-150: #BFD9F2;
 

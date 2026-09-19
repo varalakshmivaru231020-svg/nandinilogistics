@@ -97,11 +97,26 @@ export default async function SchedulePage({
 
   const active = projects.find((p) => p.id === projectId)!;
 
+  // Who a main category can be handed to: the people mapped to this project,
+  // and whoever runs it.
+  const managers = await prisma.user.findMany({
+    where: {
+      status: "ACTIVE",
+      OR: [
+        { projectAccess: { some: { projectId } } },
+        { managedProjects: { some: { id: projectId } } },
+      ],
+    },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+
   return (
     <ScheduleScreen
       projects={projects.map((p) => ({ id: p.id, name: p.name, code: p.code }))}
       activeProjectId={projectId}
       projectManager={active.projectManager?.name ?? null}
+      managers={managers}
       tab={tab === "extensions" ? "extensions" : tab === "reports" ? "reports" : "plan"}
       reportTab={report === "performance" ? "performance" : "plan"}
       nowMs={new Date().getTime()}

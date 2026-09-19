@@ -43,16 +43,18 @@ const boardState = (status: string) => BOARD_STATE[status] ?? "AVAILABLE";
 
 /** One state, one colour, everywhere. */
 const STATUS_STYLE: Record<string, { cell: string; dot: string; label: string }> = {
-  AVAILABLE:  { cell: "border-good-050 bg-good-050 text-good-700 hover:border-good-600",    dot: "bg-good-600",  label: "Available" },
-  HELD:       { cell: "border-warn-050 bg-warn-050 text-warn-700 hover:border-warn-700",    dot: "bg-warn-700",  label: "On hold" },
-  BOOKED:     { cell: "border-brand-100 bg-brand-100 text-brand-700 hover:border-brand-500", dot: "bg-brand-500", label: "Booked" },
+  // Each tint is drawn with its own edge, as the design draws it — the border
+  // is not the fill colour repeated.
+  AVAILABLE: { cell: "border-good-400 bg-good-050 text-good-700 hover:border-good-600",     dot: "bg-good-600",  label: "Available" },
+  HELD:      { cell: "border-warn-400 bg-warn-050 text-warn-800 hover:border-warn-700",     dot: "bg-warn-700",  label: "On hold" },
+  BOOKED:    { cell: "border-brand-400 bg-brand-100 text-brand-700 hover:border-brand-500", dot: "bg-brand-500", label: "Booked" },
 };
 
 /** The design's legend swatches: a tint with a stronger border. */
 const LEGEND: Record<string, string> = {
   AVAILABLE: "border-good-400 bg-good-050",
-  HELD: "border-[#E0B26A] bg-warn-050",
-  BOOKED: "border-[#6FB6DE] bg-brand-100",
+  HELD: "border-warn-400 bg-warn-050",
+  BOOKED: "border-brand-400 bg-brand-100",
 };
 
 export function BoardGrid({
@@ -132,9 +134,9 @@ export function BoardGrid({
           {/* Towers, status and type */}
           <div className="mb-3 flex flex-wrap items-center gap-[7px]">
             {blocks.map((b) => (
-              <Chip key={b.id} picked={b.id === block?.id} onClick={() => { setBlockId(b.id); setSelected(null); }}>
+              <TowerChip key={b.id} picked={b.id === block?.id} onClick={() => { setBlockId(b.id); setSelected(null); }}>
                 {blockName(b)}
-              </Chip>
+              </TowerChip>
             ))}
 
             <span className="mx-1.5 h-[22px] w-px bg-line-400" />
@@ -242,6 +244,29 @@ function Chip({ children, picked, onClick }: { children: React.ReactNode; picked
         picked
           ? "border-brand-500 bg-brand-100 text-brand-700"
           : "border-line-400 bg-white text-muted-600 hover:border-brand-500",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * A tower is picked with the design's larger chip — 9px/16px at 12px bold,
+ * the size of a project chip rather than of a status filter beside it.
+ */
+function TowerChip({
+  children, picked, onClick,
+}: { children: React.ReactNode; picked: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "cursor-pointer rounded-full border px-4 py-[9px] text-[12px] font-bold transition-colors",
+        picked
+          ? "border-brand-500 bg-brand-100 text-brand-700"
+          : "border-line-400 bg-white text-navy-500 hover:border-brand-500",
       )}
     >
       {children}

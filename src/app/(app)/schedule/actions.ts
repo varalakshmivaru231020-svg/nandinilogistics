@@ -56,16 +56,23 @@ export async function addMainCategoryAction(
     const end = new Date(v.plannedEnd);
     if (end < start) throw new Error("Planned end cannot be before planned start.");
 
-    // The design types the manager's name. An empty box means the project's own
-    // manager runs it; a name that belongs to nobody is a typo, not a new user.
+    // The manager is chosen from the people mapped to this project. Empty means
+    // the project's own manager runs it.
     const wanted = manager.trim();
     let managerId: string | null = null;
     if (wanted) {
       const person = await prisma.user.findFirst({
-        where: { name: { equals: wanted, mode: "insensitive" }, status: "ACTIVE" },
+        where: {
+          id: wanted,
+          status: "ACTIVE",
+          OR: [
+            { projectAccess: { some: { projectId: v.projectId } } },
+            { managedProjects: { some: { id: v.projectId } } },
+          ],
+        },
         select: { id: true },
       });
-      if (!person) throw new Error(`No one on this project is called "${wanted}".`);
+      if (!person) throw new Error("That person is not on this project.");
       managerId = person.id;
     }
 
