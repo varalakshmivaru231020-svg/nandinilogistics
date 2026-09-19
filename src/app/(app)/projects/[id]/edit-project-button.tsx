@@ -93,7 +93,7 @@ export function EditProjectButton({
             </Select>
           </Field>
           <Field label="Land area">
-            <Input name="landArea" defaultValue={values.landArea} placeholder="4.2" />
+            <Input name="landAreaText" defaultValue={values.landArea} placeholder="4.2 acres" />
           </Field>
           <Field label="RERA registration no." className="sm:col-span-2">
             <Input name="reraNumber" defaultValue={values.reraNumber} placeholder="PRM/KA/RERA/…" />

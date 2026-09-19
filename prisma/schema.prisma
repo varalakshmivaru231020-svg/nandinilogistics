@@ -834,6 +834,10 @@ model Project {
   reraNumber       String?
   /// Plan sanction reference — the design's "Approval details" field.
   approvalDetails  String?
+  /// What was typed — "4.2 acres", "2 acres 30 guntas". The design writes land
+  /// area as free text and never parses it, so the words are kept as given and
+  /// landArea holds the number read out of them, when there is one.
+  landAreaText     String?
   landArea         Decimal?      @db.Decimal(14, 2)
   totalTowers      Int           @default(0)
   totalFloors      Int           @default(0)

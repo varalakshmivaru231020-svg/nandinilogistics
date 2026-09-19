@@ -26,7 +26,7 @@ const FIELDS: Array<{
   { name: "name", label: "Project name", placeholder: "e.g. NN Lakefront", span: 2, required: true },
   { name: "code", label: "Project code", placeholder: "PRJ-005", span: 1, required: true },
   { name: "addressLine", label: "Location", placeholder: "Area, city", span: 2 },
-  { name: "landArea", label: "Land area", placeholder: "4.2 acres", span: 1 },
+  { name: "landAreaText", label: "Land area", placeholder: "4.2 acres", span: 1 },
   { name: "reraNumber", label: "RERA registration no.", placeholder: "PRM/KA/RERA/…", span: 2 },
   { name: "approvalDetails", label: "Approval details", placeholder: "plan sanction ref.", span: 1 },
   { name: "totalTowers", label: "Towers / blocks", placeholder: "2", span: 1, type: "number" },

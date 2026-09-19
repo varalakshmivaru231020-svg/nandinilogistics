@@ -144,7 +144,8 @@ export default async function ProjectDetailPage({
     ["Location", [project.addressLine, project.city?.name].filter(Boolean).join(", ") || "—"],
     ["Project type", project.projectType?.name ?? "—"],
     ["RERA registration no.", project.reraNumber ?? "—"],
-    ["Land area", project.landArea ? `${qty(project.landArea)} acres` : "—"],
+    // What was typed, as the design shows it; older rows fall back to the number.
+    ["Land area", project.landAreaText || (project.landArea ? `${qty(project.landArea)} acres` : "—")],
     [
       "Towers & floors",
       project.totalTowers || project.totalFloors
@@ -201,7 +202,7 @@ export default async function ProjectDetailPage({
               cityId: project.cityId ?? "",
               addressLine: project.addressLine ?? "",
               reraNumber: project.reraNumber ?? "",
-              landArea: project.landArea ? String(Number(project.landArea)) : "",
+              landArea: project.landAreaText || (project.landArea ? `${Number(project.landArea)} acres` : ""),
               totalTowers: String(project.totalTowers),
               totalFloors: String(project.totalFloors),
               totalUnits: String(project.totalUnits),

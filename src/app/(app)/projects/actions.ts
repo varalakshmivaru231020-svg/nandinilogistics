@@ -14,19 +14,20 @@ import { dateFrom, integerFrom, numberFrom } from "@/lib/parse-input";
  * value that arrives is whatever the example led someone to type. Reading it
  * strictly is what stopped a project being created.
  */
-const measure = (label: string) =>
-  z.string().trim().optional().transform((v, ctx) => {
-    const n = numberFrom(v);
-    if (n === null) { ctx.addIssue({ code: "custom", message: `${label} needs a number — for example 4.2.` }); return z.NEVER; }
-    return n;
-  });
+/*
+ * Nothing here refuses the form. The design asks for a name and a code and
+ * takes the rest as written — land area reads "2 acres 30 guntas" as often as
+ * "4.2" — so a measurement keeps the number when there is one and never
+ * stands between someone and their project.
+ */
+const measure = () =>
+  z.string().trim().optional().transform((v) => numberFrom(v) ?? undefined);
 
-const count = (label: string) =>
-  z.string().trim().optional().transform((v, ctx) => {
-    const n = integerFrom(v);
-    if (n === null) { ctx.addIssue({ code: "custom", message: `${label} needs a number.` }); return z.NEVER; }
-    return n;
-  });
+const count = () =>
+  z.string().trim().optional().transform((v) => integerFrom(v) ?? undefined);
+
+/** What was typed, kept verbatim for display. */
+const words = () => z.string().trim().optional();
 
 const when = (label: string) =>
   z.string().trim().optional().transform((v, ctx) => {
@@ -43,12 +44,12 @@ const ProjectSchema = z.object({
   cityId: z.string().trim().optional(),
   addressLine: z.string().trim().optional(),
   reraNumber: z.string().trim().optional(),
-  landArea: measure("Land area"),
-  totalTowers: count("Towers / blocks"),
-  totalFloors: count("Floors per tower"),
-  totalUnits: count("Total units"),
+  landAreaText: words(),
+  totalTowers: count(),
+  totalFloors: count(),
+  totalUnits: count(),
   approvalDetails: z.string().trim().optional(),
-  budgetAmount: measure("Budget"),
+  budgetAmount: measure(),
   startDate: when("Planned start"),
   targetDate: when("Target completion"),
   projectManagerId: z.string().trim().optional(),
@@ -65,7 +66,9 @@ function toData(v: z.infer<typeof ProjectSchema>) {
     cityId: v.cityId || null,
     addressLine: v.addressLine || null,
     reraNumber: v.reraNumber || null,
-    landArea: v.landArea ?? 0,
+    landAreaText: v.landAreaText || null,
+    // The number read out of those words, so the field stays sortable.
+    landArea: numberFrom(v.landAreaText) ?? null,
     totalTowers: v.totalTowers ?? 0,
     totalFloors: v.totalFloors ?? 0,
     totalUnits: v.totalUnits ?? 0,
