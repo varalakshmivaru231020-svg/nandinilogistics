@@ -286,8 +286,8 @@ function StaffTab({
 }) {
   return (
     <div>
-      {/* The design heads this tab with the count and one button. */}
-      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
+      {/* The design heads this tab with the count and one button, 13px above the table. */}
+      <div className="mb-[13px] flex flex-wrap items-center justify-between gap-3">
         <span className="text-[13px] font-medium text-muted-600">
           {employees.length} employee{employees.length === 1 ? "" : "s"} on record
         </span>
