@@ -5,7 +5,7 @@ import { ChevronRight } from "lucide-react";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { MODULES, PERMISSIONS } from "@/lib/permissions/registry";
+import { LIVE_PERMISSIONS, MODULES } from "@/lib/permissions/registry";
 import { Badge, PageHeader } from "@/components/ui/primitives";
 import { PermissionMatrix } from "./permission-matrix";
 
@@ -58,7 +58,7 @@ export default async function RoleDetailPage({ params }: { params: Promise<{ id:
           roleId={role.id}
           roleName={role.name}
           granted={granted}
-          permissions={PERMISSIONS.map((p) => ({
+          permissions={LIVE_PERMISSIONS.map((p) => ({
             code: p.code, module: p.module, resource: p.resource, action: p.action,
             label: p.label, description: p.description ?? null, group: p.group, kind: p.kind,
           }))}

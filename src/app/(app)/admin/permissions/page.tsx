@@ -54,6 +54,7 @@ export default async function PermissionsPage() {
         permissions={PERMISSIONS.map((p) => ({
           code: p.code, module: p.module, resource: p.resource, action: p.action,
           label: p.label, description: p.description ?? null, group: p.group, kind: p.kind,
+          notYetBuilt: p.notYetBuilt,
           roles: holders.get(p.code) ?? [],
         }))}
         modules={MODULES}

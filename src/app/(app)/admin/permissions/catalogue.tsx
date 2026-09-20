@@ -16,6 +16,8 @@ interface Row {
   description: string | null;
   group: string;
   kind: string;
+  /** Registered, but nothing asks for it yet. */
+  notYetBuilt?: boolean;
   roles: string[];
 }
 
@@ -78,7 +80,15 @@ export function PermissionCatalogue({
       ),
     },
     { key: "group", header: "Group", render: (p) => <span className="text-xs text-muted-600">{p.group}</span> },
-    { key: "kind", header: "Guards", align: "center", render: (p) => <Badge tone="slate">{p.kind}</Badge> },
+    {
+      key: "kind",
+      header: "Guards",
+      align: "center",
+      render: (p) =>
+        p.notYetBuilt
+          ? <Badge tone="warn">not built yet</Badge>
+          : <Badge tone="slate">{p.kind}</Badge>,
+    },
     {
       key: "roles",
       header: "Held by roles",

@@ -1,7 +1,7 @@
 import { requireAuth } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { PERMISSIONS } from "@/lib/permissions/registry";
+import { LIVE_PERMISSIONS } from "@/lib/permissions/registry";
 import { Card, EmptyState } from "@/components/ui/primitives";
 import { cn, moneyShort } from "@/lib/utils";
 import { ListNote } from "@/components/list/list-note";
@@ -344,7 +344,7 @@ async function Roles() {
       </div>
       <ListNote>
         Open a role to set exactly what it can reach, across all {" "}
-        <span className="num">{PERMISSIONS.length}</span> permissions. A system role can be cloned
+        <span className="num">{LIVE_PERMISSIONS.length}</span> permissions. A system role can be cloned
         and the copy changed freely.
       </ListNote>
     </div>

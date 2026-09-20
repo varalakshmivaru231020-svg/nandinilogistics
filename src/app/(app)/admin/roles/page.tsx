@@ -2,7 +2,7 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { PERMISSIONS } from "@/lib/permissions/registry";
+import { LIVE_PERMISSIONS } from "@/lib/permissions/registry";
 import { PageHeader } from "@/components/ui/primitives";
 import { readRoleListParams, roleListWhere } from "@/lib/admin/list-filters";
 import { RolesScreen } from "./roles-screen";
@@ -30,7 +30,7 @@ export default async function RolesPage({
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title="Roles & Permissions"
-        description={`Every role is a named set of permissions drawn from a catalogue of ${PERMISSIONS.length}. Change a role here and every screen, tab and button follows immediately.`}
+        description={`Every role is a named set of permissions drawn from a catalogue of ${LIVE_PERMISSIONS.length}. Change a role here and every screen, tab and button follows immediately.`}
       />
 
       <RolesScreen
@@ -45,7 +45,7 @@ export default async function RolesPage({
           userCount: r._count.users,
           permissionCount: r._count.permissions,
         }))}
-        totalPermissions={PERMISSIONS.length}
+        totalPermissions={LIVE_PERMISSIONS.length}
         can={{
           create: ctx.has(PERM.admin.role.create),
           update: ctx.has(PERM.admin.role.update),

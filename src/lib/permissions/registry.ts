@@ -729,6 +729,110 @@ export function getPermission(code: string): PermissionDef | undefined {
   return byCode.get(code);
 }
 
+/**
+ * Permissions nothing asks for yet.
+ *
+ * Each of these is a real intention — a tab, an export, a delete — whose screen
+ * has not been built. They stay registered so that roles already holding them
+ * are not disturbed and so the intention is not lost, but they are kept out of
+ * the role-permission matrix: a checkbox that changes nothing is worse than no
+ * checkbox, because it tells whoever administers a role that they have locked
+ * something down when they have not.
+ *
+ * tests/unit/permission-registry.test.ts holds this list to reality: a code
+ * that starts guarding something, or stops existing, fails the test rather
+ * than rotting here.
+ */
+export const NOT_YET_BUILT: ReadonlySet<string> = new Set([
+  "admin.approvalLimit.export",
+  "admin.approvalLimit.update",
+  "admin.permission.sync",
+  "admin.user.delete",
+  "admin.user.revokeSessions",
+  "checklist.category.export",
+  "checklist.category.view",
+  "checklist.checklist.execute",
+  "checklist.checklist.export",
+  "checklist.checklist.verify",
+  "hr.employee.uploadDocument",
+  "hr.employmentType.update",
+  "hr.employmentType.view",
+  "kb.article.export",
+  "masters.leadField.export",
+  "masters.leadField.import",
+  "masters.leadField.toggleStatus",
+  "masters.leadField.view",
+  "material.grn.print",
+  "material.indent.tabLinkedPo",
+  "material.issue.delete",
+  "material.issue.update",
+  "material.purchaseOrder.tabInvoices",
+  "material.purchaseOrder.tabItems",
+  "material.purchaseOrder.tabReceipts",
+  "material.return.update",
+  "material.stock.adjust",
+  "material.stock.audit",
+  "material.stock.viewLedger",
+  "material.transfer.delete",
+  "material.transfer.update",
+  "material.vendor.manageCategories",
+  "material.vendorInvoice.delete",
+  "material.vendorInvoice.update",
+  "material.vendorPayment.delete",
+  "project.block.create",
+  "project.block.delete",
+  "project.block.update",
+  "project.block.view",
+  "project.document.update",
+  "project.document.view",
+  "project.phase.view",
+  "project.progressLog.update",
+  "project.project.changeStatus",
+  "project.project.delete",
+  "project.project.tabFinancials",
+  "project.project.tabSchedule",
+  "project.project.tabUnits",
+  "project.project.toggleStatus",
+  "project.team.view",
+  "project.workPackage.view",
+  "sales.booking.confirm",
+  "sales.booking.update",
+  "sales.costSheet.delete",
+  "sales.costSheet.update",
+  "sales.customer.delete",
+  "sales.customer.update",
+  "sales.demand.create",
+  "sales.demand.delete",
+  "sales.demand.export",
+  "sales.demand.update",
+  "sales.followUp.delete",
+  "sales.followUp.update",
+  "sales.lead.delete",
+  "sales.lead.merge",
+  "sales.lead.tabCostSheets",
+  "sales.lead.tabVisits",
+  "sales.receipt.delete",
+  "sales.siteVisit.delete",
+  "sales.siteVisit.update",
+  "schedule.activity.captureDelay",
+  "schedule.activity.delete",
+  "schedule.activity.update",
+  "schedule.baseline.set",
+  "schedule.gantt.view",
+  "schedule.template.view",
+  "task.task.export",
+  "unit.hold.view",
+  "unit.priceList.delete",
+  "unit.priceList.update",
+]);
+
+for (const p of registry) {
+  if (NOT_YET_BUILT.has(p.code)) p.notYetBuilt = true;
+}
+
+/** The permissions the matrix offers — everything that actually guards something. */
+export const LIVE_PERMISSIONS: PermissionDef[] = registry.filter((p) => !p.notYetBuilt);
+
 export function permissionsByModule(moduleKey: string): PermissionDef[] {
   return registry.filter((p) => p.module === moduleKey);
 }

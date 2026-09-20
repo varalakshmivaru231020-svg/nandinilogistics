@@ -33,6 +33,13 @@ export interface PermissionDef {
   /** Section heading in the role-permission matrix. */
   group: string;
   kind: PermissionKind;
+  /**
+   * Registered, but nothing in the app asks for it yet — the screen or control
+   * behind it has not been built. Kept so roles that already hold it are not
+   * disturbed, and hidden from the matrix so it is not offered as a working
+   * control. See NOT_YET_BUILT in the registry.
+   */
+  notYetBuilt?: boolean;
 }
 
 export interface ModuleDef {
