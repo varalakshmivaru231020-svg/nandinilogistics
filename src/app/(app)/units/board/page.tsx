@@ -7,6 +7,7 @@ import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { expireStaleHolds } from "@/lib/sales/service";
 import { BoardGrid } from "./board-grid";
 import { UnitSetup } from "./unit-setup";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 export const metadata = { title: "Available Flats · Unit Inventory" };
 
@@ -21,7 +22,7 @@ export default async function AvailabilityBoardPage({
   // Holds release themselves — sweep before anything is read.
   await prisma.$transaction((tx) => expireStaleHolds(tx));
 
-  const projectWhere = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
+  const projectWhere = projectScopeFilter(ctx, "id");
   const projects = await prisma.project.findMany({
     where: projectWhere,
     orderBy: { name: "asc" },

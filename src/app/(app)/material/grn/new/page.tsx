@@ -4,6 +4,7 @@ import { PERM } from "@/lib/permissions/codes";
 import { formatDate, money } from "@/lib/utils";
 import { GrnForm } from "./grn-form";
 import { GrnPoPicker } from "./po-picker";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 export const metadata = { title: "Receive Material" };
 
@@ -15,7 +16,7 @@ export default async function NewGrnPage({
   const ctx = await requirePermission(PERM.material.grn.create);
   const { po: poId } = await searchParams;
 
-  const scope = ctx.canAccessAllProjects ? {} : { projectId: { in: ctx.projectIds } };
+  const scope = projectScopeFilter(ctx);
 
   // Purchase orders still expecting material.
   const openPos = await prisma.purchaseOrder.findMany({

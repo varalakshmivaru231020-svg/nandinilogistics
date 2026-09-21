@@ -7,6 +7,7 @@ import { PERM } from "@/lib/permissions/codes";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { money } from "@/lib/utils";
 import { InvoiceForm } from "./invoice-form";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 export const metadata = { title: "Record Vendor Invoice" };
 
@@ -18,7 +19,7 @@ export default async function NewInvoicePage({
   const ctx = await requirePermission(PERM.material.vendorInvoice.create);
   const { po: poId } = await searchParams;
 
-  const scope = ctx.canAccessAllProjects ? {} : { projectId: { in: ctx.projectIds } };
+  const scope = projectScopeFilter(ctx);
 
   // Only POs with something actually received can be invoiced.
   const invoiceable = await prisma.purchaseOrder.findMany({

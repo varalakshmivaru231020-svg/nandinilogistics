@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse } from "@/lib/exports/respond";
 import { PERM } from "@/lib/permissions/codes";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
   const { ctx } = gate;
 
   const lists = await prisma.priceList.findMany({
-    where: ctx.canAccessAllProjects ? {} : { projectId: { in: ctx.projectIds } },
+    where: projectScopeFilter(ctx),
     orderBy: [{ project: { code: "asc" } }, { version: "desc" }],
     take: EXPORT_MAX_ROWS + 1,
     include: {

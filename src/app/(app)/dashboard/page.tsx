@@ -29,7 +29,7 @@ function ageLabel(from: Date, now: number): { text: string; days: number } {
 export default async function DashboardPage() {
   const ctx = await requireAuth();
   const scope = projectScopeFilter(ctx);
-  const projectScope = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
+  const projectScope = projectScopeFilter(ctx, "id");
   const showMoney = ctx.has(PERM.dashboard.widget.viewFinancials);
   const nowMs = new Date().getTime();
   const today = new Date();
@@ -279,7 +279,7 @@ export default async function DashboardPage() {
   const canProjects = ctx.has(PERM.project.project.view);
   const progressProjects = canProjects
     ? await prisma.project.findMany({
-        where: { status: "ACTIVE", ...(ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } }) },
+        where: { status: "ACTIVE", ...(projectScopeFilter(ctx, "id")) },
         take: 3,
         select: {
           id: true, name: true, targetDate: true,

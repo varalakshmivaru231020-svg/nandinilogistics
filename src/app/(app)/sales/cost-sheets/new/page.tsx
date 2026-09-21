@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { Alert, PageHeader } from "@/components/ui/primitives";
 import { CostSheetBuilder } from "./cost-sheet-builder";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 export const metadata = { title: "Generate Cost Sheet" };
 
@@ -17,7 +18,7 @@ export default async function NewCostSheetPage({
   const ctx = await requirePermission(PERM.sales.costSheet.create);
   const { unit: unitId, lead: leadId } = await searchParams;
 
-  const scope = ctx.canAccessAllProjects ? {} : { projectId: { in: ctx.projectIds } };
+  const scope = projectScopeFilter(ctx);
 
   const [units, leads, heads, priceLists] = await Promise.all([
     prisma.unit.findMany({

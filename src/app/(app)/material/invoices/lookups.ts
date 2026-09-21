@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import type { AuthContext } from "@/lib/rbac/context";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 /**
  * Purchase orders that can be invoiced, with the lines and the accepted
@@ -9,7 +10,7 @@ import type { AuthContext } from "@/lib/rbac/context";
  * choose a purchase order and bill against it without a round trip.
  */
 export async function invoiceLookups(ctx: AuthContext) {
-  const scope = ctx.canAccessAllProjects ? {} : { projectId: { in: ctx.projectIds } };
+  const scope = projectScopeFilter(ctx);
 
   // Only POs with something actually received can be invoiced.
   const pos = await prisma.purchaseOrder.findMany({

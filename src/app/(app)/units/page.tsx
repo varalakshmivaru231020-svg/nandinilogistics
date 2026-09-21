@@ -8,6 +8,7 @@ import { readUnitListParams, unitListWhere } from "@/lib/units/unit-list";
 import { checkUnitDeletable, unitEditLocks } from "@/lib/units/unit-rules";
 import { UnitFilters } from "./unit-filters";
 import { NewUnitButton, UnitManager, UnitRowActions, type ManagedUnit, type UnitFormLookups } from "./unit-manager";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 export const metadata = { title: "Units" };
 
@@ -47,7 +48,7 @@ export default async function UnitsPage({
 
   // The same where clause the export uses, so a download matches the screen.
   const where = unitListWhere(ctx, params);
-  const projectScope = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
+  const projectScope = projectScopeFilter(ctx, "id");
   const selectedProject = params.project !== "all" && params.project ? params.project : null;
 
   const showPrice = ctx.has(PERM.unit.unit.viewPrice);

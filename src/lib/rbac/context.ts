@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { readSessionToken } from "@/lib/auth/session";
 import { PERM } from "@/lib/permissions/codes";
 import { resolveEffectivePermissions } from "./resolve";
+import { readWorkspaceCookie } from "@/lib/workspace";
 
 /**
  * The authenticated actor, with every permission already resolved.
@@ -28,6 +29,11 @@ export interface AuthContext {
   /** Project ids the user is mapped to. Meaningless when `canAccessAllProjects`. */
   projectIds: string[];
   canAccessAllProjects: boolean;
+  /**
+   * The project chosen as the workspace, or null for all of them. A view
+   * filter, never an access decision — see src/lib/workspace.ts.
+   */
+  workspaceProjectId: string | null;
   /** Approval ceilings by scope, e.g. { "material.indent": 500000 }. */
   approvalLimits: Record<string, number>;
   has: (code: string) => boolean;
@@ -94,6 +100,15 @@ export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
   const isSuper = user.isSuperAdmin;
   const has = (code: string) => isSuper || granted.has(code);
 
+  const projectIds = user.projectAccess.map((p) => p.projectId);
+  const canAccessAll = has(PERM.project.project.accessAll);
+
+  // A workspace the person may not reach is no workspace at all — a mapping can
+  // be taken away after the cookie was written.
+  const chosen = await readWorkspaceCookie();
+  const workspaceProjectId =
+    chosen && (canAccessAll || projectIds.includes(chosen)) ? chosen : null;
+
   return {
     id: user.id,
     employeeCode: user.employeeCode,
@@ -102,8 +117,9 @@ export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
     isSuperAdmin: isSuper,
     roles,
     permissions: granted,
-    projectIds: user.projectAccess.map((p) => p.projectId),
-    canAccessAllProjects: has(PERM.project.project.accessAll),
+    projectIds,
+    canAccessAllProjects: canAccessAll,
+    workspaceProjectId,
     approvalLimits: roleLimits,
     has,
     hasAny: (...codes) => codes.some(has),
@@ -120,6 +136,10 @@ export function projectScopeFilter(
   ctx: AuthContext,
   field = "projectId",
 ): Record<string, unknown> {
+  // A chosen workspace narrows the view to that one project. It can only ever
+  // be a project the person may already reach — the context checks that when
+  // it reads the cookie — so this never widens what is returned.
+  if (ctx.workspaceProjectId) return { [field]: ctx.workspaceProjectId };
   if (ctx.canAccessAllProjects) return {};
   return { [field]: { in: ctx.projectIds } };
 }

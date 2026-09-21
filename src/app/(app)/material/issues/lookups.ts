@@ -2,13 +2,14 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import type { AuthContext } from "@/lib/rbac/context";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 /**
  * What an issue slip can be raised against. Shared by the full /new page and
  * the drawer the list opens, so both offer the same options.
  */
 export async function issueLookups(ctx: AuthContext) {
-  const projectWhere = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
+  const projectWhere = projectScopeFilter(ctx, "id");
 
   const [projects, stores, recipients] = await Promise.all([
     prisma.project.findMany({

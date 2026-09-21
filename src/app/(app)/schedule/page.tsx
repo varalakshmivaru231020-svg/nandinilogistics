@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { ScheduleScreen } from "./schedule-screen";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 export const metadata = { title: "Project Schedule" };
 
@@ -14,7 +15,7 @@ export default async function SchedulePage({
   const ctx = await requirePermission(PERM.schedule.activity.view);
   const { project: projectParam, tab = "plan", report = "plan" } = await searchParams;
 
-  const projectWhere = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
+  const projectWhere = projectScopeFilter(ctx, "id");
   const projects = await prisma.project.findMany({
     where: projectWhere,
     orderBy: { name: "asc" },

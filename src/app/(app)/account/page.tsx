@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/permissions/registry";
 import { Badge, Card, CardBody, CardHeader, CardTitle, PageHeader } from "@/components/ui/primitives";
 import { formatDateTime, money } from "@/lib/utils";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 export const metadata = { title: "My Account" };
 
@@ -23,7 +24,7 @@ export default async function AccountPage() {
       },
     }),
     prisma.project.findMany({
-      where: ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } },
+      where: projectScopeFilter(ctx, "id"),
       select: { id: true, code: true, name: true, status: true },
       orderBy: { name: "asc" },
     }),

@@ -16,10 +16,12 @@ export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
   PLANNING: "Planning", ACTIVE: "Active", ON_HOLD: "On hold", COMPLETED: "Completed", CANCELLED: "Cancelled",
 };
 
-/** Who may see which projects — the two fields of the auth context that matter here. */
+/** Who may see which projects, and which one they have chosen to work in. */
 export interface ProjectScope {
   canAccessAllProjects: boolean;
   projectIds: string[];
+  /** The chosen workspace, or null for all of them. A view filter, not access. */
+  workspaceProjectId?: string | null;
 }
 
 type ParamSource = URLSearchParams | Record<string, string | string[] | undefined>;
@@ -51,8 +53,13 @@ export function readProjectListParams(source: ParamSource): ProjectListParams {
 export function projectListWhere(scope: ProjectScope, p: ProjectListParams): Prisma.ProjectWhereInput {
   const q = p.q.trim();
   return {
-    // Project-team scoping: you only see projects mapped to you.
-    ...(scope.canAccessAllProjects ? {} : { id: { in: scope.projectIds } }),
+    // Project-team scoping: you only see projects mapped to you. A chosen
+    // workspace narrows that to the one project being worked in.
+    ...(scope.workspaceProjectId
+      ? { id: scope.workspaceProjectId }
+      : scope.canAccessAllProjects
+        ? {}
+        : { id: { in: scope.projectIds } }),
     ...(q
       ? {
           OR: [
@@ -106,7 +113,8 @@ export function progressLogWhere(
 
   // Scoping and the project filter are separate conditions, so choosing a
   // project one is not mapped to finds nothing rather than widening the scope.
-  if (!scope.canAccessAllProjects) and.push({ projectId: { in: scope.projectIds } });
+  if (scope.workspaceProjectId) and.push({ projectId: scope.workspaceProjectId });
+  else if (!scope.canAccessAllProjects) and.push({ projectId: { in: scope.projectIds } });
   if (p.filters.projectId) and.push({ projectId: p.filters.projectId });
   if (logDate) and.push({ logDate });
   if (q) {

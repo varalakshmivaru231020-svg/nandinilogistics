@@ -29,6 +29,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     console.error("Follow-up escalation sweep failed", error);
   }
 
+  // The projects this person may work in, for the topbar switcher — and the
+  // name of the one they are in, if any.
+  const workspaces = await prisma.project.findMany({
+    where: {
+      status: { in: ["PLANNING", "ACTIVE"] },
+      ...(ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } }),
+    },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  const workspaceName = workspaces.find((p) => p.id === ctx.workspaceProjectId)?.name ?? null;
+
   badges.notifications = await prisma.notification.count({
     where: { userId: ctx.id, readAt: null },
   });
@@ -86,7 +98,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         canAccessAllProjects: ctx.canAccessAllProjects,
       }}
     >
-      <AppShell badges={badges}>{children}</AppShell>
+      <AppShell badges={badges} workspaceName={workspaceName} workspaces={workspaces}>
+        {children}
+      </AppShell>
     </PermissionProvider>
   );
 }

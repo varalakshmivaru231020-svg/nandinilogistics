@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import type { AuthContext } from "@/lib/rbac/context";
 import { returnableQty, roundQty } from "@/lib/material/return-caps";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 export interface ReturnableIssue {
   id: string;
@@ -29,7 +30,7 @@ export interface ReturnableIssue {
  * The service re-checks all of it; this only decides what the form offers.
  */
 export async function returnableIssues(ctx: AuthContext, preselect: string | null): Promise<ReturnableIssue[]> {
-  const scope = ctx.canAccessAllProjects ? {} : { projectId: { in: ctx.projectIds } };
+  const scope = projectScopeFilter(ctx);
 
   const include = {
     project: { select: { code: true } },

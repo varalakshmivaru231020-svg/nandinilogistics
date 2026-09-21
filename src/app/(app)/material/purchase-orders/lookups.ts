@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import type { AuthContext } from "@/lib/rbac/context";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 /**
  * What a purchase order can be raised against. The indent prefill is not here
@@ -9,7 +10,7 @@ import type { AuthContext } from "@/lib/rbac/context";
  * that. The drawer opens empty, as the design's does.
  */
 export async function poLookups(ctx: AuthContext) {
-  const projectWhere = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
+  const projectWhere = projectScopeFilter(ctx, "id");
 
   const [projects, vendors, terms, items, openIndents] = await Promise.all([
     prisma.project.findMany({
@@ -42,7 +43,7 @@ export async function poLookups(ctx: AuthContext) {
     prisma.indent.findMany({
       where: {
         status: "ADMIN_APPROVED",
-        ...(ctx.canAccessAllProjects ? {} : { projectId: { in: ctx.projectIds } }),
+        ...(projectScopeFilter(ctx)),
       },
       orderBy: { raisedAt: "asc" },
       take: 50,

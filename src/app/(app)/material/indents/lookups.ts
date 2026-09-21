@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import type { AuthContext } from "@/lib/rbac/context";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 /**
  * The projects and items an indent can be raised against, with what the store
@@ -9,7 +10,7 @@ import type { AuthContext } from "@/lib/rbac/context";
  * which is what the design promises.
  */
 export async function indentLookups(ctx: AuthContext) {
-  const projectWhere = ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } };
+  const projectWhere = projectScopeFilter(ctx, "id");
 
   const [projects, items, balances] = await Promise.all([
     prisma.project.findMany({

@@ -3,13 +3,14 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { PageHeader } from "@/components/ui/primitives";
 import { PriceListsScreen } from "./price-lists-screen";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 export const metadata = { title: "Price Lists" };
 
 export default async function PriceListsPage() {
   const ctx = await requirePermission(PERM.unit.priceList.view);
 
-  const scope = ctx.canAccessAllProjects ? {} : { projectId: { in: ctx.projectIds } };
+  const scope = projectScopeFilter(ctx);
 
   const [lists, projects] = await Promise.all([
     prisma.priceList.findMany({

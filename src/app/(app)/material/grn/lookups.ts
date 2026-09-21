@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import type { AuthContext } from "@/lib/rbac/context";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 /**
  * Purchase orders still expecting material, each with its lines.
@@ -11,7 +12,7 @@ import type { AuthContext } from "@/lib/rbac/context";
  * switch has to happen without a round trip.
  */
 export async function grnLookups(ctx: AuthContext) {
-  const scope = ctx.canAccessAllProjects ? {} : { projectId: { in: ctx.projectIds } };
+  const scope = projectScopeFilter(ctx);
 
   const [openPos, stores] = await Promise.all([
     prisma.purchaseOrder.findMany({

@@ -8,6 +8,7 @@ import { getReport, runReport } from "@/lib/reports";
 import { filterSpecFor, hasFilters, parseReportFilters } from "@/lib/reports/filters";
 import { Badge, PageHeader } from "@/components/ui/primitives";
 import { ReportView } from "./report-view";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 export async function generateMetadata({ params }: { params: Promise<{ key: string }> }) {
   const { key } = await params;
@@ -36,7 +37,7 @@ export default async function ReportPage({
     // editing the URL yields an empty report — runReport never widens scope.
     spec.project
       ? prisma.project.findMany({
-          where: ctx.canAccessAllProjects ? {} : { id: { in: ctx.projectIds } },
+          where: projectScopeFilter(ctx, "id"),
           select: { id: true, code: true, name: true },
           orderBy: { name: "asc" },
         })

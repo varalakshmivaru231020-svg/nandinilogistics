@@ -2,12 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Bell, Building2, ChevronDown, Menu, Search } from "lucide-react";
 
 import { screenTitle } from "@/lib/screen-title";
 import { usePermissions } from "@/components/rbac/permission-provider";
 import { logoutAction } from "@/app/(auth)/login/actions";
+import { setWorkspaceAction } from "@/app/(app)/workspace/actions";
+import { cn } from "@/lib/utils";
 
 /**
  * The design's topbar, in its order: title, the 290px search box, "All
@@ -17,18 +19,34 @@ import { logoutAction } from "@/app/(auth)/login/actions";
 export function Topbar({
   onOpenMobile,
   notificationCount = 0,
+  workspaceName = null,
+  workspaces = [],
 }: {
   onOpenMobile: () => void;
   notificationCount?: number;
+  /** The project being worked in, or null for all of them. */
+  workspaceName?: string | null;
+  /** The projects this person may choose between. */
+  workspaces?: Array<{ id: string; name: string }>;
 }) {
   const perms = usePermissions();
   const title = screenTitle(usePathname());
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
+  const [wsOpen, setWsOpen] = React.useState(false);
+  const wsRef = React.useRef<HTMLDivElement>(null);
+  const router = useRouter();
+
+  async function pick(projectId: string | null) {
+    setWsOpen(false);
+    await setWorkspaceAction(projectId);
+    router.refresh();
+  }
 
   React.useEffect(() => {
     const onClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (wsRef.current && !wsRef.current.contains(e.target as Node)) setWsOpen(false);
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
@@ -65,9 +83,55 @@ export function Topbar({
 
       <div className="flex-1" />
 
-      <div className="hidden items-center gap-[7px] rounded-[9px] border border-line-400 bg-surface-field px-3 py-[7px] text-[12px] font-semibold text-navy-600 md:flex">
-        <Building2 className="h-[13px] w-[13px] text-brand-500" />
-        All projects
+      <div className="relative hidden md:block" ref={wsRef}>
+        <button
+          type="button"
+          onClick={() => setWsOpen((o) => !o)}
+          title="Choose the project to work in"
+          className="flex items-center gap-[7px] rounded-[9px] border border-line-400 bg-surface-field px-3 py-[7px] text-[12px] font-semibold text-navy-600 transition-colors hover:border-brand-500"
+        >
+          <Building2 className="h-[13px] w-[13px] text-brand-500" />
+          <span className="max-w-[170px] truncate">{workspaceName ?? "All projects"}</span>
+          <ChevronDown className="h-[11px] w-[11px] text-muted-500" />
+        </button>
+
+        {wsOpen && (
+          <div className="animate-fade-up absolute right-0 top-[40px] z-[60] w-[260px] rounded-[12px] border border-line-400 bg-white p-[7px] shadow-[0_16px_40px_rgba(25,26,92,.14)]">
+            <p className="px-2.5 pb-[5px] pt-2 text-[10px] font-bold uppercase tracking-[.13em] text-muted-400">
+              Working in
+            </p>
+            <button
+              type="button"
+              onClick={() => pick(null)}
+              className={cn(
+                "block w-full cursor-pointer rounded-[9px] px-2.5 py-2 text-left text-[12.5px] transition-colors hover:bg-surface-hover",
+                workspaceName === null ? "font-bold text-brand-700" : "font-semibold text-navy-500",
+              )}
+            >
+              All projects
+            </button>
+            {workspaces.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => pick(p.id)}
+                className={cn(
+                  "block w-full cursor-pointer truncate rounded-[9px] px-2.5 py-2 text-left text-[12.5px] transition-colors hover:bg-surface-hover",
+                  p.name === workspaceName ? "font-bold text-brand-700" : "font-semibold text-navy-500",
+                )}
+              >
+                {p.name}
+              </button>
+            ))}
+            <Link
+              href="/workspace"
+              onClick={() => setWsOpen(false)}
+              className="mt-[5px] block rounded-[9px] border-t border-line-200 px-2.5 pb-1 pt-2.5 text-[11.5px] font-semibold text-muted-600 hover:text-brand-700"
+            >
+              Choose on a full screen →
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="relative hidden sm:block" ref={ref}>

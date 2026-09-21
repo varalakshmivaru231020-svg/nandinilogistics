@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import type { AuthContext } from "@/lib/rbac/context";
+import { projectScopeFilter } from "@/lib/rbac/context";
 
 /**
  * Everything a cost sheet is generated from — quotable units, the leads it can
@@ -10,7 +11,7 @@ import type { AuthContext } from "@/lib/rbac/context";
  * price list. Shared by the full /new page and the drawer the list opens.
  */
 export async function costSheetLookups(ctx: AuthContext) {
-  const scope = ctx.canAccessAllProjects ? {} : { projectId: { in: ctx.projectIds } };
+  const scope = projectScopeFilter(ctx);
 
   const [units, leads, heads, priceLists] = await Promise.all([
     prisma.unit.findMany({
