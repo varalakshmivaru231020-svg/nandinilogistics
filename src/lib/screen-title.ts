@@ -27,6 +27,8 @@ const SCREEN_TITLES: Array<[href: string, title: string]> = [
   ["/kb", "Knowledge Base"],
   ["/masters", "Masters & Users"],
   ["/notifications", "Notifications"],
+  // The chooser is the projects table, so it keeps that screen's name.
+  ["/workspace", "Project Management"],
   ["/admin/settings", "Settings"],
   // Access control sits under Masters & Users in the menu, so its screens keep
   // that name in the topbar rather than falling through to "Dashboard".

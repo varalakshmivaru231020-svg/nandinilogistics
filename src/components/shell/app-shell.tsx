@@ -9,13 +9,11 @@ import { ToastProvider } from "@/components/ui/toast";
 export function AppShell({
   badges,
   workspaceName = null,
-  workspaces = [],
   children,
 }: {
   badges?: Partial<Record<string, number>>;
-  /** The project being worked in, shown and changed from the topbar. */
+  /** The project being worked in, named on the topbar chip. */
   workspaceName?: string | null;
-  workspaces?: Array<{ id: string; name: string }>;
   children: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -36,7 +34,6 @@ export function AppShell({
             onOpenMobile={() => setMobileOpen(true)}
             notificationCount={badges?.notifications ?? 0}
             workspaceName={workspaceName}
-            workspaces={workspaces}
           />
           <main data-app-scroll className="flex-1 overflow-y-auto px-[26px] pb-10 pt-6">
             {children}

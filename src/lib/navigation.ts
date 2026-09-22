@@ -118,6 +118,7 @@ export function visibleNavigation(has: (code: string) => boolean): NavSection[] 
  * control is reached from Masters & Users and belongs to it.
  */
 const BELONGS_TO: ReadonlyArray<[prefix: string, href: string]> = [
+  ["/workspace", "/projects"],
   ["/admin/roles", "/masters"],
   ["/admin/users", "/masters"],
   ["/admin/permissions", "/masters"],

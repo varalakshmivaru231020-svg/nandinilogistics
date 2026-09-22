@@ -21,14 +21,13 @@ export default async function WorkspacePage() {
     },
     orderBy: [{ status: "asc" }, { name: "asc" }],
     select: {
-      id: true,
-      name: true,
-      code: true,
-      addressLine: true,
-      status: true,
+      id: true, name: true, code: true, addressLine: true, status: true,
+      reraNumber: true, totalTowers: true, totalFloors: true,
       projectType: { select: { name: true } },
       city: { select: { name: true } },
-      _count: { select: { units: true, activities: true } },
+      projectManager: { select: { name: true } },
+      activities: { select: { status: true } },
+      _count: { select: { units: true } },
     },
   });
 
@@ -39,11 +38,23 @@ export default async function WorkspacePage() {
         id: p.id,
         name: p.name,
         code: p.code,
+        where: p.city?.name ?? p.addressLine ?? "—",
         type: p.projectType.name,
-        where: [p.addressLine, p.city?.name].filter(Boolean).join(", ") || "—",
+        rera: p.reraNumber ?? "RERA not recorded",
+        // The design's scale column, written the way it writes it.
+        scale: [
+          p.totalTowers > 0 && `${p.totalTowers} tower${p.totalTowers === 1 ? "" : "s"}`,
+          p.totalFloors > 0 && `${p.totalFloors} fl`,
+          `${p._count.units} units`,
+        ].filter(Boolean).join(" · "),
+        manager: p.projectManager?.name ?? null,
+        // How much of the plan is closed — the same measure the projects list uses.
+        progressPct: p.activities.length
+          ? Math.round(
+              (p.activities.filter((a) => a.status === "COMPLETED").length / p.activities.length) * 100,
+            )
+          : 0,
         status: p.status,
-        units: p._count.units,
-        activities: p._count.activities,
       }))}
     />
   );
