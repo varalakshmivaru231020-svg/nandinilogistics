@@ -45,7 +45,7 @@ const AddSchema = z.object({
 });
 
 export async function addMainCategoryAction(
-  projectId: string, name: string, plannedStart: string, plannedEnd: string, manager = "",
+  projectId: string, name: string, plannedStart: string, plannedEnd: string,
 ): Promise<ActionResult<{ id: string }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.project.workPackage.create);
@@ -56,25 +56,8 @@ export async function addMainCategoryAction(
     const end = new Date(v.plannedEnd);
     if (end < start) throw new Error("Planned end cannot be before planned start.");
 
-    // The manager is chosen from the people mapped to this project. Empty means
-    // the project's own manager runs it.
-    const wanted = manager.trim();
-    let managerId: string | null = null;
-    if (wanted) {
-      const person = await prisma.user.findFirst({
-        where: {
-          id: wanted,
-          status: "ACTIVE",
-          OR: [
-            { projectAccess: { some: { projectId: v.projectId } } },
-            { managedProjects: { some: { id: v.projectId } } },
-          ],
-        },
-        select: { id: true },
-      });
-      if (!person) throw new Error("That person is not on this project.");
-      managerId = person.id;
-    }
+    // A main category is no longer given a manager of its own; the project's
+    // own manager runs it.
 
     const created = await prisma.$transaction(async (tx) => {
       // A main category lives under a phase; a project that has never had one
@@ -95,7 +78,6 @@ export async function addMainCategoryAction(
           code: codeFrom(v.name, new Set(siblings.map((w) => w.code))),
           name: v.name,
           sequence: siblings.length,
-          managerId,
           startDate: start,
           endDate: end,
         },
@@ -123,6 +105,20 @@ export async function addSubActivityAction(
     const start = new Date(v.plannedStart);
     const end = new Date(v.plannedEnd);
     if (end < start) throw new Error("Planned end cannot be before planned start.");
+
+    // A sub-activity is part of its main category, so it cannot run outside it.
+    const parent = await prisma.workPackage.findUnique({
+      where: { id: workPackageId },
+      select: { name: true, startDate: true, endDate: true },
+    });
+    if (!parent) throw new Error("That main category no longer exists.");
+    const span = (d: Date) => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    if (parent.startDate && start < parent.startDate) {
+      throw new Error(`${parent.name} starts on ${span(parent.startDate)} — a sub-activity cannot start before it.`);
+    }
+    if (parent.endDate && end > parent.endDate) {
+      throw new Error(`${parent.name} ends on ${span(parent.endDate)} — a sub-activity cannot run past it.`);
+    }
 
     const siblings = await prisma.scheduleActivity.findMany({
       where: { projectId: v.projectId },

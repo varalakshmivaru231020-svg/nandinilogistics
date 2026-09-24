@@ -121,13 +121,11 @@ function metrics(a: Activity, todayMs: number) {
 
 export function ScheduleScreen({
   projects, activeProjectId, projectManager, tab, reportTab, activities, extensions,
-  can, nowMs, managers,
+  can, nowMs,
 }: {
   projects: Array<{ id: string; name: string; code: string }>;
   activeProjectId: string;
   projectManager: string | null;
-  /** The people a main category can be handed to on this project. */
-  managers: Array<{ id: string; name: string }>;
   tab: "plan" | "extensions" | "reports";
   reportTab: "plan" | "performance";
   activities: Activity[];
@@ -266,8 +264,6 @@ export function ScheduleScreen({
             <AddPanel
               projectId={activeProjectId}
               workPackageId={adding}
-              projectManager={projectManager}
-              managers={managers}
               onClose={() => setAdding(null)}
               onDone={(m) => { setAdding(null); setNotice(m); router.refresh(); }}
             />
@@ -719,13 +715,9 @@ function spanLabel(from: string, to: string): string {
  * running it, with the total days counted beside them.
  */
 function AddPanel({
-  projectId, workPackageId, projectManager, managers, onClose, onDone,
+  projectId, workPackageId, onClose, onDone,
 }: {
   projectId: string;
-  /** Who runs the project — the name the box falls back to. */
-  projectManager: string | null;
-  /** The people this category can be handed to. */
-  managers: Array<{ id: string; name: string }>;
   /** "" adds a main category; an id adds a sub-activity inside it. */
   workPackageId: string;
   onClose: () => void;
@@ -733,7 +725,6 @@ function AddPanel({
 }) {
   const isMain = workPackageId === "";
   const [name, setName] = React.useState("");
-  const [pm, setPm] = React.useState("");
   const [start, setStart] = React.useState("");
   const [end, setEnd] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
@@ -743,7 +734,7 @@ function AddPanel({
     setBusy(true);
     setError(null);
     const res = isMain
-      ? await addMainCategoryAction(projectId, name, start, end, pm)
+      ? await addMainCategoryAction(projectId, name, start, end)
       : await addSubActivityAction(projectId, workPackageId, name, start, end);
     setBusy(false);
     if (!res.ok) { setError(res.error); return; }
@@ -766,17 +757,6 @@ function AddPanel({
             className={PANEL_FIELD}
           />
         </label>
-        {isMain && (
-          <label className="block">
-            <span className={PANEL_LABEL}>Project Manager</span>
-            <select value={pm} onChange={(e) => setPm(e.target.value)} className={PANEL_FIELD}>
-              <option value="">{projectManager ?? "Unassigned"}</option>
-              {managers.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </label>
-        )}
         <label className="block">
           <span className={PANEL_LABEL}>Planned start <span className="text-bad-600">*</span></span>
           <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={PANEL_FIELD} />

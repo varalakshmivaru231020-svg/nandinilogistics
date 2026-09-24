@@ -85,7 +85,7 @@ export function LeadDetail({
   can: {
     tabTimeline: boolean; tabFollowUps: boolean; tabNotes: boolean;
     tabStageHistory: boolean; tabFiles: boolean; tabFlats: boolean;
-    changeStage: boolean; markLost: boolean; edit: boolean; sendMail: boolean;
+    changeStage: boolean; markLost: boolean; edit: boolean;
     logFollowUp: boolean; note: boolean; uploadFile: boolean; assign: boolean;
     block: boolean; release: boolean;
   };
@@ -178,17 +178,6 @@ export function LeadDetail({
           </p>
         </div>
 
-        {can.sendMail && (
-          <button
-            type="button"
-            disabled={!lead.email}
-            title={lead.email ? `Mail ${lead.email}` : "No email on this lead"}
-            onClick={() => { if (lead.email) window.location.href = `mailto:${lead.email}`; }}
-            className="cursor-pointer rounded-[9px] border border-line-400 bg-white px-3.5 py-[9px] text-[12px] font-semibold text-navy-600 transition-colors hover:border-brand-500 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            ✉ Send mail
-          </button>
-        )}
         {can.edit && edit && (
           <button
             type="button"

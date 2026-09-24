@@ -46,16 +46,15 @@ describe("page-wrapper animations leave no containing block behind", () => {
 });
 
 /*
- * Every fixed overlay portals to the body. The work-breakdown dialog did not,
- * and opened behind the Create project drawer: the drawer portals to the body
- * at z-81, while the dialog stayed in the page tree where its z-97 could not
- * reach past it.
+ * Every fixed overlay portals to the body. The work-breakdown dialog, since
+ * withdrawn, did not — and opened behind the Create project drawer: the drawer
+ * portals to the body at z-81, while the dialog stayed in the page tree where
+ * its z-97 could not reach past it.
  */
 describe("a fixed overlay escapes its ancestors regardless", () => {
   const OVERLAYS: Array<[string, string[]]> = [
     ["the modal", ["src", "components", "ui", "modal.tsx"]],
     ["the drawer", ["src", "components", "ui", "drawer.tsx"]],
-    ["the work-breakdown dialog", ["src", "app", "(app)", "projects", "new-project-button.tsx"]],
   ];
 
   for (const [name, path] of OVERLAYS) {

@@ -733,11 +733,12 @@ export function getPermission(code: string): PermissionDef | undefined {
  * Permissions nothing asks for yet.
  *
  * Each of these is a real intention — a tab, an export, a delete — whose screen
- * has not been built. They stay registered so that roles already holding them
- * are not disturbed and so the intention is not lost, but they are kept out of
- * the role-permission matrix: a checkbox that changes nothing is worse than no
- * checkbox, because it tells whoever administers a role that they have locked
- * something down when they have not.
+ * has not been built, or whose control has since been withdrawn. They stay
+ * registered so that roles already holding them are not disturbed and so the
+ * intention is not lost, but they are kept out of the role-permission matrix:
+ * a checkbox that changes nothing is worse than no checkbox, because it tells
+ * whoever administers a role that they have locked something down when they
+ * have not.
  *
  * tests/unit/permission-registry.test.ts holds this list to reality: a code
  * that starts guarding something, or stops existing, fails the test rather
@@ -809,6 +810,8 @@ export const NOT_YET_BUILT: ReadonlySet<string> = new Set([
   "sales.followUp.update",
   "sales.lead.delete",
   "sales.lead.merge",
+  // The Send mail control was removed from the lead at the client's request.
+  "sales.lead.sendMail",
   "sales.lead.tabCostSheets",
   "sales.lead.tabVisits",
   "sales.receipt.delete",

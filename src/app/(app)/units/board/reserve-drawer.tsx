@@ -32,6 +32,20 @@ export function ReserveDrawer({
   const toast = useToast();
   const [creating, setCreating] = React.useState(false);
   const [customerId, setCustomerId] = React.useState("");
+  const [q, setQ] = React.useState("");
+
+  // The list is searched by name or mobile, which is how a customer is asked
+  // for at the counter.
+  const found = React.useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return customers;
+    const digits = needle.replace(/\D/g, "");
+    return customers.filter(
+      (c) =>
+        c.name.toLowerCase().includes(needle) ||
+        (digits.length > 0 && c.phone.replace(/\D/g, "").includes(digits)),
+    );
+  }, [customers, q]);
   const [remarks, setRemarks] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -104,7 +118,18 @@ export function ReserveDrawer({
 
           {!creating && (
             <div className="flex flex-col gap-[7px]">
-              {customers.map((c) => (
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search by name or mobile number…"
+                autoFocus
+              />
+              {found.length > 0 && (
+                <p className="px-1 text-[11px] font-medium text-muted-400">
+                  {found.length} of {customers.length} {customers.length === 1 ? "customer" : "customers"}
+                </p>
+              )}
+              {found.map((c) => (
                 <button
                   key={c.id}
                   type="button"
@@ -123,6 +148,11 @@ export function ReserveDrawer({
               {customers.length === 0 && (
                 <p className="py-4 text-center text-[12px] font-medium text-muted-300">
                   No customers yet — create one
+                </p>
+              )}
+              {customers.length > 0 && found.length === 0 && (
+                <p className="py-4 text-center text-[12px] font-medium text-muted-300">
+                  Nobody matches “{q.trim()}” — create them instead
                 </p>
               )}
             </div>
