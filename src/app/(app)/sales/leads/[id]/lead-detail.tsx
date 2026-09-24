@@ -15,12 +15,13 @@ import {
 } from "../actions";
 import { logFollowUpAction } from "../actions";
 import { EditLeadModal, type EditLeadValues } from "./lead-edit-modal";
+import { AssignModal } from "../assign-modal";
 
 /* --------------------------------- Types --------------------------------- */
 
 interface Lead {
   id: string; leadNo: string; name: string; phone: string; email: string | null;
-  sourceName: string; projectName: string | null; ownerName: string | null;
+  sourceName: string; projectName: string | null; ownerName: string | null; ownerId: string | null;
   firstResponseMins: number | null;
   state: string; requirement: string | null;
   unitTypeName: string | null;
@@ -53,8 +54,10 @@ const CHANNEL_ICON: Record<string, string> = {
 
 export function LeadDetail({
   lead, stepper, timeline, followUps, notes, stageHistory, files, blocked, available,
-  towers, tower, tab, projectName, edit, can, nowMs, lostReasons,
+  towers, tower, tab, projectName, edit, can, nowMs, lostReasons, owners,
 }: {
+  /** The people this lead can be handed to. */
+  owners: Array<{ id: string; name: string }>;
   lead: Lead;
   stepper: Step[];
   timeline: TimelineRow[];
@@ -94,6 +97,7 @@ export function LeadDetail({
   const router = useRouter();
   const [editing, setEditing] = React.useState(false);
   const [losing, setLosing] = React.useState(false);
+  const [assigning, setAssigning] = React.useState(false);
   const [moving, setMoving] = React.useState<string | null>(null);
   const pathname = usePathname();
   const params = useSearchParams();
@@ -178,6 +182,16 @@ export function LeadDetail({
           </p>
         </div>
 
+        {can.assign && (
+          <button
+            type="button"
+            onClick={() => setAssigning(true)}
+            className="cursor-pointer rounded-[9px] border border-line-400 bg-white px-3.5 py-[9px] text-[12px] font-semibold text-navy-600 transition-colors hover:border-brand-500 hover:text-brand-700"
+          >
+            {lead.ownerName ? `Reassign · ${lead.ownerName}` : "Assign"}
+          </button>
+        )}
+
         {can.edit && edit && (
           <button
             type="button"
@@ -237,6 +251,17 @@ export function LeadDetail({
           </React.Fragment>
         ))}
       </div>
+
+      {assigning && (
+        <AssignModal
+          leadId={lead.id}
+          leadName={lead.name}
+          ownerId={lead.ownerId}
+          owners={owners}
+          onClose={() => setAssigning(false)}
+          onSaved={(m) => { setAssigning(false); toast(m); router.refresh(); }}
+        />
+      )}
 
       {losing && (
         <LostModal

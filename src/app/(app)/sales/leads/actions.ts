@@ -185,20 +185,26 @@ export async function assignLeadAction(id: string, ownerId: string): Promise<Act
   return runAction(async () => {
     const ctx = await authorize(PERM.sales.lead.assign);
     const [lead, owner] = await Promise.all([
-      prisma.lead.findUnique({ where: { id } }),
+      prisma.lead.findUnique({ where: { id }, include: { owner: { select: { name: true } } } }),
       prisma.user.findUnique({ where: { id: ownerId }, select: { name: true } }),
     ]);
     if (!lead) throw new Error("Lead not found.");
     if (!owner) throw new Error("That user no longer exists.");
+    if (lead.ownerId === ownerId) throw new Error(`${owner.name} already owns this lead.`);
 
     await prisma.lead.update({
       where: { id },
       data: { ownerId, assignedAt: new Date() },
     });
 
+    // The timeline is built from these rows, so it names both ends of the move
+    // rather than only where it landed.
     await recordAudit({
       action: "ASSIGN", entity: "Lead", entityId: id, userId: ctx.id,
-      summary: `Assigned lead ${lead.leadNo} to ${owner.name}`,
+      summary: lead.owner
+        ? `Reassigned lead ${lead.leadNo} from ${lead.owner.name} to ${owner.name}`
+        : `Assigned lead ${lead.leadNo} to ${owner.name}`,
+      changes: { ownerId: { from: lead.ownerId, to: ownerId } },
     });
     revalidatePath("/sales/leads");
     return null;

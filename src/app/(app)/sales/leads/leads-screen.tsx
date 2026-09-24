@@ -280,8 +280,13 @@ export function LeadsScreen({
       </div>
 
       {/* ------------------------------- Board -------------------------------- */}
+      {/*
+       * Six columns across on a desktop, exactly as the design draws them, but
+       * wrapping instead of forcing a sideways scroll once the screen cannot
+       * hold them — a lead board is read on a phone at site.
+       */}
       {view === "board" && (
-        <div className="scroll-thin flex items-start gap-3 overflow-x-auto pb-2">
+        <div className="grid items-start gap-3 pb-2 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
           {BOARD_COLUMNS.map((col) => {
             const cards = col.stages.flatMap((st) => byStage.get(st) ?? []);
             return (
@@ -298,7 +303,7 @@ export function LeadsScreen({
                   if (dragging && can.changeStage) moveTo(dragging, col.drop);
                 }}
                 className={cn(
-                  "min-w-[190px] flex-1 rounded-[13px] p-2.5 transition-colors",
+                  "min-w-0 rounded-[13px] p-2.5 transition-colors",
                   dropTarget === col.key ? "bg-brand-100 ring-2 ring-brand-500" : "bg-line-200",
                 )}
               >

@@ -44,7 +44,7 @@ export default async function LeadDetailPage({
     include: {
       source: { select: { name: true } },
       project: { select: { id: true, name: true } },
-      owner: { select: { name: true } },
+      owner: { select: { id: true, name: true } },
       lostReason: { select: { name: true } },
       unitType: { select: { name: true } },
       followUps: {
@@ -158,8 +158,21 @@ export default async function LeadDetailPage({
     availableUnits.filter((u) => u.block).map((u) => [u.block!.id, u.block!.name]),
   )].map(([id, name]) => ({ id, name }));
 
+  // Who a lead can be handed to — the people whose role lets them work one.
+  const owners = ctx.has(PERM.sales.lead.assign)
+    ? await prisma.user.findMany({
+        where: {
+          status: "ACTIVE",
+          roles: { some: { role: { permissions: { some: { permission: { code: PERM.sales.lead.view } } } } } },
+        },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      })
+    : [];
+
   return (
     <LeadDetail
+      owners={owners}
       lead={{
         id: lead.id,
         leadNo: lead.leadNo,
@@ -169,6 +182,7 @@ export default async function LeadDetailPage({
         sourceName: lead.source.name,
         projectName: lead.project?.name ?? null,
         ownerName: lead.owner?.name ?? null,
+        ownerId: lead.owner?.id ?? null,
         firstResponseMins: lead.firstResponseMins,
         state: lead.state,
         requirement: lead.requirement,
