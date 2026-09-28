@@ -159,7 +159,13 @@ describe("indent approval routing runs the real ceiling logic", () => {
     return indent;
   }
 
-  it("completes the chain when the PM approves within their ceiling", async () => {
+  /*
+   * Approval is the Project Manager's one step. It used to route by value —
+   * under the PM's ceiling it completed, over it waited for Owner / Admin — and
+   * the client asked for the second step to go, so a PM decision now clears an
+   * indent whatever it is worth.
+   */
+  it("clears the indent when the PM approves within their ceiling", async () => {
     // PM ceiling is ₹500,000 — this is ₹100,000.
     const indent = await makeIndent(500, 200);
     await actAs("pm@nninfra.example");
@@ -168,21 +174,20 @@ describe("indent approval routing runs the real ceiling logic", () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
 
-    expect(res.data.skippedAdmin).toBe(true);
     expect(res.data.status).toBe("ADMIN_APPROVED");
+    expect(res.data.skippedAdmin).toBe(false);
   });
 
-  it("sends it up a level when the PM is over their ceiling", async () => {
-    // ₹1,000,000 — above the PM's ₹500,000 ceiling.
+  it("clears it in the same one step when the PM is over their ceiling", async () => {
+    // ₹1,000,000 — above the PM's ₹500,000 ceiling, and no longer a second step.
     const indent = await makeIndent(500, 2000);
     await actAs("pm@nninfra.example");
 
-    const res = await indentActions.approveIndentAction(indent.id, "PM", "Needs owner sign-off");
+    const res = await indentActions.approveIndentAction(indent.id, "PM", "Site cannot wait");
     expect(res.ok).toBe(true);
     if (!res.ok) return;
 
-    expect(res.data.skippedAdmin).toBe(false);
-    expect(res.data.status).toBe("PM_APPROVED");
+    expect(res.data.status).toBe("ADMIN_APPROVED");
   });
 
   it("records a quantity revision on the approval trail", async () => {

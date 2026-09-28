@@ -207,12 +207,15 @@ export async function submitIndentAction(id: string): Promise<ActionResult<null>
 }
 
 /**
- * Approves an indent at one level.
+ * Approves an indent.
  *
- * Value-based routing: when a PM approves an indent whose value is at or below
- * their configured ceiling, the Admin level is skipped automatically and the
- * indent goes straight to ADMIN_APPROVED. Above the ceiling it waits for the
- * Owner / Admin step.
+ * The Project Manager is the only approval an indent needs: their decision
+ * completes it whatever the value, so ADMIN_APPROVED — the status the rest of
+ * procurement reads as "cleared to buy" — is reached in one step.
+ *
+ * The ADMIN level is kept callable so that an indent left sitting in
+ * PM_APPROVED by the old two-step chain can still be cleared, not because
+ * anything routes there any more.
  */
 export async function approveIndentAction(
   id: string,
@@ -262,8 +265,8 @@ export async function approveIndentAction(
       );
     }
 
-    const withinPmCeiling = level === "PM" && (ctx.isSuperAdmin || (ceiling > 0 && approvedValue <= ceiling));
-    const nextStatus = level === "ADMIN" || withinPmCeiling ? "ADMIN_APPROVED" : "PM_APPROVED";
+    // One step: whoever approves, the indent is cleared.
+    const nextStatus = "ADMIN_APPROVED";
 
     await prisma.$transaction(async (tx) => {
       // Claim the indent first, exactly as it was checked: an edit or another
@@ -299,15 +302,15 @@ export async function approveIndentAction(
     await recordAudit({
       action: "APPROVE", entity: "Indent", entityId: id, userId: ctx.id, projectId: indent.projectId,
       summary:
-        `Approved indent ${indent.indentNo} at ${level} level for ₹${approvedValue.toLocaleString("en-IN")}` +
-        (withinPmCeiling ? " — below the approval ceiling, so the Admin level was skipped" : "") +
+        `Approved indent ${indent.indentNo} for ₹${approvedValue.toLocaleString("en-IN")} — cleared to buy` +
         (Object.keys(changes).length ? ` with ${Object.keys(changes).length} quantity revision(s)` : ""),
       changes: Object.keys(changes).length ? changes : null,
     });
 
     revalidatePath("/material/indents");
     revalidatePath(`/material/indents/${id}`);
-    return { status: nextStatus, skippedAdmin: withinPmCeiling };
+    // Nothing is skipped any more — one approval is the whole chain.
+    return { status: nextStatus, skippedAdmin: false };
   });
 }
 

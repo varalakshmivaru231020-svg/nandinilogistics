@@ -21,7 +21,8 @@ export async function poLookups(ctx: AuthContext) {
     prisma.vendor.findMany({
       where: { status: "ACTIVE" },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, paymentTermId: true },
+      // A vendor is looked up by name, code or the number you ring.
+      select: { id: true, name: true, code: true, phone: true, paymentTermId: true },
     }),
     prisma.paymentTerm.findMany({
       where: { status: "ACTIVE" },

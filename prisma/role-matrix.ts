@@ -108,8 +108,10 @@ export const ROLES: RoleSeed[] = [
     deny: [
       "project.project.delete",
       "project.project.accessAll",
+      // Approval is the Project Manager's one step; the admin level survives
+      // only to clear indents left by the old two-step chain, and that stays
+      // with Owner / Admin.
       "material.indent.approveAdmin",
-      "material.indent.create",
     ],
   },
   {
@@ -181,6 +183,10 @@ export const ROLES: RoleSeed[] = [
       "project.project.view",
       "material.indent.view",
       "material.indent.viewAll",
+      // The store raises indents too, alongside the site and the PM.
+      "material.indent.create",
+      "material.indent.update",
+      "material.indent.submit",
       "material.indent.stockCheck",
       "material.indent.print",
       "material.indent.export",

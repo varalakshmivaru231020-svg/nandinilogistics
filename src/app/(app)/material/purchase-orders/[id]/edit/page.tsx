@@ -25,7 +25,7 @@ export default async function EditPoPage({ params }: { params: Promise<{ id: str
     where: { id },
     include: {
       project: { select: { code: true, name: true } },
-      vendor: { select: { id: true, name: true, paymentTermId: true } },
+      vendor: { select: { id: true, name: true, code: true, phone: true, paymentTermId: true } },
       items: true,
     },
   });

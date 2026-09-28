@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Alert } from "@/components/ui/primitives";
 import { DetailAction, DetailScreen, PanelCard } from "@/components/shell/detail-screen";
 import { DateField } from "@/components/ui/date-field";
+import { SearchSelect } from "@/components/ui/search-select";
 import { cn, money, qty } from "@/lib/utils";
 import { poTotals, priceLine } from "@/lib/material/procurement";
 import { createPurchaseOrderAction, updatePurchaseOrderAction } from "../actions";
@@ -57,7 +58,7 @@ export function PoForm({
   projects, vendors, items, openIndents, prefill, edit, startWithVendorId, nextPoNo,
 }: {
   projects: Array<{ id: string; name: string; code: string }>;
-  vendors: Array<{ id: string; name: string; paymentTermId: string | null }>;
+  vendors: Array<{ id: string; name: string; code: string; phone: string | null; paymentTermId: string | null }>;
   items: ItemOpt[];
   openIndents: OpenIndent[];
   prefill: { projectId: string; indentId: string; indentNo: string; lines: Array<{ itemId: string; qty: number; rate: number; specification: string }> } | null;
@@ -271,14 +272,18 @@ export function PoForm({
           <div className="grid gap-3.5 sm:grid-cols-2">
             <label className="block">
               <span className={LABEL}>Vendor {REQUIRED}</span>
-              <select
+              <SearchSelect
                 value={vendorId}
-                onChange={(e) => onVendorChange(e.target.value)}
-                className={cn(FIELD, "mt-1.5")}
-              >
-                <option value="">Select vendor…</option>
-                {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
+                onChange={onVendorChange}
+                placeholder="Search vendor by name, code or number…"
+                emptyLabel="No vendor matches"
+                className="mt-1.5"
+                options={vendors.map((v) => ({
+                  id: v.id,
+                  label: v.name,
+                  hint: [v.code, v.phone].filter(Boolean).join(" · "),
+                }))}
+              />
             </label>
 
             <div>
@@ -333,14 +338,14 @@ export function PoForm({
               {edit ? (
                 <input value={edit.projectLabel} readOnly className={cn(FIELD, "mt-1.5")} />
               ) : (
-                <select
+                <SearchSelect
                   value={projectId}
-                  onChange={(e) => setProjectId(e.target.value)}
-                  className={cn(FIELD, "mt-1.5")}
-                >
-                  {projects.length === 0 && <option value="">No projects mapped to you</option>}
-                  {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                  onChange={setProjectId}
+                  placeholder="Search project by name or code…"
+                  emptyLabel="No project matches"
+                  className="mt-1.5"
+                  options={projects.map((p) => ({ id: p.id, label: p.name, hint: p.code }))}
+                />
               )}
             </label>
 
