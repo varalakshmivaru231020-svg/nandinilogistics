@@ -37,6 +37,29 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       }))?.name ?? null
     : null;
 
+  // The approvals badge counts what this person can actually decide, so it
+  // never nags about something they cannot act on.
+  if (ctx.has(PERM.approvals.queue.view)) {
+    const waiting: Array<Promise<number>> = [];
+    if (ctx.has(PERM.material.indent.approvePm)) {
+      waiting.push(prisma.indent.count({ where: { ...scope, status: "SUBMITTED" } }));
+    }
+    if (ctx.has(PERM.material.indent.approveAdmin)) {
+      waiting.push(prisma.indent.count({ where: { ...scope, status: "PM_APPROVED" } }));
+    }
+    if (ctx.has(PERM.material.purchaseOrder.approvePm)) {
+      waiting.push(prisma.purchaseOrder.count({
+        where: { ...scope, status: { in: ["DRAFT", "PENDING_APPROVAL", "PENDING_PM_APPROVAL"] } },
+      }));
+    }
+    if (ctx.has(PERM.material.purchaseOrder.approveAdmin)) {
+      waiting.push(prisma.purchaseOrder.count({ where: { ...scope, status: "PENDING_ADMIN_APPROVAL" } }));
+    }
+    const counts = await Promise.all(waiting);
+    const total = counts.reduce((n, c) => n + c, 0);
+    if (total > 0) badges.approvals = total;
+  }
+
   badges.notifications = await prisma.notification.count({
     where: { userId: ctx.id, readAt: null },
   });

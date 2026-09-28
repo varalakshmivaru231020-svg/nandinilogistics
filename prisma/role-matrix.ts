@@ -74,6 +74,7 @@ export const ROLES: RoleSeed[] = [
     level: 20,
     grant: [
       "dashboard.projectManager.view",
+      "approvals.queue.view",
       "dashboard.widget.viewFinancials",
       "project.*.*",
       "schedule.*.*",
@@ -179,6 +180,7 @@ export const ROLES: RoleSeed[] = [
       "material.vendor.view",
       "kb.article.view",
       "dashboard.storeManager.view",
+      "approvals.queue.view",
       "dashboard.widget.viewFinancials",
       "project.project.view",
       "material.indent.view",

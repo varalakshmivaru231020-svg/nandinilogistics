@@ -21,6 +21,7 @@ import type { ModuleDef, PermissionDef, PermissionKind } from "./types";
 
 export const MODULES: ModuleDef[] = [
   { key: "dashboard", label: "Dashboards", sortOrder: 10 },
+  { key: "approvals", label: "Approvals", sortOrder: 15 },
   { key: "project", label: "Project Management", sortOrder: 20 },
   { key: "task", label: "Task Management", sortOrder: 30 },
   { key: "checklist", label: "Checklist Management", sortOrder: 40 },
@@ -125,6 +126,7 @@ function crud(opts: {
 // ===========================================================================
 
 const G_DASH = "Dashboards";
+const G_APPROVALS = "Approvals";
 
 perm("dashboard", "owner", "view", "Owner dashboard", G_DASH, "PAGE", "Portfolio view, budget vs actual, sales funnel, collections, pending approvals.");
 perm("dashboard", "projectManager", "view", "Project Manager dashboard", G_DASH, "PAGE", "Schedule variance, consumption vs budget, approvals waiting on me.");
@@ -132,6 +134,11 @@ perm("dashboard", "supervisor", "view", "Supervisor dashboard", G_DASH, "PAGE", 
 perm("dashboard", "storeManager", "view", "Store Manager dashboard", G_DASH, "PAGE", "Stock and valuation, reorder alerts, open POs, vendor outstanding.");
 perm("dashboard", "sales", "view", "Sales dashboard", G_DASH, "PAGE", "Leads by stage, follow-ups due, available units, bookings and collections.");
 perm("dashboard", "widget", "viewFinancials", "See money figures on dashboards", G_DASH, "FIELD", "Hides every amount, budget and valuation tile when not granted.");
+
+// Every approval in one place. The screen shows only what the viewer already
+// has the permission to decide, so this grants sight of the queue, never the
+// power to act on anything in it.
+perm("approvals", "queue", "view", "Approvals queue", G_APPROVALS, "PAGE", "Everything waiting on you — indents, purchase orders, extensions, invoices, returns, transfers — with filter and search.");
 
 // ===========================================================================
 // MODULE 01 — PROJECT MANAGEMENT

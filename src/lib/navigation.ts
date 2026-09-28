@@ -22,7 +22,7 @@ export interface NavItem {
   anyPermission?: string[];
   /** Key into the design's icon set — see components/shell/nav-icons.tsx. */
   icon?: string;
-  badge?: "indentPending" | "followUpDue" | "reorder" | "tasks";
+  badge?: "indentPending" | "followUpDue" | "reorder" | "tasks" | "approvals";
 }
 
 export interface NavSection {
@@ -46,6 +46,7 @@ export const NAVIGATION: NavSection[] = [
           PERM.dashboard.sales.view,
         ],
       },
+      { label: "Approvals", href: "/approvals", icon: "checklists", permission: PERM.approvals.queue.view, badge: "approvals" },
     ],
   },
   {

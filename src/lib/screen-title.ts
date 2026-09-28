@@ -7,6 +7,7 @@ import { NAVIGATION } from "@/lib/navigation";
  */
 const SCREEN_TITLES: Array<[href: string, title: string]> = [
   ["/dashboard", "Dashboard"],
+  ["/approvals", "Approvals"],
   ["/projects/progress", "Site Progress"],
   ["/projects", "Project Management"],
   ["/tasks", "Task Management"],
