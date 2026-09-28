@@ -6,8 +6,9 @@ import { LockOpen, TimerReset } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Alert, Badge, Field, Textarea } from "@/components/ui/primitives";
-import { cn, formatDate, qty } from "@/lib/utils";
+import { cn, formatDate, moneyShort, phone, qty } from "@/lib/utils";
 import { extendHoldAction, releaseHoldAction } from "../../sales/cost-sheets/actions";
+import { cancelBookingAction } from "../../sales/bookings/actions";
 import { ReserveDrawer } from "./reserve-drawer";
 
 interface Hold {
@@ -21,9 +22,23 @@ interface Unit {
   superBuiltUpArea: number; carpetArea: number;
   facing: string | null; plcTag: string | null; parkingSlots: number;
   hold: Hold | null;
+  booking: Booking | null;
+}
+
+/** The booking a flat went out on, so the panel can name who holds it. */
+interface Booking {
+  id: string; bookingNo: string; bookedOn: string; status: string; total: number;
+  customerName: string; customerPhone: string; soldByName: string | null;
 }
 
 interface Block { id: string; name: string; units: Unit[] }
+
+/** A row of what has gone out on this project. */
+export interface BookingRow {
+  id: string; bookingNo: string; bookedOn: string; status: string; total: number;
+  unitNumber: string; unitTypeName: string | null;
+  customerName: string; customerPhone: string; soldByName: string | null;
+}
 
 /**
  * The board paints three states, as the design does: a flat is free, someone is
@@ -47,18 +62,21 @@ const STATUS_STYLE: Record<string, { cell: string; dot: string; label: string }>
   // is not the fill colour repeated.
   AVAILABLE: { cell: "border-good-400 bg-good-050 text-good-700 hover:border-good-600",     dot: "bg-good-600",  label: "Available" },
   HELD:      { cell: "border-warn-400 bg-warn-050 text-warn-800 hover:border-warn-700",     dot: "bg-warn-700",  label: "On hold" },
-  BOOKED:    { cell: "border-brand-400 bg-brand-100 text-brand-700 hover:border-brand-500", dot: "bg-brand-500", label: "Booked" },
+  // Booked is drawn in red at the client's request. The reference design draws
+  // it blue (#E3F2FC on #6FB6DE); red is this app's colour for a problem
+  // everywhere else, so the two now differ here on purpose.
+  BOOKED:    { cell: "border-bad-300 bg-bad-050 text-bad-700 hover:border-bad-600", dot: "bg-bad-600", label: "Booked" },
 };
 
 /** The design's legend swatches: a tint with a stronger border. */
 const LEGEND: Record<string, string> = {
   AVAILABLE: "border-good-400 bg-good-050",
   HELD: "border-warn-400 bg-warn-050",
-  BOOKED: "border-brand-400 bg-brand-100",
+  BOOKED: "border-bad-300 bg-bad-050",
 };
 
 export function BoardGrid({
-  projects, activeProjectId, blocks, customers, can, nowMs, projectType, priceList,
+  projects, activeProjectId, blocks, customers, can, nowMs, projectType, priceList, bookingHistory = [],
 }: {
   nowMs: number;
   projects: Array<{ id: string; name: string; code: string }>;
@@ -66,6 +84,8 @@ export function BoardGrid({
   blocks: Block[];
   /** Villa and plotted projects have clusters, not towers, as the design names them. */
   projectType: string | null;
+  /** What has been booked on this project, newest first. */
+  bookingHistory?: BookingRow[];
   /** Who a unit can be held or booked for, as the design's drawer lists them. */
   customers: Array<{ id: string; name: string; phone: string }>;
   /** The line the design prints under the tower's figures. */
@@ -229,6 +249,68 @@ export function BoardGrid({
           )}
         </div>
       </div>
+
+      {bookingHistory.length > 0 && (
+        <div className="mt-3.5 overflow-hidden rounded-[13px] border border-line-400 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-200 px-[18px] py-3.5">
+            <span className="font-display text-[13.5px] font-bold text-navy-950">Booking history</span>
+            <span className="text-[11.5px] font-medium text-muted-600">
+              Every flat that has gone out on this project, newest first
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] border-collapse">
+              <thead>
+                <tr className="bg-surface-sunken">
+                  {["Flat", "Customer", "Booked on", "Value", "Status", "Sold by"].map((h) => (
+                    <th
+                      key={h}
+                      className={cn(
+                        "border-b border-line-300 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
+                        h === "Value" ? "text-right" : "text-left",
+                      )}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {bookingHistory.map((b) => (
+                  <tr key={b.id} className="border-b border-line-150 last:border-0 hover:bg-surface-tint">
+                    <td className="px-4 py-3.5">
+                      <div className="text-[12.5px] font-bold text-navy-950">{b.unitNumber}</div>
+                      <div className="mt-0.5 text-[11px] font-medium text-muted-400">
+                        {b.unitTypeName ?? "—"}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="text-[12.5px] font-semibold text-navy-900">{b.customerName}</div>
+                      <div className="num mt-0.5 text-[11px] font-medium text-muted-400">
+                        {phone(b.customerPhone)}
+                      </div>
+                    </td>
+                    <td className="num px-4 py-3.5 text-[12px] font-semibold text-navy-600">
+                      {formatDate(b.bookedOn)}
+                    </td>
+                    <td className="num px-4 py-3.5 text-right text-[12.5px] font-bold text-navy-950">
+                      {moneyShort(b.total)}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <Badge tone={b.status === "CANCELLED" ? "bad" : "good"}>
+                        {b.status.charAt(0) + b.status.slice(1).toLowerCase()}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3.5 text-[12px] font-medium text-navy-500">
+                      {b.soldByName ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -380,6 +462,52 @@ function UnitPanel({
             {formatDate(unit.hold.expiresAt)}.
             {unit.hold.extensionCount > 0 && ` Extended ${unit.hold.extensionCount} time(s).`}
           </Alert>
+        )}
+
+        {unit.booking && (
+          <div className="rounded-[11px] border border-line-300 bg-surface-tint px-3.5 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-[.08em] text-muted-400">
+              Booked to
+            </p>
+            <p className="mt-[3px] text-[13px] font-bold text-navy-950">{unit.booking.customerName}</p>
+            <p className="num mt-0.5 text-[11.5px] font-semibold text-brand-700">
+              {phone(unit.booking.customerPhone)}
+            </p>
+            <p className="mt-2 text-[11px] font-medium text-muted-500">
+              <span className="num">{unit.booking.bookingNo}</span> · {formatDate(unit.booking.bookedOn)}
+              {unit.booking.soldByName && ` · sold by ${unit.booking.soldByName}`}
+            </p>
+            <p className="num mt-0.5 text-[12px] font-bold text-navy-900">
+              {moneyShort(unit.booking.total)}
+            </p>
+          </div>
+        )}
+
+        {unit.booking && can.cancelBooking && (
+          <div className="space-y-3 border-t border-line-200 pt-3">
+            <Field label="Why is it being released?" required>
+              <Textarea
+                value={releaseNote}
+                onChange={(e) => setReleaseNote(e.target.value)}
+                rows={2}
+                placeholder="e.g. customer withdrew, cheque bounced"
+              />
+            </Field>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="w-full"
+              loading={busy}
+              disabled={!releaseNote.trim()}
+              onClick={() => run(
+                () => cancelBookingAction(unit.booking!.id, releaseNote),
+                `Unit ${unit.unitNumber} released — back to available.`,
+              )}
+            >
+              <LockOpen className="h-3.5 w-3.5" />
+              Release the booking
+            </Button>
+          </div>
         )}
 
         {unit.status === "AVAILABLE" && (can.hold || can.book) && (

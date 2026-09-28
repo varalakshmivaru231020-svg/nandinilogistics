@@ -57,6 +57,18 @@ export default async function AvailabilityBoardPage({
               take: 1,
               include: { heldBy: { select: { name: true } }, lead: { select: { name: true } } },
             },
+            // Who a booked flat went to — the panel names them, as it names
+            // whoever is holding one.
+            bookings: {
+              where: { status: { notIn: ["CANCELLED"] } },
+              orderBy: { bookingDate: "desc" },
+              take: 1,
+              select: {
+                id: true, bookingNo: true, bookingDate: true, status: true, totalAmount: true,
+                customer: { select: { name: true, phone: true } },
+                soldBy: { select: { name: true } },
+              },
+            },
           },
         },
       },
@@ -90,6 +102,33 @@ export default async function AvailabilityBoardPage({
       />
     );
   }
+
+  // What has gone out on this project, newest first — the flat and who took it.
+  const bookingHistory = (
+    await prisma.booking.findMany({
+      where: { projectId },
+      orderBy: { bookingDate: "desc" },
+      take: 25,
+      select: {
+        id: true, bookingNo: true, bookingDate: true, status: true, totalAmount: true,
+        unit: { select: { unitNumber: true, unitType: { select: { name: true } } } },
+        customer: { select: { name: true, phone: true } },
+        soldBy: { select: { name: true } },
+      },
+    })
+  ).map((b) => ({
+    id: b.id,
+    bookingNo: b.bookingNo,
+    bookedOn: b.bookingDate.toISOString(),
+    status: b.status,
+    total: Number(b.totalAmount),
+    unitNumber: b.unit.unitNumber,
+    unitTypeName: b.unit.unitType?.name ?? null,
+    customerName: b.customer.name,
+    customerPhone: b.customer.phone,
+    soldByName: b.soldBy?.name ?? null,
+  }));
+
 
   return (
     <div>
@@ -138,12 +177,26 @@ export default async function AvailabilityBoardPage({
                   extensionCount: u.holds[0].extensionCount,
                 }
               : null,
+            booking: u.bookings[0]
+              ? {
+                  id: u.bookings[0].id,
+                  bookingNo: u.bookings[0].bookingNo,
+                  bookedOn: u.bookings[0].bookingDate.toISOString(),
+                  status: u.bookings[0].status,
+                  total: Number(u.bookings[0].totalAmount),
+                  customerName: u.bookings[0].customer.name,
+                  customerPhone: u.bookings[0].customer.phone,
+                  soldByName: u.bookings[0].soldBy?.name ?? null,
+                }
+              : null,
           })),
         }))}
         customers={customers}
+        bookingHistory={bookingHistory}
         nowMs={new Date().getTime()}
         can={{
           hold: ctx.has(PERM.unit.hold.create),
+          cancelBooking: ctx.has(PERM.sales.booking.cancel),
           extend: ctx.has(PERM.unit.hold.extend),
           release: ctx.has(PERM.unit.hold.release),
           viewPrice: ctx.has(PERM.unit.unit.viewPrice),
