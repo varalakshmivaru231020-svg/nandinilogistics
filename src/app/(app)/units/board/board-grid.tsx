@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Alert, Badge, Field, Textarea } from "@/components/ui/primitives";
@@ -571,8 +570,12 @@ function UnitPanel({
 function HolderCard({ label, name }: { label: string; name: string }) {
   return (
     <div className="flex items-center gap-2.5 rounded-[10px] border border-line-200 bg-surface-tint px-[13px] py-[11px]">
-      <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[linear-gradient(140deg,#0089C9,#2F308C)] text-[13px] text-white">
-        <User className="h-[15px] w-[15px]" />
+      {/* The design's own glyph, not a drawn icon — a lucide outline reads thinner. */}
+      <span
+        aria-hidden
+        className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[linear-gradient(140deg,#0089C9,#2F308C)] text-[13px] text-white"
+      >
+        👤
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[10.5px] font-semibold uppercase tracking-[.05em] text-muted-400">
