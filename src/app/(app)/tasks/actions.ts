@@ -598,3 +598,131 @@ export async function answerChecklistItemAction(
     return null;
   });
 }
+
+// --------------------------------------------------------------------------
+// The design's bulk bar
+// --------------------------------------------------------------------------
+
+/**
+ * Setting priority on several tasks at once.
+ *
+ * Priority is not part of the lifecycle — it changes nothing about who may act
+ * or when — so it is the one thing the design's bulk bar can do to a batch
+ * without asking a question per task.
+ */
+export async function setPriorityAction(
+  ids: string[],
+  priority: "HIGH" | "MEDIUM" | "LOW",
+): Promise<ActionResult<{ changed: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.task.task.update);
+    if (ids.length === 0) throw new Error("Nothing selected.");
+    const admin = await isAdminOf(ctx);
+
+    // Only tasks this person could edit anyway, and never a closed one.
+    const allowed = await prisma.task.findMany({
+      where: {
+        id: { in: ids },
+        status: { not: "CLOSED" },
+        ...(admin ? {} : { createdById: ctx.id }),
+      },
+      select: { id: true },
+    });
+    if (allowed.length === 0) throw new Error("None of those are yours to change.");
+
+    await prisma.$transaction(async (tx) => {
+      await tx.task.updateMany({ where: { id: { in: allowed.map((t) => t.id) } }, data: { priority } });
+      for (const t of allowed) {
+        await logTaskEvent(tx, {
+          taskId: t.id, actorId: ctx.id, kind: "STATUS",
+          summary: `Priority set to ${priority.toLowerCase()}`,
+        });
+      }
+    });
+
+    await recordAudit({
+      action: "UPDATE", entity: "Task", entityId: allowed[0].id, userId: ctx.id,
+      summary: `Set ${allowed.length} task(s) to ${priority.toLowerCase()} priority`,
+    });
+    refresh();
+    return { changed: allowed.length };
+  });
+}
+
+/**
+ * Moving tasks to a different assignee.
+ *
+ * The scope gives this to Admin — for when someone is on leave — and it is the
+ * assignee who changes, not the work: the task keeps its status, its dates and
+ * its history, with the handover recorded on it.
+ */
+export async function reassignTasksAction(
+  ids: string[],
+  assigneeId: string,
+): Promise<ActionResult<{ changed: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.task.task.reassign);
+    if (ids.length === 0) throw new Error("Nothing selected.");
+    if (!assigneeId) throw new Error("Choose who they go to.");
+
+    const to = await prisma.user.findUnique({ where: { id: assigneeId }, select: { name: true } });
+    if (!to) throw new Error("That person no longer exists.");
+
+    const tasks = await prisma.task.findMany({
+      where: { id: { in: ids }, status: { not: "CLOSED" } },
+      select: { id: true, assignee: { select: { name: true } } },
+    });
+    if (tasks.length === 0) throw new Error("A closed task cannot be reassigned.");
+
+    await prisma.$transaction(async (tx) => {
+      for (const t of tasks) {
+        await tx.task.update({ where: { id: t.id }, data: { assigneeId } });
+        await logTaskEvent(tx, {
+          taskId: t.id, actorId: ctx.id, kind: "REASSIGN",
+          summary: `Reassigned from ${t.assignee.name} to ${to.name}`,
+        });
+      }
+    });
+
+    await recordAudit({
+      action: "UPDATE", entity: "Task", entityId: tasks[0].id, userId: ctx.id,
+      summary: `Reassigned ${tasks.length} task(s) to ${to.name}`,
+    });
+    refresh();
+    return { changed: tasks.length };
+  });
+}
+
+/**
+ * Deleting tasks.
+ *
+ * A task that has been worked on is a record of what happened, so only one
+ * nobody has picked up yet can be removed; anything further along is closed or
+ * left alone.
+ */
+export async function deleteTasksAction(ids: string[]): Promise<ActionResult<{ deleted: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.task.task.delete);
+    if (ids.length === 0) throw new Error("Nothing selected.");
+
+    const tasks = await prisma.task.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, taskNo: true, status: true },
+    });
+    const started = tasks.filter((t) => t.status !== "PENDING");
+    if (started.length > 0) {
+      throw new Error(
+        `${started.map((t) => t.taskNo).join(", ")} ${started.length === 1 ? "has" : "have"} been worked on. ` +
+        "Close them instead — the history is the record.",
+      );
+    }
+
+    await prisma.task.deleteMany({ where: { id: { in: tasks.map((t) => t.id) } } });
+    await recordAudit({
+      action: "DELETE", entity: "Task", entityId: tasks[0]?.id ?? "-", userId: ctx.id,
+      summary: `Deleted ${tasks.length} unstarted task(s): ${tasks.map((t) => t.taskNo).join(", ")}`,
+    });
+    refresh();
+    return { deleted: tasks.length };
+  });
+}

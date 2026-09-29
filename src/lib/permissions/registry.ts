@@ -869,13 +869,10 @@ export const NOT_YET_BUILT: ReadonlySet<string> = new Set([
   "task.report.view",
   "task.report.export",
   "task.task.export",
-  "task.task.delete",
   // Assigning is part of creating a task, and attaching is part of creating or
-  // commenting; neither is a separate control yet.
+  // commenting; neither is a separate control.
   "task.task.assign",
   "task.task.attach",
-  // Admin reassigning an assignee or a level has no screen yet.
-  "task.task.reassign",
   "unit.hold.view",
   // The design's flats panel has no extension step: a hold is released or booked.
   "unit.hold.extend",

@@ -63,6 +63,7 @@ const TASK_PARTICIPANT = [
   "task.task.view",
   "task.task.create",
   "task.task.update",
+  "task.task.delete",
   "task.task.accept",
   "task.task.start",
   "task.task.complete",

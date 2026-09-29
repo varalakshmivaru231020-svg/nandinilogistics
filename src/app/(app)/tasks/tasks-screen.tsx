@@ -5,13 +5,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { TaskKind, TaskPriority, TaskStatus } from "@prisma/client";
 
-import { Alert, Card, EmptyState, Field, Input, PageHeader, Select, Textarea } from "@/components/ui/primitives";
+import { Alert, Field, Input, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { cn, formatDateTime } from "@/lib/utils";
 import { STATUS_LABEL, isOverdue } from "@/lib/tasks/lifecycle";
-import { createTaskAction } from "./actions";
+import {
+  acceptTaskAction, createTaskAction, deleteTasksAction, reassignTasksAction,
+  setPriorityAction, startTaskAction,
+} from "./actions";
 
 interface Task {
   id: string;
@@ -67,7 +70,30 @@ export function TasksScreen({
   can: Record<string, boolean>;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [creating, setCreating] = React.useState(false);
+  const [sel, setSel] = React.useState<string[]>([]);
+  const [reassigning, setReassigning] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+
+  async function bulk(work: () => Promise<{ ok: boolean; error?: string }>, done: string) {
+    setBusy(true);
+    const res = await work();
+    setBusy(false);
+    if (!res.ok) { toast(res.error ?? "That did not work."); return; }
+    toast(done);
+    setSel([]);
+    router.refresh();
+  }
+
+  async function rowRun(work: () => Promise<{ ok: boolean; error?: string }>, done: string) {
+    setBusy(true);
+    const res = await work();
+    setBusy(false);
+    if (!res.ok) { toast(res.error ?? "That did not work."); return; }
+    toast(done);
+    router.refresh();
+  }
 
   function go(next: { filter?: string; mine?: string | null }) {
     const params = new URLSearchParams();
@@ -117,72 +143,153 @@ export function TasksScreen({
         </span>
       </div>
 
-      {shown.length === 0 ? (
-        <Card>
-          <EmptyState
-            title={tasks.length === 0 ? "No tasks yet" : "Nothing matches"}
-            description={
-              tasks.length === 0
-                ? "A task is raised against a person, with a due date and a priority."
-                : "No task matches that filter."
-            }
-          />
-        </Card>
-      ) : (
-        <div className="overflow-hidden rounded-[13px] border border-line-400 bg-white">
-          {shown.map((t) => {
-            const over = isOverdue(t, nowMs);
-            return (
-              <Link
-                key={t.id}
-                href={`/tasks/${t.id}`}
-                className={cn(
-                  "flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-150 px-[18px] py-[13px] last:border-0 hover:bg-surface-tint",
-                  over && "bg-bad-025",
-                )}
-              >
-                <span className="num w-[74px] shrink-0 text-[12px] font-bold text-navy-950">{t.taskNo}</span>
-
-                <span className="min-w-[200px] flex-[2_1_240px]">
-                  <span className="block truncate text-[12.5px] font-bold text-navy-950">{t.title}</span>
-                  <span className="mt-0.5 block truncate text-[11.5px] font-medium text-muted-500">
-                    {t.projectCode ? `${t.projectCode} · ` : ""}
-                    {t.location ?? "—"}
-                    {t.kind === "CHECKLIST" && " · checklist"}
-                  </span>
-                </span>
-
-                <span className="min-w-[130px] flex-1">
-                  <span className="block text-[11.5px] font-semibold text-navy-600">{t.assignee}</span>
-                  <span className="mt-0.5 block text-[11px] font-medium text-muted-400">by {t.assigner}</span>
-                </span>
-
-                <span className="w-[120px] shrink-0">
-                  <span className={cn("block text-[11.5px] font-semibold", over ? "text-bad-600" : "text-navy-600")}>
-                    {formatDateTime(t.dueAt)}
-                  </span>
-                  {over && <span className="mt-0.5 block text-[10.5px] font-bold text-bad-600">OVERDUE</span>}
-                </span>
-
-                <span className="w-[72px] shrink-0">
-                  <span className={cn("rounded-full px-2.5 py-1 text-[10.5px] font-bold", PRIORITY_PILL[t.priority])}>
-                    {t.priority[0] + t.priority.slice(1).toLowerCase()}
-                  </span>
-                </span>
-
-                <span className="w-[112px] shrink-0 text-right">
-                  <span className={cn("rounded-full px-2.5 py-1 text-[10.5px] font-bold", STATUS_PILL[t.status])}>
-                    {STATUS_LABEL[t.status]}
-                  </span>
-                  {t.extensionWaiting && (
-                    <span className="mt-1 block text-[10px] font-bold text-warn-700">extension waiting</span>
-                  )}
-                </span>
-              </Link>
-            );
-          })}
+      {sel.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-[9px] rounded-[12px] border border-[#BFD9F2] bg-[#EFF3FB] px-[15px] py-[11px]">
+          <span className="text-[12.5px] font-bold text-[#2F308C]">
+            {sel.length} selected
+          </span>
+          <div className="flex-1" />
+          <BulkButton onClick={() => bulk(() => setPriorityAction(sel, "HIGH"), "Priority set to high.")}>
+            Set priority High
+          </BulkButton>
+          {can.reassign && (
+            <BulkButton onClick={() => setReassigning(true)}>Reassign…</BulkButton>
+          )}
+          {can.delete && (
+            <BulkButton danger onClick={() => bulk(() => deleteTasksAction(sel), "Deleted.")}>
+              Delete
+            </BulkButton>
+          )}
+          <button
+            type="button"
+            onClick={() => setSel([])}
+            className="cursor-pointer px-2 py-1.5 text-[11.5px] font-semibold text-muted-500 hover:text-brand-700"
+          >
+            Clear
+          </button>
         </div>
       )}
+
+      {reassigning && (
+        <div className="mb-3 rounded-[12px] border border-[#BFD9F2] bg-white px-[15px] py-[13px]">
+          <p className="mb-2.5 text-[12px] font-bold text-navy-950">Reassign {sel.length} to</p>
+          <div className="flex flex-wrap items-center gap-[7px]">
+            {people.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => { void bulk(() => reassignTasksAction(sel, p.id), `Reassigned to ${p.name}.`); setReassigning(false); }}
+                className="cursor-pointer rounded-full border border-line-400 bg-white px-[13px] py-[7px] text-[11.5px] font-semibold text-navy-700 hover:border-brand-500 hover:bg-brand-100 hover:text-brand-700"
+              >
+                {p.name}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setReassigning(false)}
+              className="cursor-pointer px-2 py-1.5 text-[11.5px] font-semibold text-muted-500"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-[13px] border border-line-400 bg-white">
+        <table className="w-full min-w-[760px] border-collapse">
+          <thead>
+            <tr>
+              <Th className="w-[40px] pr-0">
+                <Box
+                  checked={sel.length > 0 && sel.length === shown.length}
+                  onChange={() => setSel(sel.length === shown.length ? [] : shown.map((t) => t.id))}
+                  label="Select all"
+                />
+              </Th>
+              <Th>Task</Th>
+              <Th>Location</Th>
+              <Th>Assignee</Th>
+              <Th>Due</Th>
+              <Th>Priority</Th>
+              <Th>Evidence</Th>
+              <Th>Status</Th>
+              <Th className="text-right">Actions</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((t) => {
+              const over = isOverdue(t, nowMs);
+              return (
+                <tr key={t.id} className={cn("hover:bg-surface-tint", over && "bg-bad-025")}>
+                  <Td className="pr-0">
+                    <Box
+                      checked={sel.includes(t.id)}
+                      onChange={() => setSel((s) => s.includes(t.id) ? s.filter((x) => x !== t.id) : [...s, t.id])}
+                      label={`Select ${t.taskNo}`}
+                    />
+                  </Td>
+                  <Td>
+                    <Link href={`/tasks/${t.id}`} className="block">
+                      <span className="block text-[13px] font-semibold text-navy-800 hover:text-brand-700">{t.title}</span>
+                      <span className="num mt-0.5 block text-[11px] font-medium text-muted-400">
+                        {t.taskNo}{t.kind === "CHECKLIST" && " · checklist"}
+                      </span>
+                    </Link>
+                  </Td>
+                  <Td className="text-[12.5px] font-medium text-muted-600">{t.location ?? "—"}</Td>
+                  <Td className="text-[12.5px] font-semibold text-navy-700">{t.assignee}</Td>
+                  <Td>
+                    <span className={cn("text-[12px] font-semibold", over ? "text-bad-600" : "text-navy-700")}>
+                      {formatDateTime(t.dueAt)}
+                    </span>
+                  </Td>
+                  <Td>
+                    <span className={cn("rounded-full px-2.5 py-1 text-[10.5px] font-bold", PRIORITY_PILL[t.priority])}>
+                      {t.priority[0] + t.priority.slice(1).toLowerCase()}
+                    </span>
+                  </Td>
+                  <Td className="text-[12px] font-medium text-muted-600">
+                    {t.attachments > 0 ? `${t.attachments} file(s)` : "—"}
+                  </Td>
+                  <Td>
+                    <span className={cn("rounded-full px-2.5 py-1 text-[10.5px] font-bold", STATUS_PILL[t.status])}>
+                      {STATUS_LABEL[t.status]}
+                    </span>
+                    {t.extensionWaiting && (
+                      <span className="mt-1 block text-[10px] font-bold text-warn-700">extension waiting</span>
+                    )}
+                  </Td>
+                  <Td>
+                    <div className="flex justify-end gap-1.5">
+                      <RowAction task={t} viewerId={viewerId} busy={busy} onRun={rowRun} />
+                      <Link
+                        href={`/tasks/${t.id}`}
+                        className="rounded-[7px] border border-line-400 bg-white px-[11px] py-[5px] text-[10.5px] font-semibold text-muted-600 transition-colors hover:border-brand-500 hover:text-brand-700"
+                      >
+                        Open
+                      </Link>
+                    </div>
+                  </Td>
+                </tr>
+              );
+            })}
+            {shown.length === 0 && (
+              <tr>
+                <td colSpan={9} className="px-5 py-[38px] text-center text-[12.5px] font-medium text-muted-400">
+                  {tasks.length === 0
+                    ? "No tasks yet — raise one against a person, with a due date and a priority."
+                    : "No task matches that filter."}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-3 text-[12px] font-medium text-muted-400">
+        Status flow: Pending → Accepted → Started → Completed → Closed. A checklist task passes
+        through Under Review and Under Approval first, and any fail sends it back for Rework.
+      </p>
 
       {creating && (
         <NewTaskModal
@@ -386,4 +493,99 @@ function Chip({
       {children}
     </button>
   );
+}
+
+/** The design's column head. */
+function Th({ children, className }: { children?: React.ReactNode; className?: string }) {
+  return (
+    <th className={cn(
+      "border-b border-line-150 bg-surface-sunken px-4 py-3 text-left text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-400",
+      className,
+    )}>
+      {children}
+    </th>
+  );
+}
+
+function Td({ children, className }: { children?: React.ReactNode; className?: string }) {
+  return <td className={cn("border-b border-line-100 px-4 py-[13px]", className)}>{children}</td>;
+}
+
+/** The design's square select box. */
+function Box({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onChange}
+      aria-label={label}
+      className={cn(
+        "flex h-[17px] w-[17px] cursor-pointer items-center justify-center rounded-[5px] border text-[10px] font-bold",
+        checked ? "border-brand-500 bg-brand-500 text-white" : "border-line-500 bg-white text-transparent",
+      )}
+    >
+      ✓
+    </button>
+  );
+}
+
+function BulkButton({
+  children, onClick, danger,
+}: { children: React.ReactNode; onClick: () => void; danger?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "cursor-pointer rounded-[8px] border px-[13px] py-2 text-[11.5px] font-bold transition-colors",
+        danger
+          ? "border-[#F2CBCB] bg-[#FCEDED] text-[#B23334] hover:bg-[#F8DBDB]"
+          : "border-[#BFD9F2] bg-white text-[#0672A6] hover:border-brand-500",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * The design puts the next step on the row itself.
+ *
+ * Accepting and starting need nothing but a click, so they happen here; every
+ * other step in the scope's lifecycle needs a remark, which belongs on the task
+ * rather than in a list, so the row sends you there instead.
+ */
+function RowAction({
+  task, viewerId, busy, onRun,
+}: {
+  task: Task;
+  viewerId: string;
+  busy: boolean;
+  onRun: (work: () => Promise<{ ok: boolean; error?: string }>, done: string) => void;
+}) {
+  const mine = task.assigneeId === viewerId;
+  if (mine && task.status === "PENDING") {
+    return (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => onRun(() => acceptTaskAction(task.id), "Task accepted.")}
+        className="cursor-pointer rounded-[7px] bg-brand-500 px-[11px] py-[5px] text-[10.5px] font-bold text-white hover:bg-brand-600 disabled:opacity-60"
+      >
+        Accept
+      </button>
+    );
+  }
+  if (mine && (task.status === "ACCEPTED" || task.status === "HOLD")) {
+    return (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => onRun(() => startTaskAction(task.id), "Work started.")}
+        className="cursor-pointer rounded-[7px] bg-brand-500 px-[11px] py-[5px] text-[10.5px] font-bold text-white hover:bg-brand-600 disabled:opacity-60"
+      >
+        Start
+      </button>
+    );
+  }
+  return null;
 }

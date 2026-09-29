@@ -102,6 +102,8 @@ export default async function TasksPage({
       can={{
         create: ctx.has(PERM.task.task.create),
         update: ctx.has(PERM.task.task.update),
+        reassign: ctx.has(PERM.task.task.reassign),
+        delete: ctx.has(PERM.task.task.delete),
         viewAll: seesEverything,
       }}
     />
