@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Card, EmptyState, Field, Select, Textarea } from "@/components/ui/primitives";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
+import { groupSchedule, type ScheduleCategory } from "@/lib/schedule/groups";
 import {
   addMainCategoryAction, addSubActivityAction, completeActivityAction, startActivityAction,
 } from "./actions";
@@ -121,8 +122,14 @@ function metrics(a: Activity, todayMs: number) {
 
 export function ScheduleScreen({
   projects, activeProjectId, projectManager, tab, reportTab, activities, extensions,
-  can, nowMs,
+  can, nowMs, categories = [],
 }: {
+  /**
+   * Every main category on the project. The tree used to be built only from
+   * activities, so a category with none — a freshly added one — was created
+   * and then nowhere to be seen.
+   */
+  categories?: ScheduleCategory[];
   projects: Array<{ id: string; name: string; code: string }>;
   activeProjectId: string;
   projectManager: string | null;
@@ -170,14 +177,7 @@ export function ScheduleScreen({
   ];
 
   // Group into the design's main-category tree.
-  const groups = new Map<string, { name: string; phase: string | null; manager: string | null; items: Activity[] }>();
-  for (const a of activities) {
-    const g = groups.get(a.groupId) ?? {
-      name: a.groupName, phase: a.phaseName, manager: a.groupManager, items: [],
-    };
-    g.items.push(a);
-    groups.set(a.groupId, g);
-  }
+  const groups = groupSchedule(categories, activities);
 
   async function quickStart(a: Activity) {
     setBusy(`start:${a.id}`);
@@ -278,7 +278,7 @@ export function ScheduleScreen({
             />
           )}
 
-          {activities.length === 0 && adding === null ? (
+          {groups.size === 0 && adding === null ? (
             <Card>
               <EmptyState
                 title="No schedule activities yet"
@@ -294,8 +294,8 @@ export function ScheduleScreen({
                 const state = allDone ? "Completed" : running || doneN ? "In progress" : "Not started";
                 const pct = g.items.length ? Math.round((doneN / g.items.length) * 100) : 0;
                 const ms = g.items.map((a) => metrics(a, todayMs));
-                const ps = firstDate(ms.map((m) => m.ps));
-                const pe = lastDate(ms.map((m) => m.re));
+                const ps = firstDate(ms.map((m) => m.ps)) ?? g.plannedStart;
+                const pe = lastDate(ms.map((m) => m.re)) ?? g.plannedEnd;
                 const as = firstDate(g.items.map((a) => a.actualStart));
                 const ae = allDone ? lastDate(g.items.map((a) => a.actualEnd)) : null;
                 return (

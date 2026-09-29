@@ -98,12 +98,34 @@ export default async function SchedulePage({
 
   const active = projects.find((p) => p.id === projectId)!;
 
+  // The main categories themselves, not only those inferred from activities.
+  // A category that has just been added has no sub-activities yet, and without
+  // this it was created and then invisible.
+  const categories = (
+    await prisma.workPackage.findMany({
+      where: { phase: { projectId } },
+      orderBy: [{ phase: { sequence: "asc" } }, { sequence: "asc" }],
+      select: {
+        id: true, code: true, name: true, startDate: true, endDate: true,
+        phase: { select: { name: true } },
+        manager: { select: { name: true } },
+      },
+    })
+  ).map((w) => ({
+    id: w.id,
+    name: `${w.code} — ${w.name}`,
+    phaseName: w.phase.name,
+    manager: w.manager?.name ?? null,
+    plannedStart: w.startDate?.toISOString() ?? null,
+    plannedEnd: w.endDate?.toISOString() ?? null,
+  }));
 
   return (
     <ScheduleScreen
       projects={projects.map((p) => ({ id: p.id, name: p.name, code: p.code }))}
       activeProjectId={projectId}
       projectManager={active.projectManager?.name ?? null}
+      categories={categories}
       tab={tab === "extensions" ? "extensions" : tab === "reports" ? "reports" : "plan"}
       reportTab={report === "performance" ? "performance" : "plan"}
       nowMs={new Date().getTime()}
