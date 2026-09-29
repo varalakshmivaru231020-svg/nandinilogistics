@@ -425,11 +425,13 @@ export default async function DashboardPage() {
   const health: Array<{ value: string; label: string; tone: string }> = [];
   const [overdueTasks, closedTasks, withEvidence, runs, openFails] = await Promise.all([
     ctx.has(PERM.task.task.view)
-      ? prisma.task.count({ where: { status: { not: "APPROVED" }, dueDate: { lt: today } } })
+      ? prisma.task.count({
+          where: { status: { notIn: ["COMPLETED", "CLOSED", "UNDER_REVIEW", "UNDER_APPROVAL"] }, dueAt: { lt: today } },
+        })
       : Promise.resolve(0),
-    ctx.has(PERM.task.task.view) ? prisma.task.count({ where: { status: "APPROVED" } }) : Promise.resolve(0),
+    ctx.has(PERM.task.task.view) ? prisma.task.count({ where: { status: "CLOSED" } }) : Promise.resolve(0),
     ctx.has(PERM.task.task.view)
-      ? prisma.task.count({ where: { status: "APPROVED", evidence: { not: null } } })
+      ? prisma.task.count({ where: { status: "CLOSED", completionRemark: { not: null } } })
       : Promise.resolve(0),
     ctx.has(PERM.checklist.checklist.view)
       ? prisma.checklistRun.findMany({ select: { score: true } })

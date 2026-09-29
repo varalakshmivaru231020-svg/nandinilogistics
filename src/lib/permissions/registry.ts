@@ -648,33 +648,64 @@ for (const [key, label] of REPORTS) {
 // Task Management and Checklist Management await client verification.
 // ===========================================================================
 
-const G_PENDING = "Pending client verification";
 
+const G_TASK = "Task Management";
+
+/**
+ * The scope document's permission matrix, as codes.
+ *
+ * A role there — Assigner, Assignee, Reviewer, Approver — is a position on a
+ * particular task, not a job title, and is worked out per task by
+ * src/lib/tasks/lifecycle.ts. These codes say who may hold such a position at
+ * all; the lifecycle says whether they hold it here, and both must pass.
+ */
 crud({
   module: "task",
   resource: "task",
   entity: "task",
-  group: G_PENDING,
+  group: G_TASK,
   extra: [
-    ["assign", "Assign a task", "BUTTON"],
-    ["submit", "Submit a task for review", "BUTTON"],
-    ["approve", "Approve a submitted task", "BUTTON"],
-    ["reopen", "Reopen a task", "BUTTON"],
+    ["assign", "Assign a task to someone", "BUTTON"],
+    ["accept", "Accept a task assigned to you", "BUTTON"],
+    ["start", "Start work on a task", "BUTTON"],
+    ["complete", "Mark a task complete", "BUTTON"],
+    ["comment", "Comment on a task", "BUTTON"],
+    ["attach", "Attach a file to a task", "BUTTON"],
+    ["requestExtension", "Request a due-date extension", "BUTTON"],
+    ["approveExtension", "Approve an extension and classify the delay", "BUTTON"],
+    ["close", "Close a completed task", "BUTTON"],
+    ["sendBack", "Send a completed task back for rework", "BUTTON"],
+    ["reopen", "Reopen a closed task", "BUTTON"],
+    ["reassign", "Reassign the assignee or a review level", "BUTTON"],
+    ["viewAll", "See every user's tasks, not only your own", "TAB"],
   ],
 });
+
+/** Review and approval levels on a checklist task. */
+perm("task", "level", "review", "Review a checklist at your level", G_TASK, "BUTTON",
+  "Each level acts only once the level before it has passed.");
+perm("task", "level", "approve", "Approve a checklist at your level", G_TASK, "BUTTON",
+  "The last approval closes the task.");
+
+/** Dashboards, reports and the performance score. */
+perm("task", "report", "view", "Task reports", G_TASK, "TAB");
+perm("task", "report", "export", "Export task reports", G_TASK, "BUTTON");
+perm("task", "performance", "view", "See your own performance score", G_TASK, "TAB");
+perm("task", "performance", "viewAll", "See every employee's performance score", G_TASK, "TAB",
+  "Without this a person sees only their own score.");
 
 crud({
   module: "checklist",
   resource: "checklist",
   entity: "checklist",
-  group: G_PENDING,
+  group: "Checklist Master",
   extra: [
     ["execute", "Fill in a checklist at site", "BUTTON"],
     ["verify", "Verify a completed checklist", "BUTTON"],
   ],
 });
 
-crud({ module: "checklist", resource: "category", entity: "checklist category", group: G_PENDING });
+crud({ module: "checklist", resource: "category", entity: "checklist category", group: "Checklist Master" });
 
 // ---------------------------------------------------------------------------
 // Exports
@@ -830,7 +861,21 @@ export const NOT_YET_BUILT: ReadonlySet<string> = new Set([
   "schedule.baseline.set",
   "schedule.gantt.view",
   "schedule.template.view",
+  // Task Management, still being built out. The lifecycle, comments,
+  // attachments, extensions and levelled review are live; the dashboards,
+  // the reports and the performance screens are not yet.
+  "task.performance.view",
+  "task.performance.viewAll",
+  "task.report.view",
+  "task.report.export",
   "task.task.export",
+  "task.task.delete",
+  // Assigning is part of creating a task, and attaching is part of creating or
+  // commenting; neither is a separate control yet.
+  "task.task.assign",
+  "task.task.attach",
+  // Admin reassigning an assignee or a level has no screen yet.
+  "task.task.reassign",
   "unit.hold.view",
   // The design's flats panel has no extension step: a hold is released or booked.
   "unit.hold.extend",

@@ -221,6 +221,14 @@ model User {
   materialReturnsDecided MaterialReturn[]    @relation("ReturnDecidedBy")
   tasksAssigned          Task[]              @relation("TaskAssignee")
   tasksCreated           Task[]              @relation("TaskCreatedBy")
+  taskEvents             TaskEvent[]         @relation("TaskEventActor")
+  taskComments           TaskComment[]       @relation("TaskCommentAuthor")
+  taskAttachments        TaskAttachment[]    @relation("TaskAttachmentBy")
+  taskExtensions         TaskExtension[]     @relation("TaskExtensionBy")
+  taskExtensionsDecided  TaskExtension[]     @relation("TaskExtensionDecidedBy")
+  taskChecklistFiles     TaskChecklistItemFile[] @relation("TaskChecklistFileBy")
+  taskLevels             TaskLevel[]         @relation("TaskLevelUser")
+  taskLevelActions       TaskLevelAction[]   @relation("TaskLevelActionBy")
   checklistRuns          ChecklistRun[]      @relation("ChecklistRunBy")
   workPackagesManaged    WorkPackage[]       @relation("WorkPackageManager")
 
@@ -2242,12 +2250,19 @@ model MaterialReturnItem {
 
 // --------------------------------- Tasks ------------------------------------
 
+/// The scope document's lifecycle. Pending → Accepted → Started → Completed →
+/// Closed for a standalone task; a checklist task inserts Under Review and
+/// Under Approval before Closed, and Rework sends it back to the Assignee.
 enum TaskStatus {
-  OPEN
-  IN_PROGRESS
-  SUBMITTED
-  APPROVED
-  REOPENED
+  PENDING
+  ACCEPTED
+  STARTED
+  HOLD
+  COMPLETED
+  UNDER_REVIEW
+  REWORK
+  UNDER_APPROVAL
+  CLOSED
 }
 
 enum TaskPriority {
@@ -2256,33 +2271,322 @@ enum TaskPriority {
   LOW
 }
 
-/// A unit of site work raised against a project and a person, moving
-/// Open → In Progress → Submitted → Approved, or back to Reopened.
+/// A plain task, or one carrying checklists and levelled sign-off.
+enum TaskKind {
+  STANDALONE
+  CHECKLIST
+}
+
+/// Whether a delay was the Assignee's to prevent. Only uncontrollable delays
+/// move the date performance is measured against.
+enum DelayControl {
+  CONTROLLABLE
+  UNCONTROLLABLE
+}
+
+enum TaskExtensionStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+}
+
+/// Reviewers act first, in level order, then Approvers.
+enum TaskLevelKind {
+  REVIEW
+  APPROVAL
+}
+
+enum TaskLevelDecision {
+  PASS
+  FAIL
+  APPROVE
+  REJECT
+}
+
+/// What a checklist item asks for.
+enum ChecklistResponseType {
+  YES_NO_NA
+  TEXT
+  NUMBER
+  DATE
+}
+
+enum ChecklistItemVerdict {
+  PASS
+  FAIL
+}
+
+/// A unit of work one person assigns to another, owned by the Assigner until
+/// it closes. A checklist task is the same record with checklists and levels
+/// hung off it.
 model Task {
   id          String       @id @default(cuid())
   taskNo      String       @unique
   title       String
+  description String?
+  kind        TaskKind     @default(STANDALONE)
   projectId   String?
   /// Free text, as the design writes it: "Tower B · Fl 8".
   location    String?
   assigneeId  String
-  dueDate     DateTime?    @db.Date
   priority    TaskPriority @default(MEDIUM)
-  status      TaskStatus   @default(OPEN)
-  /// What was attached on completion, e.g. "3 photos".
-  evidence    String?
+  status      TaskStatus   @default(PENDING)
+
+  /// What the Assignee is working to now — moved by any approved extension.
+  dueAt DateTime
+  /// What was asked for at the outset. Never changes.
+  originalDueAt DateTime
+  /// The date performance is measured against: the original plus only the time
+  /// added by uncontrollable extensions. Kept as a column so a report does not
+  /// have to replay every extension.
+  effectiveDueAt DateTime
+
+  acceptedAt       DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  closedAt         DateTime?
+  /// Mandatory when the Assignee completes.
+  completionRemark String?
+  /// Mandatory when the Assigner closes or sends back.
+  closureRemark    String?
+  /// The review round; a Rework starts round 2, and every level acts again.
+  round            Int       @default(1)
+
   createdById String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   project   Project? @relation(fields: [projectId], references: [id])
   assignee  User     @relation("TaskAssignee", fields: [assigneeId], references: [id])
   createdBy User     @relation("TaskCreatedBy", fields: [createdById], references: [id])
 
+  events      TaskEvent[]
+  comments    TaskComment[]
+  attachments TaskAttachment[]
+  extensions  TaskExtension[]
+  checklists  TaskChecklist[]
+  levels      TaskLevel[]
+
   @@index([status])
   @@index([assigneeId])
+  @@index([createdById])
   @@index([projectId])
+  @@index([dueAt])
   @@map("tasks")
+}
+
+/// Everything that happened to a task, in order: who, what, when.
+model TaskEvent {
+  id         String      @id @default(cuid())
+  taskId     String
+  actorId    String
+  /// STATUS | COMMENT | EXTENSION | LEVEL | REASSIGN | REOPEN
+  kind       String
+  fromStatus TaskStatus?
+  toStatus   TaskStatus?
+  summary    String
+  remark     String?
+  createdAt  DateTime    @default(now())
+
+  task  Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor User @relation("TaskEventActor", fields: [actorId], references: [id])
+
+  @@index([taskId, createdAt])
+  @@map("task_events")
+}
+
+/// One thread per task. An edit keeps what it replaced.
+model TaskComment {
+  id        String    @id @default(cuid())
+  taskId    String
+  authorId  String
+  body      String
+  editedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  task        Task              @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author      User              @relation("TaskCommentAuthor", fields: [authorId], references: [id])
+  edits       TaskCommentEdit[]
+  attachments TaskAttachment[]
+
+  @@index([taskId, createdAt])
+  @@map("task_comments")
+}
+
+model TaskCommentEdit {
+  id        String   @id @default(cuid())
+  commentId String
+  /// What the comment said before this edit.
+  body      String
+  editedAt  DateTime @default(now())
+
+  comment TaskComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([commentId])
+  @@map("task_comment_edits")
+}
+
+/// A file on the task itself, on a comment, or on an extension request.
+model TaskAttachment {
+  id           String   @id @default(cuid())
+  taskId       String
+  commentId    String?
+  extensionId  String?
+  storageKey   String
+  fileName     String
+  fileSize     Int
+  mimeType     String?
+  uploadedById String
+  uploadedAt   DateTime @default(now())
+
+  task       Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  comment    TaskComment?   @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  extension  TaskExtension? @relation(fields: [extensionId], references: [id], onDelete: Cascade)
+  uploadedBy User           @relation("TaskAttachmentBy", fields: [uploadedById], references: [id])
+
+  @@index([taskId])
+  @@map("task_attachments")
+}
+
+/// The Assignee proposes a date; the Assigner sets the final one and says
+/// whether the delay was in the Assignee's control. A Hold is requested the
+/// same way, which is why the flag lives here.
+model TaskExtension {
+  id             String              @id @default(cuid())
+  taskId         String
+  requestedById  String
+  proposedDueAt  DateTime
+  reason         String
+  /// Set when the Assignee asked to pause rather than simply move the date.
+  isHoldRequest  Boolean             @default(false)
+  expectedResumeAt DateTime?
+  status         TaskExtensionStatus @default(REQUESTED)
+
+  decidedById    String?
+  decidedAt      DateTime?
+  decisionRemark String?
+  control        DelayControl?
+  /// The Assigner's final date, which may differ from the one proposed.
+  revisedDueAt   DateTime?
+  /// The task's due date at the moment this was decided, so the time each
+  /// extension added stays computable after later ones move it again.
+  previousDueAt  DateTime
+
+  requestedAt DateTime @default(now())
+
+  task        Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  requestedBy User             @relation("TaskExtensionBy", fields: [requestedById], references: [id])
+  decidedBy   User?            @relation("TaskExtensionDecidedBy", fields: [decidedById], references: [id])
+  attachments TaskAttachment[]
+
+  @@index([taskId, status])
+  @@map("task_extensions")
+}
+
+/// A checklist mapped onto a task. A task may carry more than one.
+model TaskChecklist {
+  id          String @id @default(cuid())
+  taskId      String
+  checklistId String
+  sortOrder   Int    @default(0)
+
+  task      Task                @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  checklist Checklist           @relation(fields: [checklistId], references: [id])
+  items     TaskChecklistItem[]
+
+  @@unique([taskId, checklistId])
+  @@map("task_checklists")
+}
+
+/// The Assignee's answer to one checkpoint, and how each round judged it.
+model TaskChecklistItem {
+  id              String    @id @default(cuid())
+  taskChecklistId String
+  checkpointId    String
+  /// The answer, in whichever shape the checkpoint asks for.
+  answerChoice    String?
+  answerText      String?
+  answerNumber    Decimal?  @db.Decimal(16, 2)
+  answerDate      DateTime?
+  answeredAt      DateTime?
+
+  taskChecklist TaskChecklist             @relation(fields: [taskChecklistId], references: [id], onDelete: Cascade)
+  checkpoint    ChecklistCheckpoint       @relation(fields: [checkpointId], references: [id])
+  attachments   TaskChecklistItemFile[]
+  reviews       TaskChecklistItemReview[]
+
+  @@unique([taskChecklistId, checkpointId])
+  @@map("task_checklist_items")
+}
+
+model TaskChecklistItemFile {
+  id           String   @id @default(cuid())
+  itemId       String
+  storageKey   String
+  fileName     String
+  fileSize     Int
+  mimeType     String?
+  uploadedById String
+  uploadedAt   DateTime @default(now())
+
+  item       TaskChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  uploadedBy User              @relation("TaskChecklistFileBy", fields: [uploadedById], references: [id])
+
+  @@index([itemId])
+  @@map("task_checklist_item_files")
+}
+
+/// One person per level, acting only when every level before theirs has passed.
+model TaskLevel {
+  id     String        @id @default(cuid())
+  taskId String
+  kind   TaskLevelKind
+  level  Int
+  userId String
+
+  task    Task                @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user    User                @relation("TaskLevelUser", fields: [userId], references: [id])
+  actions TaskLevelAction[]
+  reviews TaskChecklistItemReview[]
+
+  @@unique([taskId, kind, level])
+  @@index([userId])
+  @@map("task_levels")
+}
+
+/// A level's verdict in one round. Earlier rounds stay readable.
+model TaskLevelAction {
+  id       String            @id @default(cuid())
+  levelId  String
+  round    Int
+  decision TaskLevelDecision
+  remark   String
+  actorId  String
+  actedAt  DateTime          @default(now())
+
+  level TaskLevel @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  actor User      @relation("TaskLevelActionBy", fields: [actorId], references: [id])
+
+  @@unique([levelId, round])
+  @@map("task_level_actions")
+}
+
+/// A reviewer's verdict on one checklist item in one round.
+model TaskChecklistItemReview {
+  id      String               @id @default(cuid())
+  itemId  String
+  levelId String
+  round   Int
+  verdict ChecklistItemVerdict
+  remark  String?
+  actedAt DateTime             @default(now())
+
+  item  TaskChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  level TaskLevel         @relation(fields: [levelId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, levelId, round])
+  @@map("task_checklist_item_reviews")
 }
 
 // ------------------------------ Checklists -----------------------------------
@@ -2317,27 +2621,35 @@ model Checklist {
   categoryId String
   name       String
   version    String   @default("v1.0")
+  /// Only an active checklist can be picked for a new task. Editing one never
+  /// reaches tasks already created from it.
+  isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   category    ChecklistCategory     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   checkpoints ChecklistCheckpoint[]
   runs        ChecklistRun[]
+  taskUses    TaskChecklist[]
 
   @@index([categoryId])
   @@map("checklists")
 }
 
 model ChecklistCheckpoint {
-  id          String   @id @default(cuid())
-  checklistId String
-  text        String
-  isMandatory Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String                @id @default(cuid())
+  checklistId  String
+  text         String
+  responseType ChecklistResponseType @default(YES_NO_NA)
+  isMandatory  Boolean               @default(true)
+  /// Whether the Assignee must attach a file or photo to answer it.
+  needsFile    Boolean               @default(false)
+  sortOrder    Int                   @default(0)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
 
-  checklist Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  checklist Checklist           @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  taskItems TaskChecklistItem[]
 
   @@index([checklistId])
   @@map("checklist_checkpoints")

@@ -47,6 +47,36 @@ function resolveCodes(grant: string[], deny: string[] = []): string[] {
 // every one of these grants is editable from Administration → Roles.
 // ---------------------------------------------------------------------------
 
+/**
+ * What every working role needs to take part in Task Management.
+ *
+ * The scope document's Assigner, Assignee, Reviewer and Approver are positions
+ * on a particular task, not job titles — anyone may raise a task, be given one,
+ * or be named on a review level. So the codes go to every role, and
+ * src/lib/tasks/lifecycle.ts decides who may act on the task in front of them.
+ *
+ * What is NOT here is deliberate: reopening a closed task, reassigning an
+ * assignee or a level, seeing everyone's tasks and seeing everyone's score stay
+ * with Owner / Admin, which the scope gives full control.
+ */
+const TASK_PARTICIPANT = [
+  "task.task.view",
+  "task.task.create",
+  "task.task.update",
+  "task.task.accept",
+  "task.task.start",
+  "task.task.complete",
+  "task.task.comment",
+  "task.task.requestExtension",
+  "task.task.approveExtension",
+  "task.task.close",
+  "task.task.sendBack",
+  "task.level.review",
+  "task.level.approve",
+  "checklist.checklist.view",
+  "checklist.category.view",
+];
+
 interface RoleSeed {
   code: string;
   name: string;
@@ -73,6 +103,8 @@ export const ROLES: RoleSeed[] = [
     description: "Runs the project end to end — structure, schedule, first-level approvals.",
     level: 20,
     grant: [
+      ...TASK_PARTICIPANT,
+
       "dashboard.projectManager.view",
       "approvals.queue.view",
       "dashboard.widget.viewFinancials",
@@ -121,6 +153,8 @@ export const ROLES: RoleSeed[] = [
     description: "Executes and reports from site — raises indents, receives material, logs progress.",
     level: 30,
     grant: [
+      ...TASK_PARTICIPANT,
+
       "dashboard.supervisor.view",
       "project.project.view",
       "project.project.tabOverview",
@@ -175,6 +209,8 @@ export const ROLES: RoleSeed[] = [
     description: "Controls material and stock — PO, GRN, issue, return, transfer, vendor payments.",
     level: 30,
     grant: [
+      ...TASK_PARTICIPANT,
+
       "material.vendor.manageCategories",
       "material.vendor.viewPerformance",
       "material.vendor.view",
@@ -229,6 +265,8 @@ export const ROLES: RoleSeed[] = [
     description: "Owns the pipeline — assignment, discount approval, pricing and hold extensions.",
     level: 25,
     grant: [
+      ...TASK_PARTICIPANT,
+
       "kb.article.view",
       "dashboard.sales.view",
       "dashboard.widget.viewFinancials",
@@ -256,6 +294,8 @@ export const ROLES: RoleSeed[] = [
     description: "Owns lead to booking — follow-ups, site visits, cost sheets, collections.",
     level: 30,
     grant: [
+      ...TASK_PARTICIPANT,
+
       "kb.article.view",
       "dashboard.sales.view",
       "sales.lead.view",

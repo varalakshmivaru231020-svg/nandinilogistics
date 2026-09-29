@@ -1,95 +1,88 @@
 "use client";
 
 import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import type { TaskPriority, TaskStatus } from "@prisma/client";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import type { TaskKind, TaskPriority, TaskStatus } from "@prisma/client";
 
+import { Alert, Card, EmptyState, Field, Input, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
-import { Card, Input } from "@/components/ui/primitives";
+import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
-import { ListNote } from "@/components/list/list-note";
-import { cn, formatDayMonth } from "@/lib/utils";
-import { advanceLabel, STATUS_LABEL } from "@/lib/tasks/flow";
-import {
-  advanceTaskAction, advanceTasksAction, assignTaskAction, createTaskAction,
-  deleteTasksAction, setTaskPriorityAction, updateTaskAction,
-} from "./actions";
+import { cn, formatDateTime } from "@/lib/utils";
+import { STATUS_LABEL, isOverdue } from "@/lib/tasks/lifecycle";
+import { createTaskAction } from "./actions";
 
 interface Task {
   id: string;
   taskNo: string;
   title: string;
+  kind: TaskKind;
   projectId: string | null;
   projectCode: string | null;
   location: string | null;
   assigneeId: string;
   assignee: string;
-  dueDate: string | null;
+  assignerId: string;
+  assigner: string;
+  dueAt: string;
   priority: TaskPriority;
   status: TaskStatus;
-  evidence: string | null;
+  comments: number;
+  attachments: number;
+  extensionWaiting: boolean;
 }
 
-type Lookup = Array<{ id: string; name?: string; code?: string }>;
-
-const FILTERS = ["All", "Open", "In Progress", "Submitted", "Overdue"];
-
 const STATUS_PILL: Record<TaskStatus, string> = {
-  OPEN: "bg-slate-050 text-slate-600",
-  IN_PROGRESS: "bg-brand-100 text-brand-700",
-  SUBMITTED: "bg-plum-050 text-plum-600",
-  APPROVED: "bg-good-050 text-good-700",
-  REOPENED: "bg-[#FDEEE7] text-[#C05621]",
+  PENDING: "bg-surface-field text-navy-600",
+  ACCEPTED: "bg-brand-100 text-brand-700",
+  STARTED: "bg-brand-100 text-brand-700",
+  HOLD: "bg-warn-050 text-warn-800",
+  COMPLETED: "bg-good-050 text-good-700",
+  UNDER_REVIEW: "bg-warn-050 text-warn-800",
+  REWORK: "bg-bad-050 text-bad-700",
+  UNDER_APPROVAL: "bg-warn-050 text-warn-800",
+  CLOSED: "bg-surface-field text-muted-600",
 };
 
 const PRIORITY_PILL: Record<TaskPriority, string> = {
   HIGH: "bg-bad-050 text-bad-700",
-  MEDIUM: "bg-warn-050 text-warn-700",
-  LOW: "bg-surface-hover text-navy-500",
+  MEDIUM: "bg-warn-050 text-warn-800",
+  LOW: "bg-surface-field text-muted-600",
 };
 
-const PRIORITIES: TaskPriority[] = ["HIGH", "MEDIUM", "LOW"];
-const PRIORITY_LABEL: Record<TaskPriority, string> = { HIGH: "High", MEDIUM: "Medium", LOW: "Low" };
-
-const COLUMNS = ["Task", "Location", "Assignee", "Due", "Priority", "Evidence", "Status", "Actions"];
-
-/** The design's short due date: "04 Sep". */
-function dueLabel(iso: string) {
-  return formatDayMonth(iso);
-}
-
-function isOverdue(task: Task, nowMs: number) {
-  if (!task.dueDate || task.status === "APPROVED") return false;
-  return new Date(task.dueDate).getTime() < nowMs;
-}
+const FILTERS = ["All", "Overdue", ...Object.values(STATUS_LABEL)];
 
 export function TasksScreen({
-  tasks, projects, people, filter, nowMs, can,
+  tasks, projects, people, checklists, filter, mine, nowMs, viewerId, can,
 }: {
   tasks: Task[];
-  projects: Lookup;
-  people: Lookup;
+  projects: Array<{ id: string; code: string }>;
+  people: Array<{ id: string; name: string }>;
+  checklists: Array<{ id: string; name: string; category: string }>;
   filter: string;
+  mine: "to" | "by" | null;
   nowMs: number;
+  viewerId: string;
   can: Record<string, boolean>;
 }) {
   const router = useRouter();
-  const params = useSearchParams();
-  const toast = useToast();
-  const [selected, setSelected] = React.useState<string[]>([]);
-  const [editing, setEditing] = React.useState<Task | "new" | null>(null);
-  const [reassigning, setReassigning] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
+  const [creating, setCreating] = React.useState(false);
 
-  const active = FILTERS.includes(filter) ? filter : "All";
-
-  function pickFilter(f: string) {
-    const sp = new URLSearchParams(params.toString());
-    if (f === "All") sp.delete("filter");
-    else sp.set("filter", f);
-    setSelected([]);
-    router.push(sp.toString() ? `/tasks?${sp.toString()}` : "/tasks");
+  function go(next: { filter?: string; mine?: string | null }) {
+    const params = new URLSearchParams();
+    const f = next.filter ?? filter;
+    const m = next.mine === undefined ? mine : next.mine;
+    if (f && f !== "All") params.set("filter", f);
+    if (m) params.set("mine", m);
+    router.push(`/tasks${params.toString() ? `?${params}` : ""}`);
   }
+
+  const shown = tasks.filter((t) => {
+    if (filter === "All") return true;
+    if (filter === "Overdue") return isOverdue(t, nowMs);
+    return STATUS_LABEL[t.status] === filter;
+  });
 
   function countFor(f: string) {
     if (f === "All") return tasks.length;
@@ -97,409 +90,297 @@ export function TasksScreen({
     return tasks.filter((t) => STATUS_LABEL[t.status] === f).length;
   }
 
-  const rows = tasks.filter((t) =>
-    active === "All" ? true
-    : active === "Overdue" ? isOverdue(t, nowMs)
-    : STATUS_LABEL[t.status] === active);
-
-  async function run(work: () => Promise<{ ok: boolean; error?: string }>, done: string) {
-    setBusy(true);
-    const res = await work();
-    setBusy(false);
-    if (!res.ok) { toast(res.error ?? "That did not work.", "bad"); return; }
-    setSelected([]);
-    setReassigning(false);
-    toast(done);
-    router.refresh();
-  }
-
-  const allPicked = rows.length > 0 && rows.every((r) => selected.includes(r.id));
-
   return (
     <div className="animate-fade-up">
-      <div className="mb-[15px] flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-[7px]">
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => pickFilter(f)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[12px] font-semibold transition-colors",
-                active === f
-                  ? "border-brand-500 bg-brand-100 text-brand-700"
-                  : "border-line-400 bg-white text-navy-500 hover:border-brand-500",
-              )}
-            >
-              {f} <span className="num font-semibold opacity-65">{countFor(f)}</span>
-            </button>
-          ))}
-        </div>
-        {can.create && (
-          <Button size="md" onClick={() => setEditing("new")}>+ New task</Button>
-        )}
+      <PageHeader
+        title="Task Management"
+        description="Work one person assigns to another, from Pending through to Closed."
+        actions={can.create ? <Button onClick={() => setCreating(true)}>+ New task</Button> : undefined}
+      />
+
+      <div className="mb-3.5 flex flex-wrap items-center gap-[7px] rounded-[12px] border border-line-400 bg-white px-3.5 py-[11px]">
+        {FILTERS.filter((f) => f === "All" || countFor(f) > 0).map((f) => (
+          <Chip key={f} picked={filter === f} onClick={() => go({ filter: f })}>
+            {f} <span className="num opacity-70">{countFor(f)}</span>
+          </Chip>
+        ))}
+        <span className="mx-1.5 h-[22px] w-px bg-line-400" />
+        <Chip picked={mine === "to"} onClick={() => go({ mine: mine === "to" ? null : "to" })}>
+          Assigned to me
+        </Chip>
+        <Chip picked={mine === "by"} onClick={() => go({ mine: mine === "by" ? null : "by" })}>
+          Assigned by me
+        </Chip>
+        <div className="flex-1" />
+        <span className="text-[11.5px] font-medium text-muted-600">
+          {shown.length} of {tasks.length}
+        </span>
       </div>
 
-      {selected.length > 0 && (
-        <>
-          <div className="mb-3 flex flex-wrap items-center gap-[9px] rounded-[12px] border border-brand-150 bg-surface-hover px-[15px] py-[11px]">
-            <span className="text-[12.5px] font-bold text-navy-800">
-              {selected.length} selected
-            </span>
-            <div className="flex-1" />
-            {can.update && (
-              <BulkButton onClick={() => run(() => advanceTasksAction(selected), "Tasks advanced")} busy={busy}>
-                Advance stage
-              </BulkButton>
-            )}
-            {can.update && (
-              <BulkButton onClick={() => run(() => setTaskPriorityAction(selected, "HIGH"), "Priority set to high")} busy={busy}>
-                Set priority High
-              </BulkButton>
-            )}
-            {can.assign && (
-              <BulkButton onClick={() => setReassigning((r) => !r)} busy={busy}>Reassign…</BulkButton>
-            )}
-            {can.delete && (
-              <BulkButton onClick={() => run(() => deleteTasksAction(selected), "Tasks deleted")} busy={busy}>
-                Delete
-              </BulkButton>
-            )}
-            <button
-              type="button"
-              onClick={() => { setSelected([]); setReassigning(false); }}
-              className="px-2 py-1.5 text-[11.5px] font-semibold text-muted-600 hover:text-brand-700"
-            >
-              Clear
-            </button>
-          </div>
+      {shown.length === 0 ? (
+        <Card>
+          <EmptyState
+            title={tasks.length === 0 ? "No tasks yet" : "Nothing matches"}
+            description={
+              tasks.length === 0
+                ? "A task is raised against a person, with a due date and a priority."
+                : "No task matches that filter."
+            }
+          />
+        </Card>
+      ) : (
+        <div className="overflow-hidden rounded-[13px] border border-line-400 bg-white">
+          {shown.map((t) => {
+            const over = isOverdue(t, nowMs);
+            return (
+              <Link
+                key={t.id}
+                href={`/tasks/${t.id}`}
+                className={cn(
+                  "flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-150 px-[18px] py-[13px] last:border-0 hover:bg-surface-tint",
+                  over && "bg-bad-025",
+                )}
+              >
+                <span className="num w-[74px] shrink-0 text-[12px] font-bold text-navy-950">{t.taskNo}</span>
 
-          {reassigning && (
-            <div className="mb-3 rounded-[12px] border border-brand-150 bg-white px-[15px] py-[13px]">
-              <p className="mb-[9px] text-[12px] font-bold text-navy-950">
-                Reassign {selected.length} selected to
-              </p>
-              <div className="flex flex-wrap items-center gap-[7px]">
-                {people.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => run(() => assignTaskAction(selected, p.id), `Reassigned to ${p.name}`)}
-                    className="rounded-full border border-line-400 bg-white px-[13px] py-[7px] text-[11.5px] font-semibold text-navy-600 hover:border-brand-500 hover:bg-brand-100 hover:text-brand-700"
-                  >
-                    {p.name}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setReassigning(false)}
-                  className="px-2 py-1.5 text-[11.5px] font-semibold text-muted-600 hover:text-brand-700"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </>
+                <span className="min-w-[200px] flex-[2_1_240px]">
+                  <span className="block truncate text-[12.5px] font-bold text-navy-950">{t.title}</span>
+                  <span className="mt-0.5 block truncate text-[11.5px] font-medium text-muted-500">
+                    {t.projectCode ? `${t.projectCode} · ` : ""}
+                    {t.location ?? "—"}
+                    {t.kind === "CHECKLIST" && " · checklist"}
+                  </span>
+                </span>
+
+                <span className="min-w-[130px] flex-1">
+                  <span className="block text-[11.5px] font-semibold text-navy-600">{t.assignee}</span>
+                  <span className="mt-0.5 block text-[11px] font-medium text-muted-400">by {t.assigner}</span>
+                </span>
+
+                <span className="w-[120px] shrink-0">
+                  <span className={cn("block text-[11.5px] font-semibold", over ? "text-bad-600" : "text-navy-600")}>
+                    {formatDateTime(t.dueAt)}
+                  </span>
+                  {over && <span className="mt-0.5 block text-[10.5px] font-bold text-bad-600">OVERDUE</span>}
+                </span>
+
+                <span className="w-[72px] shrink-0">
+                  <span className={cn("rounded-full px-2.5 py-1 text-[10.5px] font-bold", PRIORITY_PILL[t.priority])}>
+                    {t.priority[0] + t.priority.slice(1).toLowerCase()}
+                  </span>
+                </span>
+
+                <span className="w-[112px] shrink-0 text-right">
+                  <span className={cn("rounded-full px-2.5 py-1 text-[10.5px] font-bold", STATUS_PILL[t.status])}>
+                    {STATUS_LABEL[t.status]}
+                  </span>
+                  {t.extensionWaiting && (
+                    <span className="mt-1 block text-[10px] font-bold text-warn-700">extension waiting</span>
+                  )}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
       )}
 
-      <Card className="overflow-x-auto">
-        <table className="w-full min-w-[760px] border-collapse">
-          <thead>
-            <tr className="bg-surface-sunken">
-              <th className="w-10 border-b border-line-300 py-3 pl-4 text-left">
-                <CheckBox
-                  checked={allPicked}
-                  onChange={() => setSelected(allPicked ? [] : rows.map((r) => r.id))}
-                  label="Select all"
-                />
-              </th>
-              {COLUMNS.map((h) => (
-                <th
-                  key={h}
-                  className={cn(
-                    "border-b border-line-300 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
-                    h === "Actions" ? "text-right" : "text-left",
-                  )}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((t) => {
-              const overdue = isOverdue(t, nowMs);
-              return (
-                <tr
-                  key={t.id}
-                  className={cn("border-b border-line-150 last:border-0 hover:bg-surface-tint", overdue && "bg-bad-025")}
-                >
-                  <td className="py-[13px] pl-4">
-                    <CheckBox
-                      checked={selected.includes(t.id)}
-                      onChange={() =>
-                        setSelected((s) => (s.includes(t.id) ? s.filter((x) => x !== t.id) : [...s, t.id]))
-                      }
-                      label={`Select ${t.taskNo}`}
-                    />
-                  </td>
-                  <td className="px-4 py-[13px]">
-                    <div className="text-[13px] font-semibold text-navy-900">{t.title}</div>
-                    <div className="mt-0.5 text-[11px] font-medium text-muted-400">{t.taskNo}</div>
-                  </td>
-                  <td className="px-4 py-[13px] text-[12.5px] font-medium text-navy-500">
-                    {[t.projectCode, t.location].filter(Boolean).join(" · ") || "—"}
-                  </td>
-                  <td className="px-4 py-[13px] text-[12.5px] font-semibold text-navy-600">{t.assignee}</td>
-                  <td className="px-4 py-[13px]">
-                    <span
-                      className={cn(
-                        "text-[12px] font-semibold",
-                        overdue ? "rounded-[7px] bg-bad-050 px-[9px] py-1 text-bad-600" : "text-navy-600",
-                      )}
-                    >
-                      {t.dueDate ? dueLabel(t.dueDate) : "—"}
-                      {overdue && " · overdue"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-[13px]">
-                    <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", PRIORITY_PILL[t.priority])}>
-                      {PRIORITY_LABEL[t.priority]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-[13px] text-[12px] font-medium text-navy-500">{t.evidence ?? "—"}</td>
-                  <td className="px-4 py-[13px]">
-                    <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-bold", STATUS_PILL[t.status])}>
-                      {STATUS_LABEL[t.status]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-[13px]">
-                    <div className="flex justify-end gap-1.5">
-                      {can.update && (
-                        <button
-                          type="button"
-                          onClick={() => run(() => advanceTaskAction(t.id), `${t.taskNo} moved on`)}
-                          className="whitespace-nowrap rounded-[7px] bg-brand-500 px-[11px] py-[5px] text-[10.5px] font-bold text-white hover:bg-brand-600"
-                        >
-                          {advanceLabel(t.status)}
-                        </button>
-                      )}
-                      {can.update && (
-                        <button
-                          type="button"
-                          onClick={() => setEditing(t)}
-                          className="rounded-[7px] border border-line-400 bg-white px-[11px] py-[5px] text-[10.5px] font-semibold text-navy-500 hover:border-brand-500 hover:text-brand-700"
-                        >
-                          Edit
-                        </button>
-                      )}
-                      {can.delete && (
-                        <button
-                          type="button"
-                          onClick={() => run(() => deleteTasksAction([t.id]), `${t.taskNo} deleted`)}
-                          aria-label={`Delete ${t.taskNo}`}
-                          className="px-1 text-[13px] font-semibold text-muted-300 hover:text-bad-600"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={COLUMNS.length + 1} className="px-5 py-[38px] text-center text-[12.5px] font-medium text-muted-400">
-                  No tasks here
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
-
-      <ListNote>
-        Status flow: Open → In Progress → Submitted for Review → Approved / Reopened. Overdue tasks
-        escalate to PM and Owner after 2 days.
-      </ListNote>
-
-      {editing && (
-        <TaskDrawer
-          task={editing === "new" ? null : editing}
+      {creating && (
+        <NewTaskModal
           projects={projects}
           people={people}
-          onClose={() => setEditing(null)}
-          onSaved={(m) => { setEditing(null); toast(m); router.refresh(); }}
+          checklists={checklists}
+          viewerId={viewerId}
+          onClose={() => setCreating(false)}
         />
       )}
     </div>
   );
 }
 
-function BulkButton({ children, onClick, busy }: { children: React.ReactNode; onClick: () => void; busy: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={busy}
-      className="rounded-[8px] border border-line-400 bg-white px-3 py-[7px] text-[11.5px] font-semibold text-navy-600 hover:border-brand-500 disabled:opacity-60"
-    >
-      {children}
-    </button>
-  );
-}
-
-/**
- * The design's own box: 16px square, 1.5px border, filled brand when it is on.
- *
- *   width:16px; height:16px; border-radius:4px; border:1.5px solid #C6CFE8
- *   on -> border and background #0089C9, the mark in white at 800 10px
- */
-function CheckBox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      aria-label={label}
-      aria-pressed={checked}
-      className={cn(
-        "flex h-4 w-4 cursor-pointer items-center justify-center rounded-[4px] border-[1.5px] p-0 text-[10px] font-extrabold",
-        checked ? "border-brand-500 bg-brand-500 text-white" : "border-muted-200 bg-white text-transparent",
-      )}
-    >
-      ✓
-    </button>
-  );
-}
-
-/* -------------------------------- Drawer ---------------------------------- */
-
-function TaskDrawer({
-  task, projects, people, onClose, onSaved,
+/** Raising a task, with the checklist and levels the scope adds for Module 2. */
+function NewTaskModal({
+  projects, people, checklists, viewerId, onClose,
 }: {
-  task: Task | null;
-  projects: Lookup;
-  people: Lookup;
+  projects: Array<{ id: string; code: string }>;
+  people: Array<{ id: string; name: string }>;
+  checklists: Array<{ id: string; name: string; category: string }>;
+  viewerId: string;
   onClose: () => void;
-  onSaved: (message: string) => void;
 }) {
-  const [projectId, setProjectId] = React.useState(task?.projectId ?? "");
-  const [assigneeId, setAssigneeId] = React.useState(task?.assigneeId ?? "");
-  const [priority, setPriority] = React.useState<TaskPriority>(task?.priority ?? "MEDIUM");
+  const router = useRouter();
+  const toast = useToast();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [picked, setPicked] = React.useState<string[]>([]);
+  const [reviewers, setReviewers] = React.useState<string[]>([]);
+  const [approvers, setApprovers] = React.useState<string[]>([]);
+  const form = React.useRef<HTMLFormElement>(null);
 
-  async function submit(fd: FormData) {
-    fd.set("projectId", projectId);
-    fd.set("assigneeId", assigneeId);
-    fd.set("priority", priority);
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setBusy(true);
     setError(null);
-    const res = task ? await updateTaskAction(task.id, fd) : await createTaskAction(fd);
+    const fd = new FormData(e.currentTarget);
+    for (const id of picked) fd.append("checklistIds", id);
+    for (const id of reviewers) if (id) fd.append("reviewerIds", id);
+    for (const id of approvers) if (id) fd.append("approverIds", id);
+    const res = await createTaskAction(fd);
     setBusy(false);
     if (!res.ok) { setError(res.error); return; }
-    onSaved(task ? "Task updated." : "Task created.");
+    toast("Task raised.");
+    onClose();
+    router.push(`/tasks/${res.data.id}`);
   }
 
   return (
-    <>
-      <div onClick={onClose} className="fixed inset-0 z-[96] bg-[rgba(25,26,92,.38)]" />
-      <div className="fixed inset-y-0 right-0 z-[97] flex w-[470px] max-w-[94vw] flex-col bg-white shadow-[-24px_0_60px_rgba(25,26,92,.2)]">
-        <div className="shrink-0 border-b border-line-200 px-[22px] py-[18px]">
-          <p className="font-display text-[16px] font-bold text-navy-950">
-            {task ? `Edit ${task.taskNo}` : "New task"}
-          </p>
-          <p className="mt-[3px] text-[11.5px] font-medium text-muted-600">
-            New tasks start as Open and move Open → In Progress → Submitted → Approved
-          </p>
+    <Modal
+      open
+      onClose={onClose}
+      title="New task"
+      description="Assigned to one person, who accepts it and owns it until you close it."
+      size="lg"
+      footer={
+        <>
+          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
+          <Button loading={busy} onClick={() => form.current?.requestSubmit()}>Assign task</Button>
+        </>
+      }
+    >
+      <form ref={form} onSubmit={submit} className="space-y-3.5">
+        {error && <Alert tone="error">{error}</Alert>}
+
+        <Field label="Title" required>
+          <Input name="title" required maxLength={160} placeholder="Snag the 8th floor handover" />
+        </Field>
+
+        <Field label="Description">
+          <Textarea name="description" rows={3} placeholder="Details and instructions" />
+        </Field>
+
+        <div className="grid gap-3.5 sm:grid-cols-2">
+          <Field label="Assign to" required>
+            <Select name="assigneeId" required defaultValue="">
+              <option value="" disabled>Choose a person</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>{p.id === viewerId ? `${p.name} (you)` : p.name}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Priority" required>
+            <Select name="priority" defaultValue="MEDIUM">
+              <option value="HIGH">High</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="LOW">Low</option>
+            </Select>
+          </Field>
+          <Field label="Due date and time" required hint="Must be in the future.">
+            <Input type="datetime-local" name="dueAt" required />
+          </Field>
+          <Field label="Project">
+            <Select name="projectId" defaultValue="">
+              <option value="">None</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.code}</option>)}
+            </Select>
+          </Field>
+          <Field label="Location" className="sm:col-span-2">
+            <Input name="location" placeholder="Tower B · Fl 8" />
+          </Field>
         </div>
 
-        <form id="task-form" action={submit} className="flex-1 overflow-y-auto px-[22px] py-5">
-          {error && (
-            <p className="mb-3 rounded-[9px] bg-bad-050 px-3 py-2 text-[12px] font-semibold text-bad-700">{error}</p>
+        <Field label="Attachments">
+          <input type="file" name="files" multiple className="text-[12px]" />
+        </Field>
+
+        <div className="rounded-[11px] border border-line-300 bg-surface-sunken p-3.5">
+          <p className="mb-2 text-[11.5px] font-bold text-navy-900">
+            Checklist <span className="font-medium text-muted-500">· optional</span>
+          </p>
+          <p className="mb-2.5 text-[11px] font-medium text-muted-500">
+            Pick one or more and the task passes through reviewers and approvers before it closes.
+          </p>
+          {checklists.length === 0 ? (
+            <p className="text-[11.5px] font-medium text-muted-400">No active checklist in the master yet.</p>
+          ) : (
+            <div className="flex flex-wrap gap-[7px]">
+              {checklists.map((c) => (
+                <Chip
+                  key={c.id}
+                  picked={picked.includes(c.id)}
+                  onClick={() => setPicked((p) => p.includes(c.id) ? p.filter((x) => x !== c.id) : [...p, c.id])}
+                >
+                  {c.name} <span className="opacity-60">· {c.category}</span>
+                </Chip>
+              ))}
+            </div>
           )}
 
-          <FieldLabel required>Task title</FieldLabel>
-          <Input name="title" defaultValue={task?.title} placeholder="Slab shuttering — 8th floor" required autoFocus />
-
-          <div className="mt-3.5">
-            <FieldLabel optional>Project</FieldLabel>
-            <div className="flex flex-wrap gap-1.5">
-              <Chip picked={projectId === ""} onClick={() => setProjectId("")}>— no project —</Chip>
-              {projects.map((p) => (
-                <Chip key={p.id} picked={projectId === p.id} onClick={() => setProjectId(p.id)}>
-                  {p.name ?? p.code}
-                </Chip>
-              ))}
+          {picked.length > 0 && (
+            <div className="mt-3.5 grid gap-3.5 sm:grid-cols-2">
+              <LevelPicker label="Reviewers" people={people} value={reviewers} onChange={setReviewers} />
+              <LevelPicker label="Approvers" people={people} value={approvers} onChange={setApprovers} />
             </div>
-          </div>
-
-          <div className="mt-3.5">
-            <FieldLabel optional>Location</FieldLabel>
-            <Input name="location" defaultValue={task?.location ?? ""} placeholder="Tower B · Fl 8" />
-          </div>
-
-          <div className="mt-3.5">
-            <FieldLabel required>Assignee</FieldLabel>
-            <div className="flex flex-wrap gap-1.5">
-              {people.map((p) => (
-                <Chip key={p.id} picked={assigneeId === p.id} onClick={() => setAssigneeId(p.id)}>
-                  {p.name ?? p.code}
-                </Chip>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-3.5">
-            <FieldLabel>Due</FieldLabel>
-            <Input type="date" name="dueDate" defaultValue={task?.dueDate ? task.dueDate.slice(0, 10) : ""} />
-          </div>
-
-          <div className="mt-3.5">
-            <FieldLabel>Priority</FieldLabel>
-            <div className="flex gap-1.5">
-              {PRIORITIES.map((p) => (
-                <Chip key={p} picked={priority === p} onClick={() => setPriority(p)}>
-                  {PRIORITY_LABEL[p]}
-                </Chip>
-              ))}
-            </div>
-          </div>
-        </form>
-
-        <div className="flex shrink-0 justify-end gap-[9px] border-t border-line-200 bg-surface-sunken px-[22px] py-4">
-          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
-          <Button type="submit" form="task-form" loading={busy} disabled={!assigneeId}>
-            {task ? "Save changes" : "Create task"}
-          </Button>
+          )}
         </div>
-      </div>
-    </>
+      </form>
+    </Modal>
   );
 }
 
-function FieldLabel({ children, required, optional }: { children: React.ReactNode; required?: boolean; optional?: boolean }) {
+/** One person per level, in order; the number of levels is chosen per task. */
+function LevelPicker({
+  label, people, value, onChange,
+}: {
+  label: string;
+  people: Array<{ id: string; name: string }>;
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
   return (
-    <p className="mb-[5px] text-[11px] font-semibold text-muted-600">
-      {children}
-      {required && <span className="text-bad-600"> *</span>}
-      {optional && <span className="font-medium text-muted-300"> · optional</span>}
-    </p>
+    <div>
+      <p className="mb-[5px] text-[11px] font-semibold text-muted-600">{label}</p>
+      {value.map((v, i) => (
+        <div key={i} className="mb-1.5 flex items-center gap-2">
+          <span className="w-[54px] shrink-0 text-[11px] font-semibold text-muted-500">Level {i + 1}</span>
+          <Select
+            value={v}
+            onChange={(e) => onChange(value.map((x, xi) => (xi === i ? e.target.value : x)))}
+            className="flex-1"
+          >
+            <option value="">Choose…</option>
+            {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </Select>
+          <button
+            type="button"
+            onClick={() => onChange(value.filter((_, xi) => xi !== i))}
+            className="shrink-0 cursor-pointer rounded-[7px] border border-line-400 px-2 py-1 text-[10.5px] font-semibold text-muted-600"
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...value, ""])}
+        className="mt-1 cursor-pointer rounded-[8px] border border-dashed border-line-400 px-2.5 py-1.5 text-[11px] font-bold text-brand-700"
+      >
+        + Add level
+      </button>
+    </div>
   );
 }
 
-function Chip({ children, picked, onClick }: { children: React.ReactNode; picked: boolean; onClick: () => void }) {
+function Chip({
+  children, picked, onClick,
+}: { children: React.ReactNode; picked: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-full border px-[13px] py-[7px] text-[11.5px] font-semibold transition-colors",
+        "cursor-pointer rounded-full border px-[11px] py-[6px] text-[11px] font-semibold transition-colors",
         picked
           ? "border-brand-500 bg-brand-100 text-brand-700"
-          : "border-line-400 bg-white text-navy-600 hover:border-brand-500",
+          : "border-line-400 bg-white text-muted-600 hover:border-brand-500",
       )}
     >
       {children}

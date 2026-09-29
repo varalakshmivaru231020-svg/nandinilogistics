@@ -3,7 +3,7 @@
  * Source: src/lib/permissions/registry.ts
  * Regenerate: pnpm perms:codegen
  *
- * 527 permission codes.
+ * 542 permission codes.
  */
 
 export const PERM = {
@@ -693,9 +693,30 @@ export const PERM = {
       "delete": "task.task.delete",
       "export": "task.task.export",
       "assign": "task.task.assign",
-      "submit": "task.task.submit",
-      "approve": "task.task.approve",
+      "accept": "task.task.accept",
+      "start": "task.task.start",
+      "complete": "task.task.complete",
+      "comment": "task.task.comment",
+      "attach": "task.task.attach",
+      "requestExtension": "task.task.requestExtension",
+      "approveExtension": "task.task.approveExtension",
+      "close": "task.task.close",
+      "sendBack": "task.task.sendBack",
       "reopen": "task.task.reopen",
+      "reassign": "task.task.reassign",
+      "viewAll": "task.task.viewAll",
+    },
+    "level": {
+      "review": "task.level.review",
+      "approve": "task.level.approve",
+    },
+    "report": {
+      "view": "task.report.view",
+      "export": "task.report.export",
+    },
+    "performance": {
+      "view": "task.performance.view",
+      "viewAll": "task.performance.viewAll",
     },
   },
   "checklist": {

@@ -5,28 +5,53 @@ import { TasksScreen } from "./tasks-screen";
 
 export const metadata = { title: "Task Management" };
 
+/**
+ * The task list.
+ *
+ * Without `task.task.viewAll` a person sees the tasks they raised and the tasks
+ * they were given, plus any they were named to review or approve — not the
+ * organisation's. The scope gives the whole view to Admin alone.
+ */
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string }>;
+  searchParams: Promise<{ filter?: string; mine?: string }>;
 }) {
   const ctx = await requirePermission(PERM.task.task.view);
-  const { filter = "All" } = await searchParams;
+  const { filter = "All", mine } = await searchParams;
 
-  // A task without a project belongs to everyone who can see tasks at all.
-  const where = ctx.canAccessAllProjects
+  const seesEverything = ctx.has(PERM.task.task.viewAll);
+  const projectScope = ctx.canAccessAllProjects
     ? {}
     : { OR: [{ projectId: { in: ctx.projectIds } }, { projectId: null }] };
 
-  const [tasks, projects, people] = await Promise.all([
+  const ownScope = {
+    OR: [
+      { assigneeId: ctx.id },
+      { createdById: ctx.id },
+      { levels: { some: { userId: ctx.id } } },
+    ],
+  };
+
+  const where = {
+    ...(seesEverything ? projectScope : {}),
+    ...(seesEverything ? {} : ownScope),
+    ...(mine === "to" ? { assigneeId: ctx.id } : {}),
+    ...(mine === "by" ? { createdById: ctx.id } : {}),
+  };
+
+  const [tasks, projects, people, checklists] = await Promise.all([
     prisma.task.findMany({
       where,
-      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+      orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }],
       select: {
-        id: true, taskNo: true, title: true, location: true, dueDate: true,
-        priority: true, status: true, evidence: true,
+        id: true, taskNo: true, title: true, location: true, dueAt: true, kind: true,
+        priority: true, status: true, round: true, createdById: true, assigneeId: true,
         project: { select: { id: true, code: true } },
         assignee: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, name: true } },
+        _count: { select: { comments: true, attachments: true } },
+        extensions: { where: { status: "REQUESTED" }, select: { id: true } },
       },
     }),
     prisma.project.findMany({
@@ -39,33 +64,45 @@ export default async function TasksPage({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    prisma.checklist.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, category: { select: { name: true } } },
+    }),
   ]);
 
   return (
     <TasksScreen
       filter={filter}
+      mine={mine === "to" ? "to" : mine === "by" ? "by" : null}
       nowMs={new Date().getTime()}
+      viewerId={ctx.id}
       projects={projects}
       people={people}
+      checklists={checklists.map((c) => ({ id: c.id, name: c.name, category: c.category.name }))}
       tasks={tasks.map((t) => ({
         id: t.id,
         taskNo: t.taskNo,
         title: t.title,
+        kind: t.kind,
         projectId: t.project?.id ?? null,
         projectCode: t.project?.code ?? null,
         location: t.location,
         assigneeId: t.assignee.id,
         assignee: t.assignee.name,
-        dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+        assignerId: t.createdBy.id,
+        assigner: t.createdBy.name,
+        dueAt: t.dueAt.toISOString(),
         priority: t.priority,
         status: t.status,
-        evidence: t.evidence,
+        comments: t._count.comments,
+        attachments: t._count.attachments,
+        extensionWaiting: t.extensions.length > 0,
       }))}
       can={{
         create: ctx.has(PERM.task.task.create),
         update: ctx.has(PERM.task.task.update),
-        assign: ctx.has(PERM.task.task.assign),
-        delete: ctx.has(PERM.task.task.delete),
+        viewAll: seesEverything,
       }}
     />
   );
