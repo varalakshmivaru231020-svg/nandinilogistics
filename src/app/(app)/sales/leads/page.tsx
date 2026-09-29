@@ -49,9 +49,38 @@ export default async function LeadsPage({
     .filter((s) => s.state !== "BOOKED" && s.state !== "LOST")
     .reduce((n, s) => n + s._count, 0);
 
+  // The people leads have turned into. A booking is where a lead stops being a
+  // lead, so the customers sit under the pipeline that produced them.
+  const customers = ctx.has(PERM.sales.customer.view)
+    ? (
+        await prisma.customer.findMany({
+          orderBy: { createdAt: "desc" },
+          take: 25,
+          select: {
+            id: true, customerNo: true, name: true, phone: true, email: true,
+            kycVerifiedAt: true,
+            bookings: {
+              where: { status: { not: "CANCELLED" } },
+              select: { totalAmount: true, unit: { select: { unitNumber: true } } },
+            },
+          },
+        })
+      ).map((c) => ({
+        id: c.id,
+        customerNo: c.customerNo,
+        name: c.name,
+        phone: c.phone,
+        email: c.email,
+        kycVerified: c.kycVerifiedAt !== null,
+        units: c.bookings.map((b) => b.unit?.unitNumber).filter(Boolean).join(", ") || "—",
+        value: c.bookings.reduce((n, b) => n + Number(b.totalAmount), 0),
+      }))
+    : [];
+
   return (
     <div>
       <LeadsScreen
+        customers={customers}
         totalLeads={totalLeads}
         openLeads={openLeads}
         unitTypes={unitTypes}

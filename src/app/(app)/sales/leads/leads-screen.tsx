@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
-import { cn, money, maskPhone, phone } from "@/lib/utils";
+import { cn, money, moneyShort, maskPhone, phone } from "@/lib/utils";
 import { LEAD_IMPORT_COLUMNS } from "@/lib/sales/lead-import";
 import {
   changeLeadStageAction, createLeadAction, importLeadsAction, logFollowUpAction,
@@ -122,11 +122,20 @@ function followUp(nextActionAt: string | null, nowMs: number, state?: string) {
   return { ...base, badge: "upcoming", tone: "brand" as const };
 }
 
+/** Someone a lead became — a customer with a booking behind them. */
+export interface CustomerRow {
+  id: string; customerNo: string; name: string; phone: string; email: string | null;
+  kycVerified: boolean; units: string; value: number;
+}
+
 export function LeadsScreen({
+  customers = [],
   leads, sources, lostReasons, projects, unitTypes, formFields, can,
   query, stateFilter, sourceFilter, followUpFilter, view, nowMs,
   totalLeads, openLeads,
 }: {
+  /** The people these leads have turned into. */
+  customers?: CustomerRow[];
   formFields: LeadField[];
   leads: Lead[];
   /** Every lead in the actor's scope, and those still open — for the header. */
@@ -467,6 +476,61 @@ export function LeadsScreen({
         Form fields, stages and lost reasons are configured in Masters → Lead Settings. Dropping a
         card on Lost asks for a reason and remarks.
       </ListNote>
+
+      {customers.length > 0 && (
+        <div className="mt-3.5 overflow-hidden rounded-[13px] border border-line-400 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-200 px-[18px] py-3.5">
+            <span className="font-display text-[13.5px] font-bold text-navy-950">Customers</span>
+            <span className="text-[11.5px] font-medium text-muted-600">
+              The people these leads became — newest first
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse">
+              <thead>
+                <tr className="bg-surface-sunken">
+                  {["Customer", "Contact", "Flats", "Value", "KYC"].map((h) => (
+                    <th
+                      key={h}
+                      className={cn(
+                        "border-b border-line-300 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
+                        h === "Value" ? "text-right" : "text-left",
+                      )}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((c) => (
+                  <tr key={c.id} className="border-b border-line-150 last:border-0 hover:bg-surface-tint">
+                    <td className="px-4 py-3.5">
+                      <div className="text-[12.5px] font-bold text-navy-950">{c.name}</div>
+                      <div className="num mt-0.5 text-[11px] font-medium text-muted-400">{c.customerNo}</div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="num text-[12px] font-semibold text-brand-700">{c.phone}</div>
+                      {c.email && (
+                        <div className="mt-0.5 truncate text-[11px] font-medium text-muted-400">{c.email}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5 text-[12px] font-semibold text-navy-600">{c.units}</td>
+                    <td className="num px-4 py-3.5 text-right text-[12.5px] font-bold text-navy-950">
+                      {c.value > 0 ? moneyShort(c.value) : "—"}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <Badge tone={c.kycVerified ? "good" : "warn"}>
+                        {c.kycVerified ? "Verified" : "Pending"}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {creating && (
         <NewLeadModal

@@ -69,8 +69,30 @@ export default async function GrnDetailPage({ params }: { params: Promise<{ id: 
 
   const canSeeRate = ctx.has(PERM.material.purchaseOrder.viewRate);
 
+
+  // The paperwork kept against this receipt, newest last so it reads in the
+  // order it arrived.
+  const files = (
+    await prisma.grnAttachment.findMany({
+      where: { grnId: grn.id },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true, fileName: true, fileSize: true, label: true, createdAt: true,
+        uploadedBy: { select: { name: true } },
+      },
+    })
+  ).map((f) => ({
+    id: f.id,
+    fileName: f.fileName,
+    fileSize: f.fileSize,
+    label: f.label,
+    uploadedBy: f.uploadedBy?.name ?? null,
+    uploadedAt: f.createdAt.toISOString(),
+  }));
+
   return (
     <GrnDetail
+      files={files}
       grn={{
         id: grn.id,
         grnNo: grn.grnNo,

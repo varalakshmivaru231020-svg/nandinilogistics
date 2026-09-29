@@ -210,6 +210,7 @@ model User {
   attendanceEntries      AttendanceEntry[]
   kbArticles             KbArticle[]
   kbAttachments          KbAttachment[]
+  grnAttachments         GrnAttachment[]   @relation("GrnAttachmentUploader")
   grnsInspected          Grn[]               @relation("GrnInspector")
   settingsUpdated        AppSetting[]        @relation("SettingUpdatedBy")
   notifications          Notification[]      @relation("NotificationRecipient")
@@ -1440,6 +1441,7 @@ model Grn {
 
   items       GrnItem[]
   stockLedger StockLedger[]
+  attachments GrnAttachment[]
 
   @@index([poId])
   @@index([status])
@@ -1903,6 +1905,27 @@ model KbArticle {
 
   @@index([category])
   @@map("kb_articles")
+}
+
+/// Challans, weighbridge slips, photos of the delivery — added when the GRN is
+/// made and afterwards, because the paperwork rarely arrives all at once.
+model GrnAttachment {
+  id           String   @id @default(cuid())
+  grnId        String
+  storageKey   String
+  fileName     String
+  fileSize     Int      @default(0)
+  mimeType     String?
+  /// What the document is — challan, weighbridge slip, photo.
+  label        String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  grn        Grn   @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  uploadedBy User? @relation("GrnAttachmentUploader", fields: [uploadedById], references: [id])
+
+  @@index([grnId])
+  @@map("grn_attachments")
 }
 
 model KbAttachment {

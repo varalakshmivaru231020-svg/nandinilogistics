@@ -10,6 +10,7 @@ import { nextDocumentNumber } from "@/lib/numbering";
 import { postGrnToStock } from "@/lib/material/grn-posting";
 import { assertUnchanged, staleMessage } from "@/lib/material/procurement";
 import { PERM } from "@/lib/permissions/codes";
+import { put, FileTooLargeError, UnsupportedFileTypeError } from "@/lib/storage";
 
 const GrnLineSchema = z
   .object({
@@ -333,6 +334,97 @@ export async function updateGrnAction(
     });
     revalidatePath("/material/grn");
     revalidatePath(`/material/grn/${id}`);
+    return null;
+  });
+}
+
+/* ------------------------------ Attachments ------------------------------- */
+
+/**
+ * The paperwork against a receipt — challans, weighbridge slips, photos.
+ *
+ * It rarely all arrives with the lorry, so attachments are added when the GRN
+ * is made and afterwards, and a wrong one can be taken off again. Editing the
+ * GRN is the permission that governs both: whoever may correct a receipt may
+ * correct its paperwork.
+ */
+export async function addGrnAttachmentsAction(
+  grnId: string,
+  formData: FormData,
+): Promise<ActionResult<{ added: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.material.grn.update);
+
+    const grn = await prisma.grn.findUnique({
+      where: { id: grnId },
+      select: { id: true, grnNo: true, purchaseOrder: { select: { projectId: true } } },
+    });
+    if (!grn) throw new Error("Goods receipt not found.");
+    assertProjectAccess(ctx, grn.purchaseOrder.projectId);
+
+    const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+    if (files.length === 0) throw new Error("Choose at least one file.");
+    const label = String(formData.get("label") ?? "").trim() || null;
+
+    for (const file of files) {
+      try {
+        const stored = await put(
+          `grn-${grnId}`,
+          file.name,
+          Buffer.from(await file.arrayBuffer()),
+          file.type,
+        );
+        await prisma.grnAttachment.create({
+          data: {
+            grnId,
+            storageKey: stored.key,
+            fileName: file.name,
+            fileSize: file.size,
+            mimeType: file.type || null,
+            label,
+            uploadedById: ctx.id,
+          },
+        });
+      } catch (err) {
+        if (err instanceof FileTooLargeError || err instanceof UnsupportedFileTypeError) {
+          throw new Error(err.message);
+        }
+        throw err;
+      }
+    }
+
+    await recordAudit({
+      action: "UPDATE", entity: "Grn", entityId: grnId, userId: ctx.id,
+      projectId: grn.purchaseOrder.projectId,
+      summary: `Attached ${files.length} file(s) to ${grn.grnNo}`,
+    });
+    revalidatePath(`/material/grn/${grnId}`);
+    return { added: files.length };
+  });
+}
+
+export async function deleteGrnAttachmentAction(id: string): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.material.grn.update);
+
+    const file = await prisma.grnAttachment.findUnique({
+      where: { id },
+      select: {
+        id: true, fileName: true,
+        grn: { select: { id: true, grnNo: true, purchaseOrder: { select: { projectId: true } } } },
+      },
+    });
+    if (!file) throw new Error("That file is no longer there.");
+    assertProjectAccess(ctx, file.grn.purchaseOrder.projectId);
+
+    await prisma.grnAttachment.delete({ where: { id } });
+
+    await recordAudit({
+      action: "UPDATE", entity: "Grn", entityId: file.grn.id, userId: ctx.id,
+      projectId: file.grn.purchaseOrder.projectId,
+      summary: `Removed ${file.fileName} from ${file.grn.grnNo}`,
+    });
+    revalidatePath(`/material/grn/${file.grn.id}`);
     return null;
   });
 }
