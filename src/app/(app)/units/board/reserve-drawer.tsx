@@ -18,9 +18,11 @@ interface Customer { id: string; name: string; phone: string }
  * price list first, so a booking always has the cost sheet behind it.
  */
 export function ReserveDrawer({
-  mode, unitId, unitNumber, unitPlan, area, customers, onClose,
+  mode, unitId, unitNumber, unitPlan, area, customers, heldForId, onClose,
 }: {
   mode: "hold" | "book";
+  /** The customer a held unit is already promised to, so booking it does not ask again. */
+  heldForId?: string | null;
   unitId: string;
   unitNumber: string;
   unitPlan: string;
@@ -31,7 +33,7 @@ export function ReserveDrawer({
   const router = useRouter();
   const toast = useToast();
   const [creating, setCreating] = React.useState(false);
-  const [customerId, setCustomerId] = React.useState("");
+  const [customerId, setCustomerId] = React.useState(heldForId ?? "");
   const [q, setQ] = React.useState("");
 
   // The list is searched by name or mobile, which is how a customer is asked
@@ -63,7 +65,10 @@ export function ReserveDrawer({
     }
 
     if (mode === "hold") {
-      const held = await holdUnitAction(unitId, null);
+      // A hold is for somebody. Asking who and then dropping the answer is how
+      // the board came to say "held by Priya" and never "held for the Kumars".
+      if (!chosen) { setBusy(false); setError("Choose a customer, or create one."); return; }
+      const held = await holdUnitAction(unitId, null, chosen, remarks);
       setBusy(false);
       if (!held.ok) { setError(held.error); return; }
       toast(`Unit ${unitNumber} held.`);
@@ -71,7 +76,7 @@ export function ReserveDrawer({
       if (!chosen) { setBusy(false); setError("Choose a customer, or create one."); return; }
       const sheet = await createCostSheetAction(unitId, null, [], 0);
       if (!sheet.ok) { setBusy(false); setError(sheet.error); return; }
-      const booked = await createBookingAction(sheet.data.id, chosen, null);
+      const booked = await createBookingAction(sheet.data.id, chosen, null, remarks);
       setBusy(false);
       if (!booked.ok) { setError(booked.error); return; }
       toast(`Unit ${unitNumber} booked — token receipt and KYC next.`);

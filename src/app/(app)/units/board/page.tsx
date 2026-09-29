@@ -55,7 +55,11 @@ export default async function AvailabilityBoardPage({
             holds: {
               where: { isActive: true },
               take: 1,
-              include: { heldBy: { select: { name: true } }, lead: { select: { name: true } } },
+              include: {
+                heldBy: { select: { name: true } },
+                lead: { select: { name: true } },
+                customer: { select: { id: true, name: true, phone: true } },
+              },
             },
             // Who a booked flat went to — the panel names them, as it names
             // whoever is holding one.
@@ -174,6 +178,10 @@ export default async function AvailabilityBoardPage({
                   expiresAt: u.holds[0].expiresAt.toISOString(),
                   heldByName: u.holds[0].heldBy.name,
                   leadName: u.holds[0].lead?.name ?? null,
+                  customerId: u.holds[0].customer?.id ?? null,
+                  customerName: u.holds[0].customer?.name ?? null,
+                  customerPhone: u.holds[0].customer?.phone ?? null,
+                  remarks: u.holds[0].remarks,
                   extensionCount: u.holds[0].extensionCount,
                 }
               : null,

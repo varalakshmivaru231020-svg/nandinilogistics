@@ -1211,6 +1211,11 @@ model UnitHold {
   id             String    @id @default(cuid())
   unitId         String
   leadId         String?
+  /// Who the unit is being held for. A hold taken from the flats board names a
+  /// customer; one taken from a lead names the lead and may have no customer yet.
+  customerId     String?
+  /// What was promised or agreed when it was held.
+  remarks        String?
   heldById       String
   heldAt         DateTime  @default(now())
   expiresAt      DateTime
@@ -1219,11 +1224,13 @@ model UnitHold {
   extensionCount Int       @default(0)
   isActive       Boolean   @default(true)
 
-  unit   Unit  @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  lead   Lead? @relation(fields: [leadId], references: [id])
-  heldBy User  @relation(fields: [heldById], references: [id])
+  unit     Unit      @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  lead     Lead?     @relation(fields: [leadId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
+  heldBy   User      @relation(fields: [heldById], references: [id])
 
   @@index([unitId, isActive])
+  @@index([customerId])
   @@map("unit_holds")
 }
 
@@ -2031,6 +2038,7 @@ model Customer {
   updatedAt     DateTime  @updatedAt
 
   bookings Booking[]
+  holds    UnitHold[]
 
   @@index([phone])
   @@map("customers")

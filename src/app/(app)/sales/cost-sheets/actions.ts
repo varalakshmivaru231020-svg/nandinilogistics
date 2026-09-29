@@ -20,6 +20,9 @@ const HOLD_DAYS = 7;
 export async function holdUnitAction(
   unitId: string,
   leadId: string | null,
+  /** Who the unit is being held for — the board asks before it holds. */
+  customerId: string | null = null,
+  remarks: string | null = null,
   days: number = HOLD_DAYS,
 ): Promise<ActionResult<{ expiresAt: string }>> {
   return runAction(async () => {
@@ -43,18 +46,36 @@ export async function holdUnitAction(
       const claimed = await tx.unit.updateMany({ where: { id: unitId, status: "AVAILABLE" }, data: { status: "HELD" } });
       if (claimed.count === 0) throw new Error(`${unit.unitNumber} was just taken. Reload and pick another unit.`);
 
+      // Naming a customer who does not exist would leave the hold pointing at
+      // nothing, so it is checked before the row is written.
+      let heldFor: string | null = null;
+      if (customerId) {
+        const customer = await tx.customer.findUnique({
+          where: { id: customerId }, select: { name: true },
+        });
+        if (!customer) throw new Error("Customer not found.");
+        heldFor = customer.name;
+      }
+
       const expiresAt = new Date(Date.now() + days * 86_400_000);
       await tx.unitHold.create({
-        data: { unitId, leadId, heldById: ctx.id, expiresAt, isActive: true },
+        data: {
+          unitId, leadId, customerId,
+          remarks: remarks?.trim() || null,
+          heldById: ctx.id, expiresAt, isActive: true,
+        },
       });
 
-      return { unitNumber: unit.unitNumber, projectId: unit.projectId, expiresAt };
+      return { unitNumber: unit.unitNumber, projectId: unit.projectId, expiresAt, heldFor };
     });
 
     await recordAudit({
       action: "CREATE", entity: "UnitHold", entityId: unitId, userId: ctx.id,
       projectId: result.projectId,
-      summary: `Held unit ${result.unitNumber} until ${result.expiresAt.toLocaleDateString("en-IN")}`,
+      summary:
+        `Held unit ${result.unitNumber}` +
+        (result.heldFor ? ` for ${result.heldFor}` : "") +
+        ` until ${result.expiresAt.toLocaleDateString("en-IN")}`,
     });
 
     revalidatePath("/units/board");

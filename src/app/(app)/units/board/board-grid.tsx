@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { LockOpen, TimerReset } from "lucide-react";
+import { LockOpen, TimerReset, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Alert, Badge, Field, Textarea } from "@/components/ui/primitives";
@@ -14,6 +14,9 @@ import { ReserveDrawer } from "./reserve-drawer";
 interface Hold {
   id: string; expiresAt: string; heldByName: string;
   leadName: string | null; extensionCount: number;
+  /** Who it is being held for — what the design's panel names. */
+  customerId: string | null; customerName: string | null; customerPhone: string | null;
+  remarks: string | null;
 }
 
 interface Unit {
@@ -456,12 +459,20 @@ function UnitPanel({
         {unit.plcTag && <Badge tone="warn">{unit.plcTag}</Badge>}
 
         {unit.hold && (
-          <Alert tone={holdExpired ? "warn" : "info"} title={holdExpired ? "Hold has expired" : "On hold"}>
-            Held by {unit.hold.heldByName}
-            {unit.hold.leadName && ` for ${unit.hold.leadName}`} until{" "}
-            {formatDate(unit.hold.expiresAt)}.
-            {unit.hold.extensionCount > 0 && ` Extended ${unit.hold.extensionCount} time(s).`}
-          </Alert>
+          <div className="space-y-2">
+            <HolderCard
+              label="Held for"
+              name={unit.hold.customerName ?? unit.hold.leadName ?? unit.hold.heldByName}
+            />
+            <p className={cn("text-[11px] font-medium", holdExpired ? "text-bad-600" : "text-muted-500")}>
+              {holdExpired ? "Hold expired on " : "Held until "}
+              {formatDate(unit.hold.expiresAt)}
+              {unit.hold.extensionCount > 0 && ` · extended ${unit.hold.extensionCount} time(s)`}
+            </p>
+            {unit.hold.remarks && (
+              <p className="text-[11px] font-medium text-muted-500">{unit.hold.remarks}</p>
+            )}
+          </div>
         )}
 
         {unit.booking && (
@@ -510,9 +521,9 @@ function UnitPanel({
           </div>
         )}
 
-        {unit.status === "AVAILABLE" && (can.hold || can.book) && (
+        {(unit.status === "AVAILABLE" || unit.status === "HELD") && (can.hold || can.book) && (
           <div className="flex gap-2 border-t border-line-200 pt-3">
-            {can.hold && (
+            {can.hold && unit.status === "AVAILABLE" && (
               <Button size="sm" variant="secondary" className="flex-1" onClick={() => setReserving("hold")}>
                 Hold unit
               </Button>
@@ -574,10 +585,32 @@ function UnitPanel({
             unitPlan={unit.unitTypeName ?? "Unit"}
             area={unit.superBuiltUpArea}
             customers={customers}
+            heldForId={unit.hold?.customerId ?? null}
             onClose={() => setReserving(null)}
           />
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The design's holder card: an avatar, the relationship in small caps, and the
+ * name. The design uses the same card for a hold and for a booking, with only
+ * the label changing.
+ */
+function HolderCard({ label, name }: { label: string; name: string }) {
+  return (
+    <div className="flex items-center gap-2.5 rounded-[10px] border border-line-200 bg-surface-tint px-[13px] py-[11px]">
+      <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[linear-gradient(140deg,#0089C9,#2F308C)] text-[13px] text-white">
+        <User className="h-[15px] w-[15px]" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[10.5px] font-semibold uppercase tracking-[.05em] text-muted-400">
+          {label}
+        </span>
+        <span className="mt-0.5 block truncate text-[13px] font-bold text-navy-950">{name}</span>
+      </span>
     </div>
   );
 }

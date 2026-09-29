@@ -87,6 +87,8 @@ export async function createBookingAction(
   costSheetId: string,
   customerId: string,
   leadId: string | null,
+  /** What was agreed when it was booked — the board's remarks box. */
+  remarks: string | null = null,
 ): Promise<ActionResult<{ id: string; bookingNo: string; demands: number }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.sales.booking.create);
@@ -141,6 +143,7 @@ export async function createBookingAction(
           bookingDate,
           totalAmount: total,
           soldById: ctx.id,
+          remarks: remarks?.trim() || null,
           status: "CONFIRMED",
         },
       });
