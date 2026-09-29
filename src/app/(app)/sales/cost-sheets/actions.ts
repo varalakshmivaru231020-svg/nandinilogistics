@@ -35,16 +35,29 @@ export async function holdUnitAction(
       if (!unit) throw new Error("Unit not found.");
       assertProjectAccess(ctx, unit.projectId);
 
-      if (unit.status !== "AVAILABLE") {
+      // Holding a flat that is already held moves the hold to somebody else —
+      // the customer who was first in the queue dropped out, the next one takes
+      // it. Anything further along than a hold is not a hold's business.
+      if (unit.status !== "AVAILABLE" && unit.status !== "HELD") {
         throw new Error(
           `${unit.unitNumber} is ${unit.status.toLowerCase()} and cannot be held.`,
         );
       }
 
-      // Claim the unit only if it is still available: a concurrent hold, block
-      // or booking wins, and no second hold is created.
-      const claimed = await tx.unit.updateMany({ where: { id: unitId, status: "AVAILABLE" }, data: { status: "HELD" } });
+      // Claim the unit only if it has not moved since it was read: a booking or
+      // a block landing in between wins, and no second hold is created.
+      const claimed = await tx.unit.updateMany({
+        where: { id: unitId, status: unit.status },
+        data: { status: "HELD" },
+      });
       if (claimed.count === 0) throw new Error(`${unit.unitNumber} was just taken. Reload and pick another unit.`);
+
+      // One flat, one live hold. The one being replaced is closed, not dropped,
+      // so the trail still shows who had it and why it moved.
+      const replaced = await tx.unitHold.updateMany({
+        where: { unitId, isActive: true },
+        data: { isActive: false, releasedAt: new Date(), releaseNote: "Hold moved to another customer" },
+      });
 
       // Naming a customer who does not exist would leave the hold pointing at
       // nothing, so it is checked before the row is written.
@@ -66,14 +79,14 @@ export async function holdUnitAction(
         },
       });
 
-      return { unitNumber: unit.unitNumber, projectId: unit.projectId, expiresAt, heldFor };
+      return { unitNumber: unit.unitNumber, projectId: unit.projectId, expiresAt, heldFor, replaced: replaced.count > 0 };
     });
 
     await recordAudit({
       action: "CREATE", entity: "UnitHold", entityId: unitId, userId: ctx.id,
       projectId: result.projectId,
       summary:
-        `Held unit ${result.unitNumber}` +
+        `${result.replaced ? "Moved the hold on" : "Held"} unit ${result.unitNumber}` +
         (result.heldFor ? ` for ${result.heldFor}` : "") +
         ` until ${result.expiresAt.toLocaleDateString("en-IN")}`,
     });
@@ -81,38 +94,6 @@ export async function holdUnitAction(
     revalidatePath("/units/board");
     revalidatePath("/units");
     return { expiresAt: result.expiresAt.toISOString() };
-  });
-}
-
-export async function extendHoldAction(
-  holdId: string,
-  days: number,
-): Promise<ActionResult<{ expiresAt: string }>> {
-  return runAction(async () => {
-    const ctx = await authorize(PERM.unit.hold.extend);
-
-    const hold = await prisma.unitHold.findUnique({
-      where: { id: holdId },
-      include: { unit: { select: { unitNumber: true, projectId: true } } },
-    });
-    if (!hold) throw new Error("Hold not found.");
-    if (!hold.isActive) throw new Error("This hold has already been released.");
-    assertProjectAccess(ctx, hold.unit.projectId);
-
-    const expiresAt = new Date(hold.expiresAt.getTime() + days * 86_400_000);
-    await prisma.unitHold.update({
-      where: { id: holdId },
-      data: { expiresAt, extensionCount: { increment: 1 } },
-    });
-
-    await recordAudit({
-      action: "APPROVE", entity: "UnitHold", entityId: holdId, userId: ctx.id,
-      projectId: hold.unit.projectId,
-      summary: `Extended the hold on ${hold.unit.unitNumber} by ${days} day(s) — extension ${hold.extensionCount + 1}`,
-    });
-
-    revalidatePath("/units/board");
-    return { expiresAt: expiresAt.toISOString() };
   });
 }
 

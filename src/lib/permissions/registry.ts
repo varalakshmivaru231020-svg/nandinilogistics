@@ -832,6 +832,8 @@ export const NOT_YET_BUILT: ReadonlySet<string> = new Set([
   "schedule.template.view",
   "task.task.export",
   "unit.hold.view",
+  // The design's flats panel has no extension step: a hold is released or booked.
+  "unit.hold.extend",
   "unit.priceList.delete",
   "unit.priceList.update",
 ]);

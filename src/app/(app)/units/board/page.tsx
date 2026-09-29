@@ -201,11 +201,9 @@ export default async function AvailabilityBoardPage({
         }))}
         customers={customers}
         bookingHistory={bookingHistory}
-        nowMs={new Date().getTime()}
         can={{
           hold: ctx.has(PERM.unit.hold.create),
           cancelBooking: ctx.has(PERM.sales.booking.cancel),
-          extend: ctx.has(PERM.unit.hold.extend),
           release: ctx.has(PERM.unit.hold.release),
           viewPrice: ctx.has(PERM.unit.unit.viewPrice),
           book: ctx.has(PERM.sales.booking.create) && ctx.has(PERM.sales.costSheet.create),
