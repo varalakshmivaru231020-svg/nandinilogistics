@@ -116,19 +116,44 @@ suite("access control, end to end", () => {
       expect(html).not.toContain('title="Assign"');
     });
 
-    it("offers lead assignment to the sales head", async () => {
-      const { html } = await visit("/sales/leads?view=list", tokens.saleshead);
-      expect(html).toContain('title="Assign"');
+    /*
+     * The design keeps a lead's actions on the lead's own screen rather than in
+     * the pipeline, so reassignment is offered there.
+     */
+    it("offers lead reassignment to the sales head, on the lead itself", async () => {
+      const lead = await prisma.lead.findFirst({ select: { id: true } });
+      if (!lead) return;
+      const { html } = await visit(`/sales/leads/${lead.id}`, tokens.saleshead);
+      expect(html).toMatch(/Reassign|Assign/);
+    });
+
+    it("hides reassignment from a sales executive", async () => {
+      const own = await prisma.lead.findFirst({
+        where: { owner: { email: "sales@nninfra.example" } },
+        select: { id: true },
+      });
+      if (!own) return;
+      const { html } = await visit(`/sales/leads/${own.id}`, tokens.sales);
+      expect(html).not.toMatch(/>Reassign/);
     });
   });
 
-  describe("the pending modules stay pending", () => {
+  /*
+   * Tasks and Checklists were inert previews once. They were built into real
+   * screens deliberately, so what is asserted now is that they work and are
+   * still gated — not that they refuse to do anything.
+   */
+  describe("tasks and checklists are real screens, still gated", () => {
     for (const route of ["/tasks", "/checklists"]) {
-      it(`tells the Owner that ${route} is a preview, and offers nothing to act on`, async () => {
-        const { html } = await visit(route, tokens.owner);
-        expect(html).toContain("pending client verification");
-        expect(html).toContain("nothing here saves");
-        expect(html).not.toContain("<form");
+      it(`serves ${route} to the Owner`, async () => {
+        const { status, html } = await visit(route, tokens.owner);
+        expect(status).toBe(200);
+        expect(html).not.toContain("pending client verification");
+      });
+
+      it(`refuses ${route} to someone without the permission`, async () => {
+        const { status } = await visit(route, tokens.sales);
+        expect([307, 403]).toContain(status);
       });
     }
   });
@@ -139,7 +164,7 @@ suite("access control, end to end", () => {
       if (!lead) return;
       const { status, html } = await visit(`/sales/leads/${lead.id}`, tokens.saleshead);
       expect(status).toBe(200);
-      for (const tab of ["Timeline", "Follow-ups", "Notes", "Stage history", "Files", "Flats"]) {
+      for (const tab of ["Timeline", "Follow-ups", "Notes", "Stage History", "Files", "Flats"]) {
         expect(html, `missing tab ${tab}`).toContain(tab);
       }
       expect(html).toContain("Back to leads");

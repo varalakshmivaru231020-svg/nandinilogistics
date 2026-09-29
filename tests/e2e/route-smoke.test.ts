@@ -11,7 +11,15 @@ import { revokeTestSessions, sessionFor, serverIsUp, visit } from "./session";
  * else, and a 500 in particular, is a screen that does not work.
  *
  * Dynamic segments are skipped here; the flow tests cover those with real ids.
+ *
+ * A few screens are only reachable from a record and send you back when opened
+ * bare — issuing material needs the indent it is issued against. Those are
+ * listed below with where they go, so "sends you somewhere sensible" stays
+ * asserted rather than merely tolerated.
  */
+const REDIRECTS_WHEN_BARE: Record<string, string> = {
+  "/material/issues/new": "/material/indents",
+};
 const APP_DIR = join(__dirname, "..", "..", "src", "app", "(app)");
 
 function routes(dir = APP_DIR, prefix = ""): string[] {
@@ -54,7 +62,11 @@ suite("every route renders or is refused, for every role", () => {
       for (const route of all) {
         const res = await visit(route, tokens[role]);
         const refused = res.status === 307 && (res.location ?? "").includes("/forbidden");
-        if (res.status === 200 || refused) continue;
+        const sentBack =
+          res.status === 307 &&
+          REDIRECTS_WHEN_BARE[route] !== undefined &&
+          (res.location ?? "").includes(REDIRECTS_WHEN_BARE[route]);
+        if (res.status === 200 || refused || sentBack) continue;
         broken.push(`${route} → ${res.status} ${res.location ?? ""}`);
       }
       expect(broken).toEqual([]);

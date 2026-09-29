@@ -135,6 +135,8 @@ export default async function IndentDetailPage({ params }: { params: Promise<{ i
       }))}
       movements={movements}
       can={{
+        approvePm: ctx.has(PERM.material.indent.approvePm),
+        approveAdmin: ctx.has(PERM.material.indent.approveAdmin),
         issue: ctx.has(PERM.material.issue.create),
         raisePo: ctx.has(PERM.material.purchaseOrder.create),
         delete: ctx.has(PERM.material.indent.delete),

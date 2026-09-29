@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Alert } from "@/components/ui/primitives";
+import { Alert, Field, Textarea } from "@/components/ui/primitives";
 import {
   DetailAction, DetailActionLink, DetailScreen, Fact, PanelCard, SoftPill,
   SummaryCard, TD, TH,
@@ -15,7 +15,7 @@ import {
   chainStage, INDENT_CHAIN, INDENT_STATUS_LABEL, INDENT_STATUS_TONE,
   indentFulfilment, q, type FulfilLine,
 } from "@/lib/material/indent-fulfilment";
-import { deleteIndentAction } from "../actions";
+import { approveIndentAction, deleteIndentAction, rejectIndentAction } from "../actions";
 
 interface Indent {
   id: string; indentNo: string; status: string; updatedAt: string;
@@ -56,12 +56,36 @@ export function IndentDetail({
   indent: Indent;
   lines: Line[];
   movements: Movement[];
-  can: { issue: boolean; raisePo: boolean; update: boolean; delete: boolean };
+  can: {
+    issue: boolean; raisePo: boolean; update: boolean; delete: boolean;
+    approvePm: boolean; approveAdmin: boolean;
+  };
 }) {
   const router = useRouter();
   const [error, setError] = React.useState<string | null>(null);
   const [confirming, setConfirming] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+
+  const [deciding, setDeciding] = React.useState<"approve" | "reject" | null>(null);
+  const [remark, setRemark] = React.useState("");
+
+  /** Which step this indent is sitting at, if any. */
+  const waitingOn =
+    indent.status === "SUBMITTED" ? "PM" : indent.status === "PM_APPROVED" ? "ADMIN" : null;
+
+  async function decide() {
+    setBusy(true);
+    setError(null);
+    const res =
+      deciding === "approve"
+        ? await approveIndentAction(indent.id, waitingOn === "ADMIN" ? "ADMIN" : "PM", remark)
+        : await rejectIndentAction(indent.id, remark);
+    setBusy(false);
+    if (!res.ok) { setError(res.error); return; }
+    setDeciding(null);
+    setRemark("");
+    router.refresh();
+  }
 
   const fulfil = indentFulfilment(lines);
   const stage = chainStage(indent.status);
@@ -102,6 +126,41 @@ export function IndentDetail({
       subtitle={`${indent.title} · ${indent.project} · required by ${indent.requiredBy}`}
       actions={
         <>
+          {/*
+           * An indent is decided from the record as well as from the approvals
+           * queue — this is where someone looks when they have the paper in
+           * front of them.
+           */}
+          {waitingOn === "PM" && can.approvePm && (
+            <>
+              <DetailAction tone="danger" onClick={() => setDeciding("reject")}>
+                Reject
+              </DetailAction>
+              <DetailAction tone="success" onClick={() => setDeciding("approve")}>
+                Approve — PM level
+              </DetailAction>
+            </>
+          )}
+          {waitingOn === "ADMIN" && can.approveAdmin && (
+            <>
+              <DetailAction tone="danger" onClick={() => setDeciding("reject")}>
+                Reject
+              </DetailAction>
+              <DetailAction tone="success" onClick={() => setDeciding("approve")}>
+                Approve — Admin level
+              </DetailAction>
+            </>
+          )}
+          {waitingOn === "PM" && !can.approvePm && (
+            <span className="rounded-[9px] bg-warn-050 px-3.5 py-[9px] text-[12px] font-semibold text-warn-700">
+              Waiting on Project Manager approval
+            </span>
+          )}
+          {waitingOn === "ADMIN" && !can.approveAdmin && (
+            <span className="rounded-[9px] bg-warn-050 px-3.5 py-[9px] text-[12px] font-semibold text-warn-700">
+              Waiting on Owner / Admin approval
+            </span>
+          )}
           {canIssueNow && can.issue && (
             <DetailActionLink tone="success" href={`/material/issues/new?indent=${indent.id}`}>
               ↗ Issue from stock
@@ -301,6 +360,38 @@ export function IndentDetail({
           </table>
         </div>
       </PanelCard>
+
+      <Modal
+        open={deciding !== null}
+        onClose={() => setDeciding(null)}
+        title={`${deciding === "approve" ? "Approve" : "Reject"} ${indent.indentNo}`}
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setDeciding(null)}>Cancel</Button>
+            <Button
+              variant={deciding === "approve" ? "success" : "danger"}
+              loading={busy}
+              disabled={deciding === "reject" && !remark.trim()}
+              onClick={decide}
+            >
+              {deciding === "approve" ? "Approve" : "Reject"}
+            </Button>
+          </>
+        }
+      >
+        <Field
+          label="Remarks"
+          required={deciding === "reject"}
+          hint={
+            deciding === "approve"
+              ? "Optional — it goes on the approval trail."
+              : "A reason is required, and whoever raised it will see it."
+          }
+        >
+          <Textarea value={remark} onChange={(e) => setRemark(e.target.value)} rows={3} />
+        </Field>
+      </Modal>
 
       <Modal
         open={confirming}
