@@ -134,22 +134,31 @@ export function ReserveDrawer({
                   {found.length} of {customers.length} {customers.length === 1 ? "customer" : "customers"}
                 </p>
               )}
-              {found.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setCustomerId(c.id)}
-                  className={cn(
-                    "flex items-center justify-between gap-2 rounded-[10px] border px-3 py-2.5 text-left text-[12.5px] font-semibold",
-                    customerId === c.id
-                      ? "border-brand-500 bg-brand-100 text-brand-700"
-                      : "border-line-400 bg-white text-navy-900 hover:border-brand-500",
-                  )}
-                >
-                  {c.name}
-                  <span className="num text-[11px] font-medium text-muted-500">{c.phone}</span>
-                </button>
-              ))}
+              {/*
+                Five customers, then scroll — searching or not. A row is 37px
+                and the gaps are 7px, so five of them come to 213px exactly;
+                the sixth is below the fold rather than half-shown.
+              */}
+              {found.length > 0 && (
+                <div className="scroll-thin flex max-h-[213px] flex-col gap-[7px] overflow-y-auto">
+                  {found.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setCustomerId(c.id)}
+                      className={cn(
+                        "flex shrink-0 items-center justify-between gap-2 rounded-[10px] border px-3 py-2.5 text-left text-[12.5px] font-semibold",
+                        customerId === c.id
+                          ? "border-brand-500 bg-brand-100 text-brand-700"
+                          : "border-line-400 bg-white text-navy-900 hover:border-brand-500",
+                      )}
+                    >
+                      {c.name}
+                      <span className="num text-[11px] font-medium text-muted-500">{c.phone}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {customers.length === 0 && (
                 <p className="py-4 text-center text-[12px] font-medium text-muted-300">
                   No customers yet — create one
