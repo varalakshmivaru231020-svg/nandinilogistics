@@ -10,7 +10,9 @@ import { nextDocumentNumber } from "@/lib/numbering";
 import { postGrnToStock } from "@/lib/material/grn-posting";
 import { assertUnchanged, staleMessage } from "@/lib/material/procurement";
 import { PERM } from "@/lib/permissions/codes";
-import { put, FileTooLargeError, UnsupportedFileTypeError } from "@/lib/storage";
+import {
+  assertStorable, filesFrom, labelFrom, storeGrnAttachments,
+} from "@/lib/material/grn-attachments";
 
 const GrnLineSchema = z
   .object({
@@ -40,7 +42,17 @@ const GrnSchema = z.object({
 
 type GrnInput = z.infer<typeof GrnSchema>;
 
-export async function createGrnAction(input: GrnInput): Promise<ActionResult<{ id: string; grnNo: string }>> {
+/**
+ * Booking a receipt, with the challan that came with it.
+ *
+ * The paperwork is part of making the receipt, not a correction to one, so it
+ * is `grn.create` that governs it here — a storeman who may book a delivery may
+ * attach its challan without also being allowed to edit receipts.
+ */
+export async function createGrnAction(
+  input: GrnInput,
+  attachments?: FormData,
+): Promise<ActionResult<{ id: string; grnNo: string; attached: number }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.material.grn.create);
     const parsed = GrnSchema.safeParse(input);
@@ -56,6 +68,11 @@ export async function createGrnAction(input: GrnInput): Promise<ActionResult<{ i
     if (!["APPROVED", "PARTIALLY_RECEIVED"].includes(po.status)) {
       throw new Error("Material can only be received against an approved purchase order.");
     }
+
+    // Booking the receipt moves stock, so a file that was never going to be
+    // accepted is refused now rather than after the store has been changed.
+    const files = attachments ? filesFrom(attachments) : [];
+    assertStorable(files);
 
     // Never accept more than the PO still has outstanding.
     const poItemById = new Map(po.items.map((i) => [i.id, i]));
@@ -109,15 +126,27 @@ export async function createGrnAction(input: GrnInput): Promise<ActionResult<{ i
       return created;
     });
 
+    const attached = files.length
+      ? await storeGrnAttachments({
+          grnId: grn.id,
+          files,
+          label: labelFrom(attachments!),
+          uploadedById: ctx.id,
+        })
+      : 0;
+
     await recordAudit({
       action: "CREATE", entity: "Grn", entityId: grn.id, userId: ctx.id, projectId: po.projectId,
-      summary: `Recorded goods receipt ${grn.grnNo} against ${po.poNo}${v.challanNo ? ` (challan ${v.challanNo})` : ""}`,
+      summary:
+        `Recorded goods receipt ${grn.grnNo} against ${po.poNo}` +
+        (v.challanNo ? ` (challan ${v.challanNo})` : "") +
+        (attached > 0 ? ` with ${attached} attachment(s)` : ""),
     });
 
     revalidatePath("/material/grn");
     revalidatePath("/material/stock");
     revalidatePath(`/material/purchase-orders/${po.id}`);
-    return { id: grn.id, grnNo: grn.grnNo };
+    return { id: grn.id, grnNo: grn.grnNo, attached };
   });
 }
 
@@ -362,36 +391,12 @@ export async function addGrnAttachmentsAction(
     if (!grn) throw new Error("Goods receipt not found.");
     assertProjectAccess(ctx, grn.purchaseOrder.projectId);
 
-    const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+    const files = filesFrom(formData);
     if (files.length === 0) throw new Error("Choose at least one file.");
-    const label = String(formData.get("label") ?? "").trim() || null;
 
-    for (const file of files) {
-      try {
-        const stored = await put(
-          `grn-${grnId}`,
-          file.name,
-          Buffer.from(await file.arrayBuffer()),
-          file.type,
-        );
-        await prisma.grnAttachment.create({
-          data: {
-            grnId,
-            storageKey: stored.key,
-            fileName: file.name,
-            fileSize: file.size,
-            mimeType: file.type || null,
-            label,
-            uploadedById: ctx.id,
-          },
-        });
-      } catch (err) {
-        if (err instanceof FileTooLargeError || err instanceof UnsupportedFileTypeError) {
-          throw new Error(err.message);
-        }
-        throw err;
-      }
-    }
+    await storeGrnAttachments({
+      grnId, files, label: labelFrom(formData), uploadedById: ctx.id,
+    });
 
     await recordAudit({
       action: "UPDATE", entity: "Grn", entityId: grnId, userId: ctx.id,

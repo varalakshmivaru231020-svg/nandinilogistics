@@ -33,6 +33,9 @@ export function GrnForm({
   const [challanDate, setChallanDate] = React.useState("");
   const [vehicleNo, setVehicleNo] = React.useState("");
   const [remarks, setRemarks] = React.useState("");
+  // The challan and any slips, held here until the receipt is booked — there is
+  // nothing to attach them to until then.
+  const [files, setFiles] = React.useState<File[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -88,6 +91,12 @@ export function GrnForm({
     setBusy(true);
     setError(null);
 
+    // The files ride with the receipt, so one permission and one audit entry
+    // cover booking it and its paperwork.
+    const attachments = new FormData();
+    for (const f of files) attachments.append("files", f);
+    attachments.set("label", "Challan");
+
     const res = await createGrnAction({
       poId: po.id,
       storeId,
@@ -107,7 +116,7 @@ export function GrnForm({
           rate: r.line.rate,
           rejectionReason: r.s.rejectionReason || undefined,
         })),
-    });
+    }, files.length ? attachments : undefined);
 
     setBusy(false);
     if (!res.ok) setError(res.error);
@@ -163,10 +172,45 @@ export function GrnForm({
               <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2} />
             </Field>
           </div>
-          <p className="mt-3 border-t border-line-200 pt-3 text-xs text-muted-500">
-            Challan photo capture arrives with the mobile app and the storage integration; the field
-            is already on the record.
-          </p>
+          <div className="mt-4 border-t border-line-200 pt-4">
+            <p className="mb-[5px] text-[11px] font-semibold text-muted-600">
+              Challan / material photo
+            </p>
+            {files.map((f, i) => (
+              <div
+                key={`${f.name}-${i}`}
+                className="mb-1.5 flex items-center gap-2.5 rounded-[9px] border border-[#9AD4B4] bg-[#E4F6EC] px-3 py-[9px]"
+              >
+                <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-[#177049]">
+                  ✓ {f.name}
+                </span>
+                <span className="num shrink-0 text-[11px] font-medium text-[#177049]">
+                  {Math.max(1, Math.round(f.size / 1024))} KB
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFiles(files.filter((_, x) => x !== i))}
+                  className="shrink-0 cursor-pointer rounded-[7px] bg-[#CBEBD9] px-[9px] py-[5px] text-[10.5px] font-semibold text-[#177049]"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <label className="mt-1.5 block w-full cursor-pointer rounded-[9px] border border-dashed border-[#C6CFE8] bg-surface-sunken px-3 py-3.5 text-center text-[12px] font-semibold text-muted-600 transition-colors hover:border-brand-500 hover:bg-[#F3F8FE] hover:text-brand-700">
+              ⎙ Capture / attach photo
+              <input
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files ?? []);
+                  if (picked.length) setFiles((f) => [...f, ...picked]);
+                  // Let the same file be chosen again after it is removed.
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
         </CardBody>
       </Card>
 
