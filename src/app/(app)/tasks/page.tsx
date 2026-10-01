@@ -13,16 +13,40 @@ export const metadata = { title: "Task Management" };
  * they were given, plus any they were named to review or approve — not the
  * organisation's. The scope gives the whole view to Admin alone.
  */
+/**
+ * Which level a checklist task is actually sitting at, in words.
+ *
+ * "Under Review" says nothing about who is holding it up; "Under review ·
+ * level 2 · Narayan" does, and it is the first thing anyone asks.
+ */
+function stageOf(t: {
+  status: string;
+  round: number;
+  levels: Array<{ kind: string; level: number; user: { name: string }; actions: Array<{ round: number }> }>;
+}): string | null {
+  const kind = t.status === "UNDER_REVIEW" ? "REVIEW" : t.status === "UNDER_APPROVAL" ? "APPROVAL" : null;
+  if (!kind) return null;
+  const done = new Set(
+    t.levels.filter((l) => l.kind === kind && l.actions.some((a) => a.round === t.round)).map((l) => l.level),
+  );
+  const next = t.levels
+    .filter((l) => l.kind === kind && !done.has(l.level))
+    .sort((a, b) => a.level - b.level)[0];
+  if (!next) return null;
+  return `Under level ${next.level} ${kind === "REVIEW" ? "review" : "approval"} · ${next.user.name}`;
+}
+
 export default async function TasksPage({
   searchParams,
 }: {
   searchParams: Promise<{
     filter?: string; mine?: string; priority?: string;
     assignee?: string; assigner?: string; from?: string; to?: string;
+    q?: string; has?: string;
   }>;
 }) {
   const ctx = await requirePermission(PERM.task.task.view);
-  const { filter = "All", mine, priority, assignee, assigner, from, to } = await searchParams;
+  const { filter = "All", mine, priority, assignee, assigner, from, to, q, has } = await searchParams;
 
   const seesEverything = ctx.has(PERM.task.task.viewAll);
   const projectScope = ctx.canAccessAllProjects
@@ -58,13 +82,27 @@ export default async function TasksPage({
       : {}),
     ...(assignee ? { assigneeId: assignee } : {}),
     ...(assigner ? { createdById: assigner } : {}),
+    ...(has === "checklist" ? { kind: "CHECKLIST" as const } : {}),
+    ...(has === "plain" ? { kind: "STANDALONE" as const } : {}),
+    // Searched by the number on it, its title, or whoever it is for.
+    ...(q?.trim()
+      ? {
+          OR: [
+            { taskNo: { contains: q.trim(), mode: "insensitive" as const } },
+            { title: { contains: q.trim(), mode: "insensitive" as const } },
+            { assignee: { name: { contains: q.trim(), mode: "insensitive" as const } } },
+            { createdBy: { name: { contains: q.trim(), mode: "insensitive" as const } } },
+          ],
+        }
+      : {}),
     ...dueRange,
   };
 
-  const [tasks, projects, people, checklists] = await Promise.all([
+  const [tasks, people] = await Promise.all([
     prisma.task.findMany({
       where,
-      orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }],
+      // Newest first: the task just raised is the one being looked for.
+      orderBy: { createdAt: "desc" },
       select: {
         id: true, taskNo: true, title: true, location: true, dueAt: true, kind: true,
         priority: true, status: true, round: true, createdById: true, assigneeId: true,
@@ -73,22 +111,19 @@ export default async function TasksPage({
         createdBy: { select: { id: true, name: true } },
         _count: { select: { comments: true, attachments: true } },
         extensions: { where: { status: "REQUESTED" }, select: { id: true } },
+        levels: {
+          select: {
+            kind: true, level: true,
+            user: { select: { name: true } },
+            actions: { select: { round: true } },
+          },
+        },
       },
-    }),
-    prisma.project.findMany({
-      where: ctx.canAccessAllProjects ? { status: "ACTIVE" } : { status: "ACTIVE", id: { in: ctx.projectIds } },
-      orderBy: { name: "asc" },
-      select: { id: true, code: true },
     }),
     prisma.user.findMany({
       where: { status: "ACTIVE" },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
-    }),
-    prisma.checklist.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, category: { select: { name: true } } },
     }),
   ]);
 
@@ -131,6 +166,8 @@ export default async function TasksPage({
       myScore={seesOwnScore ? myScore : null}
       filter={filter}
       mine={mine === "to" ? "to" : mine === "by" ? "by" : null}
+      q={q ?? ""}
+      has={has === "checklist" ? "checklist" : has === "plain" ? "plain" : ""}
       picked={{
         priority: priority ?? "",
         assignee: assignee ?? "",
@@ -140,9 +177,7 @@ export default async function TasksPage({
       }}
       nowMs={nowMs}
       viewerId={ctx.id}
-      projects={projects}
       people={people}
-      checklists={checklists.map((c) => ({ id: c.id, name: c.name, category: c.category.name }))}
       tasks={tasks.map((t) => ({
         id: t.id,
         taskNo: t.taskNo,
@@ -161,6 +196,7 @@ export default async function TasksPage({
         comments: t._count.comments,
         attachments: t._count.attachments,
         extensionWaiting: t.extensions.length > 0,
+        stage: stageOf(t),
       }))}
       can={{
         create: ctx.has(PERM.task.task.create),

@@ -9,7 +9,7 @@ import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
 import { canDo, statusAfterComplete, statusAfterLevel, type TaskAction } from "@/lib/tasks/lifecycle";
 import {
-  actedThisRound, applyExtensionDecision, checklistComplete, logTaskEvent, moveStatus, shapeOf,
+  actedThisRound, applyExtensionDecision, logTaskEvent, moveStatus, shapeOf,
 } from "@/lib/tasks/service";
 import { assertStorable, filesFrom } from "@/lib/material/grn-attachments";
 import { audienceFor, notifyTask, type TaskEventKind } from "@/lib/tasks/notify";
@@ -137,10 +137,12 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
     if (isChecklist && reviewers.length === 0 && approvers.length === 0) {
       throw new Error("A checklist task needs at least one reviewer or approver.");
     }
-    for (const [label, list] of [["reviewer", reviewers], ["approver", approvers]] as const) {
-      if (new Set(list).size !== list.length) {
-        throw new Error(`The same person is on two ${label} levels.`);
-      }
+    // Nobody sits on two levels, reviewing or approving: a second look by the
+    // same person is not a second look. The form hides the names already taken;
+    // this is what actually holds the rule.
+    const everyLevel = [...reviewers, ...approvers];
+    if (new Set(everyLevel).size !== everyLevel.length) {
+      throw new Error("The same person is on more than one review or approval level.");
     }
 
     const files = filesFrom(formData);
@@ -306,10 +308,6 @@ export async function completeTaskAction(id: string, remark: string): Promise<Ac
     const { shape } = await assertMay("complete", id, ctx.id, await isAdminOf(ctx));
     if (!remark.trim()) throw new Error("A closure remark is required to complete a task.");
 
-    if (shape.kind === "CHECKLIST" && !(await checklistComplete(prisma, id))) {
-      throw new Error("Answer every mandatory checklist item, with its photo, before completing.");
-    }
-
     const to = statusAfterComplete(shape);
     await prisma.$transaction(async (tx) => {
       await moveStatus(tx, {
@@ -331,9 +329,6 @@ export async function resubmitTaskAction(id: string, remark: string): Promise<Ac
     const ctx = await authorize(PERM.task.task.complete);
     const { shape } = await assertMay("resubmit", id, ctx.id, await isAdminOf(ctx));
     if (!remark.trim()) throw new Error("Say what was corrected before resubmitting.");
-    if (!(await checklistComplete(prisma, id))) {
-      throw new Error("Answer every mandatory checklist item, with its photo, before resubmitting.");
-    }
 
     // A resubmission is a new round, and the flow restarts at Reviewer Level 1.
     const to = statusAfterComplete(shape);
@@ -657,39 +652,6 @@ export async function deleteCommentAction(commentId: string): Promise<ActionResu
 // Answering a checklist
 // --------------------------------------------------------------------------
 
-export async function answerChecklistItemAction(
-  itemId: string,
-  answer: { choice?: string; text?: string; number?: number; date?: string },
-): Promise<ActionResult<null>> {
-  return runAction(async () => {
-    const ctx = await authorize(PERM.task.task.complete);
-    const item = await prisma.taskChecklistItem.findUniqueOrThrow({
-      where: { id: itemId },
-      select: { taskChecklist: { select: { taskId: true } } },
-    });
-    const taskId = item.taskChecklist.taskId;
-    // Answering is work on the task, so it follows the same rule as completing.
-    const shape = await shapeOf(prisma, taskId);
-    const admin = await isAdminOf(ctx);
-    const working = ["STARTED", "REWORK"].includes(shape.status);
-    const mine = shape.assigneeId === ctx.id || admin;
-    if (!working || !mine) throw new Error("Only the assignee can answer, and only while the task is open.");
-
-    await prisma.taskChecklistItem.update({
-      where: { id: itemId },
-      data: {
-        answerChoice: answer.choice ?? null,
-        answerText: answer.text ?? null,
-        answerNumber: answer.number ?? null,
-        answerDate: answer.date ? new Date(answer.date) : null,
-        answeredAt: new Date(),
-      },
-    });
-    refresh(taskId);
-    return null;
-  });
-}
-
 // --------------------------------------------------------------------------
 // The design's bulk bar
 // --------------------------------------------------------------------------
@@ -818,46 +780,3 @@ export async function deleteTasksAction(ids: string[]): Promise<ActionResult<{ d
   });
 }
 
-/**
- * Attaching the photo a checklist item asks for.
- *
- * A checkpoint marked as needing a file cannot be completed without one, so
- * this is the other half of that rule: without it a task carrying such an item
- * could never be finished.
- */
-export async function attachChecklistItemFileAction(
-  itemId: string,
-  formData: FormData,
-): Promise<ActionResult<{ added: number }>> {
-  return runAction(async () => {
-    const ctx = await authorize(PERM.task.task.complete);
-    const item = await prisma.taskChecklistItem.findUniqueOrThrow({
-      where: { id: itemId },
-      select: { taskChecklist: { select: { taskId: true } } },
-    });
-    const taskId = item.taskChecklist.taskId;
-
-    const shape = await shapeOf(prisma, taskId);
-    const admin = await isAdminOf(ctx);
-    const working = ["STARTED", "REWORK"].includes(shape.status);
-    if (!working || (shape.assigneeId !== ctx.id && !admin)) {
-      throw new Error("Only the assignee can attach, and only while the task is open.");
-    }
-
-    const files = filesFrom(formData);
-    if (files.length === 0) throw new Error("Choose a file first.");
-    assertStorable(files);
-
-    for (const file of files) {
-      const stored = await put(`task-${taskId}`, file.name, Buffer.from(await file.arrayBuffer()), file.type);
-      await prisma.taskChecklistItemFile.create({
-        data: {
-          itemId, storageKey: stored.key, fileName: file.name,
-          fileSize: file.size, mimeType: file.type || null, uploadedById: ctx.id,
-        },
-      });
-    }
-    refresh(taskId);
-    return { added: files.length };
-  });
-}

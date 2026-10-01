@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { ChecklistResponseType, TaskKind, TaskPriority, TaskStatus } from "@prisma/client";
+import type { TaskKind, TaskPriority, TaskStatus } from "@prisma/client";
 
 import {
   Alert, Card, CardBody, CardHeader, CardTitle, Field, Input, Select, Textarea,
@@ -13,10 +13,10 @@ import { useToast } from "@/components/ui/toast";
 import { cn, formatDateTime } from "@/lib/utils";
 import { STATUS_LABEL, isOverdue } from "@/lib/tasks/lifecycle";
 import {
-  acceptTaskAction, addCommentAction, answerChecklistItemAction, closeTaskAction,
+  acceptTaskAction, addCommentAction, closeTaskAction,
   completeTaskAction, decideExtensionAction, decideLevelAction, deleteCommentAction,
   editCommentAction, reopenTaskAction, requestExtensionAction, resubmitTaskAction,
-  sendBackTaskAction, startTaskAction, attachChecklistItemFileAction,
+  sendBackTaskAction, startTaskAction,
 } from "../actions";
 
 interface Task {
@@ -31,12 +31,11 @@ interface Level {
   id: string; kind: "REVIEW" | "APPROVAL"; level: number; person: string; isViewer: boolean;
   actions: Array<{ round: number; decision: string; remark: string; actor: string; actedAt: string }>;
 }
+/** A checklist line: a number, a title, and what each round said about it. */
 interface Item {
-  id: string; text: string; responseType: ChecklistResponseType;
-  isMandatory: boolean; needsFile: boolean;
-  answerChoice: string | null; answerText: string | null;
-  answerNumber: number | null; answerDate: string | null; answered: boolean;
-  files: Array<{ id: string; fileName: string }>;
+  id: string;
+  text: string;
+  isMandatory: boolean;
   reviews: Array<{ round: number; verdict: string; remark: string | null; kind: string; level: number }>;
 }
 
@@ -48,8 +47,12 @@ interface Item {
  * already allowed. The action checks again regardless.
  */
 export function TaskDetail({
-  task, levels, checklists, comments, extensions, files, history, can, nowMs,
+  task, levels, checklists, comments, extensions, files, history, can, nowMs, stage, nextUp,
 }: {
+  /** Where a checklist task is standing, in words. */
+  stage: string | null;
+  /** Who it reaches after the level holding it now. */
+  nextUp: string | null;
   task: Task;
   levels: Level[];
   checklists: Array<{ id: string; name: string; items: Item[] }>;
@@ -78,6 +81,15 @@ export function TaskDetail({
   const [asking, setAsking] = React.useState(false);
   const [deciding, setDeciding] = React.useState<string | null>(null);
   const [levelChoice, setLevelChoice] = React.useState<null | "review" | "approve">(null);
+  // Checklist / Review and approval / History, as horizontal tabs. A plain task
+  // has no checklist, so it opens on the history it does have.
+  const hasChecklist = checklists.length > 0;
+  const TABS = [
+    ...(hasChecklist ? [["checklist", "Checklist"] as const] : []),
+    ...(levels.length > 0 ? [["levels", "Review and approval"] as const] : []),
+    ["history", "History"] as const,
+  ];
+  const [tab, setTab] = React.useState<string>(TABS[0][0]);
 
   const over = isOverdue(task, nowMs);
   const waiting = extensions.find((e) => e.status === "REQUESTED");
@@ -108,8 +120,13 @@ export function TaskDetail({
                 {STATUS_LABEL[task.status]}
               </span>
               {task.kind === "CHECKLIST" && (
-                <span className="rounded-full bg-brand-100 px-2.5 py-1 text-[10.5px] font-bold text-brand-700">
+                <span className="rounded-full bg-[#EDE7FB] px-2.5 py-1 text-[10.5px] font-bold text-[#5B3FA8]">
                   Checklist · round {task.round}
+                </span>
+              )}
+              {stage && (
+                <span className="rounded-full bg-[#DCD2F5] px-2.5 py-1 text-[10.5px] font-bold text-[#4A2F94]">
+                  {stage}
                 </span>
               )}
               {over && (
@@ -185,11 +202,41 @@ export function TaskDetail({
         </Card>
       )}
 
-      {checklists.map((cl) => (
-        <ChecklistCard key={cl.id} list={cl} canAnswer={can.answer} round={task.round} onDone={() => router.refresh()} />
+      {/* Checklist · Review and approval · History, side by side. */}
+      <div className="flex flex-wrap gap-[7px] rounded-[12px] border border-line-400 bg-white px-3.5 py-[11px]">
+        {TABS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            className={cn(
+              "cursor-pointer rounded-full border px-[13px] py-[7px] text-[11.5px] font-semibold transition-colors",
+              tab === key
+                ? "border-brand-500 bg-brand-100 text-brand-700"
+                : "border-line-400 bg-white text-muted-600 hover:border-brand-500",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+        {nextUp && (
+          <>
+            <div className="flex-1" />
+            <span className="text-[11.5px] font-medium text-muted-500">Next: {nextUp}</span>
+          </>
+        )}
+      </div>
+
+      {tab === "checklist" && checklists.map((cl) => (
+        <ChecklistCard
+          key={cl.id}
+          list={cl}
+          round={task.round}
+          canDecide={can.review || can.approve}
+        />
       ))}
 
-      {levels.length > 0 && (
+      {tab === "levels" && levels.length > 0 && (
         <Card>
           <CardHeader><CardTitle>Review and approval</CardTitle></CardHeader>
           <CardBody className="space-y-2">
@@ -292,6 +339,7 @@ export function TaskDetail({
         </Card>
       )}
 
+      {tab === "history" && (
       <Card>
         <CardHeader><CardTitle>History</CardTitle></CardHeader>
         <CardBody className="space-y-1.5">
@@ -304,6 +352,7 @@ export function TaskDetail({
           ))}
         </CardBody>
       </Card>
+      )}
 
       {prompt && (
         <RemarkModal
@@ -351,6 +400,7 @@ export function TaskDetail({
           taskId={task.id}
           mode={levelChoice}
           items={checklists.flatMap((c) => c.items.map((i) => ({ id: i.id, text: i.text })))}
+          nextUp={nextUp}
           onClose={() => setLevelChoice(null)}
           onDone={() => router.refresh()}
         />
@@ -519,11 +569,13 @@ function DecideExtensionModal({
  * because a reviewer who says nothing about an item is not failing it.
  */
 function LevelModal({
-  taskId, mode, items, onClose, onDone,
+  taskId, mode, items, nextUp, onClose, onDone,
 }: {
   taskId: string;
   mode: "review" | "approve";
   items: Array<{ id: string; text: string }>;
+  /** Who it goes to if this level passes it. */
+  nextUp: string | null;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -533,6 +585,7 @@ function LevelModal({
   const [pass, setPass] = React.useState(true);
   const [remark, setRemark] = React.useState("");
   const [verdicts, setVerdicts] = React.useState<Record<string, { verdict: "PASS" | "FAIL"; remark: string }>>({});
+  const files = React.useRef<HTMLInputElement>(null);
 
   function setItem(id: string, patch: Partial<{ verdict: "PASS" | "FAIL"; remark: string }>) {
     setVerdicts((v) => ({
@@ -548,14 +601,26 @@ function LevelModal({
     // A failed item cannot sit under an overall pass — the task has to go back.
     const overall = mode === "review" ? (pass && !anyFailed) : pass;
     const decision = mode === "review" ? (overall ? "PASS" : "FAIL") : (overall ? "APPROVE" : "REJECT");
+    // A remark is welcome but not demanded: a reviewer who approves everything
+    // has said what they came to say.
+    const said = remark.trim() || (overall ? "Approved." : "Sent back.");
     const res = await decideLevelAction(
       taskId,
       decision,
-      remark,
+      said,
       mode === "review"
         ? Object.entries(verdicts).map(([itemId, v]) => ({ itemId, verdict: v.verdict, remark: v.remark }))
         : [],
     );
+    // Anything attached to the decision goes on the task, where the next level
+    // and whoever did the work can both see it.
+    const picked = files.current?.files;
+    if (res.ok && picked && picked.length > 0) {
+      const fd = new FormData();
+      fd.set("body", said);
+      for (const f of Array.from(picked)) fd.append("files", f);
+      await addCommentAction(taskId, fd);
+    }
     setBusy(false);
     if (!res.ok) { setError(res.error); return; }
     toast(`Recorded: ${decision.toLowerCase()}.`);
@@ -572,7 +637,7 @@ function LevelModal({
       footer={
         <>
           <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
-          <Button loading={busy} disabled={!remark.trim()} onClick={go}>Record decision</Button>
+          <Button loading={busy} onClick={go}>Record decision</Button>
         </>
       }
     >
@@ -624,144 +689,97 @@ function LevelModal({
             })}
           </div>
         )}
-        <Field label="Overall remark" required hint="Mandatory on every decision.">
+        <Field label="Overall remark" hint="Optional — it goes on the record either way.">
           <Textarea value={remark} onChange={(e) => setRemark(e.target.value)} rows={3} />
         </Field>
+        <Field label="Attachment" hint="Optional — a photo or a marked-up drawing.">
+          <input ref={files} type="file" name="files" multiple className="text-[12px]" />
+        </Field>
+        {nextUp && pass && (
+          <p className="text-[11.5px] font-medium text-muted-500">
+            Passing this sends it to <b className="text-navy-900">{nextUp}</b>.
+          </p>
+        )}
       </div>
     </Modal>
   );
 }
 
+/**
+ * The checklist on a task: a numbered list of lines to be approved or denied.
+ *
+ * Nobody fills anything in. The assignee does the work and the reviewers say,
+ * item by item, whether it was done — which is where the judgement belongs and
+ * why the items carry no fields of their own.
+ */
 function ChecklistCard({
-  list, canAnswer, round, onDone,
-}: { list: { id: string; name: string; items: Item[] }; canAnswer: boolean; round: number; onDone: () => void }) {
+  list, round, canDecide,
+}: {
+  list: { id: string; name: string; items: Item[] };
+  round: number;
+  canDecide: boolean;
+}) {
   return (
     <Card>
-      <CardHeader><CardTitle>{list.name}</CardTitle></CardHeader>
-      <CardBody className="space-y-2.5">
-        {list.items.map((i) => (
-          <ChecklistRow key={i.id} item={i} canAnswer={canAnswer} round={round} onDone={onDone} />
+      <CardHeader>
+        <CardTitle>{list.name}</CardTitle>
+        <span className="text-xs text-muted-500">
+          {list.items.length} point{list.items.length === 1 ? "" : "s"}
+          {canDecide && " · approve or deny each as you review"}
+        </span>
+      </CardHeader>
+      <CardBody className="space-y-2">
+        {list.items.map((item, i) => (
+          <ChecklistRow key={item.id} item={item} index={i} round={round} />
         ))}
       </CardBody>
     </Card>
   );
 }
 
-function ChecklistRow({
-  item, canAnswer, round, onDone,
-}: { item: Item; canAnswer: boolean; round: number; onDone: () => void }) {
-  const [busy, setBusy] = React.useState(false);
-  const failed = item.reviews.filter((r) => r.verdict === "FAIL");
-  const thisRound = failed.find((r) => r.round === round - 1) ?? failed.at(-1);
-
-  async function save(answer: Parameters<typeof answerChecklistItemAction>[1]) {
-    setBusy(true);
-    await answerChecklistItemAction(item.id, answer);
-    setBusy(false);
-    onDone();
-  }
+/** One line, and what every round has said about it. */
+function ChecklistRow({ item, index, round }: { item: Item; index: number; round: number }) {
+  const thisRound = item.reviews.filter((r) => r.round === round);
+  const earlier = item.reviews.filter((r) => r.round !== round);
+  const denied = thisRound.some((r) => r.verdict === "FAIL");
+  const passed = thisRound.length > 0 && !denied;
 
   return (
     <div className={cn(
       "rounded-[10px] border px-3.5 py-2.5",
-      thisRound ? "border-bad-300 bg-bad-025" : "border-line-300",
+      denied ? "border-bad-300 bg-bad-025" : passed ? "border-good-400 bg-good-050" : "border-line-300",
     )}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="flex-1 text-[12.5px] font-semibold text-navy-900">
-          {item.text}
-          {item.isMandatory && <span className="text-bad-600"> *</span>}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <span className="num shrink-0 rounded-[7px] bg-surface-field px-2 py-[3px] text-[11px] font-extrabold text-navy-600">
+          {String(index + 1).padStart(2, "0")}
         </span>
-        {item.answered && <span className="text-[10.5px] font-bold text-good-700">answered</span>}
+        <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-navy-900">{item.text}</span>
+        {thisRound.map((r) => (
+          <span
+            key={`${r.kind}-${r.level}`}
+            className={cn(
+              "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.06em]",
+              r.verdict === "FAIL" ? "bg-bad-600 text-white" : "bg-good-600 text-white",
+            )}
+          >
+            {r.verdict === "FAIL" ? "Denied" : "Approved"} · L{r.level}
+          </span>
+        ))}
       </div>
 
-      {thisRound && (
-        <p className="mt-1 text-[11.5px] font-semibold text-bad-700">
-          Failed at {thisRound.kind === "REVIEW" ? "review" : "approval"} level {thisRound.level}
-          {thisRound.remark ? ` — ${thisRound.remark}` : ""}
+      {thisRound.filter((r) => r.remark).map((r) => (
+        <p key={`rm-${r.kind}-${r.level}`} className="mt-1.5 text-[11.5px] font-medium text-bad-700">
+          {r.kind === "REVIEW" ? "Reviewer" : "Approver"} L{r.level}: {r.remark}
         </p>
-      )}
+      ))}
 
-      <div className="mt-2">
-        {item.responseType === "YES_NO_NA" ? (
-          <div className="flex gap-2">
-            {["Yes", "No", "N/A"].map((choice) => (
-              <button
-                key={choice}
-                type="button"
-                disabled={!canAnswer || busy}
-                onClick={() => save({ choice })}
-                className={cn(
-                  "cursor-pointer rounded-[8px] border px-3 py-1.5 text-[11.5px] font-bold disabled:cursor-not-allowed disabled:opacity-60",
-                  item.answerChoice === choice
-                    ? "border-brand-500 bg-brand-100 text-brand-700"
-                    : "border-line-400 bg-white text-muted-600",
-                )}
-              >
-                {choice}
-              </button>
-            ))}
-          </div>
-        ) : item.responseType === "NUMBER" ? (
-          <Input
-            type="number"
-            defaultValue={item.answerNumber ?? ""}
-            disabled={!canAnswer || busy}
-            onBlur={(e) => e.target.value && save({ number: Number(e.target.value) })}
-          />
-        ) : item.responseType === "DATE" ? (
-          <Input
-            type="date"
-            defaultValue={item.answerDate?.slice(0, 10) ?? ""}
-            disabled={!canAnswer || busy}
-            onBlur={(e) => e.target.value && save({ date: e.target.value })}
-          />
-        ) : (
-          <Input
-            defaultValue={item.answerText ?? ""}
-            disabled={!canAnswer || busy}
-            onBlur={(e) => e.target.value && save({ text: e.target.value })}
-          />
-        )}
-      </div>
-
-      {(item.needsFile || item.files.length > 0) && (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {item.needsFile && item.files.length === 0 && (
-            <span className="text-[11px] font-bold text-bad-600">A photo or file is required</span>
-          )}
-          {item.files.map((f) => (
-            <a
-              key={f.id}
-              href={`/api/tasks/checklist-files/${f.id}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[11.5px] font-semibold text-brand-700 hover:underline"
-            >
-              {f.fileName}
-            </a>
-          ))}
-          {canAnswer && (
-            <label className="cursor-pointer rounded-[8px] border border-line-400 bg-white px-2.5 py-1 text-[10.5px] font-bold text-brand-700 hover:border-brand-500">
-              {item.files.length > 0 ? "Add another" : "Attach"}
-              <input
-                type="file"
-                name="files"
-                className="hidden"
-                onChange={async (e) => {
-                  const picked = e.target.files?.[0];
-                  if (!picked) return;
-                  const fd = new FormData();
-                  fd.append("files", picked);
-                  setBusy(true);
-                  await attachChecklistItemFileAction(item.id, fd);
-                  setBusy(false);
-                  e.target.value = "";
-                  onDone();
-                }}
-              />
-            </label>
-          )}
-        </div>
+      {/* Earlier rounds stay readable, so a rework shows what it was for. */}
+      {earlier.length > 0 && (
+        <p className="mt-1 text-[11px] font-medium text-muted-400">
+          {earlier.map((r) => (
+            `Round ${r.round}: ${r.verdict === "FAIL" ? "denied" : "approved"} at ${r.kind === "REVIEW" ? "review" : "approval"} L${r.level}${r.remark ? ` — ${r.remark}` : ""}`
+          )).join(" · ")}
+        </p>
       )}
     </div>
   );

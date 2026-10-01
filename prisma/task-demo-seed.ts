@@ -47,11 +47,11 @@ export async function seedTaskDemo(prisma: PrismaClient): Promise<{ tasks: numbe
         isActive: true,
         checkpoints: {
           create: [
-            { text: "Snag list cleared and signed", responseType: "YES_NO_NA", isMandatory: true, needsFile: false, sortOrder: 1 },
-            { text: "Electricity meter reading", responseType: "NUMBER", isMandatory: true, needsFile: false, sortOrder: 2 },
-            { text: "Date keys handed over", responseType: "DATE", isMandatory: true, needsFile: false, sortOrder: 3 },
-            { text: "Photograph of the handover", responseType: "YES_NO_NA", isMandatory: true, needsFile: true, sortOrder: 4 },
-            { text: "Customer remarks", responseType: "TEXT", isMandatory: false, needsFile: false, sortOrder: 5 },
+            { text: "Snag list cleared and signed by the customer", isMandatory: true, sortOrder: 1 },
+            { text: "Electricity and water meter readings recorded", isMandatory: true, sortOrder: 2 },
+            { text: "Keys handed over and acknowledged", isMandatory: true, sortOrder: 3 },
+            { text: "Common area access and parking bay shown", isMandatory: true, sortOrder: 4 },
+            { text: "Warranty documents and manuals handed over", isMandatory: false, sortOrder: 5 },
           ],
         },
       },
@@ -159,20 +159,9 @@ export async function seedTaskDemo(prisma: PrismaClient): Promise<{ tasks: numbe
       include: { checklists: true, levels: true },
     });
 
-    const answers: Record<string, Record<string, unknown>> = {
-      YES_NO_NA: { answerChoice: "Yes" },
-      NUMBER: { answerNumber: 42815 },
-      DATE: { answerDate: new Date(now - day) },
-      TEXT: { answerText: "Asked for the balcony grill to be repainted." },
-    };
     for (const cp of checkpoints) {
       await prisma.taskChecklistItem.create({
-        data: {
-          taskChecklistId: task.checklists[0].id,
-          checkpointId: cp.id,
-          answeredAt: new Date(now - day),
-          ...(answers[cp.responseType] ?? {}),
-        },
+        data: { taskChecklistId: task.checklists[0].id, checkpointId: cp.id },
       });
     }
 

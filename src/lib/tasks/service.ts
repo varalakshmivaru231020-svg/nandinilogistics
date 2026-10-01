@@ -187,21 +187,3 @@ export async function applyExtensionDecision(
 
   return { taskId: ext.taskId, status };
 }
-
-/** Whether every mandatory checklist item on a task has been answered. */
-export async function checklistComplete(tx: Tx, taskId: string): Promise<boolean> {
-  const items = await tx.taskChecklistItem.findMany({
-    where: { taskChecklist: { taskId } },
-    select: {
-      answeredAt: true,
-      checkpoint: { select: { isMandatory: true, needsFile: true } },
-      attachments: { select: { id: true } },
-    },
-  });
-  return items.every((i) => {
-    if (!i.checkpoint.isMandatory) return true;
-    if (!i.answeredAt) return false;
-    if (i.checkpoint.needsFile && i.attachments.length === 0) return false;
-    return true;
-  });
-}

@@ -104,8 +104,7 @@ export async function duplicateChecklistAction(id: string): Promise<ActionResult
       });
       await tx.checklistCheckpoint.createMany({
         data: source.checkpoints.map((p) => ({
-          checklistId: made.id, text: p.text, isMandatory: p.isMandatory,
-          responseType: p.responseType, needsFile: p.needsFile, sortOrder: p.sortOrder,
+          checklistId: made.id, text: p.text, isMandatory: p.isMandatory, sortOrder: p.sortOrder,
         })),
       });
       return made;
@@ -142,9 +141,6 @@ export async function addCheckpointAction(
   checklistId: string,
   text: string,
   isMandatory: boolean,
-  /** What the item asks for, and whether it needs a photo — the scope's §5.1. */
-  responseType: "YES_NO_NA" | "TEXT" | "NUMBER" | "DATE" = "YES_NO_NA",
-  needsFile = false,
 ): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.checklist.checklist.update);
@@ -153,10 +149,7 @@ export async function addCheckpointAction(
       where: { checklistId }, orderBy: { sortOrder: "desc" }, select: { sortOrder: true },
     });
     await prisma.checklistCheckpoint.create({
-      data: {
-        checklistId, text: text.trim(), isMandatory, responseType, needsFile,
-        sortOrder: (last?.sortOrder ?? 0) + 1,
-      },
+      data: { checklistId, text: text.trim(), isMandatory, sortOrder: (last?.sortOrder ?? 0) + 1 },
     });
 
     await recordAudit({
@@ -170,10 +163,7 @@ export async function addCheckpointAction(
 
 export async function updateCheckpointAction(
   id: string,
-  patch: {
-    text?: string; isMandatory?: boolean;
-    responseType?: "YES_NO_NA" | "TEXT" | "NUMBER" | "DATE"; needsFile?: boolean;
-  },
+  patch: { text?: string; isMandatory?: boolean },
 ): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.checklist.checklist.update);
@@ -183,8 +173,6 @@ export async function updateCheckpointAction(
       data: {
         ...(patch.text === undefined ? {} : { text: patch.text.trim() }),
         ...(patch.isMandatory === undefined ? {} : { isMandatory: patch.isMandatory }),
-        ...(patch.responseType === undefined ? {} : { responseType: patch.responseType }),
-        ...(patch.needsFile === undefined ? {} : { needsFile: patch.needsFile }),
       },
     });
 

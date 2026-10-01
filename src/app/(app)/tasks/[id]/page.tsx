@@ -76,6 +76,21 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   if (!isAdmin && !ctx.has(PERM.task.task.viewAll) && !onIt) notFound();
 
   const acted = await actedThisRound(prisma, task.id, task.round);
+
+  // Where the task is standing, and who it will reach after the level that
+  // holds it now — both are the first things anyone asks of a checklist task.
+  const levelKind = task.status === "UNDER_REVIEW" ? "REVIEW" : task.status === "UNDER_APPROVAL" ? "APPROVAL" : null;
+  const queue = levelKind
+    ? task.levels
+        .filter((l) => l.kind === levelKind && !l.actions.some((a) => a.round === task.round))
+        .sort((a, b) => a.level - b.level)
+    : [];
+  const atLevel = queue[0] ?? null;
+  const afterThis =
+    queue[1] ??
+    (levelKind === "REVIEW"
+      ? task.levels.filter((l) => l.kind === "APPROVAL").sort((a, b) => a.level - b.level)[0] ?? null
+      : null);
   const shape = {
     kind: task.kind, status: task.status, round: task.round,
     assigneeId: task.assigneeId, createdById: task.createdById,
@@ -88,6 +103,16 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
     <TaskDetail
       viewerId={ctx.id}
       nowMs={new Date().getTime()}
+      stage={
+        atLevel
+          ? `Under level ${atLevel.level} ${levelKind === "REVIEW" ? "review" : "approval"} · ${atLevel.user.name}`
+          : null
+      }
+      nextUp={
+        afterThis
+          ? `${afterThis.kind === "REVIEW" ? "Reviewer" : "Approver"} level ${afterThis.level} · ${afterThis.user.name}`
+          : null
+      }
       task={{
         id: task.id,
         taskNo: task.taskNo,
@@ -121,15 +146,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         items: tc.items.map((i) => ({
           id: i.id,
           text: i.checkpoint.text,
-          responseType: i.checkpoint.responseType,
           isMandatory: i.checkpoint.isMandatory,
-          needsFile: i.checkpoint.needsFile,
-          answerChoice: i.answerChoice,
-          answerText: i.answerText,
-          answerNumber: i.answerNumber === null ? null : Number(i.answerNumber),
-          answerDate: i.answerDate ? i.answerDate.toISOString() : null,
-          answered: i.answeredAt !== null,
-          files: i.attachments.map((a) => ({ id: a.id, fileName: a.fileName })),
           reviews: i.reviews.map((r) => ({
             round: r.round, verdict: r.verdict, remark: r.remark,
             kind: r.level.kind, level: r.level.level,

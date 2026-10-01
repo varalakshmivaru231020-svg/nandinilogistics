@@ -5,15 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { TaskKind, TaskPriority, TaskStatus } from "@prisma/client";
 
-import { Alert, Field, Input, PageHeader, Select, Textarea } from "@/components/ui/primitives";
-import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { PageHeader } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { cn, formatDateTime } from "@/lib/utils";
 import { STATUS_LABEL, isOverdue } from "@/lib/tasks/lifecycle";
 import {
-  acceptTaskAction, createTaskAction, deleteTasksAction, reassignTasksAction,
-  setPriorityAction, startTaskAction,
+  acceptTaskAction, deleteTasksAction, reassignTasksAction, setPriorityAction, startTaskAction,
 } from "./actions";
 
 interface Task {
@@ -34,6 +31,8 @@ interface Task {
   comments: number;
   attachments: number;
   extensionWaiting: boolean;
+  /** For a checklist task, the level it is actually waiting at. */
+  stage: string | null;
 }
 
 const STATUS_PILL: Record<TaskStatus, string> = {
@@ -42,9 +41,9 @@ const STATUS_PILL: Record<TaskStatus, string> = {
   STARTED: "bg-brand-100 text-brand-700",
   HOLD: "bg-warn-050 text-warn-800",
   COMPLETED: "bg-good-050 text-good-700",
-  UNDER_REVIEW: "bg-warn-050 text-warn-800",
+  UNDER_REVIEW: "bg-[#EDE7FB] text-[#5B3FA8]",
   REWORK: "bg-bad-050 text-bad-700",
-  UNDER_APPROVAL: "bg-warn-050 text-warn-800",
+  UNDER_APPROVAL: "bg-[#DCD2F5] text-[#4A2F94]",
   CLOSED: "bg-surface-field text-muted-600",
 };
 
@@ -57,15 +56,15 @@ const PRIORITY_PILL: Record<TaskPriority, string> = {
 const FILTERS = ["All", "Overdue", ...Object.values(STATUS_LABEL)];
 
 export function TasksScreen({
-  tasks, projects, people, checklists, filter, mine, picked, summary, myScore, nowMs, viewerId, can,
+  tasks, people, filter, mine, picked, q, has, summary, myScore, nowMs, viewerId, can,
 }: {
   tasks: Task[];
-  projects: Array<{ id: string; code: string }>;
   people: Array<{ id: string; name: string }>;
-  checklists: Array<{ id: string; name: string; category: string }>;
   filter: string;
   mine: "to" | "by" | null;
   picked: { priority: string; assignee: string; assigner: string; from: string; to: string };
+  q: string;
+  has: "" | "checklist" | "plain";
   summary: {
     dueToday: number; dueThisWeek: number; pendingApprovals: number;
     high: number; medium: number; low: number;
@@ -77,7 +76,6 @@ export function TasksScreen({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [creating, setCreating] = React.useState(false);
   const [sel, setSel] = React.useState<string[]>([]);
   const [reassigning, setReassigning] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -101,10 +99,10 @@ export function TasksScreen({
     router.refresh();
   }
 
-  function go(next: Partial<Record<"filter" | "mine" | "priority" | "assignee" | "assigner" | "from" | "to", string | null>>) {
+  function go(next: Partial<Record<"filter" | "mine" | "priority" | "assignee" | "assigner" | "from" | "to" | "q" | "has", string | null>>) {
     const params = new URLSearchParams();
     const now: Record<string, string | null> = {
-      filter, mine, ...picked, ...next,
+      filter, mine, q, has, ...picked, ...next,
     };
     for (const [k, v] of Object.entries(now)) {
       if (!v) continue;
@@ -115,7 +113,7 @@ export function TasksScreen({
   }
 
   const filtered =
-    picked.priority || picked.assignee || picked.assigner || picked.from || picked.to;
+    picked.priority || picked.assignee || picked.assigner || picked.from || picked.to || has;
 
   const shown = tasks.filter((t) => {
     if (filter === "All") return true;
@@ -134,7 +132,16 @@ export function TasksScreen({
       <PageHeader
         title="Task Management"
         description="Work one person assigns to another, from Pending through to Closed."
-        actions={can.create ? <Button onClick={() => setCreating(true)}>+ New task</Button> : undefined}
+        actions={
+          can.create ? (
+            <Link
+              href="/tasks/new"
+              className="rounded-[9px] bg-brand-500 px-4 py-2.5 text-[12.5px] font-bold text-white transition-colors hover:bg-brand-600"
+            >
+              + New task
+            </Link>
+          ) : undefined
+        }
       />
 
       {/* The scope's §4.1 widgets. */}
@@ -177,6 +184,21 @@ export function TasksScreen({
       </div>
 
       <div className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-[12px] border border-line-400 bg-white px-3.5 py-[11px]">
+        <input
+          defaultValue={q}
+          onKeyDown={(e) => { if (e.key === "Enter") go({ q: (e.target as HTMLInputElement).value || null }); }}
+          onBlur={(e) => { if (e.target.value !== q) go({ q: e.target.value || null }); }}
+          placeholder="Search by task number, title or person…"
+          className="w-[280px] rounded-[9px] border border-line-400 bg-surface-sunken px-3 py-2 text-[12px] font-medium text-navy-900 outline-none focus:border-brand-500 focus:bg-white"
+        />
+
+        <span className="text-[11px] font-semibold text-muted-400">Type</span>
+        {([["", "All"], ["checklist", "With checklist"], ["plain", "Without"]] as const).map(([v, label]) => (
+          <Chip key={v || "all"} picked={has === v} onClick={() => go({ has: v || null })}>
+            {label}
+          </Chip>
+        ))}
+
         <span className="text-[11px] font-semibold text-muted-400">Priority</span>
         <select
           value={picked.priority}
@@ -227,7 +249,7 @@ export function TasksScreen({
         {filtered && (
           <button
             type="button"
-            onClick={() => go({ priority: null, assignee: null, assigner: null, from: null, to: null })}
+            onClick={() => go({ priority: null, assignee: null, assigner: null, from: null, to: null, has: null })}
             className="cursor-pointer text-[11.5px] font-semibold text-brand-700 hover:underline"
           >
             Clear filters
@@ -312,7 +334,15 @@ export function TasksScreen({
             {shown.map((t) => {
               const over = isOverdue(t, nowMs);
               return (
-                <tr key={t.id} className={cn("hover:bg-surface-tint", over && "bg-bad-025")}>
+                <tr
+                  key={t.id}
+                  className={cn(
+                    "hover:bg-surface-tint",
+                    // A checklist task is a different animal, and reads like one.
+                    t.kind === "CHECKLIST" && "bg-[#FAF8FE]",
+                    over && "bg-bad-025",
+                  )}
+                >
                   <Td className="pr-0">
                     <Box
                       checked={sel.includes(t.id)}
@@ -322,10 +352,18 @@ export function TasksScreen({
                   </Td>
                   <Td>
                     <Link href={`/tasks/${t.id}`} className="block">
-                      <span className="block text-[13px] font-semibold text-navy-800 hover:text-brand-700">{t.title}</span>
-                      <span className="num mt-0.5 block text-[11px] font-medium text-muted-400">
-                        {t.taskNo}{t.kind === "CHECKLIST" && " · checklist"}
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="text-[13px] font-semibold text-navy-800 hover:text-brand-700">{t.title}</span>
+                        {t.kind === "CHECKLIST" && (
+                          <span className="rounded-full bg-[#EDE7FB] px-2 py-[2px] text-[9px] font-extrabold uppercase tracking-[.07em] text-[#5B3FA8]">
+                            Checklist
+                          </span>
+                        )}
                       </span>
+                      <span className="num mt-0.5 block text-[11px] font-medium text-muted-400">{t.taskNo}</span>
+                      {t.stage && (
+                        <span className="mt-0.5 block text-[11px] font-semibold text-[#5B3FA8]">{t.stage}</span>
+                      )}
                     </Link>
                   </Td>
                   <Td className="text-[12.5px] font-medium text-muted-600">{t.location ?? "—"}</Td>
@@ -383,187 +421,6 @@ export function TasksScreen({
         through Under Review and Under Approval first, and any fail sends it back for Rework.
       </p>
 
-      {creating && (
-        <NewTaskModal
-          projects={projects}
-          people={people}
-          checklists={checklists}
-          viewerId={viewerId}
-          onClose={() => setCreating(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-/** Raising a task, with the checklist and levels the scope adds for Module 2. */
-function NewTaskModal({
-  projects, people, checklists, viewerId, onClose,
-}: {
-  projects: Array<{ id: string; code: string }>;
-  people: Array<{ id: string; name: string }>;
-  checklists: Array<{ id: string; name: string; category: string }>;
-  viewerId: string;
-  onClose: () => void;
-}) {
-  const router = useRouter();
-  const toast = useToast();
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [picked, setPicked] = React.useState<string[]>([]);
-  const [reviewers, setReviewers] = React.useState<string[]>([]);
-  const [approvers, setApprovers] = React.useState<string[]>([]);
-  const form = React.useRef<HTMLFormElement>(null);
-
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    const fd = new FormData(e.currentTarget);
-    for (const id of picked) fd.append("checklistIds", id);
-    for (const id of reviewers) if (id) fd.append("reviewerIds", id);
-    for (const id of approvers) if (id) fd.append("approverIds", id);
-    const res = await createTaskAction(fd);
-    setBusy(false);
-    if (!res.ok) { setError(res.error); return; }
-    toast("Task raised.");
-    onClose();
-    router.push(`/tasks/${res.data.id}`);
-  }
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title="New task"
-      description="Assigned to one person, who accepts it and owns it until you close it."
-      size="lg"
-      footer={
-        <>
-          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
-          <Button loading={busy} onClick={() => form.current?.requestSubmit()}>Assign task</Button>
-        </>
-      }
-    >
-      <form ref={form} onSubmit={submit} className="space-y-3.5">
-        {error && <Alert tone="error">{error}</Alert>}
-
-        <Field label="Title" required>
-          <Input name="title" required maxLength={160} placeholder="Snag the 8th floor handover" />
-        </Field>
-
-        <Field label="Description">
-          <Textarea name="description" rows={3} placeholder="Details and instructions" />
-        </Field>
-
-        <div className="grid gap-3.5 sm:grid-cols-2">
-          <Field label="Assign to" required>
-            <Select name="assigneeId" required defaultValue="">
-              <option value="" disabled>Choose a person</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>{p.id === viewerId ? `${p.name} (you)` : p.name}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Priority" required>
-            <Select name="priority" defaultValue="MEDIUM">
-              <option value="HIGH">High</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="LOW">Low</option>
-            </Select>
-          </Field>
-          <Field label="Due date and time" required hint="Must be in the future.">
-            <Input type="datetime-local" name="dueAt" required />
-          </Field>
-          <Field label="Project">
-            <Select name="projectId" defaultValue="">
-              <option value="">None</option>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.code}</option>)}
-            </Select>
-          </Field>
-          <Field label="Location" className="sm:col-span-2">
-            <Input name="location" placeholder="Tower B · Fl 8" />
-          </Field>
-        </div>
-
-        <Field label="Attachments">
-          <input type="file" name="files" multiple className="text-[12px]" />
-        </Field>
-
-        <div className="rounded-[11px] border border-line-300 bg-surface-sunken p-3.5">
-          <p className="mb-2 text-[11.5px] font-bold text-navy-900">
-            Checklist <span className="font-medium text-muted-500">· optional</span>
-          </p>
-          <p className="mb-2.5 text-[11px] font-medium text-muted-500">
-            Pick one or more and the task passes through reviewers and approvers before it closes.
-          </p>
-          {checklists.length === 0 ? (
-            <p className="text-[11.5px] font-medium text-muted-400">No active checklist in the master yet.</p>
-          ) : (
-            <div className="flex flex-wrap gap-[7px]">
-              {checklists.map((c) => (
-                <Chip
-                  key={c.id}
-                  picked={picked.includes(c.id)}
-                  onClick={() => setPicked((p) => p.includes(c.id) ? p.filter((x) => x !== c.id) : [...p, c.id])}
-                >
-                  {c.name} <span className="opacity-60">· {c.category}</span>
-                </Chip>
-              ))}
-            </div>
-          )}
-
-          {picked.length > 0 && (
-            <div className="mt-3.5 grid gap-3.5 sm:grid-cols-2">
-              <LevelPicker label="Reviewers" people={people} value={reviewers} onChange={setReviewers} />
-              <LevelPicker label="Approvers" people={people} value={approvers} onChange={setApprovers} />
-            </div>
-          )}
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-/** One person per level, in order; the number of levels is chosen per task. */
-function LevelPicker({
-  label, people, value, onChange,
-}: {
-  label: string;
-  people: Array<{ id: string; name: string }>;
-  value: string[];
-  onChange: (next: string[]) => void;
-}) {
-  return (
-    <div>
-      <p className="mb-[5px] text-[11px] font-semibold text-muted-600">{label}</p>
-      {value.map((v, i) => (
-        <div key={i} className="mb-1.5 flex items-center gap-2">
-          <span className="w-[54px] shrink-0 text-[11px] font-semibold text-muted-500">Level {i + 1}</span>
-          <Select
-            value={v}
-            onChange={(e) => onChange(value.map((x, xi) => (xi === i ? e.target.value : x)))}
-            className="flex-1"
-          >
-            <option value="">Choose…</option>
-            {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </Select>
-          <button
-            type="button"
-            onClick={() => onChange(value.filter((_, xi) => xi !== i))}
-            className="shrink-0 cursor-pointer rounded-[7px] border border-line-400 px-2 py-1 text-[10.5px] font-semibold text-muted-600"
-          >
-            Remove
-          </button>
-        </div>
-      ))}
-      <button
-        type="button"
-        onClick={() => onChange([...value, ""])}
-        className="mt-1 cursor-pointer rounded-[8px] border border-dashed border-line-400 px-2.5 py-1.5 text-[11px] font-bold text-brand-700"
-      >
-        + Add level
-      </button>
     </div>
   );
 }

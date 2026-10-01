@@ -17,19 +17,14 @@ interface Category { id: string; code: string; name: string; description: string
 interface Checklist {
   id: string; name: string; version: string; checkpointCount: number; isActive: boolean;
 }
-interface Checkpoint {
-  id: string; text: string; isMandatory: boolean;
-  /** What the item asks for, and whether answering it needs a photo. */
-  responseType: "YES_NO_NA" | "TEXT" | "NUMBER" | "DATE";
-  needsFile: boolean;
-}
-
-const RESPONSE_LABEL: Record<Checkpoint["responseType"], string> = {
-  YES_NO_NA: "Yes / No / N/A",
-  TEXT: "Text",
-  NUMBER: "Number",
-  DATE: "Date",
-};
+/**
+ * A checkpoint is a number and a line of text.
+ *
+ * It used to carry a response type and a photo requirement; neither earned its
+ * place. What a checkpoint needs is to be read on site and then approved or
+ * denied by whoever reviews the task, which is where the judgement belongs.
+ */
+interface Checkpoint { id: string; text: string; isMandatory: boolean }
 interface Run {
   id: string; name: string; category: string; checkpoints: number; location: string;
   by: string; score: number; result: "PASS" | "FAIL"; state: "OPEN" | "CLOSED";
@@ -333,9 +328,9 @@ export function ChecklistsScreen({
                   </div>
                 </div>
 
-                <div className="scroll-thin overflow-x-auto px-[18px] py-3">
+                <div className="px-[18px] py-3">
                   {can.update && (
-                    <div className="mb-3 flex min-w-[780px] gap-2">
+                    <div className="mb-3 flex gap-2">
                       <Input
                         value={newPoint}
                         onChange={(e) => setNewPoint(e.target.value)}
@@ -363,10 +358,7 @@ export function ChecklistsScreen({
                   )}
 
                   {checkpoints.map((p, i) => (
-                    <div
-                      key={p.id}
-                      className="flex min-w-[780px] items-center gap-[11px] border-b border-line-200 py-3 last:border-0"
-                    >
+                    <div key={p.id} className="flex items-center gap-[11px] border-b border-line-200 py-3 last:border-0">
                       <span className="num shrink-0 rounded-[8px] bg-brand-100 px-[9px] py-1.5 font-display text-[12px] font-extrabold text-brand-700">
                         {String(i + 1).padStart(2, "0")}
                       </span>
@@ -400,39 +392,6 @@ export function ChecklistsScreen({
                               )}
                             >
                               {p.isMandatory ? "Mandatory" : "Optional"}
-                            </button>
-                          )}
-                          {can.update ? (
-                            <select
-                              value={p.responseType}
-                              onChange={(e) =>
-                                run(
-                                  () => updateCheckpointAction(p.id, { responseType: e.target.value as Checkpoint["responseType"] }),
-                                  "Response type changed",
-                                )
-                              }
-                              className="shrink-0 cursor-pointer rounded-[7px] border border-line-400 bg-white px-2 py-[3px] text-[10.5px] font-semibold text-navy-700"
-                            >
-                              {Object.entries(RESPONSE_LABEL).map(([v, l]) => (
-                                <option key={v} value={v}>{l}</option>
-                              ))}
-                            </select>
-                          ) : (
-                            <span className="shrink-0 text-[10.5px] font-semibold text-muted-500">
-                              {RESPONSE_LABEL[p.responseType]}
-                            </span>
-                          )}
-                          {can.update && (
-                            <button
-                              type="button"
-                              onClick={() => run(() => updateCheckpointAction(p.id, { needsFile: !p.needsFile }), "Checkpoint updated")}
-                              className={cn(
-                                "shrink-0 rounded-full px-2 py-[3px] text-[8.5px] font-extrabold uppercase tracking-[.07em]",
-                                p.needsFile ? "bg-brand-500 text-white" : "bg-surface-field text-muted-500",
-                              )}
-                              title="Whether answering this needs a photo or file"
-                            >
-                              {p.needsFile ? "Photo required" : "No photo"}
                             </button>
                           )}
                           {can.update && (
