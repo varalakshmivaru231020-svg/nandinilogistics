@@ -104,7 +104,8 @@ export async function duplicateChecklistAction(id: string): Promise<ActionResult
       });
       await tx.checklistCheckpoint.createMany({
         data: source.checkpoints.map((p) => ({
-          checklistId: made.id, text: p.text, isMandatory: p.isMandatory, sortOrder: p.sortOrder,
+          checklistId: made.id, text: p.text, isMandatory: p.isMandatory,
+          responseType: p.responseType, needsFile: p.needsFile, sortOrder: p.sortOrder,
         })),
       });
       return made;
@@ -137,7 +138,14 @@ export async function deleteChecklistAction(id: string): Promise<ActionResult<nu
   });
 }
 
-export async function addCheckpointAction(checklistId: string, text: string, isMandatory: boolean): Promise<ActionResult<null>> {
+export async function addCheckpointAction(
+  checklistId: string,
+  text: string,
+  isMandatory: boolean,
+  /** What the item asks for, and whether it needs a photo — the scope's §5.1. */
+  responseType: "YES_NO_NA" | "TEXT" | "NUMBER" | "DATE" = "YES_NO_NA",
+  needsFile = false,
+): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.checklist.checklist.update);
     if (!text.trim()) throw new Error("Write the checkpoint first.");
@@ -145,7 +153,10 @@ export async function addCheckpointAction(checklistId: string, text: string, isM
       where: { checklistId }, orderBy: { sortOrder: "desc" }, select: { sortOrder: true },
     });
     await prisma.checklistCheckpoint.create({
-      data: { checklistId, text: text.trim(), isMandatory, sortOrder: (last?.sortOrder ?? 0) + 1 },
+      data: {
+        checklistId, text: text.trim(), isMandatory, responseType, needsFile,
+        sortOrder: (last?.sortOrder ?? 0) + 1,
+      },
     });
 
     await recordAudit({
@@ -158,7 +169,11 @@ export async function addCheckpointAction(checklistId: string, text: string, isM
 }
 
 export async function updateCheckpointAction(
-  id: string, patch: { text?: string; isMandatory?: boolean },
+  id: string,
+  patch: {
+    text?: string; isMandatory?: boolean;
+    responseType?: "YES_NO_NA" | "TEXT" | "NUMBER" | "DATE"; needsFile?: boolean;
+  },
 ): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.checklist.checklist.update);
@@ -168,6 +183,8 @@ export async function updateCheckpointAction(
       data: {
         ...(patch.text === undefined ? {} : { text: patch.text.trim() }),
         ...(patch.isMandatory === undefined ? {} : { isMandatory: patch.isMandatory }),
+        ...(patch.responseType === undefined ? {} : { responseType: patch.responseType }),
+        ...(patch.needsFile === undefined ? {} : { needsFile: patch.needsFile }),
       },
     });
 
@@ -213,6 +230,30 @@ export async function deleteCheckpointAction(id: string): Promise<ActionResult<n
       summary: `Removed checkpoint "${row.text}"`,
     });
     revalidatePath("/checklists");
+    return null;
+  });
+}
+
+/**
+ * Taking a checklist out of use, or putting it back.
+ *
+ * Only an active checklist is offered when a task is raised. Tasks already
+ * created from it keep their copy of the items and are untouched, which is
+ * what makes retiring one safe.
+ */
+export async function setChecklistActiveAction(
+  id: string,
+  isActive: boolean,
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.checklist.checklist.update);
+    const row = await prisma.checklist.update({ where: { id }, data: { isActive } });
+    await recordAudit({
+      action: "UPDATE", entity: "Checklist", entityId: id, userId: ctx.id,
+      summary: `${isActive ? "Reactivated" : "Retired"} checklist ${row.name}`,
+    });
+    revalidatePath("/checklists");
+    revalidatePath("/tasks");
     return null;
   });
 }

@@ -861,18 +861,12 @@ export const NOT_YET_BUILT: ReadonlySet<string> = new Set([
   "schedule.baseline.set",
   "schedule.gantt.view",
   "schedule.template.view",
-  // Task Management, still being built out. The lifecycle, comments,
-  // attachments, extensions and levelled review are live; the dashboards,
-  // the reports and the performance screens are not yet.
-  "task.performance.view",
-  "task.performance.viewAll",
-  "task.report.view",
-  "task.report.export",
-  "task.task.export",
   // Assigning is part of creating a task, and attaching is part of creating or
-  // commenting; neither is a separate control.
+  // commenting; neither is a separate control of its own.
   "task.task.assign",
   "task.task.attach",
+  // The task list exports through the reports screen, not from the list.
+  "task.task.export",
   "unit.hold.view",
   // The design's flats panel has no extension step: a hold is released or booked.
   "unit.hold.extend",

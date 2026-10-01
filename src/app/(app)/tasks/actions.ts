@@ -12,6 +12,7 @@ import {
   actedThisRound, applyExtensionDecision, checklistComplete, logTaskEvent, moveStatus, shapeOf,
 } from "@/lib/tasks/service";
 import { assertStorable, filesFrom } from "@/lib/material/grn-attachments";
+import { audienceFor, notifyTask, type TaskEventKind } from "@/lib/tasks/notify";
 import { put } from "@/lib/storage";
 
 /**
@@ -28,6 +29,65 @@ const REFRESH = ["/tasks", "/dashboard"];
 function refresh(id?: string) {
   for (const p of REFRESH) revalidatePath(p);
   if (id) revalidatePath(`/tasks/${id}`);
+}
+
+/** Tells whoever the scope says should hear about a change. */
+async function tell(
+  tx: Parameters<typeof notifyTask>[0],
+  kind: TaskEventKind,
+  taskId: string,
+  actorId: string,
+  title: string,
+  body?: string,
+  levelUserIds: string[] = [],
+) {
+  const t = await tx.task.findUnique({
+    where: { id: taskId },
+    select: { taskNo: true, assigneeId: true, createdById: true },
+  });
+  if (!t) return;
+  await notifyTask(tx, {
+    kind, taskId, taskNo: t.taskNo, title, body, actorId,
+    to: audienceFor(kind, t, levelUserIds),
+  });
+}
+
+/** Tells whichever level is now waiting that the task has reached them. */
+async function tellActiveLevel(
+  tx: Parameters<typeof notifyTask>[0],
+  taskId: string,
+  actorId: string,
+) {
+  const t = await tx.task.findUnique({
+    where: { id: taskId },
+    select: {
+      taskNo: true, title: true, status: true, round: true,
+      levels: { select: { id: true, kind: true, level: true, userId: true } },
+    },
+  });
+  if (!t) return;
+  const kind = t.status === "UNDER_REVIEW" ? "REVIEW" : t.status === "UNDER_APPROVAL" ? "APPROVAL" : null;
+  if (!kind) return;
+
+  const acted = await tx.taskLevelAction.findMany({
+    where: { round: t.round, level: { taskId } },
+    select: { level: { select: { kind: true, level: true } } },
+  });
+  const done = new Set(acted.filter((a) => a.level.kind === kind).map((a) => a.level.level));
+  const next = t.levels
+    .filter((l) => l.kind === kind && !done.has(l.level))
+    .sort((a, b) => a.level - b.level)[0];
+  if (!next) return;
+
+  await notifyTask(tx, {
+    kind: "LEVEL_ACTIVE",
+    taskId,
+    taskNo: t.taskNo,
+    title: `${kind === "REVIEW" ? "Review" : "Approval"} level ${next.level}: ${t.taskNo}`,
+    body: t.title,
+    to: [next.userId],
+    actorId,
+  });
 }
 
 /** The lifecycle check, in the shape the actions need. */
@@ -136,6 +196,9 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
         taskId: created.id, actorId: ctx.id, kind: "STATUS",
         summary: `Task raised and assigned`, toStatus: "PENDING",
       });
+      await tell(tx, "ASSIGNED", created.id, ctx.id,
+        `New task ${created.taskNo}: ${created.title}`,
+        `Due ${due.toLocaleString("en-IN")}.`);
       return created;
     });
 
@@ -209,12 +272,13 @@ export async function acceptTaskAction(id: string): Promise<ActionResult<null>> 
   return runAction(async () => {
     const ctx = await authorize(PERM.task.task.accept);
     const { shape } = await assertMay("accept", id, ctx.id, await isAdminOf(ctx));
-    await prisma.$transaction((tx) =>
-      moveStatus(tx, {
+    await prisma.$transaction(async (tx) => {
+      await moveStatus(tx, {
         taskId: id, actorId: ctx.id, from: shape.status, to: "ACCEPTED",
         extra: { acceptedAt: new Date() },
-      }),
-    );
+      });
+      await tell(tx, "STATUS_CHANGED", id, ctx.id, `Task accepted`);
+    });
     refresh(id);
     return null;
   });
@@ -224,12 +288,13 @@ export async function startTaskAction(id: string): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.task.task.start);
     const { shape } = await assertMay("start", id, ctx.id, await isAdminOf(ctx));
-    await prisma.$transaction((tx) =>
-      moveStatus(tx, {
+    await prisma.$transaction(async (tx) => {
+      await moveStatus(tx, {
         taskId: id, actorId: ctx.id, from: shape.status, to: "STARTED",
         extra: { startedAt: new Date() },
-      }),
-    );
+      });
+      await tell(tx, "STATUS_CHANGED", id, ctx.id, `Task started`);
+    });
     refresh(id);
     return null;
   });
@@ -246,12 +311,16 @@ export async function completeTaskAction(id: string, remark: string): Promise<Ac
     }
 
     const to = statusAfterComplete(shape);
-    await prisma.$transaction((tx) =>
-      moveStatus(tx, {
+    await prisma.$transaction(async (tx) => {
+      await moveStatus(tx, {
         taskId: id, actorId: ctx.id, from: shape.status, to, remark,
         extra: { completedAt: new Date(), completionRemark: remark.trim() },
-      }),
-    );
+      });
+      await tell(tx, "STATUS_CHANGED", id, ctx.id, "Task marked complete", remark.trim());
+      if (to === "UNDER_REVIEW" || to === "UNDER_APPROVAL") {
+        await tellActiveLevel(tx, id, ctx.id);
+      }
+    });
     refresh(id);
     return null;
   });
@@ -268,12 +337,16 @@ export async function resubmitTaskAction(id: string, remark: string): Promise<Ac
 
     // A resubmission is a new round, and the flow restarts at Reviewer Level 1.
     const to = statusAfterComplete(shape);
-    await prisma.$transaction((tx) =>
-      moveStatus(tx, {
+    await prisma.$transaction(async (tx) => {
+      await moveStatus(tx, {
         taskId: id, actorId: ctx.id, from: shape.status, to, remark,
         extra: { round: { increment: 1 }, completedAt: new Date(), completionRemark: remark.trim() },
-      }),
-    );
+      });
+      await tell(tx, "STATUS_CHANGED", id, ctx.id, "Corrected and resubmitted", remark.trim());
+      if (to === "UNDER_REVIEW" || to === "UNDER_APPROVAL") {
+        await tellActiveLevel(tx, id, ctx.id);
+      }
+    });
     refresh(id);
     return null;
   });
@@ -288,12 +361,13 @@ export async function closeTaskAction(id: string, remark: string): Promise<Actio
     const ctx = await authorize(PERM.task.task.close);
     const { shape } = await assertMay("close", id, ctx.id, await isAdminOf(ctx));
     if (!remark.trim()) throw new Error("A remark is required when closing a task.");
-    await prisma.$transaction((tx) =>
-      moveStatus(tx, {
+    await prisma.$transaction(async (tx) => {
+      await moveStatus(tx, {
         taskId: id, actorId: ctx.id, from: shape.status, to: "CLOSED", remark,
         extra: { closedAt: new Date(), closureRemark: remark.trim() },
-      }),
-    );
+      });
+      await tell(tx, "CLOSED", id, ctx.id, "Task closed", remark.trim());
+    });
     refresh(id);
     return null;
   });
@@ -304,12 +378,13 @@ export async function sendBackTaskAction(id: string, remark: string): Promise<Ac
     const ctx = await authorize(PERM.task.task.sendBack);
     const { shape } = await assertMay("sendBack", id, ctx.id, await isAdminOf(ctx));
     if (!remark.trim()) throw new Error("Say what needs redoing — the remark is required.");
-    await prisma.$transaction((tx) =>
-      moveStatus(tx, {
+    await prisma.$transaction(async (tx) => {
+      await moveStatus(tx, {
         taskId: id, actorId: ctx.id, from: shape.status, to: "STARTED", remark,
         extra: { completedAt: null, closureRemark: remark.trim() },
-      }),
-    );
+      });
+      await tell(tx, "STATUS_CHANGED", id, ctx.id, "Sent back for rework", remark.trim());
+    });
     refresh(id);
     return null;
   });
@@ -378,6 +453,8 @@ export async function requestExtensionAction(
         taskId: id, actorId: ctx.id, kind: "EXTENSION",
         summary: isHold ? "Hold requested" : "Extension requested", remark: reason,
       });
+      await tell(tx, "EXTENSION_REQUESTED", id, ctx.id,
+        isHold ? "Hold requested" : "Extension requested", reason);
       return created;
     });
 
@@ -412,16 +489,18 @@ export async function decideExtensionAction(
     if (!remark.trim()) throw new Error("A remark is required on the decision.");
     if (approve && !control) throw new Error("Classify the delay as controllable or uncontrollable.");
 
-    await prisma.$transaction((tx) =>
-      applyExtensionDecision(tx, {
+    await prisma.$transaction(async (tx) => {
+      await applyExtensionDecision(tx, {
         extensionId,
         actorId: ctx.id,
         approve,
         remark: remark.trim(),
         control,
         revisedDueAt: revisedDueAt ? new Date(revisedDueAt) : undefined,
-      }),
-    );
+      });
+      await tell(tx, "EXTENSION_DECIDED", ext.taskId, ctx.id,
+        approve ? "Extension approved" : "Extension rejected", remark.trim());
+    });
     refresh(ext.taskId);
     return null;
   });
@@ -480,6 +559,17 @@ export async function decideLevelAction(
         summary: `${kind === "REVIEW" ? "Reviewer" : "Approver"} level ${level.level}: ${decision.toLowerCase()}`,
         remark: remark.trim(),
       });
+
+      if (to === "REWORK") {
+        // Both parties hear about a failure, and the remarks travel with it.
+        await tell(tx, "CHECKLIST_FAILED", taskId, ctx.id,
+          `Sent back from ${kind === "REVIEW" ? "review" : "approval"} level ${level.level}`,
+          remark.trim());
+      } else if (to === "CLOSED") {
+        await tell(tx, "CLOSED", taskId, ctx.id, "Task closed by the final approval", remark.trim());
+      } else {
+        await tellActiveLevel(tx, taskId, ctx.id);
+      }
     });
 
     refresh(taskId);
@@ -506,6 +596,7 @@ export async function addCommentAction(taskId: string, formData: FormData): Prom
       await logTaskEvent(tx, {
         taskId, actorId: ctx.id, kind: "COMMENT", summary: "Comment added",
       });
+      await tell(tx, "COMMENTED", taskId, ctx.id, "New comment", body.slice(0, 140));
       return c;
     });
 
@@ -724,5 +815,49 @@ export async function deleteTasksAction(ids: string[]): Promise<ActionResult<{ d
     });
     refresh();
     return { deleted: tasks.length };
+  });
+}
+
+/**
+ * Attaching the photo a checklist item asks for.
+ *
+ * A checkpoint marked as needing a file cannot be completed without one, so
+ * this is the other half of that rule: without it a task carrying such an item
+ * could never be finished.
+ */
+export async function attachChecklistItemFileAction(
+  itemId: string,
+  formData: FormData,
+): Promise<ActionResult<{ added: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.task.task.complete);
+    const item = await prisma.taskChecklistItem.findUniqueOrThrow({
+      where: { id: itemId },
+      select: { taskChecklist: { select: { taskId: true } } },
+    });
+    const taskId = item.taskChecklist.taskId;
+
+    const shape = await shapeOf(prisma, taskId);
+    const admin = await isAdminOf(ctx);
+    const working = ["STARTED", "REWORK"].includes(shape.status);
+    if (!working || (shape.assigneeId !== ctx.id && !admin)) {
+      throw new Error("Only the assignee can attach, and only while the task is open.");
+    }
+
+    const files = filesFrom(formData);
+    if (files.length === 0) throw new Error("Choose a file first.");
+    assertStorable(files);
+
+    for (const file of files) {
+      const stored = await put(`task-${taskId}`, file.name, Buffer.from(await file.arrayBuffer()), file.type);
+      await prisma.taskChecklistItemFile.create({
+        data: {
+          itemId, storageKey: stored.key, fileName: file.name,
+          fileSize: file.size, mimeType: file.type || null, uploadedById: ctx.id,
+        },
+      });
+    }
+    refresh(taskId);
+    return { added: files.length };
   });
 }

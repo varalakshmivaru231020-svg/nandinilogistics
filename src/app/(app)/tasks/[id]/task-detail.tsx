@@ -16,7 +16,7 @@ import {
   acceptTaskAction, addCommentAction, answerChecklistItemAction, closeTaskAction,
   completeTaskAction, decideExtensionAction, decideLevelAction, deleteCommentAction,
   editCommentAction, reopenTaskAction, requestExtensionAction, resubmitTaskAction,
-  sendBackTaskAction, startTaskAction,
+  sendBackTaskAction, startTaskAction, attachChecklistItemFileAction,
 } from "../actions";
 
 interface Task {
@@ -276,7 +276,14 @@ export function TaskDetail({
           <CardBody className="space-y-1.5">
             {files.map((f) => (
               <p key={f.id} className="text-[12px]">
-                <b className="text-navy-900">{f.fileName}</b>{" "}
+                <a
+                  href={`/api/tasks/attachments/${f.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold text-brand-700 hover:underline"
+                >
+                  {f.fileName}
+                </a>{" "}
                 <span className="num text-muted-500">{Math.max(1, Math.round(f.fileSize / 1024))} KB</span>{" "}
                 <span className="text-muted-400">· {f.by}, {formatDateTime(f.at)}</span>
               </p>
@@ -343,6 +350,7 @@ export function TaskDetail({
         <LevelModal
           taskId={task.id}
           mode={levelChoice}
+          items={checklists.flatMap((c) => c.items.map((i) => ({ id: i.id, text: i.text })))}
           onClose={() => setLevelChoice(null)}
           onDone={() => router.refresh()}
         />
@@ -502,20 +510,52 @@ function DecideExtensionModal({
   );
 }
 
+/**
+ * A level's decision.
+ *
+ * The scope has a reviewer mark each checklist item Pass or Fail with a remark
+ * and then give an overall verdict, so both are collected here; an approver
+ * gives the overall verdict alone. Anything left unmarked is taken as a pass,
+ * because a reviewer who says nothing about an item is not failing it.
+ */
 function LevelModal({
-  taskId, mode, onClose, onDone,
-}: { taskId: string; mode: "review" | "approve"; onClose: () => void; onDone: () => void }) {
+  taskId, mode, items, onClose, onDone,
+}: {
+  taskId: string;
+  mode: "review" | "approve";
+  items: Array<{ id: string; text: string }>;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const toast = useToast();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [pass, setPass] = React.useState(true);
   const [remark, setRemark] = React.useState("");
+  const [verdicts, setVerdicts] = React.useState<Record<string, { verdict: "PASS" | "FAIL"; remark: string }>>({});
+
+  function setItem(id: string, patch: Partial<{ verdict: "PASS" | "FAIL"; remark: string }>) {
+    setVerdicts((v) => ({
+      ...v,
+      [id]: { verdict: v[id]?.verdict ?? "PASS", remark: v[id]?.remark ?? "", ...patch },
+    }));
+  }
 
   async function go() {
     setBusy(true);
     setError(null);
-    const decision = mode === "review" ? (pass ? "PASS" : "FAIL") : (pass ? "APPROVE" : "REJECT");
-    const res = await decideLevelAction(taskId, decision, remark);
+    const anyFailed = Object.values(verdicts).some((v) => v.verdict === "FAIL");
+    // A failed item cannot sit under an overall pass — the task has to go back.
+    const overall = mode === "review" ? (pass && !anyFailed) : pass;
+    const decision = mode === "review" ? (overall ? "PASS" : "FAIL") : (overall ? "APPROVE" : "REJECT");
+    const res = await decideLevelAction(
+      taskId,
+      decision,
+      remark,
+      mode === "review"
+        ? Object.entries(verdicts).map(([itemId, v]) => ({ itemId, verdict: v.verdict, remark: v.remark }))
+        : [],
+    );
     setBusy(false);
     if (!res.ok) { setError(res.error); return; }
     toast(`Recorded: ${decision.toLowerCase()}.`);
@@ -546,7 +586,45 @@ function LevelModal({
             {mode === "review" ? "Fail" : "Reject"}
           </Button>
         </div>
-        <Field label="Remark" required hint="Mandatory on every decision.">
+        {mode === "review" && items.length > 0 && (
+          <div className="space-y-1.5 rounded-[10px] border border-line-300 p-3">
+            <p className="text-[11.5px] font-bold text-navy-900">Each item</p>
+            {items.map((i) => {
+              const v = verdicts[i.id]?.verdict ?? "PASS";
+              return (
+                <div key={i.id} className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-[11.5px] font-medium text-navy-800">{i.text}</span>
+                  {(["PASS", "FAIL"] as const).map((choice) => (
+                    <button
+                      key={choice}
+                      type="button"
+                      onClick={() => setItem(i.id, { verdict: choice })}
+                      className={cn(
+                        "cursor-pointer rounded-[7px] border px-2.5 py-1 text-[10.5px] font-bold",
+                        v === choice
+                          ? choice === "PASS"
+                            ? "border-good-600 bg-good-050 text-good-700"
+                            : "border-bad-600 bg-bad-050 text-bad-700"
+                          : "border-line-400 bg-white text-muted-500",
+                      )}
+                    >
+                      {choice === "PASS" ? "Pass" : "Fail"}
+                    </button>
+                  ))}
+                  {v === "FAIL" && (
+                    <input
+                      value={verdicts[i.id]?.remark ?? ""}
+                      onChange={(e) => setItem(i.id, { remark: e.target.value })}
+                      placeholder="What is wrong with it?"
+                      className="w-full rounded-[7px] border border-line-400 bg-surface-sunken px-2.5 py-1.5 text-[11.5px]"
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <Field label="Overall remark" required hint="Mandatory on every decision.">
           <Textarea value={remark} onChange={(e) => setRemark(e.target.value)} rows={3} />
         </Field>
       </div>
@@ -646,10 +724,44 @@ function ChecklistRow({
         )}
       </div>
 
-      {item.needsFile && (
-        <p className="mt-1.5 text-[11px] font-medium text-muted-500">
-          A photo or file is required · {item.files.length} attached
-        </p>
+      {(item.needsFile || item.files.length > 0) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {item.needsFile && item.files.length === 0 && (
+            <span className="text-[11px] font-bold text-bad-600">A photo or file is required</span>
+          )}
+          {item.files.map((f) => (
+            <a
+              key={f.id}
+              href={`/api/tasks/checklist-files/${f.id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11.5px] font-semibold text-brand-700 hover:underline"
+            >
+              {f.fileName}
+            </a>
+          ))}
+          {canAnswer && (
+            <label className="cursor-pointer rounded-[8px] border border-line-400 bg-white px-2.5 py-1 text-[10.5px] font-bold text-brand-700 hover:border-brand-500">
+              {item.files.length > 0 ? "Add another" : "Attach"}
+              <input
+                type="file"
+                name="files"
+                className="hidden"
+                onChange={async (e) => {
+                  const picked = e.target.files?.[0];
+                  if (!picked) return;
+                  const fd = new FormData();
+                  fd.append("files", picked);
+                  setBusy(true);
+                  await attachChecklistItemFileAction(item.id, fd);
+                  setBusy(false);
+                  e.target.value = "";
+                  onDone();
+                }}
+              />
+            </label>
+          )}
+        </div>
       )}
     </div>
   );
@@ -713,7 +825,15 @@ function Comment({
       )}
 
       {comment.files.map((f) => (
-        <p key={f.id} className="mt-1 text-[11.5px] font-medium text-brand-700">{f.fileName}</p>
+        <a
+          key={f.id}
+          href={`/api/tasks/attachments/${f.id}`}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1 block text-[11.5px] font-semibold text-brand-700 hover:underline"
+        >
+          {f.fileName}
+        </a>
       ))}
     </div>
   );

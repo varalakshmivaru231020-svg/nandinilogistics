@@ -28,7 +28,7 @@ export default async function ChecklistsPage({
         where: { categoryId: activeCategory.id },
         orderBy: { name: "asc" },
         select: {
-          id: true, name: true, version: true,
+          id: true, name: true, version: true, isActive: true,
           _count: { select: { checkpoints: true } },
         },
       })
@@ -40,7 +40,7 @@ export default async function ChecklistsPage({
     ? await prisma.checklistCheckpoint.findMany({
         where: { checklistId: activeList.id },
         orderBy: { sortOrder: "asc" },
-        select: { id: true, text: true, isMandatory: true },
+        select: { id: true, text: true, isMandatory: true, responseType: true, needsFile: true },
       })
     : [];
 
@@ -72,7 +72,7 @@ export default async function ChecklistsPage({
       }))}
       activeCategoryId={activeCategory?.id ?? null}
       checklists={checklists.map((l) => ({
-        id: l.id, name: l.name, version: l.version, checkpointCount: l._count.checkpoints,
+        id: l.id, name: l.name, version: l.version, isActive: l.isActive, checkpointCount: l._count.checkpoints,
       }))}
       activeListId={activeList?.id ?? null}
       checkpoints={checkpoints}

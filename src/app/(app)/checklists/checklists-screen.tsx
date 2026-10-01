@@ -10,12 +10,26 @@ import { cn } from "@/lib/utils";
 import {
   addCheckpointAction, deleteCategoryAction, deleteCheckpointAction, deleteChecklistAction,
   duplicateChecklistAction, moveCheckpointAction, saveCategoryAction, saveChecklistAction,
-  updateCheckpointAction,
+  setChecklistActiveAction, updateCheckpointAction,
 } from "./actions";
 
 interface Category { id: string; code: string; name: string; description: string | null; count: number }
-interface Checklist { id: string; name: string; version: string; checkpointCount: number }
-interface Checkpoint { id: string; text: string; isMandatory: boolean }
+interface Checklist {
+  id: string; name: string; version: string; checkpointCount: number; isActive: boolean;
+}
+interface Checkpoint {
+  id: string; text: string; isMandatory: boolean;
+  /** What the item asks for, and whether answering it needs a photo. */
+  responseType: "YES_NO_NA" | "TEXT" | "NUMBER" | "DATE";
+  needsFile: boolean;
+}
+
+const RESPONSE_LABEL: Record<Checkpoint["responseType"], string> = {
+  YES_NO_NA: "Yes / No / N/A",
+  TEXT: "Text",
+  NUMBER: "Number",
+  DATE: "Date",
+};
 interface Run {
   id: string; name: string; category: string; checkpoints: number; location: string;
   by: string; score: number; result: "PASS" | "FAIL"; state: "OPEN" | "CLOSED";
@@ -247,8 +261,16 @@ export function ChecklistsScreen({
                       <div className={cn("text-[12.5px]", l.id === activeListId ? "font-bold text-brand-700" : "font-semibold text-navy-900")}>
                         {l.name}
                       </div>
-                      <div className="mt-[3px] text-[11px] font-medium text-muted-400">
-                        {l.checkpointCount} checkpoint{l.checkpointCount === 1 ? "" : "s"} · {l.version}
+                      <div className="mt-[3px] flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-muted-400">
+                        <span>
+                          {l.checkpointCount} checkpoint{l.checkpointCount === 1 ? "" : "s"} · {l.version}
+                        </span>
+                        {/* Only an active checklist is offered when a task is raised. */}
+                        {!l.isActive && (
+                          <span className="rounded-full bg-surface-field px-2 py-[2px] text-[8.5px] font-extrabold uppercase tracking-[.07em] text-muted-500">
+                            Retired
+                          </span>
+                        )}
                       </div>
                     </button>
                   ))}
@@ -289,6 +311,18 @@ export function ChecklistsScreen({
                     {can.create && (
                       <SmallButton onClick={() => run(() => duplicateChecklistAction(activeList.id), "Checklist duplicated")}>
                         ⧉ Duplicate
+                      </SmallButton>
+                    )}
+                    {can.update && (
+                      <SmallButton
+                        onClick={() =>
+                          run(
+                            () => setChecklistActiveAction(activeList.id, !activeList.isActive),
+                            activeList.isActive ? "Retired — it is no longer offered on new tasks" : "Active again",
+                          )
+                        }
+                      >
+                        {activeList.isActive ? "Retire" : "Reactivate"}
                       </SmallButton>
                     )}
                     {can.delete && (
@@ -363,6 +397,39 @@ export function ChecklistsScreen({
                               )}
                             >
                               {p.isMandatory ? "Mandatory" : "Optional"}
+                            </button>
+                          )}
+                          {can.update ? (
+                            <select
+                              value={p.responseType}
+                              onChange={(e) =>
+                                run(
+                                  () => updateCheckpointAction(p.id, { responseType: e.target.value as Checkpoint["responseType"] }),
+                                  "Response type changed",
+                                )
+                              }
+                              className="shrink-0 cursor-pointer rounded-[7px] border border-line-400 bg-white px-2 py-[3px] text-[10.5px] font-semibold text-navy-700"
+                            >
+                              {Object.entries(RESPONSE_LABEL).map(([v, l]) => (
+                                <option key={v} value={v}>{l}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="shrink-0 text-[10.5px] font-semibold text-muted-500">
+                              {RESPONSE_LABEL[p.responseType]}
+                            </span>
+                          )}
+                          {can.update && (
+                            <button
+                              type="button"
+                              onClick={() => run(() => updateCheckpointAction(p.id, { needsFile: !p.needsFile }), "Checkpoint updated")}
+                              className={cn(
+                                "shrink-0 rounded-full px-2 py-[3px] text-[8.5px] font-extrabold uppercase tracking-[.07em]",
+                                p.needsFile ? "bg-brand-500 text-white" : "bg-surface-field text-muted-500",
+                              )}
+                              title="Whether answering this needs a photo or file"
+                            >
+                              {p.needsFile ? "Photo required" : "No photo"}
                             </button>
                           )}
                           {can.update && (

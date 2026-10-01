@@ -57,7 +57,7 @@ const PRIORITY_PILL: Record<TaskPriority, string> = {
 const FILTERS = ["All", "Overdue", ...Object.values(STATUS_LABEL)];
 
 export function TasksScreen({
-  tasks, projects, people, checklists, filter, mine, nowMs, viewerId, can,
+  tasks, projects, people, checklists, filter, mine, picked, summary, myScore, nowMs, viewerId, can,
 }: {
   tasks: Task[];
   projects: Array<{ id: string; code: string }>;
@@ -65,6 +65,12 @@ export function TasksScreen({
   checklists: Array<{ id: string; name: string; category: string }>;
   filter: string;
   mine: "to" | "by" | null;
+  picked: { priority: string; assignee: string; assigner: string; from: string; to: string };
+  summary: {
+    dueToday: number; dueThisWeek: number; pendingApprovals: number;
+    high: number; medium: number; low: number;
+  };
+  myScore: { score: number | null; onTime: number; late: number } | null;
   nowMs: number;
   viewerId: string;
   can: Record<string, boolean>;
@@ -95,14 +101,21 @@ export function TasksScreen({
     router.refresh();
   }
 
-  function go(next: { filter?: string; mine?: string | null }) {
+  function go(next: Partial<Record<"filter" | "mine" | "priority" | "assignee" | "assigner" | "from" | "to", string | null>>) {
     const params = new URLSearchParams();
-    const f = next.filter ?? filter;
-    const m = next.mine === undefined ? mine : next.mine;
-    if (f && f !== "All") params.set("filter", f);
-    if (m) params.set("mine", m);
+    const now: Record<string, string | null> = {
+      filter, mine, ...picked, ...next,
+    };
+    for (const [k, v] of Object.entries(now)) {
+      if (!v) continue;
+      if (k === "filter" && v === "All") continue;
+      params.set(k, v);
+    }
     router.push(`/tasks${params.toString() ? `?${params}` : ""}`);
   }
+
+  const filtered =
+    picked.priority || picked.assignee || picked.assigner || picked.from || picked.to;
 
   const shown = tasks.filter((t) => {
     if (filter === "All") return true;
@@ -124,6 +137,26 @@ export function TasksScreen({
         actions={can.create ? <Button onClick={() => setCreating(true)}>+ New task</Button> : undefined}
       />
 
+      {/* The scope's §4.1 widgets. */}
+      <div className="mb-3.5 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <Stat value={String(countFor("Overdue"))} label="Overdue" tone={countFor("Overdue") > 0 ? "bad" : undefined} />
+        <Stat value={String(summary.dueToday)} label="Due today" />
+        <Stat value={String(summary.dueThisWeek)} label="Due this week" />
+        <Stat value={String(summary.pendingApprovals)} label="Waiting on you" tone={summary.pendingApprovals > 0 ? "warn" : undefined} />
+        <Stat
+          value={`${summary.high}/${summary.medium}/${summary.low}`}
+          label="High / Med / Low"
+        />
+        {myScore && (
+          <Stat
+            value={myScore.score === null ? "—" : `${myScore.score}%`}
+            label="Your score"
+            hint={`${myScore.onTime} on time · ${myScore.late} late`}
+            tone={myScore.score !== null && myScore.score < 70 ? "bad" : "good"}
+          />
+        )}
+      </div>
+
       <div className="mb-3.5 flex flex-wrap items-center gap-[7px] rounded-[12px] border border-line-400 bg-white px-3.5 py-[11px]">
         {FILTERS.filter((f) => f === "All" || countFor(f) > 0).map((f) => (
           <Chip key={f} picked={filter === f} onClick={() => go({ filter: f })}>
@@ -141,6 +174,65 @@ export function TasksScreen({
         <span className="text-[11.5px] font-medium text-muted-600">
           {shown.length} of {tasks.length}
         </span>
+      </div>
+
+      <div className="mb-3.5 flex flex-wrap items-center gap-2.5 rounded-[12px] border border-line-400 bg-white px-3.5 py-[11px]">
+        <span className="text-[11px] font-semibold text-muted-400">Priority</span>
+        <select
+          value={picked.priority}
+          onChange={(e) => go({ priority: e.target.value || null })}
+          className="cursor-pointer rounded-[8px] border border-line-400 bg-surface-sunken px-2.5 py-1.5 text-[11.5px] font-medium text-navy-900"
+        >
+          <option value="">Any</option>
+          <option value="HIGH">High</option>
+          <option value="MEDIUM">Medium</option>
+          <option value="LOW">Low</option>
+        </select>
+
+        <span className="text-[11px] font-semibold text-muted-400">Assignee</span>
+        <select
+          value={picked.assignee}
+          onChange={(e) => go({ assignee: e.target.value || null })}
+          className="max-w-[150px] cursor-pointer rounded-[8px] border border-line-400 bg-surface-sunken px-2.5 py-1.5 text-[11.5px] font-medium text-navy-900"
+        >
+          <option value="">Anyone</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+
+        <span className="text-[11px] font-semibold text-muted-400">Assigner</span>
+        <select
+          value={picked.assigner}
+          onChange={(e) => go({ assigner: e.target.value || null })}
+          className="max-w-[150px] cursor-pointer rounded-[8px] border border-line-400 bg-surface-sunken px-2.5 py-1.5 text-[11.5px] font-medium text-navy-900"
+        >
+          <option value="">Anyone</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+
+        <span className="text-[11px] font-semibold text-muted-400">Due</span>
+        <input
+          type="date"
+          value={picked.from}
+          onChange={(e) => go({ from: e.target.value || null })}
+          className="rounded-[8px] border border-line-400 bg-surface-sunken px-2.5 py-1.5 text-[11.5px] font-medium text-navy-900"
+        />
+        <span className="text-[11px] font-medium text-muted-400">to</span>
+        <input
+          type="date"
+          value={picked.to}
+          onChange={(e) => go({ to: e.target.value || null })}
+          className="rounded-[8px] border border-line-400 bg-surface-sunken px-2.5 py-1.5 text-[11.5px] font-medium text-navy-900"
+        />
+
+        {filtered && (
+          <button
+            type="button"
+            onClick={() => go({ priority: null, assignee: null, assigner: null, from: null, to: null })}
+            className="cursor-pointer text-[11.5px] font-semibold text-brand-700 hover:underline"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       {sel.length > 0 && (
@@ -588,4 +680,23 @@ function RowAction({
     );
   }
   return null;
+}
+
+/** One of the design's stat tiles. */
+function Stat({
+  value, label, hint, tone,
+}: { value: string; label: string; hint?: string; tone?: "bad" | "warn" | "good" }) {
+  return (
+    <div className={cn(
+      "rounded-[12px] border px-3.5 py-3",
+      tone === "bad" ? "border-bad-300 bg-bad-025"
+        : tone === "warn" ? "border-warn-400 bg-warn-050"
+          : tone === "good" ? "border-good-400 bg-good-050"
+            : "border-line-400 bg-white",
+    )}>
+      <div className="num font-display text-[21px] font-extrabold text-navy-950">{value}</div>
+      <div className="mt-0.5 text-[11px] font-semibold text-muted-500">{label}</div>
+      {hint && <div className="mt-0.5 text-[10.5px] font-medium text-muted-400">{hint}</div>}
+    </div>
+  );
 }

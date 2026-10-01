@@ -1,6 +1,7 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { scoreTasks } from "@/lib/tasks/performance";
 import { TasksScreen } from "./tasks-screen";
 
 export const metadata = { title: "Task Management" };
@@ -15,10 +16,13 @@ export const metadata = { title: "Task Management" };
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string; mine?: string }>;
+  searchParams: Promise<{
+    filter?: string; mine?: string; priority?: string;
+    assignee?: string; assigner?: string; from?: string; to?: string;
+  }>;
 }) {
   const ctx = await requirePermission(PERM.task.task.view);
-  const { filter = "All", mine } = await searchParams;
+  const { filter = "All", mine, priority, assignee, assigner, from, to } = await searchParams;
 
   const seesEverything = ctx.has(PERM.task.task.viewAll);
   const projectScope = ctx.canAccessAllProjects
@@ -33,11 +37,28 @@ export default async function TasksPage({
     ],
   };
 
+  // The scope's §3.4: status and "mine" as chips, the rest as a filter bar.
+  const dueRange =
+    from || to
+      ? {
+          dueAt: {
+            ...(from ? { gte: new Date(`${from}T00:00:00.000Z`) } : {}),
+            ...(to ? { lte: new Date(`${to}T23:59:59.999Z`) } : {}),
+          },
+        }
+      : {};
+
   const where = {
     ...(seesEverything ? projectScope : {}),
     ...(seesEverything ? {} : ownScope),
     ...(mine === "to" ? { assigneeId: ctx.id } : {}),
     ...(mine === "by" ? { createdById: ctx.id } : {}),
+    ...(priority && ["HIGH", "MEDIUM", "LOW"].includes(priority)
+      ? { priority: priority as "HIGH" | "MEDIUM" | "LOW" }
+      : {}),
+    ...(assignee ? { assigneeId: assignee } : {}),
+    ...(assigner ? { createdById: assigner } : {}),
+    ...dueRange,
   };
 
   const [tasks, projects, people, checklists] = await Promise.all([
@@ -71,11 +92,53 @@ export default async function TasksPage({
     }),
   ]);
 
+  // The scope's §4.1 widgets, for the tasks this person can see.
+  const nowMs = new Date().getTime();
+  const endOfToday = new Date(); endOfToday.setHours(23, 59, 59, 999);
+  const endOfWeek = new Date(endOfToday.getTime() + 6 * 86_400_000);
+  const openish = (t: { status: string }) =>
+    !["COMPLETED", "CLOSED", "UNDER_REVIEW", "UNDER_APPROVAL"].includes(t.status);
+
+  const summary = {
+    dueToday: tasks.filter((t) => openish(t) && t.dueAt <= endOfToday && t.dueAt.getTime() >= nowMs).length,
+    dueThisWeek: tasks.filter((t) => openish(t) && t.dueAt <= endOfWeek && t.dueAt.getTime() >= nowMs).length,
+    // What is waiting on this viewer as an Assigner: closures and extensions.
+    pendingApprovals:
+      tasks.filter((t) => t.createdById === ctx.id && t.status === "COMPLETED" && t.kind === "STANDALONE").length +
+      tasks.filter((t) => t.createdById === ctx.id && t.extensions.length > 0).length,
+    high: tasks.filter((t) => openish(t) && t.priority === "HIGH").length,
+    medium: tasks.filter((t) => openish(t) && t.priority === "MEDIUM").length,
+    low: tasks.filter((t) => openish(t) && t.priority === "LOW").length,
+  };
+
+  // Your own score, when your role includes seeing it; §4.3.
+  const seesOwnScore = ctx.has(PERM.task.performance.view);
+  const myTasks = seesOwnScore ? await prisma.task.findMany({
+    where: { assigneeId: ctx.id },
+    select: {
+      status: true, completedAt: true, effectiveDueAt: true,
+      extensions: {
+        where: { status: "APPROVED" },
+        select: { control: true, previousDueAt: true, revisedDueAt: true },
+      },
+    },
+  }) : [];
+  const myScore = scoreTasks(myTasks, nowMs);
+
   return (
     <TasksScreen
+      summary={summary}
+      myScore={seesOwnScore ? myScore : null}
       filter={filter}
       mine={mine === "to" ? "to" : mine === "by" ? "by" : null}
-      nowMs={new Date().getTime()}
+      picked={{
+        priority: priority ?? "",
+        assignee: assignee ?? "",
+        assigner: assigner ?? "",
+        from: from ?? "",
+        to: to ?? "",
+      }}
+      nowMs={nowMs}
       viewerId={ctx.id}
       projects={projects}
       people={people}
