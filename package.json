@@ -12,6 +12,7 @@
     "perms:grants": "tsx scripts/sync-role-grants.ts",
     "seed:reference": "tsx scripts/seed-reference-data.ts",
     "repair:board-records": "tsx scripts/repair-board-records.ts",
+    "seed:task-demo": "tsx scripts/seed-task-demo.ts",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
