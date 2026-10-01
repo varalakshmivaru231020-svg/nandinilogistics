@@ -55,6 +55,33 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     if (ctx.has(PERM.material.purchaseOrder.approveAdmin)) {
       waiting.push(prisma.purchaseOrder.count({ where: { ...scope, status: "PENDING_ADMIN_APPROVAL" } }));
     }
+    // Task Management's decisions count too, or the badge contradicts the queue.
+    if (ctx.has(PERM.task.task.view)) {
+      const seesAll = ctx.has(PERM.task.task.viewAll);
+      if (ctx.has(PERM.task.task.close)) {
+        waiting.push(prisma.task.count({
+          where: {
+            status: "COMPLETED", kind: "STANDALONE",
+            ...(seesAll ? {} : { createdById: ctx.id }),
+          },
+        }));
+      }
+      if (ctx.has(PERM.task.task.approveExtension)) {
+        waiting.push(prisma.taskExtension.count({
+          where: { status: "REQUESTED", ...(seesAll ? {} : { task: { createdById: ctx.id } }) },
+        }));
+      }
+      // A level is only yours when it is the one waiting, which the queue works
+      // out; counting the tasks you sit on is close enough for a badge and far
+      // cheaper than replaying every round.
+      waiting.push(prisma.task.count({
+        where: {
+          status: { in: ["UNDER_REVIEW", "UNDER_APPROVAL"] },
+          ...(seesAll ? {} : { levels: { some: { userId: ctx.id } } }),
+        },
+      }));
+    }
+
     const counts = await Promise.all(waiting);
     const total = counts.reduce((n, c) => n + c, 0);
     if (total > 0) badges.approvals = total;

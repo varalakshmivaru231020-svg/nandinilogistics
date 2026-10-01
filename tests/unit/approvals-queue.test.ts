@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  byOldestFirst, countByKind, filterApprovals, waitingFor, type ApprovalRow,
+  APPROVAL_KINDS, KIND_LABEL, byOldestFirst, countByKind, filterApprovals,
+  needsDelayClassification, waitingFor, type ApprovalKind, type ApprovalRow,
 } from "@/lib/approvals/queue";
 
 const row = (over: Partial<ApprovalRow>): ApprovalRow => ({
@@ -72,5 +73,46 @@ describe("countByKind", () => {
     expect(counts.INDENT).toBe(2);
     expect(counts.PO).toBe(1);
     expect(counts.TRANSFER).toBe(0);
+  });
+});
+
+describe("Task Management joins the same queue", () => {
+  it("offers the four task decisions alongside the material ones", () => {
+    for (const k of ["TASK_CLOSURE", "TASK_EXTENSION", "TASK_REVIEW", "TASK_APPROVAL"]) {
+      expect(APPROVAL_KINDS).toContain(k);
+      expect(KIND_LABEL[k as ApprovalKind]).toBeTruthy();
+    }
+  });
+
+  it("names them so two kinds of extension are told apart", () => {
+    expect(KIND_LABEL.EXTENSION).toBe("Schedule extension");
+    expect(KIND_LABEL.TASK_EXTENSION).toBe("Task extension");
+  });
+
+  it("asks how a task delay should be classified, and only there", () => {
+    expect(needsDelayClassification("TASK_EXTENSION")).toBe(true);
+    for (const k of ["TASK_CLOSURE", "TASK_REVIEW", "TASK_APPROVAL", "INDENT", "PO"]) {
+      expect(needsDelayClassification(k as ApprovalKind), k).toBe(false);
+    }
+  });
+
+  it("filters and counts the task kinds like any other", () => {
+    const rows: ApprovalRow[] = [
+      row({ kind: "TASK_REVIEW", reference: "T-9005", title: "Handover — Flat A-1203" }),
+      row({ kind: "TASK_CLOSURE", reference: "T-9004", title: "Scaffold removal" }),
+      row({ kind: "INDENT", reference: "IND-1", title: "Cement" }),
+    ];
+    expect(filterApprovals(rows, { kind: "TASK_REVIEW", q: "" })).toHaveLength(1);
+    expect(countByKind(rows).TASK_CLOSURE).toBe(1);
+    expect(filterApprovals(rows, { kind: "all", q: "handover" })).toHaveLength(1);
+    expect(filterApprovals(rows, { kind: "all", q: "T-900" })).toHaveLength(2);
+  });
+
+  it("sorts a task decision into the same oldest-first order", () => {
+    const rows: ApprovalRow[] = [
+      row({ kind: "INDENT", raisedAt: "2026-09-20T10:00:00.000Z" }),
+      row({ kind: "TASK_REVIEW", raisedAt: "2026-09-18T10:00:00.000Z" }),
+    ];
+    expect(byOldestFirst(rows)[0].kind).toBe("TASK_REVIEW");
   });
 });

@@ -214,11 +214,128 @@ export default async function ApprovalsPage() {
     }
   }
 
+  // ---- Task Management -----------------------------------------------------
+  // A person sees a task decision only where they are the one it waits on:
+  // the Assigner for a closure or an extension, the named level for a review
+  // or an approval. Admin sees them all, as the scope gives Admin everything.
+  if (ctx.has(PERM.task.task.view)) {
+    const seesAll = ctx.has(PERM.task.task.viewAll);
+
+    // Completed standalone tasks, waiting on whoever raised them.
+    const closures = await prisma.task.findMany({
+      where: {
+        status: "COMPLETED",
+        kind: "STANDALONE",
+        ...(seesAll ? {} : { createdById: ctx.id }),
+      },
+      orderBy: { completedAt: "asc" },
+      select: {
+        id: true, taskNo: true, title: true, completedAt: true, completionRemark: true,
+        project: { select: { name: true } },
+        assignee: { select: { name: true } },
+      },
+    });
+    for (const t of closures) {
+      rows.push({
+        id: t.id,
+        kind: "TASK_CLOSURE",
+        reference: t.taskNo,
+        title: t.completionRemark ?? t.title,
+        raisedBy: t.assignee.name,
+        raisedAt: (t.completedAt ?? new Date()).toISOString(),
+        projectName: t.project?.name ?? null,
+        value: null,
+        waitingOn: "Assigner",
+        href: `/tasks/${t.id}`,
+        canDecide: ctx.has(PERM.task.task.close),
+      });
+    }
+
+    // Due-date extensions, waiting on the Assigner to decide and classify.
+    const taskExtensions = await prisma.taskExtension.findMany({
+      where: {
+        status: "REQUESTED",
+        ...(seesAll ? {} : { task: { createdById: ctx.id } }),
+      },
+      orderBy: { requestedAt: "asc" },
+      select: {
+        id: true, reason: true, requestedAt: true, isHoldRequest: true, proposedDueAt: true,
+        requestedBy: { select: { name: true } },
+        task: { select: { id: true, taskNo: true, project: { select: { name: true } } } },
+      },
+    });
+    for (const e of taskExtensions) {
+      rows.push({
+        id: e.id,
+        kind: "TASK_EXTENSION",
+        reference: e.task.taskNo,
+        title: `${e.isHoldRequest ? "Hold" : "Extension"} to ${e.proposedDueAt.toISOString().slice(0, 10)} — ${e.reason}`,
+        raisedBy: e.requestedBy.name,
+        raisedAt: e.requestedAt.toISOString(),
+        projectName: e.task.project?.name ?? null,
+        value: null,
+        waitingOn: "Assigner",
+        // The row's id is the extension, which is what the decision acts on;
+        // the link goes to the task, which is where a person reads it.
+        href: `/tasks/${e.task.id}`,
+        canDecide: ctx.has(PERM.task.task.approveExtension),
+      });
+    }
+
+    // Checklist tasks sitting at a review or an approval level.
+    const atLevels = await prisma.task.findMany({
+      where: { status: { in: ["UNDER_REVIEW", "UNDER_APPROVAL"] } },
+      orderBy: { completedAt: "asc" },
+      select: {
+        id: true, taskNo: true, title: true, status: true, round: true, completedAt: true,
+        project: { select: { name: true } },
+        assignee: { select: { name: true } },
+        levels: {
+          select: {
+            id: true, kind: true, level: true, userId: true,
+            user: { select: { name: true } },
+            actions: { select: { round: true } },
+          },
+        },
+      },
+    });
+    for (const t of atLevels) {
+      const kind = t.status === "UNDER_REVIEW" ? "REVIEW" : "APPROVAL";
+      const done = new Set(
+        t.levels.filter((l) => l.kind === kind && l.actions.some((a) => a.round === t.round)).map((l) => l.level),
+      );
+      const next = t.levels
+        .filter((l) => l.kind === kind && !done.has(l.level))
+        .sort((a, b) => a.level - b.level)[0];
+      if (!next) continue;
+
+      const mine = next.userId === ctx.id;
+      if (!mine && !seesAll) continue;
+
+      rows.push({
+        id: t.id,
+        kind: kind === "REVIEW" ? "TASK_REVIEW" : "TASK_APPROVAL",
+        reference: t.taskNo,
+        title: t.title,
+        raisedBy: t.assignee.name,
+        raisedAt: (t.completedAt ?? new Date()).toISOString(),
+        projectName: t.project?.name ?? null,
+        value: null,
+        waitingOn: `${kind === "REVIEW" ? "Reviewer" : "Approver"} L${next.level} · ${next.user.name}`,
+        href: `/tasks/${t.id}`,
+        // Admin may act at any level; everyone else only at their own.
+        canDecide: mine
+          ? ctx.has(kind === "REVIEW" ? PERM.task.level.review : PERM.task.level.approve)
+          : ctx.has(PERM.task.task.reopen),
+      });
+    }
+  }
+
   return (
     <div className="animate-fade-up">
       <PageHeader
         title="Approvals"
-        description="Everything waiting on a decision, oldest first — indents, purchase orders, extensions, invoices, returns and transfers in one place."
+        description="Everything waiting on a decision, oldest first — indents, purchase orders, invoices, returns, transfers, schedule extensions and every task decision in one place."
       />
       <ApprovalsScreen rows={byOldestFirst(rows)} nowMs={new Date().getTime()} />
     </div>

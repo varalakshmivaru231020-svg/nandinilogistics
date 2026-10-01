@@ -4,13 +4,13 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { Alert, Card, EmptyState, Field, Input, Textarea } from "@/components/ui/primitives";
+import { Alert, Card, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { cn, moneyShort } from "@/lib/utils";
 import {
-  APPROVAL_KINDS, KIND_LABEL, countByKind, filterApprovals, waitingFor,
+  APPROVAL_KINDS, KIND_LABEL, countByKind, filterApprovals, needsDelayClassification, waitingFor,
   type ApprovalKind, type ApprovalRow,
 } from "@/lib/approvals/queue";
 import { approveIndentAction, rejectIndentAction } from "../material/indents/actions";
@@ -19,6 +19,10 @@ import { approveReturnAction, rejectReturnAction } from "../material/returns/act
 import { approveTransferAction } from "../material/transfers/actions";
 import { approveInvoiceAction } from "../material/invoices/actions";
 import { decideExtensionPmAction } from "../schedule/extension-actions";
+import {
+  closeTaskAction, decideExtensionAction as decideTaskExtensionAction, decideLevelAction,
+  sendBackTaskAction,
+} from "../tasks/actions";
 
 type Decision = { row: ApprovalRow; approve: boolean };
 
@@ -40,6 +44,7 @@ export function ApprovalsScreen({ rows, nowMs }: { rows: ApprovalRow[]; nowMs: n
   const [remark, setRemark] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [control, setControl] = React.useState<"CONTROLLABLE" | "UNCONTROLLABLE">("UNCONTROLLABLE");
 
   const counts = countByKind(rows);
   const shown = filterApprovals(rows, { kind, q });
@@ -73,6 +78,20 @@ export function ApprovalsScreen({ rows, nowMs }: { rows: ApprovalRow[]; nowMs: n
         case "INVOICE":
           if (!approve) return { ok: false as const, error: "Rejecting an invoice is done on the invoice itself." };
           return approveInvoiceAction(row.id, remark);
+
+        // A completed task waiting on whoever raised it: approve closes it,
+        // reject sends it back to be done again.
+        case "TASK_CLOSURE":
+          return approve ? closeTaskAction(row.id, remark) : sendBackTaskAction(row.id, remark);
+
+        case "TASK_EXTENSION":
+          return decideTaskExtensionAction(row.id, approve, remark, approve ? control : undefined);
+
+        case "TASK_REVIEW":
+          return decideLevelAction(row.id, approve ? "PASS" : "FAIL", remark);
+
+        case "TASK_APPROVAL":
+          return decideLevelAction(row.id, approve ? "APPROVE" : "REJECT", remark);
       }
     })();
 
@@ -216,6 +235,18 @@ export function ApprovalsScreen({ rows, nowMs }: { rows: ApprovalRow[]; nowMs: n
         >
           <div className="space-y-3">
             {error && <Alert tone="error">{error}</Alert>}
+            {deciding.approve && needsDelayClassification(deciding.row.kind) && (
+              <Field
+                label="Was the delay in the assignee's control?"
+                required
+                hint="Only an uncontrollable delay moves the date their performance is measured against."
+              >
+                <Select value={control} onChange={(e) => setControl(e.target.value as never)}>
+                  <option value="UNCONTROLLABLE">Uncontrollable</option>
+                  <option value="CONTROLLABLE">Controllable</option>
+                </Select>
+              </Field>
+            )}
             <Field
               label="Remarks"
               required={!deciding.approve}

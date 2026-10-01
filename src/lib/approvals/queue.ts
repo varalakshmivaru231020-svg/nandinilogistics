@@ -19,6 +19,13 @@ export const APPROVAL_KINDS = [
   "INVOICE",
   "RETURN",
   "TRANSFER",
+  // Task Management puts four more kinds of decision in front of people, and
+  // they belong in the same queue: a queue that holds most of what is waiting
+  // is one nobody trusts to be the whole list.
+  "TASK_CLOSURE",
+  "TASK_EXTENSION",
+  "TASK_REVIEW",
+  "TASK_APPROVAL",
 ] as const;
 
 export type ApprovalKind = (typeof APPROVAL_KINDS)[number];
@@ -26,11 +33,29 @@ export type ApprovalKind = (typeof APPROVAL_KINDS)[number];
 export const KIND_LABEL: Record<ApprovalKind, string> = {
   INDENT: "Indent",
   PO: "Purchase order",
-  EXTENSION: "Extension",
+  EXTENSION: "Schedule extension",
   INVOICE: "Vendor invoice",
   RETURN: "Material return",
   TRANSFER: "Stock transfer",
+  TASK_CLOSURE: "Task closure",
+  TASK_EXTENSION: "Task extension",
+  TASK_REVIEW: "Checklist review",
+  TASK_APPROVAL: "Checklist approval",
 };
+
+/**
+ * A task extension cannot be approved with a yes alone: the Assigner also says
+ * whether the delay was in the assignee's control, and that choice is what the
+ * performance score turns on. The queue asks for it rather than guessing.
+ */
+export function needsDelayClassification(kind: ApprovalKind): boolean {
+  return kind === "TASK_EXTENSION";
+}
+
+/** Which kinds a rejection is a real option on, as opposed to an Open. */
+export function canRejectHere(kind: ApprovalKind): boolean {
+  return kind !== "PO" && kind !== "TRANSFER" && kind !== "INVOICE";
+}
 
 export interface ApprovalRow {
   id: string;
