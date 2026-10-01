@@ -333,9 +333,9 @@ export function ChecklistsScreen({
                   </div>
                 </div>
 
-                <div className="px-[18px] py-3">
+                <div className="scroll-thin overflow-x-auto px-[18px] py-3">
                   {can.update && (
-                    <div className="mb-3 flex gap-2">
+                    <div className="mb-3 flex min-w-[780px] gap-2">
                       <Input
                         value={newPoint}
                         onChange={(e) => setNewPoint(e.target.value)}
@@ -363,7 +363,10 @@ export function ChecklistsScreen({
                   )}
 
                   {checkpoints.map((p, i) => (
-                    <div key={p.id} className="flex items-center gap-[11px] border-b border-line-200 py-3 last:border-0">
+                    <div
+                      key={p.id}
+                      className="flex min-w-[780px] items-center gap-[11px] border-b border-line-200 py-3 last:border-0"
+                    >
                       <span className="num shrink-0 rounded-[8px] bg-brand-100 px-[9px] py-1.5 font-display text-[12px] font-extrabold text-brand-700">
                         {String(i + 1).padStart(2, "0")}
                       </span>
@@ -386,13 +389,13 @@ export function ChecklistsScreen({
                         </form>
                       ) : (
                         <>
-                          <span className="flex-1 text-[12.5px] font-medium text-navy-900">{p.text}</span>
+                          <span className="min-w-[180px] flex-1 text-[12.5px] font-medium text-navy-900">{p.text}</span>
                           {can.update && (
                             <button
                               type="button"
                               onClick={() => run(() => updateCheckpointAction(p.id, { isMandatory: !p.isMandatory }), "Checkpoint updated")}
                               className={cn(
-                                "rounded-full px-2 py-[3px] text-[8.5px] font-extrabold uppercase tracking-[.07em] text-white",
+                                "shrink-0 whitespace-nowrap rounded-full px-2 py-[3px] text-[8.5px] font-extrabold uppercase tracking-[.07em] text-white",
                                 p.isMandatory ? "bg-bad-600" : "bg-muted-400",
                               )}
                             >
@@ -436,7 +439,7 @@ export function ChecklistsScreen({
                             <button
                               type="button"
                               onClick={() => setEditingPoint(p.id)}
-                              className="text-[11px] font-semibold text-brand-700 hover:underline"
+                              className="shrink-0 whitespace-nowrap text-[11px] font-semibold text-brand-700 hover:underline"
                             >
                               Edit text
                             </button>
