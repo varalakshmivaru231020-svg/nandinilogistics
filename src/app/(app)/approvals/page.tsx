@@ -323,10 +323,10 @@ export default async function ApprovalsPage() {
         value: null,
         waitingOn: `${kind === "REVIEW" ? "Reviewer" : "Approver"} L${next.level} · ${next.user.name}`,
         href: `/tasks/${t.id}`,
-        // Admin may act at any level; everyone else only at their own.
-        canDecide: mine
-          ? ctx.has(kind === "REVIEW" ? PERM.task.level.review : PERM.task.level.approve)
-          : ctx.has(PERM.task.task.reopen),
+        // A checklist level is settled by approving or denying each line, so it
+        // is decided on the task rather than by a yes from the queue; the row
+        // is here to say it is waiting, and takes you there.
+        canDecide: false,
       });
     }
   }

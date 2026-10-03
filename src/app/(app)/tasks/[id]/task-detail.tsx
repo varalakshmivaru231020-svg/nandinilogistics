@@ -15,7 +15,7 @@ import { STATUS_LABEL, isOverdue } from "@/lib/tasks/lifecycle";
 import {
   acceptTaskAction, addCommentAction, closeTaskAction, markChecklistItemAction,
   reviewChecklistItemAction,
-  completeTaskAction, decideExtensionAction, decideLevelAction, deleteCommentAction,
+  completeTaskAction, decideExtensionAction, deleteCommentAction,
   editCommentAction, reopenTaskAction, requestExtensionAction, resubmitTaskAction,
   sendBackTaskAction, startTaskAction,
 } from "../actions";
@@ -53,7 +53,11 @@ interface Item {
  */
 export function TaskDetail({
   task, levels, checklists, comments, extensions, files, history, can, nowMs, stage, nextUp,
+  activeKind, activeLevel,
 }: {
+  /** The level now holding the task, and its number. */
+  activeKind: string | null;
+  activeLevel: number | null;
   /** Where a checklist task is standing, in words. */
   stage: string | null;
   /** Who it reaches after the level holding it now. */
@@ -85,12 +89,19 @@ export function TaskDetail({
   const [remark, setRemark] = React.useState("");
   const [asking, setAsking] = React.useState(false);
   const [deciding, setDeciding] = React.useState<string | null>(null);
-  const [levelChoice, setLevelChoice] = React.useState<null | "review" | "approve">(null);
   // Checklist / Review and approval / History, as horizontal tabs. A plain task
   // has no checklist, so it opens on the history it does have.
   const hasChecklist = checklists.length > 0;
   const checklistLeft = checklists.reduce(
     (n, c) => n + c.items.filter((i) => !i.marked).length, 0,
+  );
+  // How many lines the level holding the task has yet to judge.
+  const judgedLeft = checklists.reduce(
+    (n, c) =>
+      n + c.items.filter((i) =>
+        !i.reviews.some((r) => r.round === task.round && r.kind === activeKind && r.level === activeLevel),
+      ).length,
+    0,
   );
   const TABS = [
     ...(hasChecklist ? [["checklist", "Checklist"] as const] : []),
@@ -186,8 +197,13 @@ export function TaskDetail({
           {can.requestExtension && !waiting && (
             <Button size="sm" variant="outline" onClick={() => setAsking(true)}>Request extension or hold</Button>
           )}
-          {can.review && <Button size="sm" onClick={() => { setLevelChoice("review"); setRemark(""); }}>Review this level</Button>}
-          {can.approve && <Button size="sm" onClick={() => { setLevelChoice("approve"); setRemark(""); }}>Approve this level</Button>}
+          {(can.review || can.approve) && (
+            <span className="text-[12px] font-medium text-muted-600">
+              {judgedLeft > 0
+                ? `${judgedLeft} checklist point${judgedLeft === 1 ? "" : "s"} left for you to approve or deny.`
+                : "Every point judged — this level is done."}
+            </span>
+          )}
           {task.status === "CLOSED" && !can.reopen && (
             <span className="text-[12px] font-medium text-muted-500">This task is closed and read-only.</span>
           )}
@@ -252,6 +268,8 @@ export function TaskDetail({
           canMark={can.mark}
           canJudge={can.review || can.approve}
           judgeLabel={can.review ? "Yours to review" : "Yours to approve"}
+          activeKind={activeKind}
+          activeLevel={activeLevel}
           onDone={() => router.refresh()}
         />
       ))}
@@ -449,18 +467,6 @@ export function TaskDetail({
           onDone={() => router.refresh()}
         />
       )}
-      {levelChoice && (
-        <LevelModal
-          taskId={task.id}
-          mode={levelChoice}
-          anyDenied={checklists.some((c) =>
-            c.items.some((i) => i.reviews.some((r) => r.round === task.round && r.verdict === "FAIL")),
-          )}
-          nextUp={nextUp}
-          onClose={() => setLevelChoice(null)}
-          onDone={() => router.refresh()}
-        />
-      )}
     </div>
   );
 }
@@ -617,104 +623,6 @@ function DecideExtensionModal({
 }
 
 /**
- * Finishing with a level, once its lines have been judged.
- *
- * The verdicts are given on the checklist itself, so this is only the overall
- * call and whatever is said about it. It arrives already set to what the lines
- * add up to — a denial anywhere is a denial — and can be overruled, because a
- * reviewer may want the task back for something the list does not cover.
- */
-function LevelModal({
-  taskId, mode, anyDenied, nextUp, onClose, onDone,
-}: {
-  taskId: string;
-  mode: "review" | "approve";
-  /** Whether any line was denied at this level, this round. */
-  anyDenied: boolean;
-  nextUp: string | null;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const toast = useToast();
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [pass, setPass] = React.useState(!anyDenied);
-  const [remark, setRemark] = React.useState("");
-  const files = React.useRef<HTMLInputElement>(null);
-
-  async function go() {
-    setBusy(true);
-    setError(null);
-    const decision = mode === "review" ? (pass ? "PASS" : "FAIL") : (pass ? "APPROVE" : "REJECT");
-    const said = remark.trim() || (pass ? "Approved." : "Sent back.");
-    const res = await decideLevelAction(taskId, decision, said);
-    if (!res.ok) { setBusy(false); setError(res.error); return; }
-
-    const picked = files.current?.files;
-    if (picked && picked.length > 0) {
-      const fd = new FormData();
-      fd.set("body", said);
-      for (const f of Array.from(picked)) fd.append("files", f);
-      await addCommentAction(taskId, fd);
-    }
-    setBusy(false);
-    toast(pass ? "Approved." : "Sent back for rework.");
-    onClose();
-    onDone();
-  }
-
-  return (
-    <Modal
-      open onClose={onClose}
-      title={mode === "review" ? "Finish your review" : "Finish your approval"}
-      size="sm"
-      footer={
-        <>
-          <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
-          <Button variant={pass ? "success" : "danger"} loading={busy} onClick={go}>
-            {pass ? "Approve" : "Deny and send back"}
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-3">
-        {error && <Alert tone="error">{error}</Alert>}
-
-        {anyDenied && (
-          <Alert tone="warn">
-            You denied at least one point, so this goes back to the assignee.
-          </Alert>
-        )}
-
-        <div className="flex gap-2">
-          <Button size="sm" variant={pass ? "success" : "outline"} onClick={() => setPass(true)}>
-            Approve the lot
-          </Button>
-          <Button size="sm" variant={pass ? "outline" : "danger"} onClick={() => setPass(false)}>
-            Send it back
-          </Button>
-        </div>
-
-        <Field label="Remark" hint="Optional — it goes on the record either way.">
-          <Textarea value={remark} onChange={(e) => setRemark(e.target.value)} rows={3} />
-        </Field>
-
-        <Field label="Attachment" hint="Optional — a photo or a marked-up drawing.">
-          <input ref={files} type="file" name="files" multiple className="text-[12px]" />
-        </Field>
-
-        {nextUp && pass && (
-          <p className="text-[11.5px] font-medium text-muted-500">
-            Approving sends it to <b className="text-navy-900">{nextUp}</b>.
-          </p>
-        )}
-      </div>
-    </Modal>
-  );
-}
-
-
-/**
  * The checklist on a task, and the whole of its story.
  *
  * It is worked and judged in one place. The assignee ticks each line off while
@@ -724,16 +632,26 @@ function LevelModal({
  * remark has to sit under the point it is about to be worth reading.
  */
 function ChecklistCard({
-  list, round, canMark, canJudge, judgeLabel, onDone,
+  list, round, canMark, canJudge, judgeLabel, activeKind, activeLevel, onDone,
 }: {
   list: { id: string; name: string; items: Item[] };
   round: number;
   canMark: boolean;
   canJudge: boolean;
   judgeLabel: string;
+  activeKind: string | null;
+  activeLevel: number | null;
   onDone: () => void;
 }) {
-  const done = list.items.filter((i) => i.marked).length;
+  // While the task is being worked, the count is how much of the list is done.
+  // Once it is being judged, the ticks are history and the count that matters
+  // is how far the level holding it has got.
+  const judging = activeKind !== null;
+  const done = judging
+    ? list.items.filter((i) =>
+        i.reviews.some((r) => r.round === round && r.kind === activeKind && r.level === activeLevel),
+      ).length
+    : list.items.filter((i) => i.marked).length;
   const pct = list.items.length ? Math.round((done / list.items.length) * 100) : 0;
 
   return (
@@ -742,7 +660,7 @@ function ChecklistCard({
         <div className="flex flex-wrap items-center gap-3">
           <h3 className="font-display text-[14px] font-bold text-navy-950">{list.name}</h3>
           <span className="rounded-full bg-[#EDE7FB] px-2.5 py-1 text-[10.5px] font-bold text-[#5B3FA8]">
-            {done} of {list.items.length} done
+            {done} of {list.items.length} {judging ? "judged" : "done"}
           </span>
           {canJudge && (
             <span className="rounded-full bg-brand-100 px-2.5 py-1 text-[10.5px] font-bold text-brand-700">
@@ -772,6 +690,8 @@ function ChecklistCard({
             round={round}
             canMark={canMark}
             canJudge={canJudge}
+            activeKind={activeKind}
+            activeLevel={activeLevel}
             onDone={onDone}
           />
         ))}
@@ -782,13 +702,16 @@ function ChecklistCard({
 
 /** One line: its number, its title, what has been done to it, and what was said. */
 function ChecklistRow({
-  item, index, round, canMark, canJudge, onDone,
+  item, index, round, canMark, canJudge, activeKind, activeLevel, onDone,
 }: {
   item: Item;
   index: number;
   round: number;
   canMark: boolean;
   canJudge: boolean;
+  /** The level now holding the task, so a line knows whose verdict is its own. */
+  activeKind: string | null;
+  activeLevel: number | null;
   onDone: () => void;
 }) {
   const [busy, setBusy] = React.useState(false);
@@ -796,7 +719,8 @@ function ChecklistRow({
   const [remark, setRemark] = React.useState("");
 
   const thisRound = item.reviews.filter((r) => r.round === round);
-  const mine = thisRound.at(-1);
+  // What the level now holding the task has said about this line, if anything.
+  const mineThisLevel = thisRound.find((r) => r.level === activeLevel && r.kind === activeKind) ?? null;
   const denied = thisRound.some((r) => r.verdict === "FAIL");
 
   async function mark(next: boolean) {
@@ -849,34 +773,45 @@ function ChecklistRow({
         )}
 
         {canJudge && (
-          <span className="flex shrink-0 gap-1.5">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => { setWriting("PASS"); setRemark(mine?.remark ?? ""); }}
-              className={cn(
-                "cursor-pointer rounded-[8px] border px-3 py-1.5 text-[11px] font-bold transition-colors disabled:opacity-60",
-                mine?.verdict === "PASS"
-                  ? "border-good-600 bg-good-600 text-white"
-                  : "border-good-400 bg-white text-good-700 hover:bg-good-050",
-              )}
-            >
-              Approve
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => { setWriting("FAIL"); setRemark(mine?.remark ?? ""); }}
-              className={cn(
-                "cursor-pointer rounded-[8px] border px-3 py-1.5 text-[11px] font-bold transition-colors disabled:opacity-60",
-                mine?.verdict === "FAIL"
-                  ? "border-bad-600 bg-bad-600 text-white"
-                  : "border-bad-300 bg-white text-bad-700 hover:bg-bad-050",
-              )}
-            >
-              Deny
-            </button>
-          </span>
+          mineThisLevel ? (
+            // Decided. The state replaces the buttons, with a way back while
+            // the level is still open — the last verdict closes it.
+            <span className="flex shrink-0 items-center gap-2">
+              <span className={cn(
+                "rounded-[8px] px-3 py-1.5 text-[11px] font-bold",
+                mineThisLevel.verdict === "FAIL" ? "bg-bad-600 text-white" : "bg-good-600 text-white",
+              )}>
+                {mineThisLevel.verdict === "FAIL" ? "Denied" : "Approved"}
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => { setWriting(mineThisLevel.verdict as "PASS" | "FAIL"); setRemark(mineThisLevel.remark ?? ""); }}
+                className="cursor-pointer text-[11px] font-semibold text-brand-700 hover:underline disabled:opacity-60"
+              >
+                Change
+              </button>
+            </span>
+          ) : (
+            <span className="flex shrink-0 gap-1.5">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => { setWriting("PASS"); setRemark(""); }}
+                className="cursor-pointer rounded-[8px] border border-good-400 bg-white px-3 py-1.5 text-[11px] font-bold text-good-700 transition-colors hover:bg-good-050 disabled:opacity-60"
+              >
+                Approve
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => { setWriting("FAIL"); setRemark(""); }}
+                className="cursor-pointer rounded-[8px] border border-bad-300 bg-white px-3 py-1.5 text-[11px] font-bold text-bad-700 transition-colors hover:bg-bad-050 disabled:opacity-60"
+              >
+                Deny
+              </button>
+            </span>
+          )
         )}
       </div>
 

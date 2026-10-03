@@ -879,6 +879,60 @@ export async function reviewChecklistItemAction(
       create: { itemId, levelId: row.id, round: shape.round, verdict, remark: remark.trim() || null },
       update: { verdict, remark: remark.trim() || null, actedAt: new Date() },
     });
+
+    // A level has no verdict of its own beyond the lines it judged. Once every
+    // line has one, the level is finished and the task moves: approved
+    // throughout and it goes on, a single denial and it goes back. There is
+    // nothing left for a separate overall decision to add.
+    const items = await prisma.taskChecklistItem.findMany({
+      where: { taskChecklist: { taskId } },
+      select: {
+        id: true,
+        reviews: {
+          where: { levelId: row.id, round: shape.round },
+          select: { verdict: true },
+        },
+      },
+    });
+    const judged = items.filter((i) => i.reviews.length > 0);
+    if (judged.length < items.length) {
+      refresh(taskId);
+      return null;
+    }
+
+    const denied = judged.filter((i) => i.reviews[0].verdict === "FAIL").length;
+    const decision = reviewing
+      ? denied > 0 ? "FAIL" as const : "PASS" as const
+      : denied > 0 ? "REJECT" as const : "APPROVE" as const;
+    const summary = denied > 0
+      ? `${denied} of ${items.length} point(s) denied`
+      : `All ${items.length} point(s) approved`;
+    const to = statusAfterLevel(shape, decision, acted);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.taskLevelAction.create({
+        data: { levelId: row.id, round: shape.round, decision, remark: summary, actorId: ctx.id },
+      });
+      await moveStatus(tx, {
+        taskId, actorId: ctx.id, from: shape.status, to, remark: summary,
+        extra: to === "CLOSED" ? { closedAt: new Date() } : {},
+      });
+      await logTaskEvent(tx, {
+        taskId, actorId: ctx.id, kind: "LEVEL",
+        summary: `${kind === "REVIEW" ? "Reviewer" : "Approver"} level ${level.level}: ${decision.toLowerCase()}`,
+        remark: summary,
+      });
+
+      if (to === "REWORK") {
+        await tell(tx, "CHECKLIST_FAILED", taskId, ctx.id,
+          `Sent back from ${kind === "REVIEW" ? "review" : "approval"} level ${level.level}`, summary);
+      } else if (to === "CLOSED") {
+        await tell(tx, "CLOSED", taskId, ctx.id, "Task closed by the final approval", summary);
+      } else {
+        await tellActiveLevel(tx, taskId, ctx.id);
+      }
+    });
+
     refresh(taskId);
     return null;
   });

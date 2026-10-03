@@ -20,8 +20,7 @@ import { approveTransferAction } from "../material/transfers/actions";
 import { approveInvoiceAction } from "../material/invoices/actions";
 import { decideExtensionPmAction } from "../schedule/extension-actions";
 import {
-  closeTaskAction, decideExtensionAction as decideTaskExtensionAction, decideLevelAction,
-  sendBackTaskAction,
+  closeTaskAction, decideExtensionAction as decideTaskExtensionAction, sendBackTaskAction,
 } from "../tasks/actions";
 
 type Decision = { row: ApprovalRow; approve: boolean };
@@ -87,11 +86,11 @@ export function ApprovalsScreen({ rows, nowMs }: { rows: ApprovalRow[]; nowMs: n
         case "TASK_EXTENSION":
           return decideTaskExtensionAction(row.id, approve, remark, approve ? control : undefined);
 
+        // A checklist level is settled line by line on the task itself, so
+        // these rows only point at it.
         case "TASK_REVIEW":
-          return decideLevelAction(row.id, approve ? "PASS" : "FAIL", remark);
-
         case "TASK_APPROVAL":
-          return decideLevelAction(row.id, approve ? "APPROVE" : "REJECT", remark);
+          return { ok: false as const, error: "Approve or deny each checklist point on the task." };
       }
     })();
 

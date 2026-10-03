@@ -111,6 +111,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           ? `Under level ${atLevel.level} ${levelKind === "REVIEW" ? "review" : "approval"} · ${atLevel.user.name}`
           : null
       }
+      activeKind={atLevel ? atLevel.kind : null}
+      activeLevel={atLevel ? atLevel.level : null}
       nextUp={
         afterThis
           ? `${afterThis.kind === "REVIEW" ? "Reviewer" : "Approver"} level ${afterThis.level} · ${afterThis.user.name}`
