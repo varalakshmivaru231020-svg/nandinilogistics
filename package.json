@@ -10,6 +10,7 @@
     "perms:codegen": "tsx scripts/generate-permission-codes.ts",
     "perms:sync": "tsx scripts/generate-permission-codes.ts && tsx scripts/sync-permissions.ts",
     "perms:grants": "tsx scripts/sync-role-grants.ts",
+    "perms:prune": "tsx scripts/prune-permissions.ts",
     "seed:reference": "tsx scripts/seed-reference-data.ts",
     "repair:board-records": "tsx scripts/repair-board-records.ts",
     "seed:task-demo": "tsx scripts/seed-task-demo.ts",

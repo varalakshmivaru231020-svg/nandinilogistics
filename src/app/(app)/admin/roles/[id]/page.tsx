@@ -64,6 +64,8 @@ export default async function RoleDetailPage({ params }: { params: Promise<{ id:
           }))}
           modules={MODULES}
           readOnly={!ctx.has(PERM.admin.role.managePermissions)}
+          hasDefault={Array.isArray(role.defaultCodes)}
+          defaultCount={Array.isArray(role.defaultCodes) ? (role.defaultCodes as string[]).length : 0}
           // The people holding the role are a panel of their own permission.
           users={ctx.has(PERM.admin.role.tabUsers) ? role.users.map((u) => u.user) : []}
         />

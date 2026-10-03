@@ -1,30 +1,41 @@
 /**
- * Recomputes every role's permission grants from the matrix in
+ * Brings the roles in the database into line with the matrix in
  * prisma/role-matrix.ts, and touches nothing else.
  *
- *   pnpm perms:grants
+ *   pnpm perms:grants            # add roles that do not exist yet
+ *   pnpm perms:grants --reset    # also put every existing role back to the matrix
  *
  * Adding a permission to the registry puts it in the catalogue (perms:sync),
- * but no role holds it until the grants are recomputed. On a deployed
- * environment the full seed is not safe to re-run — it resets user passwords
- * and demo data — so this is the part that is.
+ * but no role holds it until the grants are worked out.
  *
- * It replaces each role's grant set wholesale, so a role customised through
- * Administration → Roles is reset to the documented default. That is the point
- * on a fresh environment and a hazard on an established one: check with whoever
- * owns the access matrix before running it once real roles have been tuned.
+ * The default adds what is missing and leaves what is there, because a role
+ * tuned through Administration → Roles is somebody's decision and a deploy has
+ * no business undoing it. `--reset` is the old behaviour — every role back to
+ * the shipped matrix, customisation and all — which is right on a fresh
+ * environment and destructive on an established one.
+ *
+ * Either way each role's recorded default is refreshed for the roles it writes,
+ * so "Restore the default" has something to restore to.
  */
 import { PrismaClient } from "@prisma/client";
 import { applyRoleGrants } from "../prisma/role-matrix";
 
 const prisma = new PrismaClient();
+const reset = process.argv.includes("--reset");
 
 async function main() {
   const before = await prisma.rolePermission.count();
-  console.log(`\nRecomputing role grants (${before} in place)\n`);
-  await applyRoleGrants(prisma);
+  console.log(
+    reset
+      ? `\nResetting every role to the matrix (${before} grants in place)\n`
+      : `\nAdding any role the matrix has and the database does not (${before} grants in place)\n`,
+  );
+  await applyRoleGrants(prisma, { onlyMissing: !reset });
   const after = await prisma.rolePermission.count();
   console.log(`\n  ${before} → ${after} role permissions\n`);
+  if (!reset && after === before) {
+    console.log("  Nothing was missing. Use --reset to put existing roles back to the matrix.\n");
+  }
 }
 
 main()

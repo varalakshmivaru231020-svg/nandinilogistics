@@ -8,6 +8,7 @@ import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit, diff } from "@/lib/audit";
 import { hashPassword, validatePasswordStrength } from "@/lib/auth/password";
 import { PERM } from "@/lib/permissions/codes";
+import { defaultCodesFor } from "@/lib/permissions/role-defaults";
 
 /* ========================================================================== */
 /* Roles                                                                       */
@@ -176,6 +177,78 @@ export async function setRolePermissionsAction(
 
     revalidatePath("/admin/roles");
     return { granted: after.size };
+  });
+}
+
+/**
+ * Making what a role has right now its default.
+ *
+ * A default that only ever came from the shipped matrix is a default nobody
+ * chose. Once an organisation has worked out what a Project Engineer should
+ * actually hold, this is how that becomes the thing "restore" restores.
+ */
+export async function saveRoleDefaultAction(roleId: string): Promise<ActionResult<{ saved: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.admin.role.managePermissions);
+    const role = await prisma.role.findUnique({
+      where: { id: roleId },
+      include: { permissions: { include: { permission: { select: { code: true } } } } },
+    });
+    if (!role) throw new Error("Role not found.");
+
+    const codes = role.permissions.map((p) => p.permission.code).sort();
+    await prisma.role.update({ where: { id: roleId }, data: { defaultCodes: codes } });
+
+    await recordAudit({
+      action: "UPDATE", entity: "Role", entityId: roleId, userId: ctx.id,
+      summary: `Set the default for ${role.name} to the ${codes.length} permission(s) it holds now`,
+    });
+    revalidatePath("/admin/roles");
+    return { saved: codes.length };
+  });
+}
+
+/**
+ * Putting a role back to its default.
+ *
+ * Whatever was last saved as the default, or the shipped matrix if nobody has
+ * saved one. It replaces the grants wholesale, which is the point: a role that
+ * has been edited into a mess is restored, not patched.
+ */
+export async function restoreRoleDefaultAction(roleId: string): Promise<ActionResult<{ granted: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.admin.role.managePermissions);
+    const role = await prisma.role.findUnique({
+      where: { id: roleId },
+      select: { id: true, name: true, code: true, defaultCodes: true },
+    });
+    if (!role) throw new Error("Role not found.");
+
+    const saved = Array.isArray(role.defaultCodes) ? (role.defaultCodes as string[]) : null;
+    const codes = saved ?? defaultCodesFor(role.code);
+    if (!codes) {
+      throw new Error("This role has no default saved yet. Set one from the permissions it holds now.");
+    }
+
+    const permissions = await prisma.permission.findMany({
+      where: { code: { in: codes } },
+      select: { id: true },
+    });
+
+    await prisma.$transaction([
+      prisma.rolePermission.deleteMany({ where: { roleId } }),
+      prisma.rolePermission.createMany({
+        data: permissions.map((p) => ({ roleId, permissionId: p.id })),
+        skipDuplicates: true,
+      }),
+    ]);
+
+    await recordAudit({
+      action: "UPDATE", entity: "Role", entityId: roleId, userId: ctx.id,
+      summary: `Restored ${role.name} to its default of ${permissions.length} permission(s)`,
+    });
+    revalidatePath("/admin/roles");
+    return { granted: permissions.length };
   });
 }
 

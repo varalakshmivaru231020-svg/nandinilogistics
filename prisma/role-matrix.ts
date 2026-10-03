@@ -35,7 +35,7 @@ function segmentMatches(segment: string, rule: string): boolean {
   return pattern.test(segment);
 }
 
-function resolveCodes(grant: string[], deny: string[] = []): string[] {
+export function resolveCodes(grant: string[], deny: string[] = []): string[] {
   return PERMISSIONS.filter(
     (p) => grant.some((r) => matches(p.code, r)) && !deny.some((r) => matches(p.code, r)),
   ).map((p) => p.code);
@@ -347,18 +347,162 @@ export const ROLES: RoleSeed[] = [
     // executive should not be the one told that their own follow-up has lapsed.
     deny: ["sales.costSheet.approveDiscount", "sales.booking.cancel", "sales.followUp.receiveEscalation"],
   },
+  {
+    code: "PROJECT_ENGINEER",
+    name: "Project Engineer",
+    description: "Runs the work on site — schedule, progress, quality checks and the material it needs.",
+    level: 28,
+    grant: [
+      ...TASK_PARTICIPANT,
+
+      "dashboard.supervisor.view",
+      "kb.article.view",
+
+      // The project, as something to read and report against.
+      "project.project.view",
+      "project.project.tabOverview",
+      "project.project.tabWbs",
+      "project.project.tabProgress",
+      "project.project.tabSchedule",
+      "project.project.tabTeam",
+      "project.phase.view",
+      "project.workPackage.*",
+      "project.block.view",
+      "project.document.view",
+      "project.document.download",
+      "project.document.upload",
+      "project.progressLog.*",
+      "project.team.view",
+
+      // The schedule is the engineer's instrument, short of setting a baseline.
+      "schedule.*.*",
+
+      // Material: ask for it, receive it, see what is in the store.
+      "material.indent.view",
+      "material.indent.create",
+      "material.indent.update",
+      "material.indent.submit",
+      "material.indent.export",
+      "material.indent.print",
+      "material.grn.view",
+      "material.grn.create",
+      "material.grn.export",
+      "material.issue.view",
+      "material.issue.create",
+      "material.stock.view",
+      "material.stock.export",
+      "material.purchaseOrder.view",
+      "material.reorder.view",
+
+      "checklist.checklist.view",
+      "checklist.category.view",
+      "masters.*.view",
+
+      "reports.projectProgress.*",
+      "reports.scheduleVariance.*",
+      "reports.consumptionVsIndent.*",
+      "reports.indentAgeing.view",
+    ],
+    deny: [
+      // Approving and costing are the manager's, not the engineer's.
+      "material.indent.approvePm",
+      "material.indent.approveAdmin",
+      "schedule.baseline.set",
+      "schedule.extension.approve",
+      "project.project.accessAll",
+      "project.project.delete",
+    ],
+  },
+  {
+    code: "ADMIN_STAFF",
+    name: "Admin Staff",
+    description: "Back office — records, documents, masters and the paperwork that keeps them straight.",
+    level: 40,
+    grant: [
+      ...TASK_PARTICIPANT,
+
+      "dashboard.supervisor.view",
+      "kb.article.*",
+
+      "project.project.view",
+      "project.project.tabOverview",
+      "project.project.tabDocuments",
+      "project.document.*",
+
+      // People and attendance, which is where most of the back office sits.
+      "hr.employee.view",
+      "hr.employee.create",
+      "hr.employee.update",
+      "hr.employee.tab*",
+      "hr.attendance.*",
+      "hr.employmentType.view",
+
+      // The masters, read and kept, but never deleted.
+      "masters.*.view",
+      "masters.*.create",
+      "masters.*.update",
+      "masters.*.import",
+      "masters.*.export",
+
+      // Documents and registers to read, nothing to approve.
+      "material.indent.view",
+      "material.purchaseOrder.view",
+      "material.purchaseOrder.print",
+      "material.grn.view",
+      "material.vendorInvoice.view",
+      "material.stock.view",
+      "sales.customer.view",
+      "sales.booking.view",
+      "sales.booking.print",
+      "sales.receipt.view",
+      "sales.receipt.print",
+      "unit.unit.view",
+
+      "checklist.checklist.view",
+      "checklist.category.view",
+
+      "reports.bookingRegister.view",
+      "reports.collections.view",
+      "reports.attendanceSummary.*",
+    ],
+    deny: [
+      // Back office keeps the records; it does not approve money or delete them.
+      "masters.*.delete",
+      "material.*.approve*",
+      "sales.*.approve*",
+      "hr.employee.delete",
+      "project.document.delete",
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
 // Master data
 // ---------------------------------------------------------------------------
 
-export async function applyRoleGrants(prisma: PrismaClient) {
+/**
+ * Applies the shipped matrix to every role, and records it as their default.
+ *
+ * `onlyMissing` leaves a role that already exists alone — grants and default
+ * both — so a deploy adding a new role does not quietly undo whatever the
+ * people using the system have decided since.
+ */
+export async function applyRoleGrants(
+  prisma: PrismaClient,
+  { onlyMissing = false }: { onlyMissing?: boolean } = {},
+) {
   const permIds = new Map(
     (await prisma.permission.findMany({ select: { id: true, code: true } })).map((p) => [p.code, p.id]),
   );
 
   for (const r of ROLES) {
+    const existing = await prisma.role.findUnique({ where: { code: r.code }, select: { id: true } });
+    if (existing && onlyMissing) {
+      console.log(`  role ${r.code.padEnd(16)} → left as it is`);
+      continue;
+    }
+
+    const codes = resolveCodes(r.grant, r.deny);
     const role = await prisma.role.upsert({
       where: { code: r.code },
       create: {
@@ -367,11 +511,10 @@ export async function applyRoleGrants(prisma: PrismaClient) {
         description: r.description,
         level: r.level,
         isSystem: true,
+        defaultCodes: codes,
       },
-      update: { name: r.name, description: r.description, level: r.level },
+      update: { name: r.name, description: r.description, level: r.level, defaultCodes: codes },
     });
-
-    const codes = resolveCodes(r.grant, r.deny);
     // Replace the grant set wholesale so re-seeding reflects matrix edits here.
     await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
     await prisma.rolePermission.createMany({

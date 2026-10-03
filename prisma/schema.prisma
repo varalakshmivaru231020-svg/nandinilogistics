@@ -246,6 +246,11 @@ model Role {
   isSystem    Boolean      @default(false)
   /// Lower number = higher authority. Used for approval routing and role-guarding.
   level       Int          @default(100)
+  /// The permission codes this role falls back to. Set from the shipped matrix
+  /// when a role is seeded, and overwritten whenever somebody saves the grants
+  /// they have as the new default — which is what makes "restore" mean
+  /// something a person chose rather than something the code shipped with.
+  defaultCodes Json?
   status      RecordStatus @default(ACTIVE)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt

@@ -7,7 +7,9 @@ import { AlertTriangle, ChevronDown, Lock, Save, Search, Undo2 } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, Input } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
-import { setRolePermissionsAction } from "../../actions";
+import {
+  restoreRoleDefaultAction, saveRoleDefaultAction, setRolePermissionsAction,
+} from "../../actions";
 
 interface PermRow {
   code: string;
@@ -41,6 +43,8 @@ export function PermissionMatrix({
   permissions,
   modules,
   readOnly,
+  hasDefault,
+  defaultCount,
   users,
 }: {
   roleId: string;
@@ -49,6 +53,9 @@ export function PermissionMatrix({
   permissions: PermRow[];
   modules: Array<{ key: string; label: string; pending?: boolean }>;
   readOnly: boolean;
+  /** Whether somebody has saved a default for this role, and how large it is. */
+  hasDefault: boolean;
+  defaultCount: number;
   users: Array<{ id: string; name: string; email: string; status: string }>;
 }) {
   const router = useRouter();
@@ -191,6 +198,62 @@ export function PermissionMatrix({
           </Button>
         )}
       </div>
+
+      {/*
+        The default a role goes back to. It starts as what the system shipped
+        and becomes whatever somebody saves here, so restoring puts a role back
+        to what this organisation decided rather than to what we guessed.
+      */}
+      {!readOnly && (
+        <div className="flex flex-wrap items-center gap-2.5 rounded-[11px] border border-line-300 bg-surface-sunken px-3.5 py-3">
+          <span className="text-[11.5px] font-semibold text-navy-700">Default for this role</span>
+          <span className="text-[11.5px] font-medium text-muted-500">
+            {hasDefault
+              ? `${defaultCount} permission${defaultCount === 1 ? "" : "s"} saved as the default.`
+              : "None saved yet — the system's own is used."}
+          </span>
+          <div className="flex-1" />
+          <Button
+            size="sm"
+            variant="outline"
+            loading={busy}
+            disabled={dirty}
+            title={dirty ? "Save or discard your changes first" : undefined}
+            onClick={async () => {
+              setBusy(true);
+              setMessage(null);
+              const res = await saveRoleDefaultAction(roleId);
+              setBusy(false);
+              if (!res.ok) setMessage({ tone: "error", text: res.error });
+              else {
+                setMessage({ tone: "success", text: `Default for ${roleName} set to its ${res.data.saved} permissions.` });
+                router.refresh();
+              }
+            }}
+          >
+            Make this the default
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            loading={busy}
+            onClick={async () => {
+              setBusy(true);
+              setMessage(null);
+              const res = await restoreRoleDefaultAction(roleId);
+              setBusy(false);
+              if (!res.ok) setMessage({ tone: "error", text: res.error });
+              else {
+                setMessage({ tone: "success", text: `${roleName} restored to ${res.data.granted} permissions.` });
+                router.refresh();
+              }
+            }}
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            Restore the default
+          </Button>
+        </div>
+      )}
 
       {/* Groups */}
       <div className="space-y-2">
