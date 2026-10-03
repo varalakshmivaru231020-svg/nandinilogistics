@@ -7,7 +7,9 @@ import { prisma } from "@/lib/db";
 import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
-import { canDo, statusAfterComplete, statusAfterLevel, type TaskAction } from "@/lib/tasks/lifecycle";
+import {
+  canDo, statusAfterAssigneePass, statusAfterComplete, statusAfterLevel, type TaskAction,
+} from "@/lib/tasks/lifecycle";
 import {
   actedThisRound, applyExtensionDecision, checklistAllMarked, checklistProgress,
   logTaskEvent, moveStatus, shapeOf,
@@ -309,23 +311,21 @@ export async function completeTaskAction(id: string, remark: string): Promise<Ac
     const { shape } = await assertMay("complete", id, ctx.id, await isAdminOf(ctx));
     if (!remark.trim()) throw new Error("A closure remark is required to complete a task.");
 
-    // The list is the work. A checklist task is not complete until every point
-    // on it has been marked, which is what the tab is for.
-    if (shape.kind === "CHECKLIST" && !(await checklistAllMarked(prisma, id))) {
-      const { done, total } = await checklistProgress(prisma, id);
-      throw new Error(`${done} of ${total} checklist points are marked. Finish the list first.`);
-    }
-
     const to = statusAfterComplete(shape);
     await prisma.$transaction(async (tx) => {
       await moveStatus(tx, {
         taskId: id, actorId: ctx.id, from: shape.status, to, remark,
-        extra: { completedAt: new Date(), completionRemark: remark.trim() },
+        extra: {
+          completedAt: new Date(),
+          completionRemark: remark.trim(),
+          ...(to === "CLOSED" ? { closedAt: new Date() } : {}),
+        },
       });
-      await tell(tx, "STATUS_CHANGED", id, ctx.id, "Task marked complete", remark.trim());
-      if (to === "UNDER_REVIEW" || to === "UNDER_APPROVAL") {
-        await tellActiveLevel(tx, id, ctx.id);
-      }
+      await tell(
+        tx, to === "CLOSED" ? "CLOSED" : "STATUS_CHANGED", id, ctx.id,
+        to === "CLOSED" ? "Task completed and closed" : "Task marked complete",
+        remark.trim(),
+      );
     });
     refresh(id);
     return null;
@@ -343,11 +343,11 @@ export async function resubmitTaskAction(id: string, remark: string): Promise<Ac
     }
 
     // A resubmission is a new round, and the flow restarts at Reviewer Level 1.
-    const to = statusAfterComplete(shape);
+    const to = statusAfterAssigneePass(shape);
     await prisma.$transaction(async (tx) => {
       await moveStatus(tx, {
         taskId: id, actorId: ctx.id, from: shape.status, to, remark,
-        extra: { round: { increment: 1 }, completedAt: new Date(), completionRemark: remark.trim() },
+        extra: { round: { increment: 1 } },
       });
       await tell(tx, "STATUS_CHANGED", id, ctx.id, "Corrected and resubmitted", remark.trim());
       if (to === "UNDER_REVIEW" || to === "UNDER_APPROVAL") {
@@ -849,6 +849,21 @@ export async function markChecklistItemAction(
       });
     }
 
+    // Judging the last line hands the task to whoever has to check it. Nobody
+    // presses anything: finishing the list is the submission.
+    if (await checklistAllMarked(prisma, taskId)) {
+      const to = statusAfterAssigneePass(shape);
+      await prisma.$transaction(async (tx) => {
+        await moveStatus(tx, {
+          taskId, actorId: ctx.id, from: shape.status, to,
+          remark: "Checklist finished by the assignee",
+        });
+        if (to === "UNDER_REVIEW" || to === "UNDER_APPROVAL") {
+          await tellActiveLevel(tx, taskId, ctx.id);
+        }
+      });
+    }
+
     refresh(taskId);
     return checklistProgress(prisma, taskId);
   });
@@ -951,10 +966,7 @@ export async function reviewChecklistItemAction(
       await tx.taskLevelAction.create({
         data: { levelId: row.id, round: shape.round, decision, remark: summary, actorId: ctx.id },
       });
-      await moveStatus(tx, {
-        taskId, actorId: ctx.id, from: shape.status, to, remark: summary,
-        extra: to === "CLOSED" ? { closedAt: new Date() } : {},
-      });
+      await moveStatus(tx, { taskId, actorId: ctx.id, from: shape.status, to, remark: summary });
       await logTaskEvent(tx, {
         taskId, actorId: ctx.id, kind: "LEVEL",
         summary: `${kind === "REVIEW" ? "Reviewer" : "Approver"} level ${level.level}: ${decision.toLowerCase()}`,
@@ -964,8 +976,11 @@ export async function reviewChecklistItemAction(
       if (to === "REWORK") {
         await tell(tx, "CHECKLIST_FAILED", taskId, ctx.id,
           `Sent back from ${kind === "REVIEW" ? "review" : "approval"} level ${level.level}`, summary);
-      } else if (to === "CLOSED") {
-        await tell(tx, "CLOSED", taskId, ctx.id, "Task closed by the final approval", summary);
+      } else if (to === "APPROVED") {
+        // Every level has signed off. It goes back to whoever did the work to
+        // close, which is the last thing that happens to it.
+        await tell(tx, "STATUS_CHANGED", taskId, ctx.id,
+          "Approved by every level — ready to close", summary);
       } else {
         await tellActiveLevel(tx, taskId, ctx.id);
       }

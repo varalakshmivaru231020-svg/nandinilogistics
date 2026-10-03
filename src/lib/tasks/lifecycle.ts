@@ -14,7 +14,7 @@ import type { TaskKind, TaskStatus } from "@prisma/client";
 
 export const TASK_STATUSES = [
   "PENDING", "ACCEPTED", "STARTED", "HOLD", "COMPLETED",
-  "UNDER_REVIEW", "REWORK", "UNDER_APPROVAL", "CLOSED",
+  "UNDER_REVIEW", "REWORK", "UNDER_APPROVAL", "APPROVED", "CLOSED",
 ] as const;
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -26,6 +26,7 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
   UNDER_REVIEW: "Under Review",
   REWORK: "Rework",
   UNDER_APPROVAL: "Under Approval",
+  APPROVED: "Approved",
   CLOSED: "Closed",
 };
 
@@ -145,8 +146,12 @@ export function canDo(
     case "start":
       return roles.has("ASSIGNEE") && (task.status === "ACCEPTED" || task.status === "HOLD");
 
+    // A plain task is completed when the work is done. A checklist task is
+    // completed when every level has signed it off — the sign-off comes first,
+    // and completing it is what closes it.
     case "complete":
-      return roles.has("ASSIGNEE") && task.status === "STARTED";
+      if (!roles.has("ASSIGNEE")) return false;
+      return task.kind === "CHECKLIST" ? task.status === "APPROVED" : task.status === "STARTED";
 
     // A Hold is an extension too, so the Assignee asks from Accepted or Started.
     case "requestExtension":
@@ -189,7 +194,8 @@ function adminMayAtStatus(
     case "edit": return true;
     case "accept": return task.status === "PENDING";
     case "start": return task.status === "ACCEPTED" || task.status === "HOLD";
-    case "complete": return task.status === "STARTED";
+    case "complete":
+      return task.kind === "CHECKLIST" ? task.status === "APPROVED" : task.status === "STARTED";
     case "requestExtension": return ["ACCEPTED", "STARTED", "HOLD", "REWORK"].includes(task.status);
     case "decideExtension": return true;
     case "close":
@@ -204,17 +210,27 @@ function adminMayAtStatus(
 /**
  * Where completing the work sends a task.
  *
- * A standalone task waits for its Assigner. One carrying checklists goes to the
- * first review level, or — if nobody was named to review it — straight to
- * approval, and with neither it behaves like a standalone task.
+ * A standalone task waits for its Assigner to close it. A checklist task has
+ * already been through every level by the time it can be completed, so
+ * completing it is what closes it.
  */
 export function statusAfterComplete(task: TaskShape): TaskStatus {
-  if (task.kind !== "CHECKLIST") return "COMPLETED";
+  return task.kind === "CHECKLIST" ? "CLOSED" : "COMPLETED";
+}
+
+/**
+ * Where the assignee finishing their own pass sends the task.
+ *
+ * They judge every line, and it goes straight to the first level that has to
+ * check it — nobody presses anything. With no levels named at all there is
+ * nothing to check, and the task waits to be completed as a plain one does.
+ */
+export function statusAfterAssigneePass(task: TaskShape): TaskStatus {
   const hasReview = task.levels.some((l) => l.kind === "REVIEW");
   const hasApproval = task.levels.some((l) => l.kind === "APPROVAL");
   if (hasReview) return "UNDER_REVIEW";
   if (hasApproval) return "UNDER_APPROVAL";
-  return "COMPLETED";
+  return "APPROVED";
 }
 
 /**
@@ -240,7 +256,9 @@ export function statusAfterLevel(
   const stillToApprove = activeLevel({ ...task, status: "UNDER_APPROVAL" }, acted);
   if (stillToApprove) return "UNDER_APPROVAL";
 
-  return "CLOSED";
+  // Everyone has signed off. The task goes back to whoever did the work, to
+  // close — which is the last thing that happens to it.
+  return "APPROVED";
 }
 
 /** A task is overdue once its due date passes with the work not yet done. */
@@ -248,6 +266,6 @@ export function isOverdue(
   task: { status: TaskStatus; dueAt: Date | string },
   nowMs: number,
 ): boolean {
-  if (["COMPLETED", "CLOSED", "UNDER_REVIEW", "UNDER_APPROVAL"].includes(task.status)) return false;
+  if (["COMPLETED", "CLOSED", "UNDER_REVIEW", "UNDER_APPROVAL", "APPROVED"].includes(task.status)) return false;
   return new Date(task.dueAt).getTime() < nowMs;
 }

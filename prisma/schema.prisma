@@ -2267,6 +2267,9 @@ enum TaskStatus {
   UNDER_REVIEW
   REWORK
   UNDER_APPROVAL
+  /// Every level has signed off and the task is waiting for the assignee to
+  /// close it. Only a checklist task reaches this.
+  APPROVED
   CLOSED
 }
 

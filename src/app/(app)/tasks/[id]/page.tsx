@@ -208,10 +208,9 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         // Ticking the list off is the assignee's, while the task is open.
         mark: (task.status === "STARTED" || task.status === "REWORK") &&
               (task.assigneeId === ctx.id || isAdmin),
-        // Completing waits for the list, so the button knows whether it can.
-        complete: may("complete") &&
-                  (task.kind !== "CHECKLIST" ||
-                   task.checklists.every((c) => c.items.every((i) => i.answeredAt !== null))),
+        // A checklist task can only be completed once every level has signed
+        // off, which the lifecycle already decides from the status.
+        complete: may("complete"),
         deleteComment: isAdmin,
       }}
     />

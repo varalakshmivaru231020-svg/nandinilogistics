@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  activeLevel, canDo, isOverdue, rolesOf, statusAfterComplete, statusAfterLevel,
-  type TaskShape,
+  activeLevel, canDo, isOverdue, rolesOf, statusAfterAssigneePass, statusAfterComplete,
+  statusAfterLevel, type TaskShape,
 } from "@/lib/tasks/lifecycle";
 
 const ASSIGNER = "u-assigner";
@@ -142,17 +142,21 @@ describe("where each decision sends the task", () => {
     expect(statusAfterComplete(task())).toBe("COMPLETED");
   });
 
-  it("sends a completed checklist task to the first review level", () => {
-    expect(statusAfterComplete(checklistTask())).toBe("UNDER_REVIEW");
+  it("closes a checklist task when it is completed, because the levels are already through", () => {
+    expect(statusAfterComplete(checklistTask())).toBe("CLOSED");
+  });
+
+  it("sends the assignee's finished list to the first review level", () => {
+    expect(statusAfterAssigneePass(checklistTask())).toBe("UNDER_REVIEW");
   });
 
   it("skips review when nobody was named to review it", () => {
     const t = checklistTask({ levels: [{ kind: "APPROVAL", level: 1, userId: A1 }] });
-    expect(statusAfterComplete(t)).toBe("UNDER_APPROVAL");
+    expect(statusAfterAssigneePass(t)).toBe("UNDER_APPROVAL");
   });
 
-  it("behaves like a standalone task when no levels were named at all", () => {
-    expect(statusAfterComplete(checklistTask({ levels: [] }))).toBe("COMPLETED");
+  it("is ready to close straight away when no levels were named at all", () => {
+    expect(statusAfterAssigneePass(checklistTask({ levels: [] }))).toBe("APPROVED");
   });
 
   it("keeps it under review while a reviewer remains", () => {
@@ -165,11 +169,11 @@ describe("where each decision sends the task", () => {
     expect(statusAfterLevel(t, "PASS", [{ kind: "REVIEW", level: 1 }])).toBe("UNDER_APPROVAL");
   });
 
-  it("closes on the last approval, with no separate close", () => {
+  it("hands the task back to the assignee on the last approval", () => {
     const t = checklistTask({ status: "UNDER_APPROVAL" });
     expect(statusAfterLevel(t, "APPROVE", [
       { kind: "REVIEW", level: 1 }, { kind: "REVIEW", level: 2 },
-    ])).toBe("CLOSED");
+    ])).toBe("APPROVED");
   });
 
   it("sends a fail at any level to Rework", () => {
@@ -282,7 +286,7 @@ describe("a task under review cannot be sent to review again", () => {
     ],
   });
 
-  it("refuses Complete at every status after it is submitted", () => {
+  it("refuses Complete at every status until every level has signed off", () => {
     for (const status of ["UNDER_REVIEW", "REWORK", "UNDER_APPROVAL", "CLOSED"] as const) {
       expect(canDo("complete", checklist(status), as(ASSIGNEE)), status).toBe(false);
       expect(canDo("complete", checklist(status), admin), `${status} as admin`).toBe(false);
@@ -312,14 +316,24 @@ describe("a task under review cannot be sent to review again", () => {
     expect(canDo("reopen", closed, admin)).toBe(true);
   });
 
-  it("keeps the whole run one-way: complete, review, approve, closed", () => {
-    expect(statusAfterComplete(checklist("STARTED"))).toBe("UNDER_REVIEW");
+  it("keeps the whole run one-way: list, review, approve, then close", () => {
+    expect(statusAfterAssigneePass(checklist("STARTED"))).toBe("UNDER_REVIEW");
     const review = checklist("UNDER_REVIEW");
     expect(statusAfterLevel(review, "PASS", [])).toBe("UNDER_REVIEW");
     expect(statusAfterLevel(review, "PASS", [{ kind: "REVIEW", level: 1 }])).toBe("UNDER_APPROVAL");
     const approval = checklist("UNDER_APPROVAL");
     expect(statusAfterLevel(approval, "APPROVE", [
       { kind: "REVIEW", level: 1 }, { kind: "REVIEW", level: 2 },
-    ])).toBe("CLOSED");
+    ])).toBe("APPROVED");
+    expect(statusAfterComplete(checklist("APPROVED"))).toBe("CLOSED");
+  });
+
+  it("only lets the assignee complete a checklist task once every level has signed off", () => {
+    for (const status of ["STARTED", "UNDER_REVIEW", "UNDER_APPROVAL", "REWORK"] as const) {
+      expect(canDo("complete", checklist(status), as(ASSIGNEE)), status).toBe(false);
+    }
+    expect(canDo("complete", checklist("APPROVED"), as(ASSIGNEE))).toBe(true);
+    // A plain task is unaffected: it is completed when the work is done.
+    expect(canDo("complete", task({ status: "STARTED" }), as(ASSIGNEE))).toBe(true);
   });
 });

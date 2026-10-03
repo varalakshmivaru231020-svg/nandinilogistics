@@ -188,12 +188,13 @@ export function TaskDetail({
           {can.start && <Button size="sm" loading={busy} onClick={() => run(() => startTaskAction(task.id), "Work started.")}>Start work</Button>}
           {can.complete && (
             <Button size="sm" variant="success" onClick={() => { setPrompt("complete"); setRemark(""); }}>
-              Mark complete
+              {task.kind === "CHECKLIST" ? "Mark complete and close" : "Mark complete"}
             </Button>
           )}
           {!can.complete && can.mark && checklistLeft > 0 && (
             <span className="text-[12px] font-medium text-muted-500">
-              {checklistLeft} checklist point{checklistLeft === 1 ? "" : "s"} left before this can be completed.
+              {checklistLeft} checklist point{checklistLeft === 1 ? "" : "s"} left. Finishing the list
+              sends it to the reviewers.
             </span>
           )}
           {can.resubmit && (
@@ -226,8 +227,8 @@ export function TaskDetail({
           */}
           {!can.review && !can.approve && stage && (
             <span className="text-[12px] font-medium text-muted-600">
-              {stage}{stageWho ? ` · ${stageWho}` : ""}. It cannot be completed again until
-              {task.status === "UNDER_REVIEW" ? " the review" : " the approval"} is finished.
+              {stage}{stageWho ? ` · ${stageWho}` : ""}. It can be completed once every level has
+              signed off.
             </span>
           )}
 
@@ -461,14 +462,16 @@ export function TaskDetail({
       {prompt && (
         <RemarkModal
           title={{
-            complete: "Mark this task complete",
+            complete: task.kind === "CHECKLIST" ? "Complete and close this task" : "Mark this task complete",
             resubmit: "Resubmit for review",
             close: "Approve and close",
             sendBack: "Send back for rework",
             reopen: "Reopen this closed task",
           }[prompt]}
           hint={{
-            complete: "A closure remark is required.",
+            complete: task.kind === "CHECKLIST"
+              ? "Every level has signed off. A closure remark is required, and this closes the task."
+              : "A closure remark is required.",
             resubmit: "Say what you corrected.",
             close: "A remark is required, and goes on the record.",
             sendBack: "Say what needs redoing — the Assignee will see it.",

@@ -45,6 +45,8 @@ const STATUS_PILL: Record<TaskStatus, string> = {
   UNDER_REVIEW: "bg-[#EDE7FB] text-[#5B3FA8]",
   REWORK: "bg-bad-050 text-bad-700",
   UNDER_APPROVAL: "bg-[#DCD2F5] text-[#4A2F94]",
+  // Signed off and waiting for the assignee to close it.
+  APPROVED: "bg-good-050 text-good-700",
   CLOSED: "bg-surface-field text-muted-600",
 };
 
