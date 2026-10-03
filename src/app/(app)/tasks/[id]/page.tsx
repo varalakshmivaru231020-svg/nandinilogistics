@@ -58,7 +58,10 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             include: {
               checkpoint: true,
               attachments: { select: { id: true, fileName: true } },
-              reviews: { include: { level: { select: { kind: true, level: true } } } },
+              reviews: {
+                orderBy: { actedAt: "asc" },
+                include: { level: { select: { kind: true, level: true, user: { select: { name: true } } } } },
+              },
             },
           },
         },
@@ -146,10 +149,13 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         items: tc.items.map((i) => ({
           id: i.id,
           text: i.checkpoint.text,
-          isMandatory: i.checkpoint.isMandatory,
+          marked: i.answeredAt !== null,
+          markedAt: i.answeredAt ? i.answeredAt.toISOString() : null,
           reviews: i.reviews.map((r) => ({
             round: r.round, verdict: r.verdict, remark: r.remark,
             kind: r.level.kind, level: r.level.level,
+            by: r.level.user.name,
+            actedAt: r.actedAt.toISOString(),
           })),
         })),
       }))}
@@ -184,7 +190,6 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
       can={{
         accept: may("accept"),
         start: may("start"),
-        complete: may("complete"),
         resubmit: may("resubmit"),
         close: may("close"),
         sendBack: may("sendBack"),
@@ -194,8 +199,13 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         decideExtension: may("decideExtension"),
         review: may("review"),
         approve: may("approve"),
-        answer: (task.status === "STARTED" || task.status === "REWORK") &&
-                (task.assigneeId === ctx.id || isAdmin),
+        // Ticking the list off is the assignee's, while the task is open.
+        mark: (task.status === "STARTED" || task.status === "REWORK") &&
+              (task.assigneeId === ctx.id || isAdmin),
+        // Completing waits for the list, so the button knows whether it can.
+        complete: may("complete") &&
+                  (task.kind !== "CHECKLIST" ||
+                   task.checklists.every((c) => c.items.every((i) => i.answeredAt !== null))),
         deleteComment: isAdmin,
       }}
     />

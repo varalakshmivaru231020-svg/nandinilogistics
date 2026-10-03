@@ -13,7 +13,8 @@ import { useToast } from "@/components/ui/toast";
 import { cn, formatDateTime } from "@/lib/utils";
 import { STATUS_LABEL, isOverdue } from "@/lib/tasks/lifecycle";
 import {
-  acceptTaskAction, addCommentAction, closeTaskAction,
+  acceptTaskAction, addCommentAction, closeTaskAction, markChecklistItemAction,
+  reviewChecklistItemAction,
   completeTaskAction, decideExtensionAction, decideLevelAction, deleteCommentAction,
   editCommentAction, reopenTaskAction, requestExtensionAction, resubmitTaskAction,
   sendBackTaskAction, startTaskAction,
@@ -31,12 +32,16 @@ interface Level {
   id: string; kind: "REVIEW" | "APPROVAL"; level: number; person: string; isViewer: boolean;
   actions: Array<{ round: number; decision: string; remark: string; actor: string; actedAt: string }>;
 }
-/** A checklist line: a number, a title, and what each round said about it. */
+/** A checklist line: a number, a title, whether it is done, and every verdict on it. */
 interface Item {
   id: string;
   text: string;
-  isMandatory: boolean;
-  reviews: Array<{ round: number; verdict: string; remark: string | null; kind: string; level: number }>;
+  marked: boolean;
+  markedAt: string | null;
+  reviews: Array<{
+    round: number; verdict: string; remark: string | null;
+    kind: string; level: number; by: string; actedAt: string;
+  }>;
 }
 
 /**
@@ -84,6 +89,9 @@ export function TaskDetail({
   // Checklist / Review and approval / History, as horizontal tabs. A plain task
   // has no checklist, so it opens on the history it does have.
   const hasChecklist = checklists.length > 0;
+  const checklistLeft = checklists.reduce(
+    (n, c) => n + c.items.filter((i) => !i.marked).length, 0,
+  );
   const TABS = [
     ...(hasChecklist ? [["checklist", "Checklist"] as const] : []),
     ...(levels.length > 0 ? [["levels", "Review and approval"] as const] : []),
@@ -161,7 +169,16 @@ export function TaskDetail({
         <CardBody className="flex flex-wrap gap-2">
           {can.accept && <Button size="sm" loading={busy} onClick={() => run(() => acceptTaskAction(task.id), "Task accepted.")}>Accept</Button>}
           {can.start && <Button size="sm" loading={busy} onClick={() => run(() => startTaskAction(task.id), "Work started.")}>Start work</Button>}
-          {can.complete && <Button size="sm" variant="success" onClick={() => { setPrompt("complete"); setRemark(""); }}>Mark complete</Button>}
+          {can.complete && (
+            <Button size="sm" variant="success" onClick={() => { setPrompt("complete"); setRemark(""); }}>
+              Mark complete
+            </Button>
+          )}
+          {!can.complete && can.mark && checklistLeft > 0 && (
+            <span className="text-[12px] font-medium text-muted-500">
+              {checklistLeft} checklist point{checklistLeft === 1 ? "" : "s"} left before this can be completed.
+            </span>
+          )}
           {can.resubmit && <Button size="sm" variant="success" onClick={() => { setPrompt("resubmit"); setRemark(""); }}>Resubmit</Button>}
           {can.close && <Button size="sm" variant="success" onClick={() => { setPrompt("close"); setRemark(""); }}>Approve and close</Button>}
           {can.sendBack && <Button size="sm" variant="outline" onClick={() => { setPrompt("sendBack"); setRemark(""); }}>Send back for rework</Button>}
@@ -232,42 +249,77 @@ export function TaskDetail({
           key={cl.id}
           list={cl}
           round={task.round}
-          canDecide={can.review || can.approve}
+          canMark={can.mark}
+          canJudge={can.review || can.approve}
+          judgeLabel={can.review ? "Yours to review" : "Yours to approve"}
+          onDone={() => router.refresh()}
         />
       ))}
 
       {tab === "levels" && levels.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Review and approval</CardTitle></CardHeader>
-          <CardBody className="space-y-2">
-            {levels.map((l) => {
+        <Card className="overflow-hidden">
+          <div className="border-b border-line-300 bg-surface-sunken px-5 py-4">
+            <h3 className="font-display text-[14px] font-bold text-navy-950">Review and approval</h3>
+            <p className="mt-0.5 text-[11.5px] font-medium text-muted-500">
+              One person a level, acting in order. A denial at any level sends the task back and the
+              run starts again at reviewer level 1.
+            </p>
+          </div>
+
+          <div className="divide-y divide-line-150">
+            {levels.map((l, i) => {
               const thisRound = l.actions.find((a) => a.round === task.round);
+              const passed = thisRound && ["PASS", "APPROVE"].includes(thisRound.decision);
+              const isNext = !thisRound && levels.slice(0, i).every((p) => p.actions.some((a) => a.round === task.round));
               return (
-                <div key={l.id} className="flex flex-wrap items-center gap-3 rounded-[10px] border border-line-300 px-3.5 py-2.5">
-                  <span className="w-[130px] shrink-0 text-[11.5px] font-bold text-navy-900">
-                    {l.kind === "REVIEW" ? "Reviewer" : "Approver"} L{l.level}
-                  </span>
-                  <span className="flex-1 text-[12.5px] font-semibold text-navy-700">
-                    {l.person}{l.isViewer && " (you)"}
-                  </span>
-                  {thisRound ? (
+                <div key={l.id} className={cn("px-5 py-3.5", isNext && "bg-brand-100/40")}>
+                  <div className="flex flex-wrap items-center gap-3">
                     <span className={cn(
-                      "rounded-full px-2.5 py-1 text-[10.5px] font-bold",
-                      ["PASS", "APPROVE"].includes(thisRound.decision)
-                        ? "bg-good-050 text-good-700" : "bg-bad-050 text-bad-700",
+                      "flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold",
+                      thisRound
+                        ? passed ? "bg-good-600 text-white" : "bg-bad-600 text-white"
+                        : isNext ? "bg-brand-500 text-white" : "bg-surface-field text-muted-500",
                     )}>
-                      {thisRound.decision}
+                      {thisRound ? (passed ? "✓" : "✕") : l.level}
                     </span>
-                  ) : (
-                    <span className="text-[11px] font-medium text-muted-400">waiting</span>
-                  )}
-                  {thisRound?.remark && (
-                    <span className="w-full text-[11.5px] font-medium text-muted-600">{thisRound.remark}</span>
+                    <span className="w-[112px] shrink-0 text-[11px] font-bold uppercase tracking-[.06em] text-muted-400">
+                      {l.kind === "REVIEW" ? "Reviewer" : "Approver"} L{l.level}
+                    </span>
+                    <span className="min-w-[120px] flex-1 text-[13px] font-semibold text-navy-900">
+                      {l.person}{l.isViewer && <span className="text-muted-400"> (you)</span>}
+                    </span>
+                    {thisRound ? (
+                      <span className={cn(
+                        "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.06em]",
+                        passed ? "bg-good-050 text-good-700" : "bg-bad-050 text-bad-700",
+                      )}>
+                        {passed ? "Approved" : "Denied"}
+                      </span>
+                    ) : isNext ? (
+                      <span className="shrink-0 rounded-full bg-brand-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.06em] text-brand-700">
+                        With them now
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-[11px] font-medium text-muted-400">waiting their turn</span>
+                    )}
+                  </div>
+
+                  {/* Every round this level has spoken in, oldest first. */}
+                  {l.actions.length > 0 && (
+                    <div className="mt-2 space-y-1 pl-[40px]">
+                      {l.actions.map((a) => (
+                        <p key={a.round} className="text-[11.5px] font-medium text-muted-600">
+                          <span className="num text-muted-400">{formatDateTime(a.actedAt)}</span>
+                          {a.round !== task.round && <span className="text-muted-400"> · round {a.round}</span>}
+                          {a.remark && ` — ${a.remark}`}
+                        </p>
+                      ))}
+                    </div>
                   )}
                 </div>
               );
             })}
-          </CardBody>
+          </div>
         </Card>
       )}
 
@@ -304,19 +356,6 @@ export function TaskDetail({
         </Card>
       )}
 
-      <Card>
-        <CardHeader><CardTitle>Comments</CardTitle></CardHeader>
-        <CardBody className="space-y-2.5">
-          {comments.length === 0 && (
-            <p className="text-[12px] font-medium text-muted-400">Nothing said yet.</p>
-          )}
-          {comments.map((c) => (
-            <Comment key={c.id} comment={c} canDelete={can.deleteComment} onDone={() => router.refresh()} />
-          ))}
-          {can.comment && <CommentBox taskId={task.id} onDone={() => router.refresh()} />}
-        </CardBody>
-      </Card>
-
       {files.length > 0 && (
         <Card>
           <CardHeader><CardTitle>Attachments</CardTitle></CardHeader>
@@ -340,6 +379,20 @@ export function TaskDetail({
       )}
 
       {tab === "history" && (
+      <>
+      <Card>
+        <CardHeader><CardTitle>Comments</CardTitle></CardHeader>
+        <CardBody className="space-y-2.5">
+          {comments.length === 0 && (
+            <p className="text-[12px] font-medium text-muted-400">Nothing said yet.</p>
+          )}
+          {comments.map((c) => (
+            <Comment key={c.id} comment={c} canDelete={can.deleteComment} onDone={() => router.refresh()} />
+          ))}
+          {can.comment && <CommentBox taskId={task.id} onDone={() => router.refresh()} />}
+        </CardBody>
+      </Card>
+
       <Card>
         <CardHeader><CardTitle>History</CardTitle></CardHeader>
         <CardBody className="space-y-1.5">
@@ -352,6 +405,7 @@ export function TaskDetail({
           ))}
         </CardBody>
       </Card>
+      </>
       )}
 
       {prompt && (
@@ -399,7 +453,9 @@ export function TaskDetail({
         <LevelModal
           taskId={task.id}
           mode={levelChoice}
-          items={checklists.flatMap((c) => c.items.map((i) => ({ id: i.id, text: i.text })))}
+          anyDenied={checklists.some((c) =>
+            c.items.some((i) => i.reviews.some((r) => r.round === task.round && r.verdict === "FAIL")),
+          )}
           nextUp={nextUp}
           onClose={() => setLevelChoice(null)}
           onDone={() => router.refresh()}
@@ -561,20 +617,20 @@ function DecideExtensionModal({
 }
 
 /**
- * A level's decision.
+ * Finishing with a level, once its lines have been judged.
  *
- * The scope has a reviewer mark each checklist item Pass or Fail with a remark
- * and then give an overall verdict, so both are collected here; an approver
- * gives the overall verdict alone. Anything left unmarked is taken as a pass,
- * because a reviewer who says nothing about an item is not failing it.
+ * The verdicts are given on the checklist itself, so this is only the overall
+ * call and whatever is said about it. It arrives already set to what the lines
+ * add up to — a denial anywhere is a denial — and can be overruled, because a
+ * reviewer may want the task back for something the list does not cover.
  */
 function LevelModal({
-  taskId, mode, items, nextUp, onClose, onDone,
+  taskId, mode, anyDenied, nextUp, onClose, onDone,
 }: {
   taskId: string;
   mode: "review" | "approve";
-  items: Array<{ id: string; text: string }>;
-  /** Who it goes to if this level passes it. */
+  /** Whether any line was denied at this level, this round. */
+  anyDenied: boolean;
   nextUp: string | null;
   onClose: () => void;
   onDone: () => void;
@@ -582,48 +638,27 @@ function LevelModal({
   const toast = useToast();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [pass, setPass] = React.useState(true);
+  const [pass, setPass] = React.useState(!anyDenied);
   const [remark, setRemark] = React.useState("");
-  const [verdicts, setVerdicts] = React.useState<Record<string, { verdict: "PASS" | "FAIL"; remark: string }>>({});
   const files = React.useRef<HTMLInputElement>(null);
-
-  function setItem(id: string, patch: Partial<{ verdict: "PASS" | "FAIL"; remark: string }>) {
-    setVerdicts((v) => ({
-      ...v,
-      [id]: { verdict: v[id]?.verdict ?? "PASS", remark: v[id]?.remark ?? "", ...patch },
-    }));
-  }
 
   async function go() {
     setBusy(true);
     setError(null);
-    const anyFailed = Object.values(verdicts).some((v) => v.verdict === "FAIL");
-    // A failed item cannot sit under an overall pass — the task has to go back.
-    const overall = mode === "review" ? (pass && !anyFailed) : pass;
-    const decision = mode === "review" ? (overall ? "PASS" : "FAIL") : (overall ? "APPROVE" : "REJECT");
-    // A remark is welcome but not demanded: a reviewer who approves everything
-    // has said what they came to say.
-    const said = remark.trim() || (overall ? "Approved." : "Sent back.");
-    const res = await decideLevelAction(
-      taskId,
-      decision,
-      said,
-      mode === "review"
-        ? Object.entries(verdicts).map(([itemId, v]) => ({ itemId, verdict: v.verdict, remark: v.remark }))
-        : [],
-    );
-    // Anything attached to the decision goes on the task, where the next level
-    // and whoever did the work can both see it.
+    const decision = mode === "review" ? (pass ? "PASS" : "FAIL") : (pass ? "APPROVE" : "REJECT");
+    const said = remark.trim() || (pass ? "Approved." : "Sent back.");
+    const res = await decideLevelAction(taskId, decision, said);
+    if (!res.ok) { setBusy(false); setError(res.error); return; }
+
     const picked = files.current?.files;
-    if (res.ok && picked && picked.length > 0) {
+    if (picked && picked.length > 0) {
       const fd = new FormData();
       fd.set("body", said);
       for (const f of Array.from(picked)) fd.append("files", f);
       await addCommentAction(taskId, fd);
     }
     setBusy(false);
-    if (!res.ok) { setError(res.error); return; }
-    toast(`Recorded: ${decision.toLowerCase()}.`);
+    toast(pass ? "Approved." : "Sent back for rework.");
     onClose();
     onDone();
   }
@@ -631,73 +666,46 @@ function LevelModal({
   return (
     <Modal
       open onClose={onClose}
-      title={mode === "review" ? "Review this level" : "Approve this level"}
-      description="A fail or a reject sends the task back to the assignee, and the flow restarts at Reviewer Level 1."
+      title={mode === "review" ? "Finish your review" : "Finish your approval"}
       size="sm"
       footer={
         <>
           <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
-          <Button loading={busy} onClick={go}>Record decision</Button>
+          <Button variant={pass ? "success" : "danger"} loading={busy} onClick={go}>
+            {pass ? "Approve" : "Deny and send back"}
+          </Button>
         </>
       }
     >
       <div className="space-y-3">
         {error && <Alert tone="error">{error}</Alert>}
+
+        {anyDenied && (
+          <Alert tone="warn">
+            You denied at least one point, so this goes back to the assignee.
+          </Alert>
+        )}
+
         <div className="flex gap-2">
           <Button size="sm" variant={pass ? "success" : "outline"} onClick={() => setPass(true)}>
-            {mode === "review" ? "Pass" : "Approve"}
+            Approve the lot
           </Button>
           <Button size="sm" variant={pass ? "outline" : "danger"} onClick={() => setPass(false)}>
-            {mode === "review" ? "Fail" : "Reject"}
+            Send it back
           </Button>
         </div>
-        {mode === "review" && items.length > 0 && (
-          <div className="space-y-1.5 rounded-[10px] border border-line-300 p-3">
-            <p className="text-[11.5px] font-bold text-navy-900">Each item</p>
-            {items.map((i) => {
-              const v = verdicts[i.id]?.verdict ?? "PASS";
-              return (
-                <div key={i.id} className="flex flex-wrap items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-[11.5px] font-medium text-navy-800">{i.text}</span>
-                  {(["PASS", "FAIL"] as const).map((choice) => (
-                    <button
-                      key={choice}
-                      type="button"
-                      onClick={() => setItem(i.id, { verdict: choice })}
-                      className={cn(
-                        "cursor-pointer rounded-[7px] border px-2.5 py-1 text-[10.5px] font-bold",
-                        v === choice
-                          ? choice === "PASS"
-                            ? "border-good-600 bg-good-050 text-good-700"
-                            : "border-bad-600 bg-bad-050 text-bad-700"
-                          : "border-line-400 bg-white text-muted-500",
-                      )}
-                    >
-                      {choice === "PASS" ? "Pass" : "Fail"}
-                    </button>
-                  ))}
-                  {v === "FAIL" && (
-                    <input
-                      value={verdicts[i.id]?.remark ?? ""}
-                      onChange={(e) => setItem(i.id, { remark: e.target.value })}
-                      placeholder="What is wrong with it?"
-                      className="w-full rounded-[7px] border border-line-400 bg-surface-sunken px-2.5 py-1.5 text-[11.5px]"
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        <Field label="Overall remark" hint="Optional — it goes on the record either way.">
+
+        <Field label="Remark" hint="Optional — it goes on the record either way.">
           <Textarea value={remark} onChange={(e) => setRemark(e.target.value)} rows={3} />
         </Field>
+
         <Field label="Attachment" hint="Optional — a photo or a marked-up drawing.">
           <input ref={files} type="file" name="files" multiple className="text-[12px]" />
         </Field>
+
         {nextUp && pass && (
           <p className="text-[11.5px] font-medium text-muted-500">
-            Passing this sends it to <b className="text-navy-900">{nextUp}</b>.
+            Approving sends it to <b className="text-navy-900">{nextUp}</b>.
           </p>
         )}
       </div>
@@ -705,85 +713,218 @@ function LevelModal({
   );
 }
 
+
 /**
- * The checklist on a task: a numbered list of lines to be approved or denied.
+ * The checklist on a task, and the whole of its story.
  *
- * Nobody fills anything in. The assignee does the work and the reviewers say,
- * item by item, whether it was done — which is where the judgement belongs and
- * why the items carry no fields of their own.
+ * It is worked and judged in one place. The assignee ticks each line off while
+ * the task is open; whoever holds the active level approves or denies the same
+ * lines, with a remark if they have one; and every verdict any round has given
+ * stays stacked beneath the line it was about. A dialog could not do that — the
+ * remark has to sit under the point it is about to be worth reading.
  */
 function ChecklistCard({
-  list, round, canDecide,
+  list, round, canMark, canJudge, judgeLabel, onDone,
 }: {
   list: { id: string; name: string; items: Item[] };
   round: number;
-  canDecide: boolean;
+  canMark: boolean;
+  canJudge: boolean;
+  judgeLabel: string;
+  onDone: () => void;
 }) {
+  const done = list.items.filter((i) => i.marked).length;
+  const pct = list.items.length ? Math.round((done / list.items.length) * 100) : 0;
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{list.name}</CardTitle>
-        <span className="text-xs text-muted-500">
-          {list.items.length} point{list.items.length === 1 ? "" : "s"}
-          {canDecide && " · approve or deny each as you review"}
-        </span>
-      </CardHeader>
-      <CardBody className="space-y-2">
+    <Card className="overflow-hidden">
+      <div className="border-b border-line-300 bg-surface-sunken px-5 py-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="font-display text-[14px] font-bold text-navy-950">{list.name}</h3>
+          <span className="rounded-full bg-[#EDE7FB] px-2.5 py-1 text-[10.5px] font-bold text-[#5B3FA8]">
+            {done} of {list.items.length} done
+          </span>
+          {canJudge && (
+            <span className="rounded-full bg-brand-100 px-2.5 py-1 text-[10.5px] font-bold text-brand-700">
+              {judgeLabel}
+            </span>
+          )}
+        </div>
+        <div className="mt-2.5 h-[7px] overflow-hidden rounded-full bg-line-200">
+          <div
+            className="h-full rounded-full transition-[width]"
+            style={{
+              width: `${pct}%`,
+              background: pct === 100
+                ? "linear-gradient(90deg,#1F9D66,#5BC8A2)"
+                : "linear-gradient(90deg,#6C4FC4,#A98FE8)",
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="divide-y divide-line-150">
         {list.items.map((item, i) => (
-          <ChecklistRow key={item.id} item={item} index={i} round={round} />
+          <ChecklistRow
+            key={item.id}
+            item={item}
+            index={i}
+            round={round}
+            canMark={canMark}
+            canJudge={canJudge}
+            onDone={onDone}
+          />
         ))}
-      </CardBody>
+      </div>
     </Card>
   );
 }
 
-/** One line, and what every round has said about it. */
-function ChecklistRow({ item, index, round }: { item: Item; index: number; round: number }) {
+/** One line: its number, its title, what has been done to it, and what was said. */
+function ChecklistRow({
+  item, index, round, canMark, canJudge, onDone,
+}: {
+  item: Item;
+  index: number;
+  round: number;
+  canMark: boolean;
+  canJudge: boolean;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = React.useState(false);
+  const [writing, setWriting] = React.useState<null | "PASS" | "FAIL">(null);
+  const [remark, setRemark] = React.useState("");
+
   const thisRound = item.reviews.filter((r) => r.round === round);
-  const earlier = item.reviews.filter((r) => r.round !== round);
+  const mine = thisRound.at(-1);
   const denied = thisRound.some((r) => r.verdict === "FAIL");
-  const passed = thisRound.length > 0 && !denied;
+
+  async function mark(next: boolean) {
+    setBusy(true);
+    await markChecklistItemAction(item.id, next);
+    setBusy(false);
+    onDone();
+  }
+
+  async function judge(verdict: "PASS" | "FAIL") {
+    setBusy(true);
+    await reviewChecklistItemAction(item.id, verdict, remark);
+    setBusy(false);
+    setWriting(null);
+    setRemark("");
+    onDone();
+  }
 
   return (
-    <div className={cn(
-      "rounded-[10px] border px-3.5 py-2.5",
-      denied ? "border-bad-300 bg-bad-025" : passed ? "border-good-400 bg-good-050" : "border-line-300",
-    )}>
-      <div className="flex flex-wrap items-center gap-2.5">
-        <span className="num shrink-0 rounded-[7px] bg-surface-field px-2 py-[3px] text-[11px] font-extrabold text-navy-600">
-          {String(index + 1).padStart(2, "0")}
+    <div className={cn("px-5 py-3.5", denied && "bg-bad-025")}>
+      <div className="flex flex-wrap items-start gap-3">
+        <span className={cn(
+          "num mt-[1px] flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px] text-[11px] font-extrabold",
+          item.marked ? "bg-good-600 text-white" : "bg-surface-field text-navy-500",
+        )}>
+          {item.marked ? "✓" : String(index + 1).padStart(2, "0")}
         </span>
-        <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-navy-900">{item.text}</span>
-        {thisRound.map((r) => (
-          <span
-            key={`${r.kind}-${r.level}`}
+
+        <span className={cn(
+          "min-w-[180px] flex-1 text-[13px] font-semibold",
+          item.marked ? "text-navy-900" : "text-navy-700",
+        )}>
+          {item.text}
+        </span>
+
+        {canMark && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => mark(!item.marked)}
             className={cn(
-              "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.06em]",
-              r.verdict === "FAIL" ? "bg-bad-600 text-white" : "bg-good-600 text-white",
+              "shrink-0 cursor-pointer rounded-[8px] border px-3 py-1.5 text-[11px] font-bold transition-colors disabled:opacity-60",
+              item.marked
+                ? "border-good-400 bg-good-050 text-good-700"
+                : "border-line-400 bg-white text-muted-600 hover:border-brand-500 hover:text-brand-700",
             )}
           >
-            {r.verdict === "FAIL" ? "Denied" : "Approved"} · L{r.level}
+            {item.marked ? "Done" : "Mark done"}
+          </button>
+        )}
+
+        {canJudge && (
+          <span className="flex shrink-0 gap-1.5">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => { setWriting("PASS"); setRemark(mine?.remark ?? ""); }}
+              className={cn(
+                "cursor-pointer rounded-[8px] border px-3 py-1.5 text-[11px] font-bold transition-colors disabled:opacity-60",
+                mine?.verdict === "PASS"
+                  ? "border-good-600 bg-good-600 text-white"
+                  : "border-good-400 bg-white text-good-700 hover:bg-good-050",
+              )}
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => { setWriting("FAIL"); setRemark(mine?.remark ?? ""); }}
+              className={cn(
+                "cursor-pointer rounded-[8px] border px-3 py-1.5 text-[11px] font-bold transition-colors disabled:opacity-60",
+                mine?.verdict === "FAIL"
+                  ? "border-bad-600 bg-bad-600 text-white"
+                  : "border-bad-300 bg-white text-bad-700 hover:bg-bad-050",
+              )}
+            >
+              Deny
+            </button>
           </span>
-        ))}
+        )}
       </div>
 
-      {thisRound.filter((r) => r.remark).map((r) => (
-        <p key={`rm-${r.kind}-${r.level}`} className="mt-1.5 text-[11.5px] font-medium text-bad-700">
-          {r.kind === "REVIEW" ? "Reviewer" : "Approver"} L{r.level}: {r.remark}
-        </p>
-      ))}
+      {writing && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-2 pl-[38px]">
+          <input
+            value={remark}
+            onChange={(e) => setRemark(e.target.value)}
+            placeholder={writing === "FAIL" ? "What is wrong with it?" : "A remark, if you have one"}
+            autoFocus
+            className="min-w-[220px] flex-1 rounded-[8px] border border-line-400 bg-surface-sunken px-3 py-2 text-[12px] font-medium text-navy-900 outline-none focus:border-brand-500 focus:bg-white"
+          />
+          <Button size="xs" loading={busy} onClick={() => judge(writing)}>
+            {writing === "PASS" ? "Approve" : "Deny"}
+          </Button>
+          <Button size="xs" variant="outline" onClick={() => setWriting(null)}>Cancel</Button>
+        </div>
+      )}
 
-      {/* Earlier rounds stay readable, so a rework shows what it was for. */}
-      {earlier.length > 0 && (
-        <p className="mt-1 text-[11px] font-medium text-muted-400">
-          {earlier.map((r) => (
-            `Round ${r.round}: ${r.verdict === "FAIL" ? "denied" : "approved"} at ${r.kind === "REVIEW" ? "review" : "approval"} L${r.level}${r.remark ? ` — ${r.remark}` : ""}`
-          )).join(" · ")}
-        </p>
+      {/* Every verdict, newest round last, stacked under the line it is about. */}
+      {item.reviews.length > 0 && (
+        <div className="mt-2.5 space-y-1.5 pl-[38px]">
+          {item.reviews.map((r, i) => (
+            <div key={i} className="flex flex-wrap items-baseline gap-2">
+              <span className={cn(
+                "shrink-0 rounded-full px-2 py-[2px] text-[9.5px] font-extrabold uppercase tracking-[.06em]",
+                r.verdict === "FAIL" ? "bg-bad-050 text-bad-700" : "bg-good-050 text-good-700",
+              )}>
+                {r.verdict === "FAIL" ? "Denied" : "Approved"}
+              </span>
+              <span className="text-[11.5px] font-semibold text-navy-700">
+                {r.kind === "REVIEW" ? "Reviewer" : "Approver"} L{r.level} · {r.by}
+              </span>
+              <span className="num text-[10.5px] font-medium text-muted-400">
+                {formatDateTime(r.actedAt)}
+                {r.round !== round && ` · round ${r.round}`}
+              </span>
+              {r.remark && (
+                <span className="w-full text-[12px] font-medium text-muted-600">{r.remark}</span>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
 }
+
 
 function Comment({
   comment, canDelete, onDone,

@@ -187,3 +187,30 @@ export async function applyExtensionDecision(
 
   return { taskId: ext.taskId, status };
 }
+
+/**
+ * Whether every point on a task's checklists has been marked done.
+ *
+ * The assignee works through the list and ticks each line off; the task cannot
+ * be called complete until the list is. Every point counts — a checklist with
+ * optional lines is a checklist nobody finishes.
+ */
+export async function checklistAllMarked(tx: Tx, taskId: string): Promise<boolean> {
+  const items = await tx.taskChecklistItem.findMany({
+    where: { taskChecklist: { taskId } },
+    select: { answeredAt: true },
+  });
+  return items.length > 0 && items.every((i) => i.answeredAt !== null);
+}
+
+/** How far through the list the assignee has got. */
+export async function checklistProgress(
+  tx: Tx,
+  taskId: string,
+): Promise<{ done: number; total: number }> {
+  const items = await tx.taskChecklistItem.findMany({
+    where: { taskChecklist: { taskId } },
+    select: { answeredAt: true },
+  });
+  return { done: items.filter((i) => i.answeredAt !== null).length, total: items.length };
+}

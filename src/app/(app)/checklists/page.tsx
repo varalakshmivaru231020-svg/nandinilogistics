@@ -40,7 +40,7 @@ export default async function ChecklistsPage({
     ? await prisma.checklistCheckpoint.findMany({
         where: { checklistId: activeList.id },
         orderBy: { sortOrder: "asc" },
-        select: { id: true, text: true, isMandatory: true },
+        select: { id: true, text: true },
       })
     : [];
 

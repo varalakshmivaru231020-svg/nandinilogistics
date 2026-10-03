@@ -9,7 +9,8 @@ import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
 import { canDo, statusAfterComplete, statusAfterLevel, type TaskAction } from "@/lib/tasks/lifecycle";
 import {
-  actedThisRound, applyExtensionDecision, logTaskEvent, moveStatus, shapeOf,
+  actedThisRound, applyExtensionDecision, checklistAllMarked, checklistProgress,
+  logTaskEvent, moveStatus, shapeOf,
 } from "@/lib/tasks/service";
 import { assertStorable, filesFrom } from "@/lib/material/grn-attachments";
 import { audienceFor, notifyTask, type TaskEventKind } from "@/lib/tasks/notify";
@@ -308,6 +309,13 @@ export async function completeTaskAction(id: string, remark: string): Promise<Ac
     const { shape } = await assertMay("complete", id, ctx.id, await isAdminOf(ctx));
     if (!remark.trim()) throw new Error("A closure remark is required to complete a task.");
 
+    // The list is the work. A checklist task is not complete until every point
+    // on it has been marked, which is what the tab is for.
+    if (shape.kind === "CHECKLIST" && !(await checklistAllMarked(prisma, id))) {
+      const { done, total } = await checklistProgress(prisma, id);
+      throw new Error(`${done} of ${total} checklist points are marked. Finish the list first.`);
+    }
+
     const to = statusAfterComplete(shape);
     await prisma.$transaction(async (tx) => {
       await moveStatus(tx, {
@@ -329,6 +337,10 @@ export async function resubmitTaskAction(id: string, remark: string): Promise<Ac
     const ctx = await authorize(PERM.task.task.complete);
     const { shape } = await assertMay("resubmit", id, ctx.id, await isAdminOf(ctx));
     if (!remark.trim()) throw new Error("Say what was corrected before resubmitting.");
+    if (!(await checklistAllMarked(prisma, id))) {
+      const { done, total } = await checklistProgress(prisma, id);
+      throw new Error(`${done} of ${total} checklist points are marked. Finish the list first.`);
+    }
 
     // A resubmission is a new round, and the flow restarts at Reviewer Level 1.
     const to = statusAfterComplete(shape);
@@ -780,3 +792,94 @@ export async function deleteTasksAction(ids: string[]): Promise<ActionResult<{ d
   });
 }
 
+
+// --------------------------------------------------------------------------
+// Working through the checklist, and judging it
+// --------------------------------------------------------------------------
+
+/**
+ * The assignee ticking one checklist point off, or putting it back.
+ *
+ * This is the step marking the list is for: the task cannot be completed until
+ * every point is marked, so the checklist is worked through rather than
+ * remembered.
+ */
+export async function markChecklistItemAction(
+  itemId: string,
+  done: boolean,
+): Promise<ActionResult<{ done: number; total: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.task.task.complete);
+    const item = await prisma.taskChecklistItem.findUniqueOrThrow({
+      where: { id: itemId },
+      select: { taskChecklist: { select: { taskId: true } } },
+    });
+    const taskId = item.taskChecklist.taskId;
+
+    const shape = await shapeOf(prisma, taskId);
+    const admin = await isAdminOf(ctx);
+    if (!["STARTED", "REWORK"].includes(shape.status)) {
+      throw new Error("The checklist is worked through while the task is open.");
+    }
+    if (shape.assigneeId !== ctx.id && !admin) {
+      throw new Error("Only the person the task is assigned to works through its checklist.");
+    }
+
+    await prisma.taskChecklistItem.update({
+      where: { id: itemId },
+      data: { answeredAt: done ? new Date() : null },
+    });
+    refresh(taskId);
+    return checklistProgress(prisma, taskId);
+  });
+}
+
+/**
+ * A reviewer or an approver judging one point, at the level they hold.
+ *
+ * It happens on the list itself rather than in a dialog, so the remark sits
+ * under the line it is about and every round of them stays there.
+ */
+export async function reviewChecklistItemAction(
+  itemId: string,
+  verdict: "PASS" | "FAIL",
+  remark: string,
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const item = await prisma.taskChecklistItem.findUniqueOrThrow({
+      where: { id: itemId },
+      select: { taskChecklist: { select: { taskId: true } } },
+    });
+    const taskId = item.taskChecklist.taskId;
+
+    const shape = await shapeOf(prisma, taskId);
+    const reviewing = shape.status === "UNDER_REVIEW";
+    const ctx = await authorize(reviewing ? PERM.task.level.review : PERM.task.level.approve);
+    const admin = await isAdminOf(ctx);
+    const acted = await actedThisRound(prisma, taskId, shape.round);
+
+    if (!canDo(reviewing ? "review" : "approve", shape, { userId: ctx.id, isAdmin: admin }, acted)) {
+      throw new Error("This level is not yours to judge, at least not yet.");
+    }
+
+    const kind = reviewing ? "REVIEW" : "APPROVAL";
+    const done = new Set(acted.filter((a) => a.kind === kind).map((a) => a.level));
+    const level = shape.levels
+      .filter((l) => l.kind === kind && !done.has(l.level))
+      .sort((a, b) => a.level - b.level)[0];
+    if (!level) throw new Error("There is no level waiting on a decision.");
+
+    const row = await prisma.taskLevel.findFirstOrThrow({
+      where: { taskId, kind, level: level.level },
+      select: { id: true },
+    });
+
+    await prisma.taskChecklistItemReview.upsert({
+      where: { itemId_levelId_round: { itemId, levelId: row.id, round: shape.round } },
+      create: { itemId, levelId: row.id, round: shape.round, verdict, remark: remark.trim() || null },
+      update: { verdict, remark: remark.trim() || null, actedAt: new Date() },
+    });
+    refresh(taskId);
+    return null;
+  });
+}

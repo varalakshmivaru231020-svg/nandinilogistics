@@ -47,11 +47,11 @@ export async function seedTaskDemo(prisma: PrismaClient): Promise<{ tasks: numbe
         isActive: true,
         checkpoints: {
           create: [
-            { text: "Snag list cleared and signed by the customer", isMandatory: true, sortOrder: 1 },
-            { text: "Electricity and water meter readings recorded", isMandatory: true, sortOrder: 2 },
-            { text: "Keys handed over and acknowledged", isMandatory: true, sortOrder: 3 },
-            { text: "Common area access and parking bay shown", isMandatory: true, sortOrder: 4 },
-            { text: "Warranty documents and manuals handed over", isMandatory: false, sortOrder: 5 },
+            { text: "Snag list cleared and signed by the customer", sortOrder: 1 },
+            { text: "Electricity and water meter readings recorded", sortOrder: 2 },
+            { text: "Keys handed over and acknowledged", sortOrder: 3 },
+            { text: "Common area access and parking bay shown", sortOrder: 4 },
+            { text: "Warranty documents and manuals handed over", sortOrder: 5 },
           ],
         },
       },
@@ -159,9 +159,15 @@ export async function seedTaskDemo(prisma: PrismaClient): Promise<{ tasks: numbe
       include: { checklists: true, levels: true },
     });
 
+    // The task has been completed, so its list was worked through first —
+    // every point marked, which is what completing one requires.
     for (const cp of checkpoints) {
       await prisma.taskChecklistItem.create({
-        data: { taskChecklistId: task.checklists[0].id, checkpointId: cp.id },
+        data: {
+          taskChecklistId: task.checklists[0].id,
+          checkpointId: cp.id,
+          answeredAt: new Date(now - day),
+        },
       });
     }
 

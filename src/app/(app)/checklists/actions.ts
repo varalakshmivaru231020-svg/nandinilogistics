@@ -104,7 +104,7 @@ export async function duplicateChecklistAction(id: string): Promise<ActionResult
       });
       await tx.checklistCheckpoint.createMany({
         data: source.checkpoints.map((p) => ({
-          checklistId: made.id, text: p.text, isMandatory: p.isMandatory, sortOrder: p.sortOrder,
+          checklistId: made.id, text: p.text, isMandatory: true, sortOrder: p.sortOrder,
         })),
       });
       return made;
@@ -137,10 +137,10 @@ export async function deleteChecklistAction(id: string): Promise<ActionResult<nu
   });
 }
 
+/** Every checkpoint on a list is required; there is no optional one. */
 export async function addCheckpointAction(
   checklistId: string,
   text: string,
-  isMandatory: boolean,
 ): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.checklist.checklist.update);
@@ -149,7 +149,7 @@ export async function addCheckpointAction(
       where: { checklistId }, orderBy: { sortOrder: "desc" }, select: { sortOrder: true },
     });
     await prisma.checklistCheckpoint.create({
-      data: { checklistId, text: text.trim(), isMandatory, sortOrder: (last?.sortOrder ?? 0) + 1 },
+      data: { checklistId, text: text.trim(), isMandatory: true, sortOrder: (last?.sortOrder ?? 0) + 1 },
     });
 
     await recordAudit({
@@ -163,7 +163,7 @@ export async function addCheckpointAction(
 
 export async function updateCheckpointAction(
   id: string,
-  patch: { text?: string; isMandatory?: boolean },
+  patch: { text?: string },
 ): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.checklist.checklist.update);
@@ -172,7 +172,6 @@ export async function updateCheckpointAction(
       where: { id },
       data: {
         ...(patch.text === undefined ? {} : { text: patch.text.trim() }),
-        ...(patch.isMandatory === undefined ? {} : { isMandatory: patch.isMandatory }),
       },
     });
 

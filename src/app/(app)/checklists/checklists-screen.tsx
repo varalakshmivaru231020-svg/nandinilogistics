@@ -24,7 +24,7 @@ interface Checklist {
  * place. What a checkpoint needs is to be read on site and then approved or
  * denied by whoever reviews the task, which is where the judgement belongs.
  */
-interface Checkpoint { id: string; text: string; isMandatory: boolean }
+interface Checkpoint { id: string; text: string }
 interface Run {
   id: string; name: string; category: string; checkpoints: number; location: string;
   by: string; score: number; result: "PASS" | "FAIL"; state: "OPEN" | "CLOSED";
@@ -79,7 +79,6 @@ export function ChecklistsScreen({
     router.refresh();
   }
 
-  const mandatory = checkpoints.filter((p) => p.isMandatory).length;
 
   return (
     <div className="animate-fade-up">
@@ -296,7 +295,7 @@ export function ChecklistsScreen({
                       </span>
                     </div>
                     <p className="mt-[3px] text-[11.5px] font-medium text-muted-400">
-                      {activeCategory?.name} · {checkpoints.length} checkpoint{checkpoints.length === 1 ? "" : "s"} · {mandatory} mandatory
+                      {activeCategory?.name} · {checkpoints.length} checkpoint{checkpoints.length === 1 ? "" : "s"}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -341,7 +340,7 @@ export function ChecklistsScreen({
                         loading={busy}
                         disabled={!newPoint.trim()}
                         onClick={async () => {
-                          await run(() => addCheckpointAction(activeList.id, newPoint, true), "Checkpoint added");
+                          await run(() => addCheckpointAction(activeList.id, newPoint), "Checkpoint added");
                           setNewPoint("");
                         }}
                       >
@@ -382,18 +381,6 @@ export function ChecklistsScreen({
                       ) : (
                         <>
                           <span className="min-w-[180px] flex-1 text-[12.5px] font-medium text-navy-900">{p.text}</span>
-                          {can.update && (
-                            <button
-                              type="button"
-                              onClick={() => run(() => updateCheckpointAction(p.id, { isMandatory: !p.isMandatory }), "Checkpoint updated")}
-                              className={cn(
-                                "shrink-0 whitespace-nowrap rounded-full px-2 py-[3px] text-[8.5px] font-extrabold uppercase tracking-[.07em] text-white",
-                                p.isMandatory ? "bg-bad-600" : "bg-muted-400",
-                              )}
-                            >
-                              {p.isMandatory ? "Mandatory" : "Optional"}
-                            </button>
-                          )}
                           {can.update && (
                             <button
                               type="button"
