@@ -21,9 +21,11 @@ interface Person { id: string; name: string; hint: string; keywords: string }
  * raised on its own screen.
  */
 export function NewTaskForm({
-  projects, people, checklists,
+  projects, people, checklists, startWithProjectId = "",
 }: {
   projects: Array<{ id: string; code: string; name: string }>;
+  /** Filled in when the task is raised from a project's own screen. */
+  startWithProjectId?: string;
   people: Person[];
   checklists: Array<{ id: string; name: string; category: string; points: number }>;
 }) {
@@ -122,7 +124,7 @@ export function NewTaskForm({
                 <Input type="datetime-local" name="dueAt" required />
               </Field>
               <Field label="Project">
-                <Select name="projectId" defaultValue="">
+                <Select name="projectId" defaultValue={startWithProjectId}>
                   <option value="">None</option>
                   {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
                 </Select>

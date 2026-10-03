@@ -5,8 +5,14 @@ import { NewTaskForm } from "./new-task-form";
 
 export const metadata = { title: "New task" };
 
-export default async function NewTaskPage() {
+export default async function NewTaskPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ project?: string }>;
+}) {
   const ctx = await requirePermission(PERM.task.task.create);
+  // Raised from a project's own Tasks tab, the project is already known.
+  const { project: fromProject } = await searchParams;
 
   const [projects, people, checklists] = await Promise.all([
     prisma.project.findMany({
@@ -36,6 +42,7 @@ export default async function NewTaskPage() {
   return (
     <NewTaskForm
       projects={projects}
+      startWithProjectId={fromProject && projects.some((p) => p.id === fromProject) ? fromProject : ""}
       people={people.map((p) => ({
         id: p.id,
         name: p.name,

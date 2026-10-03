@@ -157,7 +157,7 @@ crud({
     ["accessAll", "Access every project", "ACTION", "Bypasses project-team mapping. Without it a user sees only projects they are mapped to."],
     ["viewBudget", "See project budget figures", "FIELD"],
     ["tabOverview", "Project tab — Overview", "TAB"],
-    ["tabWbs", "Project tab — Work breakdown", "TAB"],
+    ["tabWbs", "Project tab — Tasks and work breakdown", "TAB"],
     ["tabTeam", "Project tab — Team", "TAB"],
     ["tabDocuments", "Project tab — Documents", "TAB"],
     ["tabProgress", "Project tab — Site progress", "TAB"],

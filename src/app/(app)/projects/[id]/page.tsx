@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 /** The design's five tabs, in its words and its order. */
 const TABS = [
   { key: "overview", label: "Overview", perm: PERM.project.project.tabOverview },
-  { key: "wbs", label: "Work Breakdown", perm: PERM.project.project.tabWbs },
+  { key: "wbs", label: "Tasks", perm: PERM.project.project.tabWbs },
   { key: "team", label: "Team Mapping", perm: PERM.project.project.tabTeam },
   { key: "docs", label: "Documents", perm: PERM.project.project.tabDocuments },
   { key: "log", label: "Site Progress", perm: PERM.project.project.tabProgress },
@@ -118,6 +118,21 @@ export default async function ProjectDetailPage({
 
   // The breakdown, flattened the way the design draws it: each phase, then its
   // packages indented under it.
+  // The work assigned against this project, for the Tasks tab.
+  const projectTasks = ctx.has(PERM.task.task.view)
+    ? await prisma.task.findMany({
+        where: { projectId: id },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        select: {
+          id: true, taskNo: true, title: true, status: true, priority: true, kind: true,
+          dueAt: true, location: true,
+          assignee: { select: { name: true } },
+          createdBy: { select: { name: true } },
+        },
+      })
+    : [];
+
   const wbsRows: WbsRow[] = project.phases.flatMap((ph) => [
     { id: ph.id, kind: "PHASE" as const, code: ph.code, name: ph.name, pct: ph.progressPct, phaseId: null },
     ...ph.workPackages.map((w) => ({
@@ -259,6 +274,20 @@ export default async function ProjectDetailPage({
           {tab === "wbs" && (
             <WbsTab
               projectId={project.id}
+              nowMs={new Date().getTime()}
+              tasks={projectTasks.map((t) => ({
+                id: t.id,
+                taskNo: t.taskNo,
+                title: t.title,
+                status: t.status,
+                priority: t.priority,
+                kind: t.kind,
+                dueAt: t.dueAt.toISOString(),
+                location: t.location,
+                assignee: t.assignee.name,
+                assigner: t.createdBy.name,
+              }))}
+              canCreateTask={ctx.has(PERM.task.task.create)}
               rows={wbsRows}
               phases={project.phases.map((p) => ({ id: p.id, name: p.name }))}
               can={{
