@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { cn, formatDate, qty } from "@/lib/utils";
 import { DocumentsTab } from "./documents/documents-tab";
-import { WbsTab, type WbsRow } from "./wbs-tab";
+import { ProjectTasksTab } from "./tasks-tab";
 import { TeamTab, type TeamRole } from "./team-tab";
 import { EditProjectButton } from "./edit-project-button";
 
@@ -132,13 +132,6 @@ export default async function ProjectDetailPage({
         },
       })
     : [];
-
-  const wbsRows: WbsRow[] = project.phases.flatMap((ph) => [
-    { id: ph.id, kind: "PHASE" as const, code: ph.code, name: ph.name, pct: ph.progressPct, phaseId: null },
-    ...ph.workPackages.map((w) => ({
-      id: w.id, kind: "WP" as const, code: w.code, name: w.name, pct: w.progressPct, phaseId: ph.id,
-    })),
-  ]);
 
   const teamRoles: TeamRole[] = TEAM_ROLES.map((r) => ({
     role: r.role,
@@ -272,7 +265,7 @@ export default async function ProjectDetailPage({
           )}
 
           {tab === "wbs" && (
-            <WbsTab
+            <ProjectTasksTab
               projectId={project.id}
               nowMs={new Date().getTime()}
               tasks={projectTasks.map((t) => ({
@@ -288,16 +281,6 @@ export default async function ProjectDetailPage({
                 assigner: t.createdBy.name,
               }))}
               canCreateTask={ctx.has(PERM.task.task.create)}
-              rows={wbsRows}
-              phases={project.phases.map((p) => ({ id: p.id, name: p.name }))}
-              can={{
-                createPhase: ctx.has(PERM.project.phase.create),
-                updatePhase: ctx.has(PERM.project.phase.update),
-                deletePhase: ctx.has(PERM.project.phase.delete),
-                createPackage: ctx.has(PERM.project.workPackage.create),
-                updatePackage: ctx.has(PERM.project.workPackage.update),
-                deletePackage: ctx.has(PERM.project.workPackage.delete),
-              }}
             />
           )}
 

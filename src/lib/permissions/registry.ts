@@ -824,6 +824,14 @@ export const NOT_YET_BUILT: ReadonlySet<string> = new Set([
   "project.block.view",
   "project.document.update",
   "project.document.view",
+  // The work breakdown left the project screen, which asked for tasks there
+  // and nothing else. A phase and a work package are still created from the
+  // Schedule, as its main categories; renaming or removing one has no screen.
+  "project.phase.create",
+  "project.phase.update",
+  "project.phase.delete",
+  "project.workPackage.update",
+  "project.workPackage.delete",
   "project.phase.view",
   "project.progressLog.update",
   "project.project.changeStatus",
