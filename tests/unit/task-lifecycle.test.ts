@@ -270,3 +270,56 @@ describe("overdue", () => {
     expect(isOverdue({ status: "REWORK", dueAt: "2026-09-19T18:00:00.000Z" }, now)).toBe(true);
   });
 });
+
+describe("a task under review cannot be sent to review again", () => {
+  const checklist = (status: TaskShape["status"], round = 1): TaskShape => ({
+    kind: "CHECKLIST", status, round,
+    assigneeId: ASSIGNEE, createdById: ASSIGNER,
+    levels: [
+      { kind: "REVIEW", level: 1, userId: R1 },
+      { kind: "REVIEW", level: 2, userId: R2 },
+      { kind: "APPROVAL", level: 1, userId: A1 },
+    ],
+  });
+
+  it("refuses Complete at every status after it is submitted", () => {
+    for (const status of ["UNDER_REVIEW", "REWORK", "UNDER_APPROVAL", "CLOSED"] as const) {
+      expect(canDo("complete", checklist(status), as(ASSIGNEE)), status).toBe(false);
+      expect(canDo("complete", checklist(status), admin), `${status} as admin`).toBe(false);
+    }
+  });
+
+  it("refuses Resubmit anywhere but Rework", () => {
+    for (const status of ["UNDER_REVIEW", "UNDER_APPROVAL", "CLOSED"] as const) {
+      expect(canDo("resubmit", checklist(status), as(ASSIGNEE)), status).toBe(false);
+    }
+    expect(canDo("resubmit", checklist("REWORK"), as(ASSIGNEE))).toBe(true);
+  });
+
+  it("lets nobody judge a closed task, Admin included", () => {
+    const closed = checklist("CLOSED");
+    for (const who of [as(R1), as(R2), as(A1), admin]) {
+      expect(canDo("review", closed, who)).toBe(false);
+      expect(canDo("approve", closed, who)).toBe(false);
+    }
+  });
+
+  it("sends a closed task nowhere — reopening is the only way back", () => {
+    const closed = checklist("CLOSED");
+    for (const action of ["complete", "resubmit", "review", "approve", "comment", "close"] as const) {
+      expect(canDo(action, closed, admin), action).toBe(false);
+    }
+    expect(canDo("reopen", closed, admin)).toBe(true);
+  });
+
+  it("keeps the whole run one-way: complete, review, approve, closed", () => {
+    expect(statusAfterComplete(checklist("STARTED"))).toBe("UNDER_REVIEW");
+    const review = checklist("UNDER_REVIEW");
+    expect(statusAfterLevel(review, "PASS", [])).toBe("UNDER_REVIEW");
+    expect(statusAfterLevel(review, "PASS", [{ kind: "REVIEW", level: 1 }])).toBe("UNDER_APPROVAL");
+    const approval = checklist("UNDER_APPROVAL");
+    expect(statusAfterLevel(approval, "APPROVE", [
+      { kind: "REVIEW", level: 1 }, { kind: "REVIEW", level: 2 },
+    ])).toBe("CLOSED");
+  });
+});

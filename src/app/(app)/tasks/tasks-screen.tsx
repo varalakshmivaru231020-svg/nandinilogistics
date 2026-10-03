@@ -31,8 +31,9 @@ interface Task {
   comments: number;
   attachments: number;
   extensionWaiting: boolean;
-  /** For a checklist task, the level it is actually waiting at. */
+  /** For a checklist task, the level it is waiting at, and who holds it. */
   stage: string | null;
+  stageWho: string | null;
 }
 
 const STATUS_PILL: Record<TaskStatus, string> = {
@@ -361,9 +362,6 @@ export function TasksScreen({
                         )}
                       </span>
                       <span className="num mt-0.5 block text-[11px] font-medium text-muted-400">{t.taskNo}</span>
-                      {t.stage && (
-                        <span className="mt-0.5 block text-[11px] font-semibold text-[#5B3FA8]">{t.stage}</span>
-                      )}
                     </Link>
                   </Td>
                   <Td className="text-[12.5px] font-medium text-muted-600">{t.location ?? "—"}</Td>
@@ -382,9 +380,14 @@ export function TasksScreen({
                     {t.attachments > 0 ? `${t.attachments} file(s)` : "—"}
                   </Td>
                   <Td>
-                    <span className={cn("rounded-full px-2.5 py-1 text-[10.5px] font-bold", STATUS_PILL[t.status])}>
-                      {STATUS_LABEL[t.status]}
+                    <span className={cn("whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold", STATUS_PILL[t.status])}>
+                      {t.stage ?? STATUS_LABEL[t.status]}
                     </span>
+                    {t.stageWho && (
+                      <span className="mt-1 block text-[10.5px] font-medium text-muted-500">
+                        with {t.stageWho}
+                      </span>
+                    )}
                     {t.extensionWaiting && (
                       <span className="mt-1 block text-[10px] font-bold text-warn-700">extension waiting</span>
                     )}

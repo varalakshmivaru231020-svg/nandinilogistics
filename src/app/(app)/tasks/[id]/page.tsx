@@ -106,11 +106,11 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
     <TaskDetail
       viewerId={ctx.id}
       nowMs={new Date().getTime()}
+      // The same words the list uses, so one status is one phrase everywhere.
       stage={
-        atLevel
-          ? `Under level ${atLevel.level} ${levelKind === "REVIEW" ? "review" : "approval"} · ${atLevel.user.name}`
-          : null
+        atLevel ? `Under ${levelKind === "REVIEW" ? "review" : "approval"} L${atLevel.level}` : null
       }
+      stageWho={atLevel ? atLevel.user.name : null}
       activeKind={atLevel ? atLevel.kind : null}
       activeLevel={atLevel ? atLevel.level : null}
       nextUp={

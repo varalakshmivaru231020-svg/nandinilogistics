@@ -57,14 +57,15 @@ interface Item {
  * already allowed. The action checks again regardless.
  */
 export function TaskDetail({
-  task, levels, checklists, comments, extensions, files, history, can, nowMs, stage, nextUp,
+  task, levels, checklists, comments, extensions, files, history, can, nowMs, stage, stageWho, nextUp,
   activeKind, activeLevel,
 }: {
   /** The level now holding the task, and its number. */
   activeKind: string | null;
   activeLevel: number | null;
-  /** Where a checklist task is standing, in words. */
+  /** Where a checklist task is standing, and who is holding it. */
   stage: string | null;
+  stageWho: string | null;
   /** Who it reaches after the level holding it now. */
   nextUp: string | null;
   task: Task;
@@ -150,7 +151,7 @@ export function TaskDetail({
               )}
               {stage && (
                 <span className="rounded-full bg-[#DCD2F5] px-2.5 py-1 text-[10.5px] font-bold text-[#4A2F94]">
-                  {stage}
+                  {stage}{stageWho ? ` · ${stageWho}` : ""}
                 </span>
               )}
               {over && (
@@ -195,7 +196,16 @@ export function TaskDetail({
               {checklistLeft} checklist point{checklistLeft === 1 ? "" : "s"} left before this can be completed.
             </span>
           )}
-          {can.resubmit && <Button size="sm" variant="success" onClick={() => { setPrompt("resubmit"); setRemark(""); }}>Resubmit</Button>}
+          {can.resubmit && (
+            <>
+              <Button size="sm" variant="success" onClick={() => { setPrompt("resubmit"); setRemark(""); }}>
+                Resubmit
+              </Button>
+              <span className="text-[12px] font-medium text-muted-600">
+                Resubmitting starts the review again at level 1.
+              </span>
+            </>
+          )}
           {can.close && <Button size="sm" variant="success" onClick={() => { setPrompt("close"); setRemark(""); }}>Approve and close</Button>}
           {can.sendBack && <Button size="sm" variant="outline" onClick={() => { setPrompt("sendBack"); setRemark(""); }}>Send back for rework</Button>}
           {can.reopen && <Button size="sm" variant="outline" onClick={() => { setPrompt("reopen"); setRemark(""); }}>Reopen</Button>}
@@ -207,6 +217,23 @@ export function TaskDetail({
               {judgedLeft > 0
                 ? `${judgedLeft} checklist point${judgedLeft === 1 ? "" : "s"} left for you to approve or deny.`
                 : "Every point judged — this level is done."}
+            </span>
+          )}
+
+          {/*
+            A button that simply vanishes reads as a fault. Once the task is with
+            a level, say so and say why completing is not on offer.
+          */}
+          {!can.review && !can.approve && stage && (
+            <span className="text-[12px] font-medium text-muted-600">
+              {stage}{stageWho ? ` · ${stageWho}` : ""}. It cannot be completed again until
+              {task.status === "UNDER_REVIEW" ? " the review" : " the approval"} is finished.
+            </span>
+          )}
+
+          {task.status === "REWORK" && !can.resubmit && (
+            <span className="text-[12px] font-medium text-muted-600">
+              Sent back for rework — it is with {task.assignee} now.
             </span>
           )}
           {task.status === "CLOSED" && !can.reopen && (

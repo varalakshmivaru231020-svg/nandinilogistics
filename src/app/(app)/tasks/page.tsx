@@ -14,16 +14,17 @@ export const metadata = { title: "Task Management" };
  * organisation's. The scope gives the whole view to Admin alone.
  */
 /**
- * Which level a checklist task is actually sitting at, in words.
+ * Which level a checklist task is actually sitting at.
  *
- * "Under Review" says nothing about who is holding it up; "Under review ·
- * level 2 · Narayan" does, and it is the first thing anyone asks.
+ * "Under Review" says nothing about where it has got to; "Under review L2" is
+ * the status a person means when they ask for one, so it is what the status
+ * column shows. The name of whoever is holding it goes beside the task.
  */
 function stageOf(t: {
   status: string;
   round: number;
   levels: Array<{ kind: string; level: number; user: { name: string }; actions: Array<{ round: number }> }>;
-}): string | null {
+}): { label: string; who: string } | null {
   const kind = t.status === "UNDER_REVIEW" ? "REVIEW" : t.status === "UNDER_APPROVAL" ? "APPROVAL" : null;
   if (!kind) return null;
   const done = new Set(
@@ -33,7 +34,10 @@ function stageOf(t: {
     .filter((l) => l.kind === kind && !done.has(l.level))
     .sort((a, b) => a.level - b.level)[0];
   if (!next) return null;
-  return `Under level ${next.level} ${kind === "REVIEW" ? "review" : "approval"} · ${next.user.name}`;
+  return {
+    label: `Under ${kind === "REVIEW" ? "review" : "approval"} L${next.level}`,
+    who: next.user.name,
+  };
 }
 
 export default async function TasksPage({
@@ -196,7 +200,8 @@ export default async function TasksPage({
         comments: t._count.comments,
         attachments: t._count.attachments,
         extensionWaiting: t.extensions.length > 0,
-        stage: stageOf(t),
+        stage: stageOf(t)?.label ?? null,
+        stageWho: stageOf(t)?.who ?? null,
       }))}
       can={{
         create: ctx.has(PERM.task.task.create),
