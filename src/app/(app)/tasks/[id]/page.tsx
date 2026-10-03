@@ -153,6 +153,10 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           text: i.checkpoint.text,
           marked: i.answeredAt !== null,
           markedAt: i.answeredAt ? i.answeredAt.toISOString() : null,
+          verdict: i.answerChoice,
+          remark: i.answerText,
+          markedBy: task.assignee.name,
+          files: i.attachments.map((a) => ({ id: a.id, fileName: a.fileName })),
           reviews: i.reviews.map((r) => ({
             round: r.round, verdict: r.verdict, remark: r.remark,
             kind: r.level.kind, level: r.level.level,

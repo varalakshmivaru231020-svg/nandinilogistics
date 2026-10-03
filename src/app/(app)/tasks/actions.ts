@@ -806,7 +806,7 @@ export async function deleteTasksAction(ids: string[]): Promise<ActionResult<{ d
  */
 export async function markChecklistItemAction(
   itemId: string,
-  done: boolean,
+  formData: FormData,
 ): Promise<ActionResult<{ done: number; total: number }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.task.task.complete);
@@ -825,10 +825,30 @@ export async function markChecklistItemAction(
       throw new Error("Only the person the task is assigned to works through its checklist.");
     }
 
+    const verdict = String(formData.get("verdict") ?? "");
+    if (verdict !== "APPROVE" && verdict !== "DENY") {
+      throw new Error("Say whether the point is approved or denied.");
+    }
+    const remark = String(formData.get("remark") ?? "").trim();
+
+    const files = filesFrom(formData);
+    assertStorable(files);
+
     await prisma.taskChecklistItem.update({
       where: { id: itemId },
-      data: { answeredAt: done ? new Date() : null },
+      data: { answerChoice: verdict, answerText: remark || null, answeredAt: new Date() },
     });
+
+    for (const file of files) {
+      const stored = await put(`task-${taskId}`, file.name, Buffer.from(await file.arrayBuffer()), file.type);
+      await prisma.taskChecklistItemFile.create({
+        data: {
+          itemId, storageKey: stored.key, fileName: file.name,
+          fileSize: file.size, mimeType: file.type || null, uploadedById: ctx.id,
+        },
+      });
+    }
+
     refresh(taskId);
     return checklistProgress(prisma, taskId);
   });
@@ -842,8 +862,7 @@ export async function markChecklistItemAction(
  */
 export async function reviewChecklistItemAction(
   itemId: string,
-  verdict: "PASS" | "FAIL",
-  remark: string,
+  formData: FormData,
 ): Promise<ActionResult<null>> {
   return runAction(async () => {
     const item = await prisma.taskChecklistItem.findUniqueOrThrow({
@@ -874,10 +893,29 @@ export async function reviewChecklistItemAction(
       select: { id: true },
     });
 
+    const choice = String(formData.get("verdict") ?? "");
+    if (choice !== "APPROVE" && choice !== "DENY") {
+      throw new Error("Say whether the point is approved or denied.");
+    }
+    const verdict = choice === "APPROVE" ? ("PASS" as const) : ("FAIL" as const);
+    const remark = String(formData.get("remark") ?? "").trim();
+
+    const files = filesFrom(formData);
+    assertStorable(files);
+    for (const file of files) {
+      const stored = await put(`task-${taskId}`, file.name, Buffer.from(await file.arrayBuffer()), file.type);
+      await prisma.taskChecklistItemFile.create({
+        data: {
+          itemId, storageKey: stored.key, fileName: file.name,
+          fileSize: file.size, mimeType: file.type || null, uploadedById: ctx.id,
+        },
+      });
+    }
+
     await prisma.taskChecklistItemReview.upsert({
       where: { itemId_levelId_round: { itemId, levelId: row.id, round: shape.round } },
-      create: { itemId, levelId: row.id, round: shape.round, verdict, remark: remark.trim() || null },
-      update: { verdict, remark: remark.trim() || null, actedAt: new Date() },
+      create: { itemId, levelId: row.id, round: shape.round, verdict, remark: remark || null },
+      update: { verdict, remark: remark || null, actedAt: new Date() },
     });
 
     // A level has no verdict of its own beyond the lines it judged. Once every

@@ -32,12 +32,17 @@ interface Level {
   id: string; kind: "REVIEW" | "APPROVAL"; level: number; person: string; isViewer: boolean;
   actions: Array<{ round: number; decision: string; remark: string; actor: string; actedAt: string }>;
 }
-/** A checklist line: a number, a title, whether it is done, and every verdict on it. */
+/** A checklist line: a number, a title, and every judgement on it. */
 interface Item {
   id: string;
   text: string;
   marked: boolean;
   markedAt: string | null;
+  /** What the assignee said about it — APPROVE or DENY — and why. */
+  verdict: string | null;
+  remark: string | null;
+  markedBy: string | null;
+  files: Array<{ id: string; fileName: string }>;
   reviews: Array<{
     round: number; verdict: string; remark: string | null;
     kind: string; level: number; by: string; actedAt: string;
@@ -701,38 +706,50 @@ function ChecklistCard({
 }
 
 /** One line: its number, its title, what has been done to it, and what was said. */
+/**
+ * One line of the checklist: its number, its title, and every judgement on it.
+ *
+ * Approve or deny is the only verdict anyone gives here — the person doing the
+ * work, the reviewers above them and the approvers above those — each with a
+ * remark and photographs if they have them, and none of it required. The same
+ * control serves all three; who is allowed to use it is decided on the server
+ * and passed down.
+ */
 function ChecklistRow({
   item, index, round, canMark, canJudge, activeKind, activeLevel, onDone,
 }: {
   item: Item;
   index: number;
   round: number;
+  /** The assignee, working the list. */
   canMark: boolean;
+  /** The level now holding the task. */
   canJudge: boolean;
-  /** The level now holding the task, so a line knows whose verdict is its own. */
   activeKind: string | null;
   activeLevel: number | null;
   onDone: () => void;
 }) {
   const [busy, setBusy] = React.useState(false);
-  const [writing, setWriting] = React.useState<null | "PASS" | "FAIL">(null);
+  const [writing, setWriting] = React.useState<null | "APPROVE" | "DENY">(null);
   const [remark, setRemark] = React.useState("");
+  const files = React.useRef<HTMLInputElement>(null);
 
   const thisRound = item.reviews.filter((r) => r.round === round);
-  // What the level now holding the task has said about this line, if anything.
   const mineThisLevel = thisRound.find((r) => r.level === activeLevel && r.kind === activeKind) ?? null;
-  const denied = thisRound.some((r) => r.verdict === "FAIL");
+  const denied = thisRound.some((r) => r.verdict === "FAIL") || item.verdict === "DENY";
 
-  async function mark(next: boolean) {
-    setBusy(true);
-    await markChecklistItemAction(item.id, next);
-    setBusy(false);
-    onDone();
-  }
+  // The assignee's own verdict is on the item; a level's is on its review row.
+  const settled = canJudge ? mineThisLevel : item.verdict ? { verdict: item.verdict === "DENY" ? "FAIL" : "PASS", remark: item.remark } : null;
+  const mayAct = canMark || canJudge;
 
-  async function judge(verdict: "PASS" | "FAIL") {
+  async function send(verdict: "APPROVE" | "DENY") {
     setBusy(true);
-    await reviewChecklistItemAction(item.id, verdict, remark);
+    const fd = new FormData();
+    fd.set("verdict", verdict);
+    fd.set("remark", remark);
+    for (const f of Array.from(files.current?.files ?? [])) fd.append("files", f);
+    if (canJudge) await reviewChecklistItemAction(item.id, fd);
+    else await markChecklistItemAction(item.id, fd);
     setBusy(false);
     setWriting(null);
     setRemark("");
@@ -744,49 +761,28 @@ function ChecklistRow({
       <div className="flex flex-wrap items-start gap-3">
         <span className={cn(
           "num mt-[1px] flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px] text-[11px] font-extrabold",
-          item.marked ? "bg-good-600 text-white" : "bg-surface-field text-navy-500",
+          settled
+            ? settled.verdict === "FAIL" ? "bg-bad-600 text-white" : "bg-good-600 text-white"
+            : "bg-surface-field text-navy-500",
         )}>
-          {item.marked ? "✓" : String(index + 1).padStart(2, "0")}
+          {settled ? (settled.verdict === "FAIL" ? "✕" : "✓") : String(index + 1).padStart(2, "0")}
         </span>
 
-        <span className={cn(
-          "min-w-[180px] flex-1 text-[13px] font-semibold",
-          item.marked ? "text-navy-900" : "text-navy-700",
-        )}>
-          {item.text}
-        </span>
+        <span className="min-w-[180px] flex-1 text-[13px] font-semibold text-navy-900">{item.text}</span>
 
-        {canMark && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => mark(!item.marked)}
-            className={cn(
-              "shrink-0 cursor-pointer rounded-[8px] border px-3 py-1.5 text-[11px] font-bold transition-colors disabled:opacity-60",
-              item.marked
-                ? "border-good-400 bg-good-050 text-good-700"
-                : "border-line-400 bg-white text-muted-600 hover:border-brand-500 hover:text-brand-700",
-            )}
-          >
-            {item.marked ? "Done" : "Mark done"}
-          </button>
-        )}
-
-        {canJudge && (
-          mineThisLevel ? (
-            // Decided. The state replaces the buttons, with a way back while
-            // the level is still open — the last verdict closes it.
+        {mayAct && (
+          settled ? (
             <span className="flex shrink-0 items-center gap-2">
               <span className={cn(
                 "rounded-[8px] px-3 py-1.5 text-[11px] font-bold",
-                mineThisLevel.verdict === "FAIL" ? "bg-bad-600 text-white" : "bg-good-600 text-white",
+                settled.verdict === "FAIL" ? "bg-bad-600 text-white" : "bg-good-600 text-white",
               )}>
-                {mineThisLevel.verdict === "FAIL" ? "Denied" : "Approved"}
+                {settled.verdict === "FAIL" ? "Denied" : "Approved"}
               </span>
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => { setWriting(mineThisLevel.verdict as "PASS" | "FAIL"); setRemark(mineThisLevel.remark ?? ""); }}
+                onClick={() => { setWriting(settled.verdict === "FAIL" ? "DENY" : "APPROVE"); setRemark(settled.remark ?? ""); }}
                 className="cursor-pointer text-[11px] font-semibold text-brand-700 hover:underline disabled:opacity-60"
               >
                 Change
@@ -797,7 +793,7 @@ function ChecklistRow({
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => { setWriting("PASS"); setRemark(""); }}
+                onClick={() => { setWriting("APPROVE"); setRemark(""); }}
                 className="cursor-pointer rounded-[8px] border border-good-400 bg-white px-3 py-1.5 text-[11px] font-bold text-good-700 transition-colors hover:bg-good-050 disabled:opacity-60"
               >
                 Approve
@@ -805,7 +801,7 @@ function ChecklistRow({
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => { setWriting("FAIL"); setRemark(""); }}
+                onClick={() => { setWriting("DENY"); setRemark(""); }}
                 className="cursor-pointer rounded-[8px] border border-bad-300 bg-white px-3 py-1.5 text-[11px] font-bold text-bad-700 transition-colors hover:bg-bad-050 disabled:opacity-60"
               >
                 Deny
@@ -816,46 +812,102 @@ function ChecklistRow({
       </div>
 
       {writing && (
-        <div className="mt-2.5 flex flex-wrap items-center gap-2 pl-[38px]">
+        <div className="mt-2.5 space-y-2 rounded-[10px] border border-line-300 bg-surface-sunken p-3 pl-[38px]">
           <input
             value={remark}
             onChange={(e) => setRemark(e.target.value)}
-            placeholder={writing === "FAIL" ? "What is wrong with it?" : "A remark, if you have one"}
+            placeholder={writing === "DENY" ? "What is wrong with it? (optional)" : "A remark, if you have one (optional)"}
             autoFocus
-            className="min-w-[220px] flex-1 rounded-[8px] border border-line-400 bg-surface-sunken px-3 py-2 text-[12px] font-medium text-navy-900 outline-none focus:border-brand-500 focus:bg-white"
+            className="w-full rounded-[8px] border border-line-400 bg-white px-3 py-2 text-[12px] font-medium text-navy-900 outline-none focus:border-brand-500"
           />
-          <Button size="xs" loading={busy} onClick={() => judge(writing)}>
-            {writing === "PASS" ? "Approve" : "Deny"}
-          </Button>
-          <Button size="xs" variant="outline" onClick={() => setWriting(null)}>Cancel</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <input ref={files} type="file" name="files" multiple accept="image/*,.pdf" className="flex-1 text-[11.5px]" />
+            <Button
+              size="xs"
+              loading={busy}
+              variant={writing === "DENY" ? "danger" : "success"}
+              onClick={() => send(writing)}
+            >
+              {writing === "DENY" ? "Deny" : "Approve"}
+            </Button>
+            <Button size="xs" variant="outline" onClick={() => setWriting(null)}>Cancel</Button>
+          </div>
+          <p className="text-[10.5px] font-medium text-muted-400">
+            The remark and the photographs are both optional.
+          </p>
         </div>
       )}
 
-      {/* Every verdict, newest round last, stacked under the line it is about. */}
-      {item.reviews.length > 0 && (
+      {/* What the assignee said, then every level above them, in order. */}
+      {(item.verdict || item.reviews.length > 0 || item.files.length > 0) && (
         <div className="mt-2.5 space-y-1.5 pl-[38px]">
+          {item.verdict && (
+            <Verdict
+              label="Assignee"
+              who={item.markedBy ?? "—"}
+              at={item.markedAt}
+              failed={item.verdict === "DENY"}
+              remark={item.remark}
+            />
+          )}
           {item.reviews.map((r, i) => (
-            <div key={i} className="flex flex-wrap items-baseline gap-2">
-              <span className={cn(
-                "shrink-0 rounded-full px-2 py-[2px] text-[9.5px] font-extrabold uppercase tracking-[.06em]",
-                r.verdict === "FAIL" ? "bg-bad-050 text-bad-700" : "bg-good-050 text-good-700",
-              )}>
-                {r.verdict === "FAIL" ? "Denied" : "Approved"}
-              </span>
-              <span className="text-[11.5px] font-semibold text-navy-700">
-                {r.kind === "REVIEW" ? "Reviewer" : "Approver"} L{r.level} · {r.by}
-              </span>
-              <span className="num text-[10.5px] font-medium text-muted-400">
-                {formatDateTime(r.actedAt)}
-                {r.round !== round && ` · round ${r.round}`}
-              </span>
-              {r.remark && (
-                <span className="w-full text-[12px] font-medium text-muted-600">{r.remark}</span>
-              )}
-            </div>
+            <Verdict
+              key={i}
+              label={`${r.kind === "REVIEW" ? "Reviewer" : "Approver"} L${r.level}`}
+              who={r.by}
+              at={r.actedAt}
+              failed={r.verdict === "FAIL"}
+              remark={r.remark}
+              note={r.round !== round ? `round ${r.round}` : undefined}
+            />
           ))}
+          {item.files.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              {item.files.map((f) => (
+                <a
+                  key={f.id}
+                  href={`/api/tasks/checklist-files/${f.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-[7px] border border-line-400 bg-white px-2.5 py-1 text-[11px] font-semibold text-brand-700 hover:border-brand-500"
+                >
+                  {f.fileName}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** One judgement on a line, in the same shape whoever gave it. */
+function Verdict({
+  label, who, at, failed, remark, note,
+}: {
+  label: string;
+  who: string;
+  at: string | null;
+  failed: boolean;
+  remark: string | null;
+  note?: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-2">
+      <span className={cn(
+        "shrink-0 rounded-full px-2 py-[2px] text-[9.5px] font-extrabold uppercase tracking-[.06em]",
+        failed ? "bg-bad-050 text-bad-700" : "bg-good-050 text-good-700",
+      )}>
+        {failed ? "Denied" : "Approved"}
+      </span>
+      <span className="text-[11.5px] font-semibold text-navy-700">{label} · {who}</span>
+      {at && (
+        <span className="num text-[10.5px] font-medium text-muted-400">
+          {formatDateTime(at)}{note ? ` · ${note}` : ""}
+        </span>
+      )}
+      {remark && <span className="w-full text-[12px] font-medium text-muted-600">{remark}</span>}
     </div>
   );
 }
