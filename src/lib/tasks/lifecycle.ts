@@ -43,7 +43,7 @@ export type TaskAction =
   | "comment"
   | "review"
   | "approve"
-  | "resubmit"
+  | "submit"
   | "reopen"
   | "reassign";
 
@@ -178,9 +178,11 @@ export function canDo(
       return !!next && next.userId === viewer.userId;
     }
 
-    // After a Fail or a Reject the task is the Assignee's again.
-    case "resubmit":
-      return roles.has("ASSIGNEE") && task.status === "REWORK";
+    // Sending the work to be checked: once when it is done, and again after a
+    // rework. The Assignee does not judge the list themselves — they are often
+    // review level 1, and judging it twice is judging it once.
+    case "submit":
+      return roles.has("ASSIGNEE") && (task.status === "STARTED" || task.status === "REWORK");
   }
 }
 
@@ -202,7 +204,7 @@ function adminMayAtStatus(
     case "sendBack": return task.kind === "STANDALONE" && task.status === "COMPLETED";
     case "review": return task.status === "UNDER_REVIEW" && !!activeLevel(task, actedThisRound);
     case "approve": return task.status === "UNDER_APPROVAL" && !!activeLevel(task, actedThisRound);
-    case "resubmit": return task.status === "REWORK";
+    case "submit": return task.status === "STARTED" || task.status === "REWORK";
     default: return true;
   }
 }
@@ -219,13 +221,12 @@ export function statusAfterComplete(task: TaskShape): TaskStatus {
 }
 
 /**
- * Where the assignee finishing their own pass sends the task.
+ * Where submitting the work sends it.
  *
- * They judge every line, and it goes straight to the first level that has to
- * check it — nobody presses anything. With no levels named at all there is
- * nothing to check, and the task waits to be completed as a plain one does.
+ * To the first level that has to check it. With no levels named at all there
+ * is nothing to check, and the task waits to be closed.
  */
-export function statusAfterAssigneePass(task: TaskShape): TaskStatus {
+export function statusAfterSubmit(task: TaskShape): TaskStatus {
   const hasReview = task.levels.some((l) => l.kind === "REVIEW");
   const hasApproval = task.levels.some((l) => l.kind === "APPROVAL");
   if (hasReview) return "UNDER_REVIEW";

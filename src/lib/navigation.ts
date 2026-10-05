@@ -55,6 +55,7 @@ export const NAVIGATION: NavSection[] = [
       { label: "Projects", href: "/projects", icon: "projects", permission: PERM.project.project.view },
       { label: "Tasks", href: "/tasks", icon: "tasks", permission: PERM.task.task.view, badge: "tasks" },
       { label: "Task Reports", href: "/tasks/reports", icon: "reports", permission: PERM.task.report.view },
+      { label: "Performance", href: "/dashboard/performance", icon: "dashboard", permission: PERM.dashboard.performance.view },
       { label: "Checklists", href: "/checklists", icon: "checklists", permission: PERM.checklist.checklist.view },
       { label: "Schedule", href: "/schedule", icon: "schedule", permission: PERM.schedule.activity.view },
     ],

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  activeLevel, canDo, isOverdue, rolesOf, statusAfterAssigneePass, statusAfterComplete,
+  activeLevel, canDo, isOverdue, rolesOf, statusAfterSubmit, statusAfterComplete,
   statusAfterLevel, type TaskShape,
 } from "@/lib/tasks/lifecycle";
 
@@ -147,16 +147,16 @@ describe("where each decision sends the task", () => {
   });
 
   it("sends the assignee's finished list to the first review level", () => {
-    expect(statusAfterAssigneePass(checklistTask())).toBe("UNDER_REVIEW");
+    expect(statusAfterSubmit(checklistTask())).toBe("UNDER_REVIEW");
   });
 
   it("skips review when nobody was named to review it", () => {
     const t = checklistTask({ levels: [{ kind: "APPROVAL", level: 1, userId: A1 }] });
-    expect(statusAfterAssigneePass(t)).toBe("UNDER_APPROVAL");
+    expect(statusAfterSubmit(t)).toBe("UNDER_APPROVAL");
   });
 
   it("is ready to close straight away when no levels were named at all", () => {
-    expect(statusAfterAssigneePass(checklistTask({ levels: [] }))).toBe("APPROVED");
+    expect(statusAfterSubmit(checklistTask({ levels: [] }))).toBe("APPROVED");
   });
 
   it("keeps it under review while a reviewer remains", () => {
@@ -185,7 +185,7 @@ describe("where each decision sends the task", () => {
 
   it("puts a reworked task back in the Assignee's hands", () => {
     const t = checklistTask({ status: "REWORK" });
-    expect(canDo("resubmit", t, as(ASSIGNEE))).toBe(true);
+    expect(canDo("submit", t, as(ASSIGNEE))).toBe(true);
     expect(canDo("review", t, as(R1))).toBe(false);
   });
 
@@ -293,11 +293,20 @@ describe("a task under review cannot be sent to review again", () => {
     }
   });
 
-  it("refuses Resubmit anywhere but Rework", () => {
-    for (const status of ["UNDER_REVIEW", "UNDER_APPROVAL", "CLOSED"] as const) {
-      expect(canDo("resubmit", checklist(status), as(ASSIGNEE)), status).toBe(false);
+  it("submits only from Started or Rework", () => {
+    for (const status of ["UNDER_REVIEW", "UNDER_APPROVAL", "APPROVED", "CLOSED"] as const) {
+      expect(canDo("submit", checklist(status), as(ASSIGNEE)), status).toBe(false);
     }
-    expect(canDo("resubmit", checklist("REWORK"), as(ASSIGNEE))).toBe(true);
+    expect(canDo("submit", checklist("STARTED"), as(ASSIGNEE))).toBe(true);
+    expect(canDo("submit", checklist("REWORK"), as(ASSIGNEE))).toBe(true);
+  });
+
+  it("gives the assignee no verdict of their own on the checklist", () => {
+    // They are usually review level 1. Judging the list as assignee and again
+    // as that reviewer is judging it twice, which is what this removes.
+    const started = checklist("STARTED");
+    expect(canDo("review", started, as(ASSIGNEE))).toBe(false);
+    expect(canDo("approve", started, as(ASSIGNEE))).toBe(false);
   });
 
   it("lets nobody judge a closed task, Admin included", () => {
@@ -310,14 +319,14 @@ describe("a task under review cannot be sent to review again", () => {
 
   it("sends a closed task nowhere — reopening is the only way back", () => {
     const closed = checklist("CLOSED");
-    for (const action of ["complete", "resubmit", "review", "approve", "comment", "close"] as const) {
+    for (const action of ["complete", "submit", "review", "approve", "comment", "close"] as const) {
       expect(canDo(action, closed, admin), action).toBe(false);
     }
     expect(canDo("reopen", closed, admin)).toBe(true);
   });
 
   it("keeps the whole run one-way: list, review, approve, then close", () => {
-    expect(statusAfterAssigneePass(checklist("STARTED"))).toBe("UNDER_REVIEW");
+    expect(statusAfterSubmit(checklist("STARTED"))).toBe("UNDER_REVIEW");
     const review = checklist("UNDER_REVIEW");
     expect(statusAfterLevel(review, "PASS", [])).toBe("UNDER_REVIEW");
     expect(statusAfterLevel(review, "PASS", [{ kind: "REVIEW", level: 1 }])).toBe("UNDER_APPROVAL");

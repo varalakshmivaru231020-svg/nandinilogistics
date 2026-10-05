@@ -196,7 +196,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
       can={{
         accept: may("accept"),
         start: may("start"),
-        resubmit: may("resubmit"),
+        submit: may("submit"),
         close: may("close"),
         sendBack: may("sendBack"),
         reopen: may("reopen"),
@@ -205,9 +205,6 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         decideExtension: may("decideExtension"),
         review: may("review"),
         approve: may("approve"),
-        // Ticking the list off is the assignee's, while the task is open.
-        mark: (task.status === "STARTED" || task.status === "REWORK") &&
-              (task.assigneeId === ctx.id || isAdmin),
         // A checklist task can only be completed once every level has signed
         // off, which the lifecycle already decides from the status.
         complete: may("complete"),

@@ -65,6 +65,7 @@ const TASK_PARTICIPANT = [
   "task.task.update",
   "task.task.delete",
   "task.report.view",
+  "dashboard.performance.view",
   "task.report.export",
   "task.performance.view",
   "task.task.accept",
@@ -481,15 +482,19 @@ export const ROLES: RoleSeed[] = [
 // ---------------------------------------------------------------------------
 
 /**
- * Applies the shipped matrix to every role, and records it as their default.
+ * Applies the shipped matrix to the roles, and records it as their default.
  *
- * `onlyMissing` leaves a role that already exists alone — grants and default
- * both — so a deploy adding a new role does not quietly undo whatever the
- * people using the system have decided since.
+ * Three modes, because the right one differs:
+ *   onlyMissing  adds roles the database does not have and leaves the rest
+ *                entirely alone. The deploy's mode.
+ *   add          also gives existing roles the matrix codes they lack, without
+ *                taking anything away. How a permission added in a release
+ *                reaches the roles meant to hold it.
+ *   (neither)    puts every role back to the matrix, customisation and all.
  */
 export async function applyRoleGrants(
   prisma: PrismaClient,
-  { onlyMissing = false }: { onlyMissing?: boolean } = {},
+  { onlyMissing = false, add = false }: { onlyMissing?: boolean; add?: boolean } = {},
 ) {
   const permIds = new Map(
     (await prisma.permission.findMany({ select: { id: true, code: true } })).map((p) => [p.code, p.id]),
@@ -497,12 +502,34 @@ export async function applyRoleGrants(
 
   for (const r of ROLES) {
     const existing = await prisma.role.findUnique({ where: { code: r.code }, select: { id: true } });
-    if (existing && onlyMissing) {
-      console.log(`  role ${r.code.padEnd(16)} → left as it is`);
+    const codes = resolveCodes(r.grant, r.deny);
+
+    if (existing && (onlyMissing || add)) {
+      if (onlyMissing) {
+        console.log(`  role ${r.code.padEnd(16)} → left as it is`);
+        continue;
+      }
+      // Additive: give it what the matrix says it should have and it does not,
+      // and take nothing away.
+      const held = new Set(
+        (await prisma.rolePermission.findMany({
+          where: { roleId: existing.id },
+          select: { permission: { select: { code: true } } },
+        })).map((x) => x.permission.code),
+      );
+      const missing = codes.filter((c) => !held.has(c));
+      if (missing.length > 0) {
+        await prisma.rolePermission.createMany({
+          data: missing
+            .map((c) => permIds.get(c))
+            .filter((id): id is string => Boolean(id))
+            .map((permissionId) => ({ roleId: existing.id, permissionId })),
+          skipDuplicates: true,
+        });
+      }
+      console.log(`  role ${r.code.padEnd(16)} → +${missing.length} added, ${held.size} kept`);
       continue;
     }
-
-    const codes = resolveCodes(r.grant, r.deny);
     const role = await prisma.role.upsert({
       where: { code: r.code },
       create: {

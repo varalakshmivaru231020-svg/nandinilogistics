@@ -133,6 +133,8 @@ perm("dashboard", "projectManager", "view", "Project Manager dashboard", G_DASH,
 perm("dashboard", "supervisor", "view", "Supervisor dashboard", G_DASH, "PAGE", "My indents, material issued to me, today's site log.");
 perm("dashboard", "storeManager", "view", "Store Manager dashboard", G_DASH, "PAGE", "Stock and valuation, reorder alerts, open POs, vendor outstanding.");
 perm("dashboard", "sales", "view", "Sales dashboard", G_DASH, "PAGE", "Leads by stage, follow-ups due, available units, bookings and collections.");
+perm("dashboard", "performance", "view", "Performance dashboard", G_DASH, "PAGE",
+  "Every module's health on one screen, with the employee performance matrix.");
 perm("dashboard", "widget", "viewFinancials", "See money figures on dashboards", G_DASH, "FIELD", "Hides every amount, budget and valuation tile when not granted.");
 
 // Every approval in one place. The screen shows only what the viewer already

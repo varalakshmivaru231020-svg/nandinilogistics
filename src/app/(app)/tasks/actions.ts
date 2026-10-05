@@ -8,11 +8,10 @@ import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
 import {
-  canDo, statusAfterAssigneePass, statusAfterComplete, statusAfterLevel, type TaskAction,
+  canDo, statusAfterSubmit, statusAfterComplete, statusAfterLevel, type TaskAction,
 } from "@/lib/tasks/lifecycle";
 import {
-  actedThisRound, applyExtensionDecision, checklistAllMarked, checklistProgress,
-  logTaskEvent, moveStatus, shapeOf,
+  actedThisRound, applyExtensionDecision, logTaskEvent, moveStatus, shapeOf,
 } from "@/lib/tasks/service";
 import { assertStorable, filesFrom } from "@/lib/material/grn-attachments";
 import { audienceFor, notifyTask, type TaskEventKind } from "@/lib/tasks/notify";
@@ -332,30 +331,39 @@ export async function completeTaskAction(id: string, remark: string): Promise<Ac
   });
 }
 
-export async function resubmitTaskAction(id: string, remark: string): Promise<ActionResult<null>> {
+/**
+ * Sending the work to be checked.
+ *
+ * Once when it is done, and again after a rework — which starts a fresh round,
+ * so every level judges it anew. The assignee does not judge the checklist
+ * themselves: they are usually review level 1, and a list judged twice by the
+ * same person is a list judged once.
+ */
+export async function submitForReviewAction(
+  id: string,
+  remark: string,
+): Promise<ActionResult<{ status: string }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.task.task.complete);
-    const { shape } = await assertMay("resubmit", id, ctx.id, await isAdminOf(ctx));
-    if (!remark.trim()) throw new Error("Say what was corrected before resubmitting.");
-    if (!(await checklistAllMarked(prisma, id))) {
-      const { done, total } = await checklistProgress(prisma, id);
-      throw new Error(`${done} of ${total} checklist points are marked. Finish the list first.`);
-    }
+    const { shape } = await assertMay("submit", id, ctx.id, await isAdminOf(ctx));
+    const again = shape.status === "REWORK";
+    if (again && !remark.trim()) throw new Error("Say what was corrected before resubmitting.");
 
-    // A resubmission is a new round, and the flow restarts at Reviewer Level 1.
-    const to = statusAfterAssigneePass(shape);
+    const to = statusAfterSubmit(shape);
     await prisma.$transaction(async (tx) => {
       await moveStatus(tx, {
-        taskId: id, actorId: ctx.id, from: shape.status, to, remark,
-        extra: { round: { increment: 1 } },
+        taskId: id, actorId: ctx.id, from: shape.status, to,
+        remark: remark.trim() || null,
+        extra: again ? { round: { increment: 1 } } : {},
       });
-      await tell(tx, "STATUS_CHANGED", id, ctx.id, "Corrected and resubmitted", remark.trim());
+      await tell(tx, "STATUS_CHANGED", id, ctx.id,
+        again ? "Corrected and resubmitted" : "Sent for review", remark.trim());
       if (to === "UNDER_REVIEW" || to === "UNDER_APPROVAL") {
         await tellActiveLevel(tx, id, ctx.id);
       }
     });
     refresh(id);
-    return null;
+    return { status: to };
   });
 }
 
@@ -792,82 +800,9 @@ export async function deleteTasksAction(ids: string[]): Promise<ActionResult<{ d
   });
 }
 
-
 // --------------------------------------------------------------------------
 // Working through the checklist, and judging it
 // --------------------------------------------------------------------------
-
-/**
- * The assignee ticking one checklist point off, or putting it back.
- *
- * This is the step marking the list is for: the task cannot be completed until
- * every point is marked, so the checklist is worked through rather than
- * remembered.
- */
-export async function markChecklistItemAction(
-  itemId: string,
-  formData: FormData,
-): Promise<ActionResult<{ done: number; total: number }>> {
-  return runAction(async () => {
-    const ctx = await authorize(PERM.task.task.complete);
-    const item = await prisma.taskChecklistItem.findUniqueOrThrow({
-      where: { id: itemId },
-      select: { taskChecklist: { select: { taskId: true } } },
-    });
-    const taskId = item.taskChecklist.taskId;
-
-    const shape = await shapeOf(prisma, taskId);
-    const admin = await isAdminOf(ctx);
-    if (!["STARTED", "REWORK"].includes(shape.status)) {
-      throw new Error("The checklist is worked through while the task is open.");
-    }
-    if (shape.assigneeId !== ctx.id && !admin) {
-      throw new Error("Only the person the task is assigned to works through its checklist.");
-    }
-
-    const verdict = String(formData.get("verdict") ?? "");
-    if (verdict !== "APPROVE" && verdict !== "DENY") {
-      throw new Error("Say whether the point is approved or denied.");
-    }
-    const remark = String(formData.get("remark") ?? "").trim();
-
-    const files = filesFrom(formData);
-    assertStorable(files);
-
-    await prisma.taskChecklistItem.update({
-      where: { id: itemId },
-      data: { answerChoice: verdict, answerText: remark || null, answeredAt: new Date() },
-    });
-
-    for (const file of files) {
-      const stored = await put(`task-${taskId}`, file.name, Buffer.from(await file.arrayBuffer()), file.type);
-      await prisma.taskChecklistItemFile.create({
-        data: {
-          itemId, storageKey: stored.key, fileName: file.name,
-          fileSize: file.size, mimeType: file.type || null, uploadedById: ctx.id,
-        },
-      });
-    }
-
-    // Judging the last line hands the task to whoever has to check it. Nobody
-    // presses anything: finishing the list is the submission.
-    if (await checklistAllMarked(prisma, taskId)) {
-      const to = statusAfterAssigneePass(shape);
-      await prisma.$transaction(async (tx) => {
-        await moveStatus(tx, {
-          taskId, actorId: ctx.id, from: shape.status, to,
-          remark: "Checklist finished by the assignee",
-        });
-        if (to === "UNDER_REVIEW" || to === "UNDER_APPROVAL") {
-          await tellActiveLevel(tx, taskId, ctx.id);
-        }
-      });
-    }
-
-    refresh(taskId);
-    return checklistProgress(prisma, taskId);
-  });
-}
 
 /**
  * A reviewer or an approver judging one point, at the level they hold.

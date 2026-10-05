@@ -13,10 +13,9 @@ import { useToast } from "@/components/ui/toast";
 import { cn, formatDateTime } from "@/lib/utils";
 import { STATUS_LABEL, isOverdue } from "@/lib/tasks/lifecycle";
 import {
-  acceptTaskAction, addCommentAction, closeTaskAction, markChecklistItemAction,
-  reviewChecklistItemAction,
+  acceptTaskAction, addCommentAction, closeTaskAction, reviewChecklistItemAction,
   completeTaskAction, decideExtensionAction, deleteCommentAction,
-  editCommentAction, reopenTaskAction, requestExtensionAction, resubmitTaskAction,
+  editCommentAction, reopenTaskAction, requestExtensionAction, submitForReviewAction,
   sendBackTaskAction, startTaskAction,
 } from "../actions";
 
@@ -91,16 +90,13 @@ export function TaskDetail({
   const toast = useToast();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [prompt, setPrompt] = React.useState<null | "complete" | "close" | "sendBack" | "reopen" | "resubmit">(null);
+  const [prompt, setPrompt] = React.useState<null | "complete" | "close" | "sendBack" | "reopen" | "submit">(null);
   const [remark, setRemark] = React.useState("");
   const [asking, setAsking] = React.useState(false);
   const [deciding, setDeciding] = React.useState<string | null>(null);
   // Checklist / Review and approval / History, as horizontal tabs. A plain task
   // has no checklist, so it opens on the history it does have.
   const hasChecklist = checklists.length > 0;
-  const checklistLeft = checklists.reduce(
-    (n, c) => n + c.items.filter((i) => !i.marked).length, 0,
-  );
   // How many lines the level holding the task has yet to judge.
   const judgedLeft = checklists.reduce(
     (n, c) =>
@@ -191,19 +187,16 @@ export function TaskDetail({
               {task.kind === "CHECKLIST" ? "Mark complete and close" : "Mark complete"}
             </Button>
           )}
-          {!can.complete && can.mark && checklistLeft > 0 && (
-            <span className="text-[12px] font-medium text-muted-500">
-              {checklistLeft} checklist point{checklistLeft === 1 ? "" : "s"} left. Finishing the list
-              sends it to the reviewers.
-            </span>
-          )}
-          {can.resubmit && (
+
+          {can.submit && (
             <>
-              <Button size="sm" variant="success" onClick={() => { setPrompt("resubmit"); setRemark(""); }}>
-                Resubmit
+              <Button size="sm" onClick={() => { setPrompt("submit"); setRemark(""); }}>
+                {task.status === "REWORK" ? "Resubmit for review" : "Send for review"}
               </Button>
               <span className="text-[12px] font-medium text-muted-600">
-                Resubmitting starts the review again at level 1.
+                {task.status === "REWORK"
+                  ? "Resubmitting starts the review again at level 1."
+                  : "It goes to the first review level; the checklist is judged there."}
               </span>
             </>
           )}
@@ -298,7 +291,6 @@ export function TaskDetail({
           key={cl.id}
           list={cl}
           round={task.round}
-          canMark={can.mark}
           canJudge={can.review || can.approve}
           judgeLabel={can.review ? "Yours to review" : "Yours to approve"}
           activeKind={activeKind}
@@ -463,7 +455,7 @@ export function TaskDetail({
         <RemarkModal
           title={{
             complete: task.kind === "CHECKLIST" ? "Complete and close this task" : "Mark this task complete",
-            resubmit: "Resubmit for review",
+            submit: task.status === "REWORK" ? "Resubmit for review" : "Send for review",
             close: "Approve and close",
             sendBack: "Send back for rework",
             reopen: "Reopen this closed task",
@@ -472,7 +464,9 @@ export function TaskDetail({
             complete: task.kind === "CHECKLIST"
               ? "Every level has signed off. A closure remark is required, and this closes the task."
               : "A closure remark is required.",
-            resubmit: "Say what you corrected.",
+            submit: task.status === "REWORK"
+              ? "Say what you corrected — it goes to the reviewers with it."
+              : "A note for the reviewers, if you have one. Optional.",
             close: "A remark is required, and goes on the record.",
             sendBack: "Say what needs redoing — the Assignee will see it.",
             reopen: "Say why it is being reopened.",
@@ -484,7 +478,7 @@ export function TaskDetail({
           onConfirm={() => {
             const work = {
               complete: () => completeTaskAction(task.id, remark),
-              resubmit: () => resubmitTaskAction(task.id, remark),
+              submit: () => submitForReviewAction(task.id, remark),
               close: () => closeTaskAction(task.id, remark),
               sendBack: () => sendBackTaskAction(task.id, remark),
               reopen: () => reopenTaskAction(task.id, remark),
@@ -667,11 +661,10 @@ function DecideExtensionModal({
  * remark has to sit under the point it is about to be worth reading.
  */
 function ChecklistCard({
-  list, round, canMark, canJudge, judgeLabel, activeKind, activeLevel, onDone,
+  list, round, canJudge, judgeLabel, activeKind, activeLevel, onDone,
 }: {
   list: { id: string; name: string; items: Item[] };
   round: number;
-  canMark: boolean;
   canJudge: boolean;
   judgeLabel: string;
   activeKind: string | null;
@@ -723,7 +716,6 @@ function ChecklistCard({
             item={item}
             index={i}
             round={round}
-            canMark={canMark}
             canJudge={canJudge}
             activeKind={activeKind}
             activeLevel={activeLevel}
@@ -746,13 +738,11 @@ function ChecklistCard({
  * and passed down.
  */
 function ChecklistRow({
-  item, index, round, canMark, canJudge, activeKind, activeLevel, onDone,
+  item, index, round, canJudge, activeKind, activeLevel, onDone,
 }: {
   item: Item;
   index: number;
   round: number;
-  /** The assignee, working the list. */
-  canMark: boolean;
   /** The level now holding the task. */
   canJudge: boolean;
   activeKind: string | null;
@@ -765,12 +755,9 @@ function ChecklistRow({
   const files = React.useRef<HTMLInputElement>(null);
 
   const thisRound = item.reviews.filter((r) => r.round === round);
-  const mineThisLevel = thisRound.find((r) => r.level === activeLevel && r.kind === activeKind) ?? null;
-  const denied = thisRound.some((r) => r.verdict === "FAIL") || item.verdict === "DENY";
-
-  // The assignee's own verdict is on the item; a level's is on its review row.
-  const settled = canJudge ? mineThisLevel : item.verdict ? { verdict: item.verdict === "DENY" ? "FAIL" : "PASS", remark: item.remark } : null;
-  const mayAct = canMark || canJudge;
+  // What the level now holding the task has said about this line, if anything.
+  const settled = thisRound.find((r) => r.level === activeLevel && r.kind === activeKind) ?? null;
+  const denied = thisRound.some((r) => r.verdict === "FAIL");
 
   async function send(verdict: "APPROVE" | "DENY") {
     setBusy(true);
@@ -778,8 +765,7 @@ function ChecklistRow({
     fd.set("verdict", verdict);
     fd.set("remark", remark);
     for (const f of Array.from(files.current?.files ?? [])) fd.append("files", f);
-    if (canJudge) await reviewChecklistItemAction(item.id, fd);
-    else await markChecklistItemAction(item.id, fd);
+    await reviewChecklistItemAction(item.id, fd);
     setBusy(false);
     setWriting(null);
     setRemark("");
@@ -800,7 +786,7 @@ function ChecklistRow({
 
         <span className="min-w-[180px] flex-1 text-[13px] font-semibold text-navy-900">{item.text}</span>
 
-        {mayAct && (
+        {canJudge && (
           settled ? (
             <span className="flex shrink-0 items-center gap-2">
               <span className={cn(
@@ -868,18 +854,9 @@ function ChecklistRow({
         </div>
       )}
 
-      {/* What the assignee said, then every level above them, in order. */}
-      {(item.verdict || item.reviews.length > 0 || item.files.length > 0) && (
+      {/* Every level that has judged this line, in order. */}
+      {(item.reviews.length > 0 || item.files.length > 0) && (
         <div className="mt-2.5 space-y-1.5 pl-[38px]">
-          {item.verdict && (
-            <Verdict
-              label="Assignee"
-              who={item.markedBy ?? "—"}
-              at={item.markedAt}
-              failed={item.verdict === "DENY"}
-              remark={item.remark}
-            />
-          )}
           {item.reviews.map((r, i) => (
             <Verdict
               key={i}
