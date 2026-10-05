@@ -29,7 +29,6 @@ export async function uploadDocumentAction(
     const title = String(formData.get("title") ?? "").trim();
     const documentTypeId = String(formData.get("documentTypeId") ?? "").trim();
     const supersedesId = String(formData.get("supersedesId") ?? "").trim() || null;
-    const expiryDate = String(formData.get("expiryDate") ?? "").trim();
     const access = String(formData.get("access") ?? "").trim() || null;
 
     if (!title) throw new Error("Give the document a title.");
@@ -75,7 +74,6 @@ export async function uploadDocumentAction(
         version,
         supersedesId,
         access,
-        expiryDate: expiryDate ? new Date(expiryDate) : null,
         uploadedById: ctx.id,
       },
     });

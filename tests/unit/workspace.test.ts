@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { projectScopeWhere, scopeToWorkspace } from "@/lib/workspace";
 import { projectListWhere, type ProjectScope } from "@/lib/projects/list-filters";
 
-const params = { q: "", status: "" };
+const params = { q: "", status: "", type: "", city: "", manager: "" };
 
 describe("scopeToWorkspace", () => {
   it("narrows to the chosen project", () => {

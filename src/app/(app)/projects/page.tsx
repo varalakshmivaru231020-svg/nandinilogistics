@@ -6,7 +6,11 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { Badge, Card, EmptyState } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
-import { projectListWhere, readProjectListParams } from "@/lib/projects/list-filters";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import {
+  PROJECT_STATUSES, projectFiltersApplied, projectListWhere,
+  readProjectListParams,
+} from "@/lib/projects/list-filters";
 import { NewProjectButton } from "./new-project-button";
 
 export const metadata = { title: "Project Management" };
@@ -37,13 +41,17 @@ export default async function ProjectsPage({
   const ctx = await requirePermission(PERM.project.project.view);
   const raw = await searchParams;
   const listParams = readProjectListParams(raw);
-  const filtered = Boolean(listParams.q || listParams.status);
+  const filtered = projectFiltersApplied(listParams);
 
   // Project-team scoping (you only see projects mapped to you), then the
   // search and status filter — the same function the export uses.
   const where = projectListWhere(ctx, listParams);
 
-  const [projects, types] = await Promise.all([
+  // The dropdowns offer what the projects in scope actually carry, so a filter
+  // never lists a choice that finds nothing.
+  const inScope = projectListWhere(ctx, { q: "", status: "", type: "", city: "", manager: "" });
+
+  const [projects, types, cities, managers] = await Promise.all([
     prisma.project.findMany({
       where,
       orderBy: [{ status: "asc" }, { name: "asc" }],
@@ -56,6 +64,16 @@ export default async function ProjectsPage({
       },
     }),
     prisma.projectType.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
+    prisma.city.findMany({
+      where: { projects: { some: inScope } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.user.findMany({
+      where: { managedProjects: { some: inScope } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   const totalUnits = projects.reduce((s, p) => s + p._count.units, 0);
@@ -74,6 +92,38 @@ export default async function ProjectsPage({
           <NewProjectButton types={types} />
         )}
       </div>
+
+      <ListToolbar
+        searchPlaceholder="Search project name, code, RERA number, city or manager…"
+        filters={[
+          {
+            name: "status",
+            label: "Status",
+            allLabel: "All statuses",
+            options: PROJECT_STATUSES.map((v) => ({ value: v, label: STATUS_LABEL[v] })),
+          },
+          {
+            name: "type",
+            label: "Type",
+            allLabel: "All types",
+            options: types.map((t) => ({ value: t.id, label: t.name })),
+          },
+          {
+            name: "city",
+            label: "City",
+            allLabel: "All cities",
+            options: cities.map((c) => ({ value: c.id, label: c.name })),
+          },
+          {
+            name: "manager",
+            label: "Manager",
+            allLabel: "All managers",
+            options: managers.map((m) => ({ value: m.id, label: m.name })),
+          },
+        ]}
+        count={projects.length}
+        countNoun="project"
+      />
 
       {projects.length === 0 ? (
         <Card>

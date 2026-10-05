@@ -38,6 +38,10 @@ export interface ProjectListParams {
   q: string;
   /** A ProjectStatus, or "" for every status. */
   status: string;
+  /** Ids, or "" for every one. The screen offers a dropdown per parameter. */
+  type: string;
+  city: string;
+  manager: string;
 }
 
 export function readProjectListParams(source: ParamSource): ProjectListParams {
@@ -47,7 +51,15 @@ export function readProjectListParams(source: ParamSource): ProjectListParams {
     // A status that is not a status (a hand-edited URL) filters nothing rather
     // than reaching the database as an invalid enum.
     status: (PROJECT_STATUSES as readonly string[]).includes(status) ? status : "",
+    type: read(source, "type"),
+    city: read(source, "city"),
+    manager: read(source, "manager"),
   };
+}
+
+/** Whether anything at all narrows the list — what the empty state asks. */
+export function projectFiltersApplied(p: ProjectListParams): boolean {
+  return Boolean(p.q.trim() || p.status || p.type || p.city || p.manager);
 }
 
 export function projectListWhere(scope: ProjectScope, p: ProjectListParams): Prisma.ProjectWhereInput {
@@ -72,6 +84,11 @@ export function projectListWhere(scope: ProjectScope, p: ProjectListParams): Pri
         }
       : {}),
     ...(p.status ? { status: p.status as ProjectStatus } : {}),
+    // An id that matches nothing finds nothing, which is the honest answer to
+    // a filter for something that is not there.
+    ...(p.type ? { projectTypeId: p.type } : {}),
+    ...(p.city ? { cityId: p.city } : {}),
+    ...(p.manager ? { projectManagerId: p.manager } : {}),
   };
 }
 
@@ -79,6 +96,10 @@ export function describeProjectFilters(p: ProjectListParams, scope: ProjectScope
   const parts = [
     p.q.trim() ? `Search "${p.q.trim()}"` : null,
     p.status ? `Status ${PROJECT_STATUS_LABEL[p.status as ProjectStatus].toLowerCase()}` : null,
+    // Ids are not worth printing; that one is set is.
+    p.type ? "Type filtered" : null,
+    p.city ? "City filtered" : null,
+    p.manager ? "Manager filtered" : null,
     scope.canAccessAllProjects ? null : "Your mapped projects",
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : "All projects";

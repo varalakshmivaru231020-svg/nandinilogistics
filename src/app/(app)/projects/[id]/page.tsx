@@ -111,7 +111,7 @@ export default async function ProjectDetailPage({
   const documentTypes = ctx.has(PERM.project.project.tabDocuments)
     ? await prisma.documentType.findMany({
         where: { status: "ACTIVE", scope: "project" },
-        select: { id: true, name: true, requiresExpiry: true },
+        select: { id: true, name: true },
         orderBy: { name: "asc" },
       })
     : [];
@@ -299,7 +299,6 @@ export default async function ProjectDetailPage({
           {tab === "docs" && (
             <DocumentsTab
               projectId={id}
-              nowMs={new Date().getTime()}
               documentTypes={documentTypes}
               documents={project.documents.map((d) => ({
                 id: d.id,
@@ -308,7 +307,6 @@ export default async function ProjectDetailPage({
                 version: d.version,
                 supersedesId: d.supersedesId,
                 hasNewerVersion: d._count.versions > 0,
-                expiryDate: d.expiryDate?.toISOString() ?? null,
                 createdAt: d.createdAt.toISOString(),
                 typeId: d.documentType.id,
                 typeName: d.documentType.name,

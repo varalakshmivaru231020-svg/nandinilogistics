@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Field, Input, Select } from "@/components/ui/primitives";
 import { cn, formatDate } from "@/lib/utils";
+import { documentChains } from "@/lib/projects/document-chains";
 import { deleteDocumentAction, updateDocumentAction, uploadDocumentAction } from "./actions";
 
 export interface DocumentRow {
@@ -16,7 +17,6 @@ export interface DocumentRow {
   version: number;
   supersedesId: string | null;
   hasNewerVersion: boolean;
-  expiryDate: string | null;
   createdAt: string;
   typeId: string;
   typeName: string;
@@ -43,13 +43,12 @@ function tagOf(typeName: string): { label: string; tone: string } {
 }
 
 export function DocumentsTab({
-  projectId, documents, documentTypes, can, nowMs,
+  projectId, documents, documentTypes, can,
 }: {
   projectId: string;
   documents: DocumentRow[];
-  documentTypes: Array<{ id: string; name: string; requiresExpiry: boolean }>;
+  documentTypes: Array<{ id: string; name: string }>;
   can: Record<string, boolean>;
-  nowMs: number;
 }) {
   const router = useRouter();
   const [uploading, setUploading] = React.useState(false);
@@ -59,8 +58,10 @@ export function DocumentsTab({
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
-  // Only the newest version of each chain leads the list.
-  const current = documents.filter((d) => !d.hasNewerVersion);
+  // Every version is listed: the one in force leads its chain and the ones it
+  // replaced sit under it, newest first. They were always stored and never
+  // deletable — they just had nowhere to be seen.
+  const chains = documentChains(documents);
 
   async function remove() {
     if (!confirming) return;
@@ -76,7 +77,7 @@ export function DocumentsTab({
     <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
-          Document repository · {current.length} files
+          Document repository · {chains.length} files
         </div>
         {can.upload && (
           <button
@@ -91,14 +92,11 @@ export function DocumentsTab({
 
       {error && <div className="mb-3"><Alert tone="error">{error}</Alert></div>}
 
-      {current.map((d) => {
+      {chains.map(({ current: d, older }) => {
         const tag = tagOf(d.typeName);
-        const expired = d.expiryDate ? new Date(d.expiryDate).getTime() < nowMs : false;
         return (
-          <div
-            key={d.id}
-            className="flex items-center gap-[11px] border-b border-line-100 py-2.5 last:border-0 hover:bg-surface-tint"
-          >
+          <div key={d.id} className="border-b border-line-100 py-2.5 last:border-0">
+          <div className="flex items-center gap-[11px] hover:bg-surface-tint">
             <span className={cn("rounded-full px-[9px] py-1 text-[9px] font-bold tracking-[.06em]", tag.tone)}>
               {tag.label}
             </span>
@@ -113,7 +111,6 @@ export function DocumentsTab({
               <div className="mt-0.5 text-[11px] font-medium text-muted-400">
                 v{d.version} · {formatDate(d.createdAt)}
                 {d.uploadedByName ? ` · ${d.uploadedByName}` : ""}
-                {expired ? " · expired" : d.expiryDate ? ` · expires ${formatDate(d.expiryDate)}` : ""}
               </div>
             </div>
             <span className="shrink-0 rounded-full bg-surface-field px-[9px] py-1 text-[10.5px] font-semibold text-muted-500">
@@ -147,10 +144,32 @@ export function DocumentsTab({
               </button>
             )}
           </div>
+
+          {older.length > 0 && (
+            <div className="mt-1.5 pl-[58px]">
+              {older.map((o) => (
+                <div key={o.id} className="flex items-center gap-2 py-[3px] text-[11px] font-medium text-muted-400">
+                  <span className="shrink-0 rounded-full bg-surface-field px-[7px] py-px text-[9.5px] font-bold text-muted-500">
+                    v{o.version}
+                  </span>
+                  {can.download ? (
+                    <a href={`/api/documents/${o.id}`} className="truncate hover:text-brand-600">
+                      {o.title}
+                    </a>
+                  ) : (
+                    <span className="truncate">{o.title}</span>
+                  )}
+                  <span className="shrink-0">· {formatDate(o.createdAt)}</span>
+                  {o.uploadedByName && <span className="shrink-0 truncate">· {o.uploadedByName}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          </div>
         );
       })}
 
-      {current.length === 0 && (
+      {chains.length === 0 && (
         <div className="py-6 text-center text-[12px] font-medium text-muted-400">
           Drawings, approvals, licences and agreements live here, with version history.
         </div>
@@ -209,7 +228,7 @@ function UploadModal({
   projectId, documentTypes, superseding, onClose, onDone,
 }: {
   projectId: string;
-  documentTypes: Array<{ id: string; name: string; requiresExpiry: boolean }>;
+  documentTypes: Array<{ id: string; name: string }>;
   superseding: DocumentRow | null;
   onClose: () => void;
   onDone: () => void;
@@ -265,10 +284,6 @@ function UploadModal({
           <Select name="access" defaultValue={superseding?.access ?? ACCESS_CHOICES[0]}>
             {ACCESS_CHOICES.map((a) => <option key={a} value={a}>{a}</option>)}
           </Select>
-        </Field>
-
-        <Field label="Expiry date" hint="For licences and certificates that lapse.">
-          <Input name="expiryDate" type="date" />
         </Field>
 
         <Field label="File" required>
