@@ -122,6 +122,7 @@ export default async function EmployeeDetailPage({
         name: employee.name,
         initials: employee.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase(),
         avatar: AVATAR_COLOURS[employee.name.length % AVATAR_COLOURS.length],
+        hasPhoto: employee.photoKey !== null,
         type: employee.employmentType.name,
         designation: employee.designation?.name ?? "—",
         fields: [

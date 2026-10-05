@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "crypto";
 import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import { dirname, extname, join, normalize, resolve, sep } from "path";
 
+import { ACCEPTED_MIME, MAX_UPLOAD_BYTES } from "./upload-rules";
+
 /**
  * Document storage.
  *
@@ -29,21 +31,10 @@ function root(): string {
 }
 
 /** 25 MB — enough for a drawing set, small enough to keep a request honest. */
-export const MAX_FILE_BYTES = 25 * 1024 * 1024;
-
-export const ALLOWED_MIME = new Set([
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/msword",
-  "application/vnd.ms-excel",
-  "image/vnd.dwg",
-  "application/acad",
-  "text/plain",
-]);
+// The rules themselves live in upload-rules.ts, which a form can import too —
+// a screen that offers a file type the server refuses is a screen that lies.
+export const MAX_FILE_BYTES = MAX_UPLOAD_BYTES;
+export const ALLOWED_MIME = new Set<string>(ACCEPTED_MIME);
 
 export class FileTooLargeError extends Error {
   constructor(bytes: number) {

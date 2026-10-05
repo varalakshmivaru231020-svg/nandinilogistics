@@ -7,9 +7,13 @@ const nextConfig: NextConfig = {
   // loaded from node_modules instead.
   serverExternalPackages: ["pdfkit", "exceljs"],
   experimental: {
-    // Imports upload a spreadsheet through a server action. The 1 MB default
-    // refuses a real lead list; the parser itself caps files at 4 MB.
-    serverActions: { bodySizeLimit: "5mb" },
+    // Every upload in the app goes through a server action, and the storage
+    // layer accepts files up to 25 MB. This has to clear that with room for the
+    // multipart envelope, or a file the app would happily store is refused by
+    // the framework first — with an error the app never sees and cannot
+    // explain. src/lib/storage.ts owns the real limit; this only has to be
+    // comfortably above it.
+    serverActions: { bodySizeLimit: "30mb" },
   },
 };
 

@@ -47,6 +47,8 @@ export function EmployeeDetail({
   employee: {
     id: string; name: string; initials: string; avatar: string;
     type: string; designation: string;
+    /** Whether a photograph was uploaded, so the card knows which to draw. */
+    hasPhoto: boolean;
     fields: Array<{ k: string; v: string }>;
   };
   documents: Array<{ id: string; kind: string; fileName: string; size: string }>;
@@ -139,12 +141,26 @@ export function EmployeeDetail({
       <div className="grid gap-3.5 lg:[grid-template-columns:330px_1fr]">
         <div className="space-y-3.5">
           <div className="rounded-[13px] border border-line-400 bg-white px-5 py-[18px] text-center">
-            <span
-              className="mx-auto flex h-[150px] w-[150px] items-center justify-center rounded-[18px] font-display text-[46px] font-bold text-white"
-              style={{ background: employee.avatar }}
-            >
-              {employee.initials}
-            </span>
+            {/*
+              The photograph if there is one, the initials if there is not.
+              Both occupy the same square, so a record without a photo does not
+              change the shape of the card.
+            */}
+            {employee.hasPhoto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`/api/hr/photo/${employee.id}`}
+                alt={employee.name}
+                className="mx-auto h-[150px] w-[150px] rounded-[18px] object-cover"
+              />
+            ) : (
+              <span
+                className="mx-auto flex h-[150px] w-[150px] items-center justify-center rounded-[18px] font-display text-[46px] font-bold text-white"
+                style={{ background: employee.avatar }}
+              >
+                {employee.initials}
+              </span>
+            )}
             <div className="mt-3.5 font-display text-[16px] font-bold text-navy-950">{employee.name}</div>
             <div className="mt-0.5 text-[12px] font-semibold text-brand-700">{employee.designation}</div>
             <div className="mt-2">

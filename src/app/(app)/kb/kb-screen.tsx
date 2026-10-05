@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { Drawer } from "@/components/ui/drawer";
 import { Modal } from "@/components/ui/modal";
+import { ACCEPT_ATTR, ACCEPTED_LABEL, uploadProblem } from "@/lib/upload-rules";
+
 /** The design stamps an article in figures: 02/09/2026, 11:20. */
 function stamp(value: string) {
   const d = new Date(value);
@@ -371,6 +373,22 @@ function ArticleForm({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [files, setFiles] = React.useState<string[]>([]);
+  const [fileProblem, setFileProblem] = React.useState<string | null>(null);
+
+  /**
+   * Checks the files as they are chosen.
+   *
+   * The server checks again; this is so somebody learns the file is too big or
+   * the wrong kind while they are still looking at the picker, rather than
+   * after writing an article and pressing publish.
+   */
+  function pick(e: React.ChangeEvent<HTMLInputElement>) {
+    const chosen = Array.from(e.target.files ?? []);
+    const problem = uploadProblem(chosen);
+    setFileProblem(problem);
+    setFiles(problem ? [] : chosen.map((f) => f.name));
+    if (problem) e.target.value = "";
+  }
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -431,13 +449,14 @@ function ArticleForm({
                 name="files"
                 multiple
                 className="hidden"
-                onChange={(e) => setFiles(Array.from(e.target.files ?? []).map((f) => f.name))}
+                accept={ACCEPT_ATTR}
+                onChange={pick}
               />
             </label>
           </div>
           <label className="block cursor-pointer rounded-[11px] border border-dashed border-muted-200 bg-surface-sunken p-6 text-center transition-colors hover:border-brand-500">
             <span className="block text-[12.5px] font-semibold text-muted-500">
-              Drop files here — PDF, DOCX, XLSX, ZIP, images
+              Drop files here — {ACCEPTED_LABEL}
             </span>
             <span className="mt-1 block text-[11px] font-medium text-muted-400">
               {files.length > 0 ? files.join(" · ") : "Multiple attachments supported per article"}
@@ -447,9 +466,13 @@ function ArticleForm({
               name="files"
               multiple
               className="hidden"
-              onChange={(e) => setFiles(Array.from(e.target.files ?? []).map((f) => f.name))}
+              accept={ACCEPT_ATTR}
+              onChange={pick}
             />
           </label>
+          {fileProblem && (
+            <p className="mt-2 text-[11.5px] font-semibold text-bad-600">{fileProblem}</p>
+          )}
         </div>
       </form>
     </Drawer>
