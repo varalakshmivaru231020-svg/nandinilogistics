@@ -105,6 +105,19 @@ export function TaskDetail({
       ).length,
     0,
   );
+  /*
+   * Whether the viewer is one of the levels this task passes through, and what
+   * they do on it. A reviewer or an approver looking at a task in rework needs
+   * to know it is coming back to them.
+   */
+  const myLevels = levels.filter((l) => l.isViewer);
+  const onALevel = myLevels.length > 0;
+  const activeKindOfViewer = myLevels.some((l) => l.kind === "REVIEW")
+    ? myLevels.some((l) => l.kind === "APPROVAL")
+      ? "your review and approval levels"
+      : "your review level"
+    : "your approval level";
+
   const TABS = [
     ...(hasChecklist ? [["checklist", "Checklist"] as const] : []),
     ...(levels.length > 0 ? [["levels", "Review and approval"] as const] : []),
@@ -225,9 +238,22 @@ export function TaskDetail({
             </span>
           )}
 
-          {task.status === "REWORK" && !can.resubmit && (
+          {/*
+            Said to everyone except the person who can resubmit, who has the
+            button for it right here. It used to test can.resubmit, which is not
+            a key anything sets — so it read as undefined, and the assignee was
+            told the task was with themselves directly under the button that
+            sends it on.
+
+            A reviewer or approver needs the other half of it: the task is not
+            theirs now, and it is coming back to them when it returns.
+          */}
+          {task.status === "REWORK" && !can.submit && (
             <span className="text-[12px] font-medium text-muted-600">
-              Sent back for rework — it is with {task.assignee} now.
+              Sent back for rework — it is with {task.assignee} now
+              {onALevel
+                ? `, and returns to ${activeKindOfViewer} once it is resubmitted.`
+                : "."}
             </span>
           )}
           {task.status === "CLOSED" && !can.reopen && (

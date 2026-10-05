@@ -36,6 +36,24 @@ export function NewTaskForm({
 
   const [assigneeId, setAssigneeId] = React.useState("");
   const [picked, setPicked] = React.useState<string[]>([]);
+  const [checklistQuery, setChecklistQuery] = React.useState("");
+
+  /*
+   * What the picker shows: the checklists matching what was typed, plus the
+   * ones already chosen. A chosen checklist that the search hides is still
+   * going to be attached, and a card that stops showing it reads as one that
+   * dropped it.
+   */
+  const shownChecklists = React.useMemo(() => {
+    const q = checklistQuery.trim().toLowerCase();
+    if (!q) return checklists;
+    return checklists.filter(
+      (c) =>
+        picked.includes(c.id) ||
+        c.name.toLowerCase().includes(q) ||
+        c.category.toLowerCase().includes(q),
+    );
+  }, [checklists, checklistQuery, picked]);
   // Levels 2 and up. Level 1 is always the assignee, so it is derived rather
   // than stored — storing it would mean keeping two copies of one fact in step.
   const [extraReviewers, setExtraReviewers] = React.useState<string[]>([]);
@@ -151,8 +169,19 @@ export function NewTaskForm({
                 No active checklist in the master yet.
               </p>
             ) : (
+              <>
+                <Input
+                  value={checklistQuery}
+                  onChange={(e) => setChecklistQuery(e.target.value)}
+                  placeholder="Search checklists by name or category…"
+                />
+                {shownChecklists.length === 0 && (
+                  <p className="text-[12.5px] font-medium text-muted-400">
+                    No checklist matches “{checklistQuery}”.
+                  </p>
+                )}
               <div className="flex flex-wrap gap-2">
-                {checklists.map((c) => (
+                {shownChecklists.map((c) => (
                   <button
                     key={c.id}
                     type="button"
@@ -178,6 +207,7 @@ export function NewTaskForm({
                   </button>
                 ))}
               </div>
+              </>
             )}
 
             {picked.length > 0 && (
