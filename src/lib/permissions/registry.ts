@@ -867,7 +867,6 @@ export const NOT_YET_BUILT: ReadonlySet<string> = new Set([
   "sales.siteVisit.update",
   "schedule.activity.captureDelay",
   "schedule.activity.delete",
-  "schedule.activity.update",
   "schedule.baseline.set",
   "schedule.gantt.view",
   "schedule.template.view",

@@ -151,6 +151,95 @@ export async function addSubActivityAction(
 
 
 /**
+ * Correcting an activity after it was entered — the name it was given and the
+ * dates it is working to.
+ *
+ * A plan typed wrong has to be fixable, and before this the only way to move a
+ * date was to raise an extension against yourself and grant it, which wrote a
+ * delay into the variance report that never happened.
+ *
+ * Two things this does not do. The baseline never moves: it is what slippage is
+ * measured against, and an editable baseline measures nothing. And the edit is
+ * audited with both dates in it, so a finish that moved without an extension is
+ * visible afterwards as exactly that.
+ */
+export async function updateActivityAction(
+  id: string,
+  name: string,
+  plannedStart: string,
+  plannedEnd: string,
+): Promise<ActionResult<{ shifted: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.schedule.activity.update);
+
+    const activity = await prisma.scheduleActivity.findUnique({
+      where: { id },
+      select: {
+        id: true, name: true, code: true, projectId: true, workPackageId: true,
+        plannedStart: true, plannedEnd: true,
+      },
+    });
+    if (!activity) throw new Error("Activity not found.");
+    assertProjectAccess(ctx, activity.projectId);
+
+    const trimmed = name.trim();
+    if (trimmed.length < 2) throw new Error("Give the activity a name of at least two characters.");
+    if (!plannedStart || !plannedEnd) throw new Error("Both planned dates are required.");
+
+    const start = new Date(plannedStart);
+    const end = new Date(plannedEnd);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      throw new Error("Those dates could not be read.");
+    }
+    if (end < start) throw new Error("Planned end cannot be before planned start.");
+
+    // The same containment rule a sub-activity is created under.
+    if (activity.workPackageId) {
+      const parent = await prisma.workPackage.findUnique({
+        where: { id: activity.workPackageId },
+        select: { name: true, startDate: true, endDate: true },
+      });
+      const span = (d: Date) => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+      if (parent?.startDate && start < parent.startDate) {
+        throw new Error(`${parent.name} starts on ${span(parent.startDate)} — a sub-activity cannot start before it.`);
+      }
+      if (parent?.endDate && end > parent.endDate) {
+        throw new Error(`${parent.name} ends on ${span(parent.endDate)} — a sub-activity cannot run past it.`);
+      }
+    }
+
+    let shifted = 0;
+    await prisma.$transaction(async (tx) => {
+      await tx.scheduleActivity.update({
+        where: { id },
+        data: { name: trimmed, plannedStart: start, plannedEnd: end },
+      });
+      // Whatever waits on this activity moves with it, in the same transaction.
+      shifted = (await reschedule(tx, activity.projectId)).shifted.length;
+    });
+
+    const was = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "—");
+    await recordAudit({
+      action: "UPDATE",
+      entity: "ScheduleActivity",
+      entityId: id,
+      userId: ctx.id,
+      projectId: activity.projectId,
+      summary:
+        `Edited ${activity.code} — ${activity.name}` +
+        (trimmed !== activity.name ? ` → ${trimmed}` : "") +
+        `; planned ${was(activity.plannedStart)} → ${was(activity.plannedEnd)}` +
+        ` becomes ${plannedStart} → ${plannedEnd} (baseline unchanged)` +
+        (shifted ? ` — ${shifted} downstream activit${shifted === 1 ? "y" : "ies"} moved with it` : ""),
+    });
+
+    revalidatePath("/schedule");
+    return { shifted };
+  });
+}
+
+
+/**
  * Records progress. Slipping past the planned finish requires a delay reason,
  * so the review meeting starts with facts rather than recollection.
  */

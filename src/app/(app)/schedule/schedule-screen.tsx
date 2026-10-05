@@ -11,6 +11,7 @@ import { cn, formatDate, formatDateTime } from "@/lib/utils";
 import { groupSchedule, type ScheduleCategory } from "@/lib/schedule/groups";
 import {
   addMainCategoryAction, addSubActivityAction, completeActivityAction, startActivityAction,
+  updateActivityAction,
 } from "./actions";
 import {
   decideExtensionAdminAction, decideExtensionPmAction, requestExtensionAction,
@@ -144,6 +145,7 @@ export function ScheduleScreen({
   const [adding, setAdding] = React.useState<string | null>(null);
   const [extending, setExtending] = React.useState<Activity | null>(null);
   const [deciding, setDeciding] = React.useState<Extension | null>(null);
+  const [editing, setEditing] = React.useState<Activity | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -275,6 +277,14 @@ export function ScheduleScreen({
               target={metrics(extending, todayMs).re}
               onClose={() => setExtending(null)}
               onDone={(m) => { setExtending(null); setNotice(m); router.refresh(); }}
+            />
+          )}
+
+          {editing && (
+            <EditActivityModal
+              activity={editing}
+              onClose={() => setEditing(null)}
+              onDone={(m) => { setEditing(null); setNotice(m); router.refresh(); }}
             />
           )}
 
@@ -510,6 +520,15 @@ export function ScheduleScreen({
                                   ⏱ Extension
                                 </button>
                               )}
+                              {can.editActivity && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditing(a)}
+                                  className="cursor-pointer whitespace-nowrap rounded-[8px] border border-line-400 bg-white px-[13px] py-[9px] text-[11.5px] font-bold text-navy-500 transition-colors hover:border-brand-500 hover:text-brand-700"
+                                >
+                                  ✎ Edit
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
@@ -582,12 +601,15 @@ export function ScheduleScreen({
                       >
                         {e.status === "AWAITING_PM" ? "PM decision" : "Admin decision"}
                       </button>
-                    ) : null}
-                    <div className="mt-1.5 text-[11px] font-medium text-muted-400">
-                      {e.status === "AWAITING_PM"
-                        ? "Only the Project Manager can act on this request"
-                        : "Only the Admin can grant the revised date"}
-                    </div>
+                    ) : (
+                      // Said only to someone who cannot act. Printed under the
+                      // button it reads as a refusal of the button beside it.
+                      <div className="text-[11px] font-medium text-muted-400">
+                        {e.status === "AWAITING_PM"
+                          ? "Only the Project Manager can act on this request"
+                          : "Only the Admin can grant the revised date"}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -678,6 +700,7 @@ export function ScheduleScreen({
       {tab === "reports" && can.viewReports && (
         <ScheduleReports
           activities={activities}
+          categories={categories}
           reportTab={reportTab}
           projectId={activeProjectId}
           projectManager={projectManager}
@@ -794,8 +817,12 @@ function AddPanel({
 }
 
 /**
- * Asking for more time, in the design's amber card: how many days, why, and
- * the date it would move to — said plainly before it is sent.
+ * Asking for more time: how many days, why, and the date it would move to —
+ * said plainly before it is sent.
+ *
+ * It opens as a dialog rather than unfolding above the schedule. Asked for from
+ * a row a long way down a long plan, the panel appeared at the top where the
+ * person could not see it, and the row they were looking at jumped.
  */
 function ExtensionPanel({
   activity, target, onClose, onDone,
@@ -825,22 +852,41 @@ function ExtensionPanel({
   }
 
   return (
-    <div className="mb-3.5 rounded-[13px] border border-amber-200 bg-warn-050 px-[18px] py-4">
-      <div className="font-display text-[13.5px] font-bold text-warn-800">
-        Request extension · {activity.name}
-      </div>
-      <div className="mb-3 mt-[3px] text-[11.5px] font-medium text-warn-800 opacity-85">
-        Current target {formatDate(target)} — the request goes to the Project Manager first, then to
-        Admin for the revised date.
-      </div>
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={`Request extension · ${activity.name}`}
+      description={`Current target ${formatDate(target)} — the request goes to the Project Manager first, then to Admin for the revised date.`}
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-[9px] border border-amber-200 bg-white px-[15px] py-[11px] text-[12px] font-semibold text-warn-800 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy || asked <= 0 || reason.trim().length < 3}
+            onClick={send}
+            className="cursor-pointer rounded-[9px] bg-amber-500 px-4 py-[11px] text-[12px] font-bold text-white transition-colors hover:bg-[#C9862B] disabled:opacity-60"
+          >
+            {busy ? "Sending…" : "Send request"}
+          </button>
+        </>
+      }
+    >
       {error && <div className="mb-3"><Alert tone="error">{error}</Alert></div>}
-      <div className="grid items-end gap-3 [grid-template-columns:150px_minmax(220px,1fr)_170px_auto] max-md:[grid-template-columns:1fr]">
+      <div className="grid gap-3">
         <label className="block">
           <span className={PANEL_LABEL}>Extension days <span className="text-bad-600">*</span></span>
           <input
             value={days}
             onChange={(e) => setDays(e.target.value.replace(/[^\d]/g, ""))}
             placeholder="5"
+            autoFocus
             className={cn(PANEL_FIELD, "bg-white")}
           />
         </label>
@@ -853,31 +899,102 @@ function ExtensionPanel({
             className={cn(PANEL_FIELD, "bg-white")}
           />
         </label>
-        <div>
+        <div className="rounded-[10px] bg-warn-050 px-3.5 py-2.5">
           <div className={PANEL_LABEL}>Requested new date</div>
-          <div className="py-[9px] font-display text-[14px] font-extrabold text-warn-800">
+          <div className="font-display text-[14px] font-extrabold text-warn-800">
             {newDate ? formatDate(newDate) : "—"}
           </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={busy || asked <= 0 || reason.trim().length < 3}
-            onClick={send}
-            className="cursor-pointer rounded-[9px] bg-amber-500 px-4 py-[11px] text-[12px] font-bold text-white transition-colors hover:bg-[#C9862B] disabled:opacity-60"
-          >
-            Send request
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="cursor-pointer rounded-[9px] border border-amber-200 bg-white px-[15px] py-[11px] text-[12px] font-semibold text-warn-800 transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
+  );
+}
+
+
+/**
+ * Correcting an activity: its name and the dates it is working to.
+ *
+ * The baseline is not here and never will be — it is what slippage is measured
+ * against. The dialog says so, because someone who came looking for it should
+ * find out why rather than wonder where it went.
+ */
+function EditActivityModal({
+  activity, onClose, onDone,
+}: {
+  activity: Activity;
+  onClose: () => void;
+  onDone: (m: string) => void;
+}) {
+  const [name, setName] = React.useState(activity.name);
+  const [start, setStart] = React.useState(activity.plannedStart?.slice(0, 10) ?? "");
+  const [end, setEnd] = React.useState(activity.plannedEnd?.slice(0, 10) ?? "");
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const res = await updateActivityAction(activity.id, name, start, end);
+    setBusy(false);
+    if (!res.ok) { setError(res.error); return; }
+    onDone(
+      `${name} updated` +
+      (res.data.shifted ? ` — ${res.data.shifted} activit${res.data.shifted === 1 ? "y" : "ies"} moved with it.` : "."),
+    );
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={`Edit ${activity.code}`}
+      description="The baseline stays where it was — it is what slippage is measured against."
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button loading={busy} onClick={save} disabled={name.trim().length < 2 || !start || !end}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        {error && <Alert tone="error">{error}</Alert>}
+        <label className="block">
+          <span className={PANEL_LABEL}>Activity name <span className="text-bad-600">*</span></span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+            className={cn(PANEL_FIELD, "bg-white")}
+          />
+        </label>
+        <div className="grid gap-3 [grid-template-columns:1fr_1fr]">
+          <label className="block">
+            <span className={PANEL_LABEL}>Planned start <span className="text-bad-600">*</span></span>
+            <input
+              type="date"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              className={cn(PANEL_FIELD, "bg-white")}
+            />
+          </label>
+          <label className="block">
+            <span className={PANEL_LABEL}>Planned finish <span className="text-bad-600">*</span></span>
+            <input
+              type="date"
+              value={end}
+              onChange={(e) => setEnd(e.target.value)}
+              className={cn(PANEL_FIELD, "bg-white")}
+            />
+          </label>
+        </div>
+        <p className="text-[11px] font-medium text-muted-400">
+          Baseline {formatDate(activity.baselineStart)} → {formatDate(activity.baselineEnd)} · unchanged
+        </p>
+      </div>
+    </Modal>
   );
 }
 
@@ -978,9 +1095,10 @@ function DecideModal({
  * what the report says and what the plan shows can never disagree.
  */
 function ScheduleReports({
-  activities, reportTab, projectId, projectManager, nowMs,
+  activities, categories, reportTab, projectId, projectManager, nowMs,
 }: {
   activities: Activity[];
+  categories: ScheduleCategory[];
   reportTab: "plan" | "performance";
   projectId: string;
   projectManager: string | null;
@@ -991,6 +1109,18 @@ function ScheduleReports({
   const todayIso = new Date(todayMs).toISOString();
 
   const rows = activities.map((a) => ({ a, m: metrics(a, todayMs) }));
+
+  // The report reads the plan the way the plan is drawn: each main category,
+  // then the sub-activities inside it. Flat, every sub-activity carried its
+  // category as a caption and the categories themselves were nowhere.
+  const reportGroups = [...groupSchedule(categories, activities).entries()]
+    .map(([id, g]) => ({
+      id,
+      group: g,
+      rows: g.items.map((a) => ({ a, m: metrics(a, todayMs) })),
+    }))
+    // A category with nothing under it has nothing to report.
+    .filter((g) => g.rows.length > 0);
 
   const plannedDays = rows.reduce((n, r) => n + r.m.planDays, 0);
   const actualDays = rows
@@ -1086,14 +1216,27 @@ function ScheduleReports({
                         No activities on this schedule yet.
                       </td>
                     </tr>
-                  ) : rows.map(({ a, m }) => {
+                  ) : reportGroups.flatMap((g) => [
+                    <tr key={`h:${g.id}`} className="bg-surface-sunken">
+                      <td colSpan={13} className="border-b border-line-300 px-[13px] py-[9px]">
+                        <span className="text-[12px] font-extrabold text-navy-950">{g.group.name}</span>
+                        <span className="ml-2 text-[11px] font-semibold text-muted-500">
+                          {firstDate(g.rows.map((r) => r.m.ps))
+                            ? `${formatDate(firstDate(g.rows.map((r) => r.m.ps)))} → ${formatDate(lastDate(g.rows.map((r) => r.m.re)))}`
+                            : "no dates yet"}
+                          {" · "}
+                          {g.rows.length} sub-activit{g.rows.length === 1 ? "y" : "ies"}
+                          {g.group.manager ? ` · PM ${g.group.manager}` : ""}
+                        </span>
+                      </td>
+                    </tr>,
+                    ...g.rows.map(({ a, m }) => {
                     const diff = a.actualEnd ? m.revVar : null;
                     const state = activityState(a);
                     return (
                       <tr key={a.id} className="hover:bg-surface-tint">
-                        <td className={cn(TD_R, "whitespace-normal")}>
+                        <td className={cn(TD_R, "whitespace-normal pl-7")}>
                           <div className="text-[12.5px] font-bold text-navy-950">{a.name}</div>
-                          <div className="mt-0.5 text-[11px] font-medium text-muted-400">{a.groupName}</div>
                           <div className="mt-1"><span className={cn(PILL, STATE_PILL[state])}>{state}</span></div>
                         </td>
                         <td className={TD_R}>{formatDate(m.ps)}</td>
@@ -1139,7 +1282,8 @@ function ScheduleReports({
                         </td>
                       </tr>
                     );
-                  })}
+                    }),
+                  ])}
                 </tbody>
               </table>
             </div>

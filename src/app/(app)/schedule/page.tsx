@@ -194,6 +194,7 @@ export default async function SchedulePage({
         importActivities: ctx.has(PERM.schedule.activity.import),
         exportActivities: ctx.has(PERM.schedule.activity.export),
         updateProgress: ctx.has(PERM.schedule.activity.updateProgress),
+        editActivity: ctx.has(PERM.schedule.activity.update),
         manageDependencies: ctx.has(PERM.schedule.dependency.manage),
         viewBaseline: ctx.has(PERM.schedule.baseline.view),
         viewCriticalPath: ctx.has(PERM.schedule.criticalPath.view),
