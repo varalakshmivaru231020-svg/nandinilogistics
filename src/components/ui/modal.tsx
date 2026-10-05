@@ -40,10 +40,17 @@ export function Modal({
   // containing block and clip a fixed overlay to its own box.
   if (!open || typeof document === "undefined") return null;
 
+  // The layer order this app paints in: topbar 20, sidebar 30/40, drawers
+  // 80–83, detail screen 92, modal 96, toast 98, loading splash 100. The modal
+  // has to sit above the detail screen, which is itself a fixed full-bleed
+  // panel at z-92: at the z-50 this used to be, every dialog opened from a
+  // record — approving an indent, receiving a PO, deleting a vendor — rendered
+  // behind that panel and swallowed the click on its own confirm button.
+
   const sizes = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl", xl: "max-w-6xl" };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy-950/35 p-4 backdrop-blur-[2px] sm:p-8">
+    <div className="fixed inset-0 z-[96] flex items-start justify-center overflow-y-auto bg-navy-950/35 p-4 backdrop-blur-[2px] sm:p-8">
       <div
         className={cn("animate-fade-up w-full rounded-[14px] border border-line-400 bg-white shadow-[0_24px_60px_rgba(25,26,92,.18)]", sizes[size])}
         role="dialog"

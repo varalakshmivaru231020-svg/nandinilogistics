@@ -62,7 +62,7 @@ function ToastViewport({
       onClick={onDismiss}
       key={current.id}
       className={[
-        "animate-fade-up fixed bottom-[26px] left-1/2 z-[90] -translate-x-1/2 cursor-pointer",
+        "animate-fade-up fixed bottom-[26px] left-1/2 z-[98] -translate-x-1/2 cursor-pointer",
         "flex items-center gap-2.5 rounded-[11px] px-5 py-3.5",
         "text-[13px] font-semibold text-white",
         "shadow-[0_14px_40px_rgba(25,26,92,.35)]",
