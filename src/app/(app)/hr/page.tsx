@@ -94,6 +94,7 @@ export default async function WorkforcePage({
           designationId: e.designation?.id ?? null,
           designation: e.designation?.name ?? null,
           status: e.status,
+          hasPhoto: e.photoKey !== null,
           documents: e.documents,
         }))}
         markable={markable.map((e) => ({

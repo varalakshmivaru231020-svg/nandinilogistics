@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/toast";
 import { Drawer } from "@/components/ui/drawer";
 import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
+import { uploadProblem } from "@/lib/upload-rules";
 import type { AttendanceSummaryRow } from "@/lib/hr/attendance-report";
 import { isInactive, statusLabel } from "@/lib/hr/employee-status";
 import {
@@ -29,6 +30,8 @@ interface Employee {
   employmentTypeId: string; employmentType: string;
   designationId: string | null; designation: string | null;
   status: string;
+  /** Whether a photograph is on file, so the row and the form can show it. */
+  hasPhoto: boolean;
   documents: Array<{ id: string; kind: string; fileName: string; fileSize: number }>;
 }
 interface TypeRow { id: string; name: string; count: number; canDelete: boolean }
@@ -332,12 +335,23 @@ function StaffTab({
               >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-[11px]">
-                    <span
-                      className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[10px] text-[12px] font-bold text-white"
-                      style={{ background: AVATAR_COLOURS[initialsIndex(e.name)] }}
-                    >
-                      {initials(e.name)}
-                    </span>
+                    {/* The photograph if one was uploaded, initials if not —
+                        the same square either way, so rows stay aligned. */}
+                    {e.hasPhoto ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={`/api/hr/photo/${e.id}`}
+                        alt={e.name}
+                        className="h-[38px] w-[38px] shrink-0 rounded-[10px] object-cover"
+                      />
+                    ) : (
+                      <span
+                        className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[10px] text-[12px] font-bold text-white"
+                        style={{ background: AVATAR_COLOURS[initialsIndex(e.name)] }}
+                      >
+                        {initials(e.name)}
+                      </span>
+                    )}
                     <div className="min-w-0">
                       <p className={cn("text-[13px] font-bold", isInactive(e.status) ? "text-muted-500" : "text-navy-950")}>
                         {e.name}
@@ -656,6 +670,8 @@ function EmployeeForm({
   const [error, setError] = React.useState<string | null>(null);
   const [photoName, setPhotoName] = React.useState<string | null>(null);
   const [docs, setDocs] = React.useState<Record<string, { name: string; size: string } | null>>({});
+  /** The live file inputs, so Remove can clear the one it is undoing. */
+  const docInputs = React.useRef<Record<string, HTMLInputElement | null>>({});
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -695,24 +711,49 @@ function EmployeeForm({
         {error && <p className="rounded-[9px] bg-bad-050 px-3 py-2 text-[12px] font-bold text-bad-600">{error}</p>}
 
         <div className="flex flex-wrap items-start gap-4">
+          {/*
+            Editing someone who already has a photograph shows that photograph,
+            so the square says what is on file rather than inviting an upload
+            that has already happened. Picking a new file replaces it.
+          */}
           <label
             className={cn(
-              "flex h-[84px] w-[84px] shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-[12px] border-[1.5px] text-center text-[10px] font-semibold transition-colors",
+              "relative flex h-[84px] w-[84px] shrink-0 cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded-[12px] border-[1.5px] text-center text-[10px] font-semibold transition-colors",
               photoName
                 ? "border-solid border-good-400 bg-good-050 text-good-700"
                 : "border-dashed border-muted-200 bg-surface-sunken text-muted-400 hover:border-brand-500",
             )}
           >
-            <span className="text-[20px]">📷</span>
-            <span className="px-1.5">
-              {photoName ? "✓ Photo added" : "Upload photo"}
-            </span>
+            {employee?.hasPhoto && !photoName ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/hr/photo/${employee.id}`}
+                  alt={employee.name}
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+                <span className="absolute inset-x-0 bottom-0 bg-navy-950/60 py-[3px] text-[9px] font-bold text-white">
+                  Change
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-[20px]">📷</span>
+                <span className="px-1.5">{photoName ? "✓ Photo added" : "Upload photo"}</span>
+              </>
+            )}
             <input
               type="file"
               name="photo"
               accept="image/*"
               className="hidden"
-              onChange={(e) => setPhotoName(e.target.files?.[0]?.name ?? null)}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                const problem = f ? uploadProblem([f]) : null;
+                if (problem) { setError(problem); e.target.value = ""; setPhotoName(null); return; }
+                setError(null);
+                setPhotoName(f?.name ?? null);
+              }}
             />
           </label>
 
@@ -771,7 +812,13 @@ function EmployeeForm({
           <p className="mb-[9px] text-[11px] font-medium text-muted-400">Aadhaar card and PAN card copies only</p>
           <div>
             {(["Aadhaar card", "PAN card"] as const).map((kind) => {
-              const doc = docs[kind];
+              // What this row shows: the file just picked, or failing that the
+              // copy already on the record. Derived, so removing a new pick
+              // falls back to the stored one rather than showing nothing.
+              const onFile = employee?.documents.find((d) => d.kind === kind);
+              const doc =
+                docs[kind] ??
+                (onFile ? { name: onFile.fileName, size: fileSize(onFile.fileSize) } : null);
               return (
                 <div
                   key={kind}
@@ -798,30 +845,71 @@ function EmployeeForm({
                       </span>
                     )}
                   </span>
-                  {doc ? (
+                  {/*
+                   * The input stays mounted whether or not a file has been
+                   * chosen. It used to live inside the Attach label and be
+                   * swapped for the Remove button, which unmounted it — and an
+                   * input that is not in the form when it submits contributes
+                   * no file. Every Aadhaar and PAN copy anyone attached was
+                   * silently dropped, which is why no employee had documents.
+                   */}
+                  <input
+                    ref={(el) => { docInputs.current[kind] = el; }}
+                    id={`doc-${kind.replace(/\s+/g, "-")}`}
+                    type="file"
+                    name={`doc:${kind}`}
+                    accept="application/pdf,image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      const problem = f ? uploadProblem([f]) : null;
+                      if (problem) {
+                        setError(problem);
+                        e.target.value = "";
+                        setDocs((d) => {
+                          const next = { ...d };
+                          delete next[kind];
+                          return next;
+                        });
+                        return;
+                      }
+                      setError(null);
+                      setDocs((d) => {
+                        const next = { ...d };
+                        if (f) next[kind] = { name: f.name, size: fileSize(f.size) };
+                        else delete next[kind];
+                        return next;
+                      });
+                    }}
+                  />
+                  {/*
+                   * Remove undoes a file picked just now. A copy already on the
+                   * record is replaced, not removed — taking an identity
+                   * document off a staff record is not something a half-filled
+                   * form should do on the way past.
+                   */}
+                  {docs[kind] ? (
                     <button
                       type="button"
-                      onClick={() => setDocs((d) => ({ ...d, [kind]: null }))}
+                      onClick={() => {
+                        const input = docInputs.current[kind];
+                        if (input) input.value = "";
+                        setDocs((d) => {
+                          const next = { ...d };
+                          delete next[kind];
+                          return next;
+                        });
+                      }}
                       className="shrink-0 cursor-pointer rounded-[7px] border border-bad-100 bg-bad-050 px-[11px] py-[5px] text-[10.5px] font-semibold text-bad-700 transition-colors hover:bg-bad-100"
                     >
                       Remove
                     </button>
                   ) : (
-                    <label className="shrink-0 cursor-pointer rounded-[7px] border border-line-400 bg-white px-3 py-[5px] text-[10.5px] font-bold text-brand-700 transition-colors hover:border-brand-500 hover:bg-brand-100">
-                      ↑ Attach
-                      <input
-                        type="file"
-                        name={`doc:${kind}`}
-                        accept="application/pdf,image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          setDocs((d) => ({
-                            ...d,
-                            [kind]: f ? { name: f.name, size: fileSize(f.size) } : null,
-                          }));
-                        }}
-                      />
+                    <label
+                      htmlFor={`doc-${kind.replace(/\s+/g, "-")}`}
+                      className="shrink-0 cursor-pointer rounded-[7px] border border-line-400 bg-white px-3 py-[5px] text-[10.5px] font-bold text-brand-700 transition-colors hover:border-brand-500 hover:bg-brand-100"
+                    >
+                      {doc ? "↑ Replace" : "↑ Attach"}
                     </label>
                   )}
                 </div>
