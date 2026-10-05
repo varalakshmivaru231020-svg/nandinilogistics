@@ -78,6 +78,9 @@ export const NAVIGATION: NavSection[] = [
     items: [
       { label: "Leads · CRM", href: "/sales/leads", icon: "leads", permission: PERM.sales.lead.view },
       { label: "Follow-ups", href: "/sales/follow-ups", icon: "followups", permission: PERM.sales.followUp.view, badge: "followUpDue" },
+      // Customers are their own module, not a table under the pipeline: once a
+      // lead has become one, the pipeline is no longer where you look for them.
+      { label: "Customers", href: "/sales/customers", icon: "hr", permission: PERM.sales.customer.view },
       { label: "Available Flats", href: "/units/board", icon: "flats", permission: PERM.unit.board.view },
     ],
   },
