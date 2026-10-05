@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { formatDateTime, formatDayMonth, money, moneyShort, qty } from "@/lib/utils";
 import { requirePrintProjectAccess } from "@/components/print/access";
+import { place } from "@/components/print/figures";
 import { PrintBanner, SectionLabel } from "@/components/print/blocks";
 import { LETTERHEAD_COMPANY_SELECT, Letterhead } from "@/components/print/letterhead";
 import { PrintSheet } from "@/components/print/print-sheet";
@@ -27,8 +28,21 @@ export default async function PrintPurchaseOrderPage({ params }: { params: Promi
   const po = await prisma.purchaseOrder.findUnique({
     where: { id },
     include: {
-      project: { select: { name: true, company: { select: LETTERHEAD_COMPANY_SELECT } } },
-      vendor: { select: { name: true } },
+      project: {
+        select: {
+          name: true, addressLine: true,
+          city: { select: { name: true, state: { select: { name: true } } } },
+          projectManager: { select: { name: true, phone: true, email: true } },
+          company: { select: LETTERHEAD_COMPANY_SELECT },
+        },
+      },
+      vendor: {
+        select: {
+          name: true, contactPerson: true, phone: true, email: true,
+          addressLine: true, pincode: true, gstin: true,
+          city: { select: { name: true, state: { select: { name: true } } } },
+        },
+      },
       paymentTerm: { select: { name: true, days: true } },
       createdBy: { select: { name: true } },
       pmApprovedBy: { select: { name: true } },
@@ -47,6 +61,24 @@ export default async function PrintPurchaseOrderPage({ params }: { params: Promi
   const company = po.project.company;
   const statusLabel = po.status.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
   const subTotal = Number(po.subTotal);
+
+  // Contact lines, from the vendor and project masters. Each is left out
+  // entirely when the master holds nothing, rather than printing a dash.
+  const vendorAddress = place([
+    po.vendor.addressLine, po.vendor.city?.name, po.vendor.city?.state.name, po.vendor.pincode,
+  ]);
+  const vendorContact = [
+    po.vendor.contactPerson,
+    po.vendor.phone && `☏ ${po.vendor.phone}`,
+    po.vendor.email,
+  ].filter(Boolean).join(" · ");
+  const siteAddress = place([
+    po.project.addressLine, po.project.city?.name, po.project.city?.state.name,
+  ]);
+  const pm = po.project.projectManager;
+  const siteContact = pm
+    ? [`Project Manager ${pm.name}`, pm.phone && `☏ ${pm.phone}`, pm.email].filter(Boolean).join(" · ")
+    : "";
   const taxPct = subTotal > 0 ? Math.round((Number(po.taxAmount) / subTotal) * 100) : 0;
 
   return (
@@ -60,11 +92,23 @@ export default async function PrintPurchaseOrderPage({ params }: { params: Promi
 
       {po.status === "CANCELLED" && <PrintBanner tone="bad">Cancelled</PrintBanner>}
 
-      {/* Who it is for, and where it goes */}
+      {/*
+        Who it is for and where it goes — both with somebody to ring.
+
+        A printed order that names a vendor and no way to reach them is a sheet
+        of paper the store has to look someone up for. Everything here comes off
+        the vendor and project masters, so correcting a number in one place
+        corrects every order printed afterwards.
+      */}
       <section className="print-keep grid grid-cols-2 gap-6 py-[18px]">
         <div>
           <SectionLabel>Vendor</SectionLabel>
           <p className="mt-[5px] text-[14px] font-bold">{po.vendor.name}</p>
+          {vendorAddress && <p className="mt-1 text-[11.5px] text-muted-600">{vendorAddress}</p>}
+          {vendorContact && <p className="mt-0.5 text-[11.5px] text-muted-600">{vendorContact}</p>}
+          {po.vendor.gstin && (
+            <p className="mt-0.5 text-[11.5px] text-muted-600">GSTIN {po.vendor.gstin}</p>
+          )}
           <p className="mt-1 text-[11.5px] text-muted-600">
             {po.sourceIndent ? `Against indent: ${po.sourceIndent.indentNo}` : "Raised directly"}
           </p>
@@ -72,6 +116,8 @@ export default async function PrintPurchaseOrderPage({ params }: { params: Promi
         <div>
           <SectionLabel>Deliver to</SectionLabel>
           <p className="mt-[5px] text-[14px] font-bold">{po.project.name} · site store</p>
+          {siteAddress && <p className="mt-1 text-[11.5px] text-muted-600">{siteAddress}</p>}
+          {siteContact && <p className="mt-0.5 text-[11.5px] text-muted-600">{siteContact}</p>}
           <p className="mt-1 text-[11.5px] text-muted-600">
             {[
               po.expectedDate ? `Due ${formatDayMonth(po.expectedDate)}` : null,
