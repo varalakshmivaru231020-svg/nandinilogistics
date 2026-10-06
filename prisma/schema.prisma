@@ -2512,6 +2512,10 @@ model TaskChecklistItem {
   id              String    @id @default(cuid())
   taskChecklistId String
   checkpointId    String
+  /// Which pass through the levels this point is on. A denial starts the next
+  /// one for this point alone, which is what sends it back without dragging
+  /// the rest of the checklist with it.
+  round           Int       @default(1)
   /// The answer, in whichever shape the checkpoint asks for.
   answerChoice    String?
   answerText      String?

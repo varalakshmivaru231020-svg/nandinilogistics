@@ -14,29 +14,52 @@ type Tx = Prisma.TransactionClient | PrismaClient;
  * and a state check.
  */
 
-/** The task as the lifecycle rules need to see it. */
+/**
+ * The task as the lifecycle rules need to see it.
+ *
+ * The checklist points come with it, because on a checklist task who may judge
+ * what is a question about the points rather than about the task: each one
+ * stands in front of its own level.
+ */
 export async function shapeOf(tx: Tx, taskId: string): Promise<TaskShape & { id: string }> {
   const t = await tx.task.findUniqueOrThrow({
     where: { id: taskId },
     select: {
       id: true, kind: true, status: true, round: true, assigneeId: true, createdById: true,
       levels: { select: { kind: true, level: true, userId: true } },
+      checklists: {
+        select: {
+          items: {
+            select: {
+              id: true, round: true,
+              reviews: {
+                select: {
+                  round: true, verdict: true,
+                  level: { select: { kind: true, level: true } },
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
-  return t;
-}
 
-/** Which levels have already acted in the round now running. */
-export async function actedThisRound(
-  tx: Tx,
-  taskId: string,
-  round: number,
-): Promise<Array<{ kind: "REVIEW" | "APPROVAL"; level: number }>> {
-  const rows = await tx.taskLevelAction.findMany({
-    where: { round, level: { taskId } },
-    select: { level: { select: { kind: true, level: true } } },
-  });
-  return rows.map((r) => ({ kind: r.level.kind, level: r.level.level }));
+  return {
+    ...t,
+    items: t.checklists.flatMap((c) =>
+      c.items.map((i) => ({
+        id: i.id,
+        round: i.round,
+        verdicts: i.reviews.map((r) => ({
+          kind: r.level.kind,
+          level: r.level.level,
+          round: r.round,
+          verdict: r.verdict as "PASS" | "FAIL",
+        })),
+      })),
+    ),
+  };
 }
 
 /** Writes one line of the task's history. Every change goes through here. */

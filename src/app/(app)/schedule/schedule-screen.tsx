@@ -58,6 +58,15 @@ const DAY = 86_400_000;
 /** The design's pill: one shape, coloured by what it says. */
 const PILL = "inline-block whitespace-nowrap rounded-full px-2.5 py-[5px] text-[10.5px] font-bold";
 
+/*
+ * The same chip, allowed to wrap.
+ *
+ * An extension chip carries a date, a judgement and a person's name — a
+ * sentence, not a label. Held on one line it ran straight out of the activity
+ * column and printed over the planned dates beside it.
+ */
+const PILL_WRAP = "inline-block rounded-full px-2.5 py-[5px] text-[10.5px] font-bold [overflow-wrap:anywhere]";
+
 /**
  * The design reads an activity's state off the facts — started, finished — and
  * leaves lateness to the flag and the verdicts beside it.
@@ -392,9 +401,15 @@ export function ScheduleScreen({
                               m.overdue && "bg-bad-025",
                             )}
                           >
-                            <div>
+                            {/*
+                              min-w-0: a grid item will not shrink below its
+                              content unless it is told it may, and a long
+                              extension chip would otherwise push this column
+                              over the one next to it rather than wrap inside it.
+                            */}
+                            <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-[12.5px] font-semibold text-navy-900">{a.name}</span>
+                                <span className="text-[12.5px] font-semibold text-navy-900 [overflow-wrap:anywhere]">{a.name}</span>
                                 {flag && (
                                   <span
                                     className={cn(
@@ -411,12 +426,12 @@ export function ScheduleScreen({
                               </div>
                               {a.extensions.map((x) => (
                                 <div key={x.id} className="mt-1.5">
-                                  <div className="text-[11px] font-medium text-navy-500">
+                                  <div className="text-[11px] font-medium text-navy-500 [overflow-wrap:anywhere]">
                                     +{x.days} d · {x.reason}
                                   </div>
                                   <span
                                     className={cn(
-                                      PILL,
+                                      PILL_WRAP,
                                       x.status === "GRANTED"
                                         ? x.performance === "Avoidable"
                                           ? "bg-warn-050 text-warn-700"

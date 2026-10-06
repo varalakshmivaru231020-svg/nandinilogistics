@@ -4,7 +4,9 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { canDo } from "@/lib/tasks/lifecycle";
-import { actedThisRound } from "@/lib/tasks/service";
+import {
+  earliestWaitingLevel, levelOrder, type FlowItem, type FlowLevel,
+} from "@/lib/tasks/checklist-flow";
 import { TaskDetail } from "./task-detail";
 
 export const metadata = { title: "Task" };
@@ -78,44 +80,54 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   // Without the org-wide view, a task you have no part in is not yours to read.
   if (!isAdmin && !ctx.has(PERM.task.task.viewAll) && !onIt) notFound();
 
-  const acted = await actedThisRound(prisma, task.id, task.round);
+  /*
+   * Every checklist point and where it has got to. The task's own position is
+   * read off these: a point moves through the levels on its own, so "where the
+   * task is" is simply the earliest level still holding something.
+   */
+  const levels: FlowLevel[] = task.levels.map((l) => ({ kind: l.kind, level: l.level, userId: l.userId }));
+  const flowItems: FlowItem[] = task.checklists.flatMap((c) =>
+    c.items.map((i) => ({
+      id: i.id,
+      round: i.round,
+      verdicts: i.reviews.map((r) => ({
+        kind: r.level.kind, level: r.level.level, round: r.round,
+        verdict: r.verdict as "PASS" | "FAIL",
+      })),
+    })),
+  );
 
-  // Where the task is standing, and who it will reach after the level that
-  // holds it now — both are the first things anyone asks of a checklist task.
-  const levelKind = task.status === "UNDER_REVIEW" ? "REVIEW" : task.status === "UNDER_APPROVAL" ? "APPROVAL" : null;
-  const queue = levelKind
-    ? task.levels
-        .filter((l) => l.kind === levelKind && !l.actions.some((a) => a.round === task.round))
-        .sort((a, b) => a.level - b.level)
-    : [];
-  const atLevel = queue[0] ?? null;
-  const afterThis =
-    queue[1] ??
-    (levelKind === "REVIEW"
-      ? task.levels.filter((l) => l.kind === "APPROVAL").sort((a, b) => a.level - b.level)[0] ?? null
-      : null);
+  // Only once the work has started is a point actually in front of anyone.
+  const judging = task.status === "UNDER_REVIEW" || task.status === "UNDER_APPROVAL";
+  const at = judging ? earliestWaitingLevel(flowItems, levels) : null;
+  const order = levelOrder(levels);
+  const afterThis = at
+    ? order[order.findIndex((l) => l.kind === at.kind && l.level === at.level) + 1] ?? null
+    : null;
+  const nameOf = (l: FlowLevel | null) =>
+    l ? task.levels.find((x) => x.kind === l.kind && x.level === l.level)?.user.name ?? null : null;
+
   const shape = {
     kind: task.kind, status: task.status, round: task.round,
     assigneeId: task.assigneeId, createdById: task.createdById,
-    levels: task.levels.map((l) => ({ kind: l.kind, level: l.level, userId: l.userId })),
+    levels,
+    items: flowItems,
   };
   const viewer = { userId: ctx.id, isAdmin };
-  const may = (a: Parameters<typeof canDo>[0]) => canDo(a, shape, viewer, acted);
+  const may = (a: Parameters<typeof canDo>[0]) => canDo(a, shape, viewer);
 
   return (
     <TaskDetail
       viewerId={ctx.id}
+      isAdmin={isAdmin}
+      flowLevels={levels}
       nowMs={new Date().getTime()}
       // The same words the list uses, so one status is one phrase everywhere.
-      stage={
-        atLevel ? `Under ${levelKind === "REVIEW" ? "review" : "approval"} L${atLevel.level}` : null
-      }
-      stageWho={atLevel ? atLevel.user.name : null}
-      activeKind={atLevel ? atLevel.kind : null}
-      activeLevel={atLevel ? atLevel.level : null}
+      stage={at ? `Under ${at.kind === "REVIEW" ? "review" : "approval"} L${at.level}` : null}
+      stageWho={nameOf(at)}
       nextUp={
         afterThis
-          ? `${afterThis.kind === "REVIEW" ? "Reviewer" : "Approver"} level ${afterThis.level} · ${afterThis.user.name}`
+          ? `${afterThis.kind === "REVIEW" ? "Reviewer" : "Approver"} level ${afterThis.level} · ${nameOf(afterThis)}`
           : null
       }
       task={{
@@ -150,6 +162,9 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         name: tc.checklist.name,
         items: tc.items.map((i) => ({
           id: i.id,
+          // The point's own round. A denial starts the next one for this point
+          // alone, and only verdicts from the current round still stand.
+          round: i.round,
           text: i.checkpoint.text,
           marked: i.answeredAt !== null,
           markedAt: i.answeredAt ? i.answeredAt.toISOString() : null,
@@ -196,7 +211,6 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
       can={{
         accept: may("accept"),
         start: may("start"),
-        submit: may("submit"),
         close: may("close"),
         sendBack: may("sendBack"),
         reopen: may("reopen"),

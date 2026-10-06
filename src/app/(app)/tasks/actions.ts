@@ -8,10 +8,13 @@ import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
 import {
-  canDo, statusAfterSubmit, statusAfterComplete, statusAfterLevel, type TaskAction,
+  checklistStage, earliestWaitingLevel, waitingLevel,
+} from "@/lib/tasks/checklist-flow";
+import {
+  canDo, statusAfterComplete, type TaskAction,
 } from "@/lib/tasks/lifecycle";
 import {
-  actedThisRound, applyExtensionDecision, logTaskEvent, moveStatus, shapeOf,
+  applyExtensionDecision, logTaskEvent, moveStatus, shapeOf,
 } from "@/lib/tasks/service";
 import { assertStorable, filesFrom } from "@/lib/material/grn-attachments";
 import { audienceFor, notifyTask, type TaskEventKind } from "@/lib/tasks/notify";
@@ -68,18 +71,14 @@ async function tellActiveLevel(
     },
   });
   if (!t) return;
-  const kind = t.status === "UNDER_REVIEW" ? "REVIEW" : t.status === "UNDER_APPROVAL" ? "APPROVAL" : null;
-  if (!kind) return;
+  if (t.status !== "UNDER_REVIEW" && t.status !== "UNDER_APPROVAL") return;
 
-  const acted = await tx.taskLevelAction.findMany({
-    where: { round: t.round, level: { taskId } },
-    select: { level: { select: { kind: true, level: true } } },
-  });
-  const done = new Set(acted.filter((a) => a.level.kind === kind).map((a) => a.level.level));
-  const next = t.levels
-    .filter((l) => l.kind === kind && !done.has(l.level))
-    .sort((a, b) => a.level - b.level)[0];
+  // Whoever is holding the earliest point. Points move independently now, so
+  // "the next level" is the first one in the chain with anything in front of it.
+  const shape = await shapeOf(tx, taskId);
+  const next = earliestWaitingLevel(shape.items, shape.levels);
   if (!next) return;
+  const kind = next.kind;
 
   await notifyTask(tx, {
     kind: "LEVEL_ACTIVE",
@@ -95,11 +94,10 @@ async function tellActiveLevel(
 /** The lifecycle check, in the shape the actions need. */
 async function assertMay(action: TaskAction, taskId: string, userId: string, isAdmin: boolean) {
   const shape = await shapeOf(prisma, taskId);
-  const acted = await actedThisRound(prisma, taskId, shape.round);
-  if (!canDo(action, shape, { userId, isAdmin }, acted)) {
+  if (!canDo(action, shape, { userId, isAdmin })) {
     throw new Error("That is not yours to do on this task, at least not yet.");
   }
-  return { shape, acted };
+  return { shape };
 }
 
 async function isAdminOf(ctx: { has: (code: string) => boolean }) {
@@ -292,12 +290,21 @@ export async function startTaskAction(id: string): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.task.task.start);
     const { shape } = await assertMay("start", id, ctx.id, await isAdminOf(ctx));
+
+    /*
+     * Starting a checklist task puts every point in front of the first reviewer
+     * at once. There is nothing for the Assignee to submit: the levels judge
+     * the points, and the task is read off where the points have got to.
+     */
+    const to = shape.kind === "CHECKLIST" ? checklistStage(shape.items, shape.levels) : "STARTED";
+
     await prisma.$transaction(async (tx) => {
       await moveStatus(tx, {
-        taskId: id, actorId: ctx.id, from: shape.status, to: "STARTED",
+        taskId: id, actorId: ctx.id, from: shape.status, to,
         extra: { startedAt: new Date() },
       });
       await tell(tx, "STATUS_CHANGED", id, ctx.id, `Task started`);
+      if (to === "UNDER_REVIEW" || to === "UNDER_APPROVAL") await tellActiveLevel(tx, id, ctx.id);
     });
     refresh(id);
     return null;
@@ -328,42 +335,6 @@ export async function completeTaskAction(id: string, remark: string): Promise<Ac
     });
     refresh(id);
     return null;
-  });
-}
-
-/**
- * Sending the work to be checked.
- *
- * Once when it is done, and again after a rework — which starts a fresh round,
- * so every level judges it anew. The assignee does not judge the checklist
- * themselves: they are usually review level 1, and a list judged twice by the
- * same person is a list judged once.
- */
-export async function submitForReviewAction(
-  id: string,
-  remark: string,
-): Promise<ActionResult<{ status: string }>> {
-  return runAction(async () => {
-    const ctx = await authorize(PERM.task.task.complete);
-    const { shape } = await assertMay("submit", id, ctx.id, await isAdminOf(ctx));
-    const again = shape.status === "REWORK";
-    if (again && !remark.trim()) throw new Error("Say what was corrected before resubmitting.");
-
-    const to = statusAfterSubmit(shape);
-    await prisma.$transaction(async (tx) => {
-      await moveStatus(tx, {
-        taskId: id, actorId: ctx.id, from: shape.status, to,
-        remark: remark.trim() || null,
-        extra: again ? { round: { increment: 1 } } : {},
-      });
-      await tell(tx, "STATUS_CHANGED", id, ctx.id,
-        again ? "Corrected and resubmitted" : "Sent for review", remark.trim());
-      if (to === "UNDER_REVIEW" || to === "UNDER_APPROVAL") {
-        await tellActiveLevel(tx, id, ctx.id);
-      }
-    });
-    refresh(id);
-    return { status: to };
   });
 }
 
@@ -523,77 +494,6 @@ export async function decideExtensionAction(
 
 // --------------------------------------------------------------------------
 // Review and approval levels
-// --------------------------------------------------------------------------
-
-export async function decideLevelAction(
-  taskId: string,
-  decision: "PASS" | "FAIL" | "APPROVE" | "REJECT",
-  remark: string,
-  itemVerdicts: Array<{ itemId: string; verdict: "PASS" | "FAIL"; remark?: string }> = [],
-): Promise<ActionResult<null>> {
-  return runAction(async () => {
-    const review = decision === "PASS" || decision === "FAIL";
-    const ctx = await authorize(review ? PERM.task.level.review : PERM.task.level.approve);
-    const admin = await isAdminOf(ctx);
-    const { shape, acted } = await assertMay(review ? "review" : "approve", taskId, ctx.id, admin);
-    if (!remark.trim()) throw new Error("A remark is required on every decision.");
-
-    const kind = review ? "REVIEW" : "APPROVAL";
-    const done = new Set(acted.filter((a) => a.kind === kind).map((a) => a.level));
-    const level = shape.levels
-      .filter((l) => l.kind === kind && !done.has(l.level))
-      .sort((a, b) => a.level - b.level)[0];
-    if (!level) throw new Error("There is no level waiting on a decision.");
-
-    const row = await prisma.taskLevel.findFirstOrThrow({
-      where: { taskId, kind, level: level.level }, select: { id: true },
-    });
-
-    const to = statusAfterLevel(shape, decision, acted);
-
-    await prisma.$transaction(async (tx) => {
-      await tx.taskLevelAction.create({
-        data: {
-          levelId: row.id, round: shape.round, decision, remark: remark.trim(), actorId: ctx.id,
-        },
-      });
-      for (const v of itemVerdicts) {
-        await tx.taskChecklistItemReview.create({
-          data: {
-            itemId: v.itemId, levelId: row.id, round: shape.round,
-            verdict: v.verdict, remark: v.remark?.trim() || null,
-          },
-        });
-      }
-      await moveStatus(tx, {
-        taskId, actorId: ctx.id, from: shape.status, to, remark: remark.trim(),
-        extra: to === "CLOSED" ? { closedAt: new Date() } : {},
-      });
-      await logTaskEvent(tx, {
-        taskId, actorId: ctx.id, kind: "LEVEL",
-        summary: `${kind === "REVIEW" ? "Reviewer" : "Approver"} level ${level.level}: ${decision.toLowerCase()}`,
-        remark: remark.trim(),
-      });
-
-      if (to === "REWORK") {
-        // Both parties hear about a failure, and the remarks travel with it.
-        await tell(tx, "CHECKLIST_FAILED", taskId, ctx.id,
-          `Sent back from ${kind === "REVIEW" ? "review" : "approval"} level ${level.level}`,
-          remark.trim());
-      } else if (to === "CLOSED") {
-        await tell(tx, "CLOSED", taskId, ctx.id, "Task closed by the final approval", remark.trim());
-      } else {
-        await tellActiveLevel(tx, taskId, ctx.id);
-      }
-    });
-
-    refresh(taskId);
-    return null;
-  });
-}
-
-// --------------------------------------------------------------------------
-// Comments
 // --------------------------------------------------------------------------
 
 export async function addCommentAction(taskId: string, formData: FormData): Promise<ActionResult<null>> {
@@ -805,43 +705,43 @@ export async function deleteTasksAction(ids: string[]): Promise<ActionResult<{ d
 // --------------------------------------------------------------------------
 
 /**
- * A reviewer or an approver judging one point, at the level they hold.
+ * A reviewer or an approver judging one point, at the level that point has
+ * reached.
  *
- * It happens on the list itself rather than in a dialog, so the remark sits
- * under the line it is about and every round of them stays there.
+ * Each point travels on its own. Approving it hands it to the next level;
+ * denying it starts a fresh round for that point alone, which puts it back in
+ * front of the first reviewer with every verdict it has collected still
+ * readable underneath. The points beside it do not move.
+ *
+ * The task's own status is not decided here so much as read afterwards: it is
+ * whatever its points add up to.
  */
 export async function reviewChecklistItemAction(
   itemId: string,
   formData: FormData,
 ): Promise<ActionResult<null>> {
   return runAction(async () => {
-    const item = await prisma.taskChecklistItem.findUniqueOrThrow({
+    const row = await prisma.taskChecklistItem.findUniqueOrThrow({
       where: { id: itemId },
       select: { taskChecklist: { select: { taskId: true } } },
     });
-    const taskId = item.taskChecklist.taskId;
+    const taskId = row.taskChecklist.taskId;
 
     const shape = await shapeOf(prisma, taskId);
-    const reviewing = shape.status === "UNDER_REVIEW";
+    const item = shape.items.find((i) => i.id === itemId);
+    if (!item) throw new Error("That point is not on this task.");
+
+    // The level this point is standing in front of — not the level the task is
+    // on, because the task is not on one.
+    const at = waitingLevel(item, shape.levels);
+    if (!at) throw new Error("This point has already been through every level.");
+
+    const reviewing = at.kind === "REVIEW";
     const ctx = await authorize(reviewing ? PERM.task.level.review : PERM.task.level.approve);
     const admin = await isAdminOf(ctx);
-    const acted = await actedThisRound(prisma, taskId, shape.round);
-
-    if (!canDo(reviewing ? "review" : "approve", shape, { userId: ctx.id, isAdmin: admin }, acted)) {
-      throw new Error("This level is not yours to judge, at least not yet.");
+    if (at.userId !== ctx.id && !admin) {
+      throw new Error("This point is with another level, at least for now.");
     }
-
-    const kind = reviewing ? "REVIEW" : "APPROVAL";
-    const done = new Set(acted.filter((a) => a.kind === kind).map((a) => a.level));
-    const level = shape.levels
-      .filter((l) => l.kind === kind && !done.has(l.level))
-      .sort((a, b) => a.level - b.level)[0];
-    if (!level) throw new Error("There is no level waiting on a decision.");
-
-    const row = await prisma.taskLevel.findFirstOrThrow({
-      where: { taskId, kind, level: level.level },
-      select: { id: true },
-    });
 
     const choice = String(formData.get("verdict") ?? "");
     if (choice !== "APPROVE" && choice !== "DENY") {
@@ -849,6 +749,11 @@ export async function reviewChecklistItemAction(
     }
     const verdict = choice === "APPROVE" ? ("PASS" as const) : ("FAIL" as const);
     const remark = String(formData.get("remark") ?? "").trim();
+
+    const level = await prisma.taskLevel.findFirstOrThrow({
+      where: { taskId, kind: at.kind, level: at.level },
+      select: { id: true },
+    });
 
     const files = filesFrom(formData);
     assertStorable(files);
@@ -862,60 +767,56 @@ export async function reviewChecklistItemAction(
       });
     }
 
-    await prisma.taskChecklistItemReview.upsert({
-      where: { itemId_levelId_round: { itemId, levelId: row.id, round: shape.round } },
-      create: { itemId, levelId: row.id, round: shape.round, verdict, remark: remark || null },
-      update: { verdict, remark: remark || null, actedAt: new Date() },
-    });
-
-    // A level has no verdict of its own beyond the lines it judged. Once every
-    // line has one, the level is finished and the task moves: approved
-    // throughout and it goes on, a single denial and it goes back. There is
-    // nothing left for a separate overall decision to add.
-    const items = await prisma.taskChecklistItem.findMany({
-      where: { taskChecklist: { taskId } },
-      select: {
-        id: true,
-        reviews: {
-          where: { levelId: row.id, round: shape.round },
-          select: { verdict: true },
-        },
-      },
-    });
-    const judged = items.filter((i) => i.reviews.length > 0);
-    if (judged.length < items.length) {
-      refresh(taskId);
-      return null;
-    }
-
-    const denied = judged.filter((i) => i.reviews[0].verdict === "FAIL").length;
-    const decision = reviewing
-      ? denied > 0 ? "FAIL" as const : "PASS" as const
-      : denied > 0 ? "REJECT" as const : "APPROVE" as const;
-    const summary = denied > 0
-      ? `${denied} of ${items.length} point(s) denied`
-      : `All ${items.length} point(s) approved`;
-    const to = statusAfterLevel(shape, decision, acted);
+    // Where the point stands once this verdict is in, and what that makes the
+    // task — both worked out before anything is written.
+    const nextRound = verdict === "FAIL" ? item.round + 1 : item.round;
+    const after = shape.items.map((i) =>
+      i.id === itemId
+        ? {
+            ...i,
+            round: nextRound,
+            verdicts: [
+              ...i.verdicts.filter((v) => !(v.round === item.round && v.kind === at.kind && v.level === at.level)),
+              { kind: at.kind, level: at.level, round: item.round, verdict },
+            ],
+          }
+        : i,
+    );
+    const to = checklistStage(after, shape.levels);
+    const where = `${reviewing ? "Reviewer" : "Approver"} level ${at.level}`;
 
     await prisma.$transaction(async (tx) => {
-      await tx.taskLevelAction.create({
-        data: { levelId: row.id, round: shape.round, decision, remark: summary, actorId: ctx.id },
-      });
-      await moveStatus(tx, { taskId, actorId: ctx.id, from: shape.status, to, remark: summary });
-      await logTaskEvent(tx, {
-        taskId, actorId: ctx.id, kind: "LEVEL",
-        summary: `${kind === "REVIEW" ? "Reviewer" : "Approver"} level ${level.level}: ${decision.toLowerCase()}`,
-        remark: summary,
+      await tx.taskChecklistItemReview.upsert({
+        where: { itemId_levelId_round: { itemId, levelId: level.id, round: item.round } },
+        create: { itemId, levelId: level.id, round: item.round, verdict, remark: remark || null },
+        update: { verdict, remark: remark || null, actedAt: new Date() },
       });
 
-      if (to === "REWORK") {
+      // A denial starts the point's next round. Nothing else on the task moves.
+      if (verdict === "FAIL") {
+        await tx.taskChecklistItem.update({ where: { id: itemId }, data: { round: nextRound } });
+      }
+
+      if (to !== shape.status) {
+        await moveStatus(tx, { taskId, actorId: ctx.id, from: shape.status, to });
+      }
+
+      await logTaskEvent(tx, {
+        taskId, actorId: ctx.id, kind: "LEVEL",
+        summary: `${where}: point ${verdict === "PASS" ? "approved" : "denied"}`,
+        remark: remark || null,
+      });
+
+      if (verdict === "FAIL") {
         await tell(tx, "CHECKLIST_FAILED", taskId, ctx.id,
-          `Sent back from ${kind === "REVIEW" ? "review" : "approval"} level ${level.level}`, summary);
-      } else if (to === "APPROVED") {
-        // Every level has signed off. It goes back to whoever did the work to
-        // close, which is the last thing that happens to it.
+          `A point was sent back from ${where.toLowerCase()}`, remark || undefined);
+      }
+
+      if (to === "APPROVED") {
+        // Every point is through every level. It goes back to whoever did the
+        // work, to close — the last thing that happens to it.
         await tell(tx, "STATUS_CHANGED", taskId, ctx.id,
-          "Approved by every level — ready to close", summary);
+          "Every point approved — ready to close");
       } else {
         await tellActiveLevel(tx, taskId, ctx.id);
       }

@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+
+import { waitingLevel, type FlowItem, type FlowLevel } from "@/lib/tasks/checklist-flow";
 import { useRouter } from "next/navigation";
 import type { TaskKind, TaskPriority, TaskStatus } from "@prisma/client";
 
@@ -15,7 +17,7 @@ import { STATUS_LABEL, isOverdue } from "@/lib/tasks/lifecycle";
 import {
   acceptTaskAction, addCommentAction, closeTaskAction, reviewChecklistItemAction,
   completeTaskAction, decideExtensionAction, deleteCommentAction,
-  editCommentAction, reopenTaskAction, requestExtensionAction, submitForReviewAction,
+  editCommentAction, reopenTaskAction, requestExtensionAction,
   sendBackTaskAction, startTaskAction,
 } from "../actions";
 
@@ -34,6 +36,8 @@ interface Level {
 /** A checklist line: a number, a title, and every judgement on it. */
 interface Item {
   id: string;
+  /** This point's own round. Only verdicts from it still stand. */
+  round: number;
   text: string;
   marked: boolean;
   markedAt: string | null;
@@ -57,11 +61,11 @@ interface Item {
  */
 export function TaskDetail({
   task, levels, checklists, comments, extensions, files, history, can, nowMs, stage, stageWho, nextUp,
-  activeKind, activeLevel,
+  flowLevels, isAdmin, viewerId,
 }: {
-  /** The level now holding the task, and its number. */
-  activeKind: string | null;
-  activeLevel: number | null;
+  /** The levels a point travels through, in the shape the flow rules read. */
+  flowLevels: FlowLevel[];
+  isAdmin: boolean;
   /** Where a checklist task is standing, and who is holding it. */
   stage: string | null;
   stageWho: string | null;
@@ -90,33 +94,58 @@ export function TaskDetail({
   const toast = useToast();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [prompt, setPrompt] = React.useState<null | "complete" | "close" | "sendBack" | "reopen" | "submit">(null);
+  const [prompt, setPrompt] = React.useState<null | "complete" | "close" | "sendBack" | "reopen">(null);
   const [remark, setRemark] = React.useState("");
   const [asking, setAsking] = React.useState(false);
   const [deciding, setDeciding] = React.useState<string | null>(null);
   // Checklist / Review and approval / History, as horizontal tabs. A plain task
   // has no checklist, so it opens on the history it does have.
   const hasChecklist = checklists.length > 0;
-  // How many lines the level holding the task has yet to judge.
+  // How many points are standing in front of this viewer right now.
   const judgedLeft = checklists.reduce(
-    (n, c) =>
-      n + c.items.filter((i) =>
-        !i.reviews.some((r) => r.round === task.round && r.kind === activeKind && r.level === activeLevel),
-      ).length,
+    (n, c) => n + c.items.filter((i) => {
+      const at = waitingLevel(
+        {
+          id: i.id, round: i.round,
+          verdicts: i.reviews.map((r) => ({
+            kind: r.kind as "REVIEW" | "APPROVAL", level: r.level, round: r.round,
+            verdict: r.verdict as "PASS" | "FAIL",
+          })),
+        },
+        flowLevels,
+      );
+      return at !== null && (at.userId === viewerId || isAdmin);
+    }).length,
     0,
   );
-  /*
-   * Whether the viewer is one of the levels this task passes through, and what
-   * they do on it. A reviewer or an approver looking at a task in rework needs
-   * to know it is coming back to them.
+  /** One checklist row as the flow rules see it. */
+  const flowOf = React.useCallback(
+    (item: Item): FlowItem => ({
+      id: item.id,
+      round: item.round,
+      verdicts: item.reviews.map((r) => ({
+        kind: r.kind as "REVIEW" | "APPROVAL", level: r.level, round: r.round,
+        verdict: r.verdict as "PASS" | "FAIL",
+      })),
+    }),
+    [],
+  );
+
+  /**
+   * Whether this point is standing in front of someone this viewer is.
+   *
+   * `can.review` and `can.approve` come from the server and already carry the
+   * status gate, so a task that has not been started offers nothing — the
+   * points are in front of reviewer 1 in principle, but not yet in fact.
    */
-  const myLevels = levels.filter((l) => l.isViewer);
-  const onALevel = myLevels.length > 0;
-  const activeKindOfViewer = myLevels.some((l) => l.kind === "REVIEW")
-    ? myLevels.some((l) => l.kind === "APPROVAL")
-      ? "your review and approval levels"
-      : "your review level"
-    : "your approval level";
+  const mineToJudge = React.useCallback(
+    (item: Item) => {
+      if (!can.review && !can.approve) return false;
+      const at = waitingLevel(flowOf(item), flowLevels);
+      return at !== null && (at.userId === viewerId || isAdmin);
+    },
+    [flowOf, flowLevels, viewerId, isAdmin, can.review, can.approve],
+  );
 
   const TABS = [
     ...(hasChecklist ? [["checklist", "Checklist"] as const] : []),
@@ -153,9 +182,14 @@ export function TaskDetail({
               <span className="rounded-full bg-surface-field px-2.5 py-1 text-[10.5px] font-bold text-navy-600">
                 {STATUS_LABEL[task.status]}
               </span>
+              {/*
+                No round on the task any more: each point carries its own, and
+                a task-level one would be a number that means nothing. How far
+                the checklist has got is on the list itself.
+              */}
               {task.kind === "CHECKLIST" && (
                 <span className="rounded-full bg-[#EDE7FB] px-2.5 py-1 text-[10.5px] font-bold text-[#5B3FA8]">
-                  Checklist · round {task.round}
+                  Checklist
                 </span>
               )}
               {stage && (
@@ -201,18 +235,6 @@ export function TaskDetail({
             </Button>
           )}
 
-          {can.submit && (
-            <>
-              <Button size="sm" onClick={() => { setPrompt("submit"); setRemark(""); }}>
-                {task.status === "REWORK" ? "Resubmit for review" : "Send for review"}
-              </Button>
-              <span className="text-[12px] font-medium text-muted-600">
-                {task.status === "REWORK"
-                  ? "Resubmitting starts the review again at level 1."
-                  : "It goes to the first review level; the checklist is judged there."}
-              </span>
-            </>
-          )}
           {can.close && <Button size="sm" variant="success" onClick={() => { setPrompt("close"); setRemark(""); }}>Approve and close</Button>}
           {can.sendBack && <Button size="sm" variant="outline" onClick={() => { setPrompt("sendBack"); setRemark(""); }}>Send back for rework</Button>}
           {can.reopen && <Button size="sm" variant="outline" onClick={() => { setPrompt("reopen"); setRemark(""); }}>Reopen</Button>}
@@ -238,24 +260,6 @@ export function TaskDetail({
             </span>
           )}
 
-          {/*
-            Said to everyone except the person who can resubmit, who has the
-            button for it right here. It used to test can.resubmit, which is not
-            a key anything sets — so it read as undefined, and the assignee was
-            told the task was with themselves directly under the button that
-            sends it on.
-
-            A reviewer or approver needs the other half of it: the task is not
-            theirs now, and it is coming back to them when it returns.
-          */}
-          {task.status === "REWORK" && !can.submit && (
-            <span className="text-[12px] font-medium text-muted-600">
-              Sent back for rework — it is with {task.assignee} now
-              {onALevel
-                ? `, and returns to ${activeKindOfViewer} once it is resubmitted.`
-                : "."}
-            </span>
-          )}
           {task.status === "CLOSED" && !can.reopen && (
             <span className="text-[12px] font-medium text-muted-500">This task is closed and read-only.</span>
           )}
@@ -316,11 +320,10 @@ export function TaskDetail({
         <ChecklistCard
           key={cl.id}
           list={cl}
-          round={task.round}
-          canJudge={can.review || can.approve}
+          flowLevels={flowLevels}
+          flowOf={flowOf}
+          mineToJudge={mineToJudge}
           judgeLabel={can.review ? "Yours to review" : "Yours to approve"}
-          activeKind={activeKind}
-          activeLevel={activeLevel}
           onDone={() => router.refresh()}
         />
       ))}
@@ -330,26 +333,42 @@ export function TaskDetail({
           <div className="border-b border-line-300 bg-surface-sunken px-5 py-4">
             <h3 className="font-display text-[14px] font-bold text-navy-950">Review and approval</h3>
             <p className="mt-0.5 text-[11.5px] font-medium text-muted-500">
-              One person a level, acting in order. A denial at any level sends the task back and the
-              run starts again at reviewer level 1.
+              One person a level, in order. Each point is judged on its own: a denial sends that
+              point back to reviewer level 1 and leaves the rest where they are.
             </p>
           </div>
 
           <div className="divide-y divide-line-150">
-            {levels.map((l, i) => {
-              const thisRound = l.actions.find((a) => a.round === task.round);
-              const passed = thisRound && ["PASS", "APPROVE"].includes(thisRound.decision);
-              const isNext = !thisRound && levels.slice(0, i).every((p) => p.actions.some((a) => a.round === task.round));
+            {levels.map((l) => {
+              /*
+               * A level is not "done" or "pending" any more — it holds some
+               * number of points and has passed some others. That count is the
+               * honest reading, and it is what tells someone whether there is
+               * anything for them to do.
+               */
+              const all = checklists.flatMap((c) => c.items);
+              const here = all.filter((item) => {
+                const at = waitingLevel(flowOf(item), flowLevels);
+                return at !== null && at.kind === l.kind && at.level === l.level;
+              });
+              const past = all.filter((item) =>
+                item.reviews.some(
+                  (r) => r.round === item.round && r.kind === l.kind && r.level === l.level && r.verdict === "PASS",
+                ),
+              );
+              const holding = here.length > 0;
               return (
-                <div key={l.id} className={cn("px-5 py-3.5", isNext && "bg-brand-100/40")}>
+                <div key={l.id} className={cn("px-5 py-3.5", holding && "bg-brand-100/40")}>
                   <div className="flex flex-wrap items-center gap-3">
                     <span className={cn(
                       "flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold",
-                      thisRound
-                        ? passed ? "bg-good-600 text-white" : "bg-bad-600 text-white"
-                        : isNext ? "bg-brand-500 text-white" : "bg-surface-field text-muted-500",
+                      holding
+                        ? "bg-brand-500 text-white"
+                        : past.length === all.length && all.length > 0
+                          ? "bg-good-600 text-white"
+                          : "bg-surface-field text-muted-500",
                     )}>
-                      {thisRound ? (passed ? "✓" : "✕") : l.level}
+                      {!holding && past.length === all.length && all.length > 0 ? "✓" : l.level}
                     </span>
                     <span className="w-[112px] shrink-0 text-[11px] font-bold uppercase tracking-[.06em] text-muted-400">
                       {l.kind === "REVIEW" ? "Reviewer" : "Approver"} L{l.level}
@@ -357,34 +376,20 @@ export function TaskDetail({
                     <span className="min-w-[120px] flex-1 text-[13px] font-semibold text-navy-900">
                       {l.person}{l.isViewer && <span className="text-muted-400"> (you)</span>}
                     </span>
-                    {thisRound ? (
-                      <span className={cn(
-                        "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.06em]",
-                        passed ? "bg-good-050 text-good-700" : "bg-bad-050 text-bad-700",
-                      )}>
-                        {passed ? "Approved" : "Denied"}
-                      </span>
-                    ) : isNext ? (
+                    {holding ? (
                       <span className="shrink-0 rounded-full bg-brand-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.06em] text-brand-700">
-                        With them now
+                        {here.length} point{here.length === 1 ? "" : "s"} with them
+                      </span>
+                    ) : past.length === all.length && all.length > 0 ? (
+                      <span className="shrink-0 rounded-full bg-good-050 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.06em] text-good-700">
+                        Passed every point
                       </span>
                     ) : (
-                      <span className="shrink-0 text-[11px] font-medium text-muted-400">waiting their turn</span>
+                      <span className="shrink-0 text-[11px] font-medium text-muted-400">
+                        {past.length} of {all.length} passed
+                      </span>
                     )}
                   </div>
-
-                  {/* Every round this level has spoken in, oldest first. */}
-                  {l.actions.length > 0 && (
-                    <div className="mt-2 space-y-1 pl-[40px]">
-                      {l.actions.map((a) => (
-                        <p key={a.round} className="text-[11.5px] font-medium text-muted-600">
-                          <span className="num text-muted-400">{formatDateTime(a.actedAt)}</span>
-                          {a.round !== task.round && <span className="text-muted-400"> · round {a.round}</span>}
-                          {a.remark && ` — ${a.remark}`}
-                        </p>
-                      ))}
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -481,7 +486,6 @@ export function TaskDetail({
         <RemarkModal
           title={{
             complete: task.kind === "CHECKLIST" ? "Complete and close this task" : "Mark this task complete",
-            submit: task.status === "REWORK" ? "Resubmit for review" : "Send for review",
             close: "Approve and close",
             sendBack: "Send back for rework",
             reopen: "Reopen this closed task",
@@ -490,9 +494,6 @@ export function TaskDetail({
             complete: task.kind === "CHECKLIST"
               ? "Every level has signed off. A closure remark is required, and this closes the task."
               : "A closure remark is required.",
-            submit: task.status === "REWORK"
-              ? "Say what you corrected — it goes to the reviewers with it."
-              : "A note for the reviewers, if you have one. Optional.",
             close: "A remark is required, and goes on the record.",
             sendBack: "Say what needs redoing — the Assignee will see it.",
             reopen: "Say why it is being reopened.",
@@ -504,7 +505,6 @@ export function TaskDetail({
           onConfirm={() => {
             const work = {
               complete: () => completeTaskAction(task.id, remark),
-              submit: () => submitForReviewAction(task.id, remark),
               close: () => closeTaskAction(task.id, remark),
               sendBack: () => sendBackTaskAction(task.id, remark),
               reopen: () => reopenTaskAction(task.id, remark),
@@ -687,25 +687,19 @@ function DecideExtensionModal({
  * remark has to sit under the point it is about to be worth reading.
  */
 function ChecklistCard({
-  list, round, canJudge, judgeLabel, activeKind, activeLevel, onDone,
+  list, flowLevels, flowOf, mineToJudge, judgeLabel, onDone,
 }: {
   list: { id: string; name: string; items: Item[] };
-  round: number;
-  canJudge: boolean;
+  flowLevels: FlowLevel[];
+  flowOf: (item: Item) => FlowItem;
+  mineToJudge: (item: Item) => boolean;
   judgeLabel: string;
-  activeKind: string | null;
-  activeLevel: number | null;
   onDone: () => void;
 }) {
-  // While the task is being worked, the count is how much of the list is done.
-  // Once it is being judged, the ticks are history and the count that matters
-  // is how far the level holding it has got.
-  const judging = activeKind !== null;
-  const done = judging
-    ? list.items.filter((i) =>
-        i.reviews.some((r) => r.round === round && r.kind === activeKind && r.level === activeLevel),
-      ).length
-    : list.items.filter((i) => i.marked).length;
+  // Progress is how many points are through every level — the only reading that
+  // means the same thing at each step, now that points travel separately.
+  const done = list.items.filter((i) => waitingLevel(flowOf(i), flowLevels) === null).length;
+  const mine = list.items.filter(mineToJudge).length;
   const pct = list.items.length ? Math.round((done / list.items.length) * 100) : 0;
 
   return (
@@ -714,11 +708,11 @@ function ChecklistCard({
         <div className="flex flex-wrap items-center gap-3">
           <h3 className="font-display text-[14px] font-bold text-navy-950">{list.name}</h3>
           <span className="rounded-full bg-[#EDE7FB] px-2.5 py-1 text-[10.5px] font-bold text-[#5B3FA8]">
-            {done} of {list.items.length} {judging ? "judged" : "done"}
+            {done} of {list.items.length} approved
           </span>
-          {canJudge && (
+          {mine > 0 && (
             <span className="rounded-full bg-brand-100 px-2.5 py-1 text-[10.5px] font-bold text-brand-700">
-              {judgeLabel}
+              {judgeLabel} · {mine}
             </span>
           )}
         </div>
@@ -741,10 +735,8 @@ function ChecklistCard({
             key={item.id}
             item={item}
             index={i}
-            round={round}
-            canJudge={canJudge}
-            activeKind={activeKind}
-            activeLevel={activeLevel}
+            at={waitingLevel(flowOf(item), flowLevels)}
+            canJudge={mineToJudge(item)}
             onDone={onDone}
           />
         ))}
@@ -764,15 +756,14 @@ function ChecklistCard({
  * and passed down.
  */
 function ChecklistRow({
-  item, index, round, canJudge, activeKind, activeLevel, onDone,
+  item, index, at, canJudge, onDone,
 }: {
   item: Item;
   index: number;
-  round: number;
-  /** The level now holding the task. */
+  /** The level this point is standing in front of, or null once it is through. */
+  at: FlowLevel | null;
+  /** Whether that level is one the viewer holds. */
   canJudge: boolean;
-  activeKind: string | null;
-  activeLevel: number | null;
   onDone: () => void;
 }) {
   const [busy, setBusy] = React.useState(false);
@@ -780,9 +771,16 @@ function ChecklistRow({
   const [remark, setRemark] = React.useState("");
   const files = React.useRef<HTMLInputElement>(null);
 
-  const thisRound = item.reviews.filter((r) => r.round === round);
-  // What the level now holding the task has said about this line, if anything.
-  const settled = thisRound.find((r) => r.level === activeLevel && r.kind === activeKind) ?? null;
+  const thisRound = item.reviews.filter((r) => r.round === item.round);
+  /*
+   * A point waiting on a level has no verdict from that level yet, so this is
+   * only ever set once the point has moved past it — which is what turns the
+   * buttons into a badge. A point that is through every level shows the last
+   * word on it.
+   */
+  const settled = at
+    ? thisRound.find((r) => r.kind === at.kind && r.level === at.level) ?? null
+    : (thisRound[thisRound.length - 1] ?? null);
   const denied = thisRound.some((r) => r.verdict === "FAIL");
 
   async function send(verdict: "APPROVE" | "DENY") {
@@ -891,7 +889,7 @@ function ChecklistRow({
               at={r.actedAt}
               failed={r.verdict === "FAIL"}
               remark={r.remark}
-              note={r.round !== round ? `round ${r.round}` : undefined}
+              note={r.round !== item.round ? `round ${r.round}` : undefined}
             />
           ))}
           {item.files.length > 0 && (

@@ -4,6 +4,7 @@ import { PERM } from "@/lib/permissions/codes";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import { PageHeader } from "@/components/ui/primitives";
 import { byOldestFirst, type ApprovalRow } from "@/lib/approvals/queue";
+import { earliestWaitingLevel } from "@/lib/tasks/checklist-flow";
 import { ApprovalsScreen } from "./approvals-screen";
 
 export const metadata = { title: "Approvals" };
@@ -294,20 +295,41 @@ export default async function ApprovalsPage() {
           select: {
             id: true, kind: true, level: true, userId: true,
             user: { select: { name: true } },
-            actions: { select: { round: true } },
+          },
+        },
+        checklists: {
+          select: {
+            items: {
+              select: {
+                id: true, round: true,
+                reviews: {
+                  select: { round: true, verdict: true, level: { select: { kind: true, level: true } } },
+                },
+              },
+            },
           },
         },
       },
     });
     for (const t of atLevels) {
-      const kind = t.status === "UNDER_REVIEW" ? "REVIEW" : "APPROVAL";
-      const done = new Set(
-        t.levels.filter((l) => l.kind === kind && l.actions.some((a) => a.round === t.round)).map((l) => l.level),
+      // Points travel one at a time, so the row is about the earliest level
+      // still holding one — not about the task having reached a level.
+      const levels = t.levels.map((l) => ({ kind: l.kind, level: l.level, userId: l.userId }));
+      const items = t.checklists.flatMap((c) =>
+        c.items.map((i) => ({
+          id: i.id,
+          round: i.round,
+          verdicts: i.reviews.map((r) => ({
+            kind: r.level.kind, level: r.level.level, round: r.round,
+            verdict: r.verdict as "PASS" | "FAIL",
+          })),
+        })),
       );
-      const next = t.levels
-        .filter((l) => l.kind === kind && !done.has(l.level))
-        .sort((a, b) => a.level - b.level)[0];
+      const at = earliestWaitingLevel(items, levels);
+      if (!at) continue;
+      const next = t.levels.find((l) => l.kind === at.kind && l.level === at.level);
       if (!next) continue;
+      const kind = at.kind;
 
       const mine = next.userId === ctx.id;
       if (!mine && !seesAll) continue;

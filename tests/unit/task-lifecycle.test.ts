@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  activeLevel, canDo, isOverdue, rolesOf, statusAfterSubmit, statusAfterComplete,
-  statusAfterLevel, type TaskShape,
+  canDo, isOverdue, rolesOf, statusAfterComplete, type TaskShape,
 } from "@/lib/tasks/lifecycle";
+import type { FlowItem } from "@/lib/tasks/checklist-flow";
 
 const ASSIGNER = "u-assigner";
 const ASSIGNEE = "u-assignee";
@@ -20,9 +20,16 @@ function task(over: Partial<TaskShape> = {}): TaskShape {
     assigneeId: ASSIGNEE,
     createdById: ASSIGNER,
     levels: [],
+    items: [],
     ...over,
   };
 }
+
+/* A checklist point and the verdicts on it, in the shape the rules read. */
+const point = (round: number, verdicts: FlowItem["verdicts"] = []): FlowItem =>
+  ({ id: `p${round}-${verdicts.length}`, round, verdicts });
+const passed = (kind: "REVIEW" | "APPROVAL", level: number, round = 1) =>
+  ({ kind, level, round, verdict: "PASS" as const });
 
 function checklistTask(over: Partial<TaskShape> = {}): TaskShape {
   return task({
@@ -110,30 +117,69 @@ describe("the Assigner's side", () => {
   });
 });
 
-describe("levels act in order, one at a time", () => {
-  it("makes Reviewer 1 active first", () => {
-    const t = checklistTask({ status: "UNDER_REVIEW" });
-    expect(activeLevel(t, [])?.userId).toBe(R1);
+describe("a point stands in front of one level at a time", () => {
+  /* The checklist task's levels are Reviewer 1, Reviewer 2, then Approver 1. */
+
+  it("puts a fresh point in front of Reviewer 1", () => {
+    const t = checklistTask({ status: "UNDER_REVIEW", items: [point(1)] });
     expect(canDo("review", t, as(R1))).toBe(true);
     expect(canDo("review", t, as(R2))).toBe(false);
-  });
-
-  it("moves to Reviewer 2 once Reviewer 1 has acted", () => {
-    const t = checklistTask({ status: "UNDER_REVIEW" });
-    const acted = [{ kind: "REVIEW" as const, level: 1 }];
-    expect(activeLevel(t, acted)?.userId).toBe(R2);
-    expect(canDo("review", t, as(R2), acted)).toBe(true);
-    expect(canDo("review", t, as(R1), acted)).toBe(false);
-  });
-
-  it("keeps an Approver out until the reviews are through", () => {
-    const t = checklistTask({ status: "UNDER_REVIEW" });
     expect(canDo("approve", t, as(A1))).toBe(false);
   });
 
-  it("lets the Approver act once the task is under approval", () => {
-    const t = checklistTask({ status: "UNDER_APPROVAL" });
+  it("hands it to Reviewer 2 once Reviewer 1 has passed it", () => {
+    const t = checklistTask({
+      status: "UNDER_REVIEW",
+      items: [point(1, [passed("REVIEW", 1)])],
+    });
+    expect(canDo("review", t, as(R2))).toBe(true);
+    expect(canDo("review", t, as(R1))).toBe(false);
+  });
+
+  it("keeps the Approver out until every reviewer has passed it", () => {
+    const t = checklistTask({
+      status: "UNDER_REVIEW",
+      items: [point(1, [passed("REVIEW", 1)])],
+    });
+    expect(canDo("approve", t, as(A1))).toBe(false);
+  });
+
+  it("lets the Approver act once the reviews are through", () => {
+    const t = checklistTask({
+      status: "UNDER_APPROVAL",
+      items: [point(1, [passed("REVIEW", 1), passed("REVIEW", 2)])],
+    });
     expect(canDo("approve", t, as(A1))).toBe(true);
+  });
+
+  /*
+   * The behaviour the whole-task round made impossible: one point back with
+   * review while another waits on approval, and both people can work.
+   */
+  it("lets a reviewer and an approver work at the same time on different points", () => {
+    const t = checklistTask({
+      status: "UNDER_REVIEW",
+      items: [
+        point(2),                                                   // denied, back at R1
+        point(1, [passed("REVIEW", 1), passed("REVIEW", 2)]),       // with A1
+      ],
+    });
+    expect(canDo("review", t, as(R1))).toBe(true);
+    expect(canDo("approve", t, as(A1))).toBe(true);
+  });
+
+  it("gives nobody anything to judge before the task is started", () => {
+    const t = checklistTask({ status: "ACCEPTED", items: [point(1)] });
+    expect(canDo("review", t, as(R1))).toBe(false);
+  });
+
+  it("gives nobody anything to judge once every point is through", () => {
+    const t = checklistTask({
+      status: "APPROVED",
+      items: [point(1, [passed("REVIEW", 1), passed("REVIEW", 2), passed("APPROVAL", 1)])],
+    });
+    expect(canDo("review", t, as(R1))).toBe(false);
+    expect(canDo("approve", t, as(A1))).toBe(false);
   });
 });
 
@@ -146,53 +192,18 @@ describe("where each decision sends the task", () => {
     expect(statusAfterComplete(checklistTask())).toBe("CLOSED");
   });
 
-  it("sends the assignee's finished list to the first review level", () => {
-    expect(statusAfterSubmit(checklistTask())).toBe("UNDER_REVIEW");
+  it("lets the Assignee close a checklist task only once every point is approved", () => {
+    expect(canDo("complete", checklistTask({ status: "APPROVED" }), as(ASSIGNEE))).toBe(true);
+    expect(canDo("complete", checklistTask({ status: "UNDER_REVIEW" }), as(ASSIGNEE))).toBe(false);
+    expect(canDo("complete", checklistTask({ status: "UNDER_APPROVAL" }), as(ASSIGNEE))).toBe(false);
   });
 
-  it("skips review when nobody was named to review it", () => {
-    const t = checklistTask({ levels: [{ kind: "APPROVAL", level: 1, userId: A1 }] });
-    expect(statusAfterSubmit(t)).toBe("UNDER_APPROVAL");
-  });
-
-  it("is ready to close straight away when no levels were named at all", () => {
-    expect(statusAfterSubmit(checklistTask({ levels: [] }))).toBe("APPROVED");
-  });
-
-  it("keeps it under review while a reviewer remains", () => {
-    const t = checklistTask({ status: "UNDER_REVIEW" });
-    expect(statusAfterLevel(t, "PASS", [])).toBe("UNDER_REVIEW");
-  });
-
-  it("moves to approval when the last reviewer passes", () => {
-    const t = checklistTask({ status: "UNDER_REVIEW" });
-    expect(statusAfterLevel(t, "PASS", [{ kind: "REVIEW", level: 1 }])).toBe("UNDER_APPROVAL");
-  });
-
-  it("hands the task back to the assignee on the last approval", () => {
-    const t = checklistTask({ status: "UNDER_APPROVAL" });
-    expect(statusAfterLevel(t, "APPROVE", [
-      { kind: "REVIEW", level: 1 }, { kind: "REVIEW", level: 2 },
-    ])).toBe("APPROVED");
-  });
-
-  it("sends a fail at any level to Rework", () => {
-    expect(statusAfterLevel(checklistTask({ status: "UNDER_REVIEW" }), "FAIL", [])).toBe("REWORK");
-    expect(statusAfterLevel(checklistTask({ status: "UNDER_APPROVAL" }), "REJECT", [
-      { kind: "REVIEW", level: 1 }, { kind: "REVIEW", level: 2 },
-    ])).toBe("REWORK");
-  });
-
-  it("puts a reworked task back in the Assignee's hands", () => {
-    const t = checklistTask({ status: "REWORK" });
-    expect(canDo("submit", t, as(ASSIGNEE))).toBe(true);
-    expect(canDo("review", t, as(R1))).toBe(false);
-  });
-
-  it("restarts at Reviewer 1 in the next round", () => {
-    // A new round has nobody acted in it, so level 1 is active again.
-    const t = checklistTask({ status: "UNDER_REVIEW", round: 2 });
-    expect(activeLevel(t, [])?.userId).toBe(R1);
+  /*
+   * A standalone task has no levels and no points. Its Assigner can send it
+   * back, and the Assignee completes it again — there is nothing to resubmit.
+   */
+  it("lets the Assignee complete a standalone task again after it is sent back", () => {
+    expect(canDo("complete", task({ status: "REWORK" }), as(ASSIGNEE))).toBe(true);
   });
 });
 
@@ -226,8 +237,19 @@ describe("Admin has full control", () => {
     expect(canDo("close", task({ status: "COMPLETED" }), admin)).toBe(true);
   });
 
-  it("can act at whichever level is active", () => {
-    expect(canDo("review", checklistTask({ status: "UNDER_REVIEW" }), admin)).toBe(true);
+  it("can judge a point at whichever level is holding it", () => {
+    const atReview = checklistTask({ status: "UNDER_REVIEW", items: [point(1)] });
+    expect(canDo("review", atReview, admin)).toBe(true);
+
+    const atApproval = checklistTask({
+      status: "UNDER_APPROVAL",
+      items: [point(1, [passed("REVIEW", 1), passed("REVIEW", 2)])],
+    });
+    expect(canDo("approve", atApproval, admin)).toBe(true);
+  });
+
+  it("has nothing to judge when no point is waiting", () => {
+    expect(canDo("review", checklistTask({ status: "UNDER_REVIEW", items: [] }), admin)).toBe(false);
   });
 
   it("reassigns an Assignee or a level, and nobody else may", () => {
@@ -275,15 +297,16 @@ describe("overdue", () => {
   });
 });
 
-describe("a task under review cannot be sent to review again", () => {
-  const checklist = (status: TaskShape["status"], round = 1): TaskShape => ({
-    kind: "CHECKLIST", status, round,
+describe("the run is one way: start, judge every point, then close", () => {
+  const checklist = (status: TaskShape["status"], items: FlowItem[] = [point(1)]): TaskShape => ({
+    kind: "CHECKLIST", status, round: 1,
     assigneeId: ASSIGNEE, createdById: ASSIGNER,
     levels: [
       { kind: "REVIEW", level: 1, userId: R1 },
       { kind: "REVIEW", level: 2, userId: R2 },
       { kind: "APPROVAL", level: 1, userId: A1 },
     ],
+    items,
   });
 
   it("refuses Complete at every status until every level has signed off", () => {
@@ -293,20 +316,24 @@ describe("a task under review cannot be sent to review again", () => {
     }
   });
 
-  it("submits only from Started or Rework", () => {
-    for (const status of ["UNDER_REVIEW", "UNDER_APPROVAL", "APPROVED", "CLOSED"] as const) {
-      expect(canDo("submit", checklist(status), as(ASSIGNEE)), status).toBe(false);
+  /*
+   * There is nothing for the Assignee to submit. Starting the task is what puts
+   * the points in front of the first reviewer, so no status gives them a hand-off
+   * of their own.
+   */
+  it("gives the Assignee nothing to send onwards at any status", () => {
+    for (const status of ["STARTED", "UNDER_REVIEW", "UNDER_APPROVAL", "APPROVED", "CLOSED"] as const) {
+      expect(canDo("review", checklist(status), as(ASSIGNEE)), status).toBe(false);
+      expect(canDo("approve", checklist(status), as(ASSIGNEE)), status).toBe(false);
     }
-    expect(canDo("submit", checklist("STARTED"), as(ASSIGNEE))).toBe(true);
-    expect(canDo("submit", checklist("REWORK"), as(ASSIGNEE))).toBe(true);
   });
 
   it("gives the assignee no verdict of their own on the checklist", () => {
     // They are usually review level 1. Judging the list as assignee and again
     // as that reviewer is judging it twice, which is what this removes.
-    const started = checklist("STARTED");
-    expect(canDo("review", started, as(ASSIGNEE))).toBe(false);
-    expect(canDo("approve", started, as(ASSIGNEE))).toBe(false);
+    const judging = checklist("UNDER_REVIEW");
+    expect(canDo("review", judging, as(ASSIGNEE))).toBe(false);
+    expect(canDo("approve", judging, as(ASSIGNEE))).toBe(false);
   });
 
   it("lets nobody judge a closed task, Admin included", () => {
@@ -319,21 +346,13 @@ describe("a task under review cannot be sent to review again", () => {
 
   it("sends a closed task nowhere — reopening is the only way back", () => {
     const closed = checklist("CLOSED");
-    for (const action of ["complete", "submit", "review", "approve", "comment", "close"] as const) {
+    for (const action of ["complete", "review", "approve", "comment", "close"] as const) {
       expect(canDo(action, closed, admin), action).toBe(false);
     }
     expect(canDo("reopen", closed, admin)).toBe(true);
   });
 
-  it("keeps the whole run one-way: list, review, approve, then close", () => {
-    expect(statusAfterSubmit(checklist("STARTED"))).toBe("UNDER_REVIEW");
-    const review = checklist("UNDER_REVIEW");
-    expect(statusAfterLevel(review, "PASS", [])).toBe("UNDER_REVIEW");
-    expect(statusAfterLevel(review, "PASS", [{ kind: "REVIEW", level: 1 }])).toBe("UNDER_APPROVAL");
-    const approval = checklist("UNDER_APPROVAL");
-    expect(statusAfterLevel(approval, "APPROVE", [
-      { kind: "REVIEW", level: 1 }, { kind: "REVIEW", level: 2 },
-    ])).toBe("APPROVED");
+  it("closes a checklist task when the Assignee completes it", () => {
     expect(statusAfterComplete(checklist("APPROVED"))).toBe("CLOSED");
   });
 

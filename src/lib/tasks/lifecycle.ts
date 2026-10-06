@@ -1,5 +1,7 @@
 import type { TaskKind, TaskStatus } from "@prisma/client";
 
+import { isWaitingOn, waitingLevel, type FlowItem } from "./checklist-flow";
+
 /**
  * Who may do what to a task, and where it can go next.
  *
@@ -43,7 +45,6 @@ export type TaskAction =
   | "comment"
   | "review"
   | "approve"
-  | "submit"
   | "reopen"
   | "reassign";
 
@@ -64,6 +65,11 @@ export interface TaskShape {
   /** The Assigner — whoever created it. */
   createdById: string;
   levels: TaskLevelShape[];
+  /**
+   * The checklist points and where each one stands. Empty on a standalone task,
+   * which has no points and no levels to put them in front of.
+   */
+  items: FlowItem[];
 }
 
 export interface TaskViewer {
@@ -86,22 +92,31 @@ export function rolesOf(task: TaskShape, viewer: TaskViewer): Set<TaskRole> {
 }
 
 /**
- * The level waiting to act, or null when nothing is.
+ * The level this viewer could act on right now, by kind — the one holding at
+ * least one checklist point that is theirs to judge.
  *
- * Levels act strictly in order and only in the current round, so the active one
- * is the lowest level of the active kind that has not acted this round.
+ * Levels no longer act on the task as a whole, so there is no single "active
+ * level": two of them can be working at once on different points.
  */
-export function activeLevel(
+function levelWithWork(
   task: TaskShape,
-  actedThisRound: Array<{ kind: "REVIEW" | "APPROVAL"; level: number }>,
+  userId: string,
+  kind: "REVIEW" | "APPROVAL",
 ): TaskLevelShape | null {
-  const kind = task.status === "UNDER_REVIEW" ? "REVIEW" : task.status === "UNDER_APPROVAL" ? "APPROVAL" : null;
-  if (!kind) return null;
-  const done = new Set(actedThisRound.filter((a) => a.kind === kind).map((a) => a.level));
-  return task.levels
-    .filter((l) => l.kind === kind && !done.has(l.level))
-    .sort((a, b) => a.level - b.level)[0] ?? null;
+  const mine = task.levels.filter((l) => l.kind === kind && l.userId === userId);
+  for (const l of mine) {
+    if (task.items.some((i) => isWaitingOn(i, task.levels, l))) return l;
+  }
+  return null;
 }
+
+/** Whether any point at all is standing in front of a level of this kind. */
+function anyWorkOfKind(task: TaskShape, kind: "REVIEW" | "APPROVAL"): boolean {
+  return task.items.some((i) => waitingLevel(i, task.levels)?.kind === kind);
+}
+
+/** The statuses in which points are being judged. */
+const JUDGING: TaskStatus[] = ["UNDER_REVIEW", "UNDER_APPROVAL"];
 
 /** Statuses from which nothing may be changed except by an Admin reopening. */
 const LOCKED: TaskStatus[] = ["CLOSED"];
@@ -117,7 +132,6 @@ export function canDo(
   action: TaskAction,
   task: TaskShape,
   viewer: TaskViewer,
-  actedThisRound: Array<{ kind: "REVIEW" | "APPROVAL"; level: number }> = [],
 ): boolean {
   const roles = rolesOf(task, viewer);
   const closed = LOCKED.includes(task.status);
@@ -133,7 +147,7 @@ export function canDo(
   // Everyone who can see the task can talk on it, at any status until it closes.
   if (action === "comment") return roles.size > 0;
 
-  if (roles.has("ADMIN")) return adminMayAtStatus(action, task, actedThisRound);
+  if (roles.has("ADMIN")) return adminMayAtStatus(action, task);
 
   switch (action) {
     // The Assigner may correct the task until work starts on it.
@@ -151,7 +165,12 @@ export function canDo(
     // and completing it is what closes it.
     case "complete":
       if (!roles.has("ASSIGNEE")) return false;
-      return task.kind === "CHECKLIST" ? task.status === "APPROVED" : task.status === "STARTED";
+      // A checklist task is completed only once every point has been through
+      // every level; a standalone one when the work is done, including after
+      // the Assigner has sent it back.
+      return task.kind === "CHECKLIST"
+        ? task.status === "APPROVED"
+        : task.status === "STARTED" || task.status === "REWORK";
 
     // A Hold is an extension too, so the Assignee asks from Accepted or Started.
     case "requestExtension":
@@ -166,23 +185,17 @@ export function canDo(
     case "sendBack":
       return roles.has("ASSIGNER") && task.kind === "STANDALONE" && task.status === "COMPLETED";
 
-    case "review": {
-      if (task.status !== "UNDER_REVIEW") return false;
-      const next = activeLevel(task, actedThisRound);
-      return !!next && next.userId === viewer.userId;
-    }
+    /*
+     * Judging is per point, not per task. A reviewer may act the moment any
+     * point is standing in front of them — which can be while an approver is
+     * working on a different point of the same checklist.
+     */
+    case "review":
+      return JUDGING.includes(task.status) && levelWithWork(task, viewer.userId, "REVIEW") !== null;
 
-    case "approve": {
-      if (task.status !== "UNDER_APPROVAL") return false;
-      const next = activeLevel(task, actedThisRound);
-      return !!next && next.userId === viewer.userId;
-    }
+    case "approve":
+      return JUDGING.includes(task.status) && levelWithWork(task, viewer.userId, "APPROVAL") !== null;
 
-    // Sending the work to be checked: once when it is done, and again after a
-    // rework. The Assignee does not judge the list themselves — they are often
-    // review level 1, and judging it twice is judging it once.
-    case "submit":
-      return roles.has("ASSIGNEE") && (task.status === "STARTED" || task.status === "REWORK");
   }
 }
 
@@ -190,21 +203,21 @@ export function canDo(
 function adminMayAtStatus(
   action: TaskAction,
   task: TaskShape,
-  actedThisRound: Array<{ kind: "REVIEW" | "APPROVAL"; level: number }>,
 ): boolean {
   switch (action) {
     case "edit": return true;
     case "accept": return task.status === "PENDING";
     case "start": return task.status === "ACCEPTED" || task.status === "HOLD";
     case "complete":
-      return task.kind === "CHECKLIST" ? task.status === "APPROVED" : task.status === "STARTED";
+      return task.kind === "CHECKLIST"
+        ? task.status === "APPROVED"
+        : task.status === "STARTED" || task.status === "REWORK";
     case "requestExtension": return ["ACCEPTED", "STARTED", "HOLD", "REWORK"].includes(task.status);
     case "decideExtension": return true;
     case "close":
     case "sendBack": return task.kind === "STANDALONE" && task.status === "COMPLETED";
-    case "review": return task.status === "UNDER_REVIEW" && !!activeLevel(task, actedThisRound);
-    case "approve": return task.status === "UNDER_APPROVAL" && !!activeLevel(task, actedThisRound);
-    case "submit": return task.status === "STARTED" || task.status === "REWORK";
+    case "review": return JUDGING.includes(task.status) && anyWorkOfKind(task, "REVIEW");
+    case "approve": return JUDGING.includes(task.status) && anyWorkOfKind(task, "APPROVAL");
     default: return true;
   }
 }
@@ -218,48 +231,6 @@ function adminMayAtStatus(
  */
 export function statusAfterComplete(task: TaskShape): TaskStatus {
   return task.kind === "CHECKLIST" ? "CLOSED" : "COMPLETED";
-}
-
-/**
- * Where submitting the work sends it.
- *
- * To the first level that has to check it. With no levels named at all there
- * is nothing to check, and the task waits to be closed.
- */
-export function statusAfterSubmit(task: TaskShape): TaskStatus {
-  const hasReview = task.levels.some((l) => l.kind === "REVIEW");
-  const hasApproval = task.levels.some((l) => l.kind === "APPROVAL");
-  if (hasReview) return "UNDER_REVIEW";
-  if (hasApproval) return "UNDER_APPROVAL";
-  return "APPROVED";
-}
-
-/**
- * Where a level's decision sends the task.
- *
- * A Fail or a Reject at any level is a Rework, whichever level it came from;
- * the last Approver's approval closes the task with no further step.
- */
-export function statusAfterLevel(
-  task: TaskShape,
-  decision: "PASS" | "FAIL" | "APPROVE" | "REJECT",
-  actedThisRound: Array<{ kind: "REVIEW" | "APPROVAL"; level: number }>,
-): TaskStatus {
-  if (decision === "FAIL" || decision === "REJECT") return "REWORK";
-
-  const acted = [...actedThisRound];
-  const current = activeLevel(task, acted);
-  if (current) acted.push({ kind: current.kind, level: current.level });
-
-  const stillToReview = activeLevel({ ...task, status: "UNDER_REVIEW" }, acted);
-  if (stillToReview) return "UNDER_REVIEW";
-
-  const stillToApprove = activeLevel({ ...task, status: "UNDER_APPROVAL" }, acted);
-  if (stillToApprove) return "UNDER_APPROVAL";
-
-  // Everyone has signed off. The task goes back to whoever did the work, to
-  // close — which is the last thing that happens to it.
-  return "APPROVED";
 }
 
 /** A task is overdue once its due date passes with the work not yet done. */
