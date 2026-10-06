@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 
@@ -37,14 +38,55 @@ export function SearchSelect({
   const [open, setOpen] = React.useState(false);
   const [q, setQ] = React.useState("");
   const box = React.useRef<HTMLDivElement>(null);
+  const list = React.useRef<HTMLDivElement>(null);
+  /** Where to draw the list, in viewport coordinates. */
+  const [at, setAt] = React.useState<{ left: number; top: number; width: number; up: boolean } | null>(null);
 
   React.useEffect(() => {
     const away = (e: MouseEvent) => {
-      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      // The list is portalled out of this element, so it has to be asked too.
+      if (box.current?.contains(t) || list.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", away);
     return () => document.removeEventListener("mousedown", away);
   }, []);
+
+  /*
+   * The list is drawn at the top of the document rather than under the trigger.
+   *
+   * Inside anything that scrolls — a dialog body, a drawer, a table — an
+   * absolutely positioned list is clipped by that box, and the options below
+   * the fold simply cannot be reached. Measured against the trigger and fixed
+   * to the viewport, it is clipped by nothing. It flips above the trigger when
+   * there is more room up there.
+   */
+  const place = React.useCallback(() => {
+    const el = box.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom;
+    setAt({
+      left: r.left,
+      top: r.bottom + 4,
+      width: r.width,
+      up: below < 280 && r.top > below,
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    place();
+    // Anything that moves the trigger moves the list with it. Capture, so a
+    // scroll inside a dialog body counts and not only the window's own.
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open, place]);
 
   const picked = options.find((o) => o.id === value) ?? null;
 
@@ -78,8 +120,17 @@ export function SearchSelect({
       {/* Kept for form posts and for required-field validation. */}
       <input type="hidden" value={value} required={required} />
 
-      {open && (
-        <div className="absolute left-0 right-0 top-[42px] z-50 rounded-[11px] border border-line-400 bg-white p-[7px] shadow-[0_16px_40px_rgba(25,26,92,.14)]">
+      {open && at && typeof document !== "undefined" && createPortal(
+        <div
+          ref={list}
+          style={
+            at.up
+              ? { left: at.left, bottom: window.innerHeight - at.top + 8, width: at.width }
+              : { left: at.left, top: at.top, width: at.width }
+          }
+          // Above the modal at z-96, below the toast at z-98.
+          className="fixed z-[97] rounded-[11px] border border-line-400 bg-white p-[7px] shadow-[0_16px_40px_rgba(25,26,92,.14)]"
+        >
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -108,7 +159,8 @@ export function SearchSelect({
               <p className="px-2.5 py-4 text-center text-[12px] font-medium text-muted-400">{emptyLabel}</p>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

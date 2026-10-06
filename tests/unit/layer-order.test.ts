@@ -31,6 +31,7 @@ const DETAIL = () => layer("components/shell/detail-screen.tsx", "fixed inset-y-
 const MODAL = () => layer("components/ui/modal.tsx", "fixed inset-0");
 const TOAST = () => layer("components/ui/toast.tsx", "animate-fade-up fixed bottom-");
 const SPLASH = () => layer("components/loading-splash.tsx", "fixed inset-0");
+const PICKER = () => layer("components/ui/search-select.tsx", "fixed z-[");
 
 describe("overlay layer order", () => {
   it("puts the detail screen above the sidebar", () => {
@@ -51,5 +52,27 @@ describe("overlay layer order", () => {
 
   it("keeps the loading splash on top of everything", () => {
     expect(SPLASH()).toBeGreaterThan(TOAST());
+  });
+
+  /*
+   * The searchable picker's list is drawn at the top of the document rather
+   * than under its trigger. Positioned inside the element, it was clipped by
+   * whatever scrolls around it — in a dialog body the options below the fold
+   * could not be reached at all.
+   */
+  it("draws the picker's list above a modal", () => {
+    expect(PICKER()).toBeGreaterThan(MODAL());
+  });
+
+  it("keeps the picker's list below a toast", () => {
+    expect(PICKER()).toBeLessThan(TOAST());
+  });
+
+  it("portals the picker's list out of whatever scrolls around it", () => {
+    const src = readFileSync(new URL("../../src/components/ui/search-select.tsx", import.meta.url), "utf8");
+    expect(src).toContain("createPortal");
+    expect(src).toContain("document.body");
+    // Positioned to the viewport, not to an ancestor that may be clipping.
+    expect(src).toMatch(/className="fixed z-\[\d+\]/);
   });
 });

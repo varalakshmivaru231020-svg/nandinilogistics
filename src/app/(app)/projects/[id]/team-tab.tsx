@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Field } from "@/components/ui/primitives";
+import { SearchSelect } from "@/components/ui/search-select";
 import { mapUserToProjectAction, removeUserFromProjectAction } from "../actions";
 
 export interface TeamRole {
@@ -24,7 +25,10 @@ export function TeamTab({
 }: {
   projectId: string;
   roles: TeamRole[];
-  assignable: Array<{ id: string; name: string; designation: string | null }>;
+  assignable: Array<{
+    id: string; name: string; designation: string | null;
+    email: string; phone: string | null;
+  }>;
   can: { assign: boolean; remove: boolean };
 }) {
   const router = useRouter();
@@ -107,19 +111,24 @@ export function TeamTab({
           </>
         }
       >
+        {/*
+          The same searchable picker the task form uses. A native select is fine
+          for a handful of names and useless once the directory is the whole
+          company, where the person is found by typing rather than by scrolling.
+        */}
         <Field label="User" hint="Access follows the mapping — a mapped user sees this project.">
-          <select
+          <SearchSelect
+            options={assignable.map((u) => ({
+              id: u.id,
+              label: u.name,
+              hint: [u.designation, u.email].filter(Boolean).join(" · ") || undefined,
+              keywords: [u.email, u.phone].filter(Boolean).join(" "),
+            }))}
             value={pick}
-            onChange={(e) => setPick(e.target.value)}
-            className="w-full rounded-[9px] border border-line-400 bg-surface-field px-3 py-2 text-[12.5px] text-navy-900"
-          >
-            <option value="">Pick a user…</option>
-            {assignable.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}{u.designation ? ` · ${u.designation}` : ""}
-              </option>
-            ))}
-          </select>
+            onChange={setPick}
+            placeholder="Search people…"
+            emptyLabel="Nobody left to map"
+          />
         </Field>
       </Modal>
     </div>

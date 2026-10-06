@@ -89,9 +89,19 @@ export default async function ProjectDetailPage({
         await prisma.user.findMany({
           where: { status: "ACTIVE", NOT: { projectAccess: { some: { projectId: project.id } } } },
           orderBy: { name: "asc" },
-          select: { id: true, name: true, designation: { select: { name: true } } },
+          select: {
+            id: true, name: true, email: true, phone: true,
+            designation: { select: { name: true } },
+          },
         })
-      ).map((u) => ({ id: u.id, name: u.name, designation: u.designation?.name ?? null }))
+      ).map((u) => ({
+        id: u.id,
+        name: u.name,
+        designation: u.designation?.name ?? null,
+        // What the picker should find someone by, beyond their name.
+        email: u.email,
+        phone: u.phone,
+      }))
     : [];
 
   const [types, cities] = ctx.has(PERM.project.project.update)
