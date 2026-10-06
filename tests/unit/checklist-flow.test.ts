@@ -50,6 +50,30 @@ describe("where a point is waiting", () => {
     expect(waitingLevel(denied, LEVELS)).toEqual(R1);
   });
 
+  it("goes back to the first reviewer when the second reviewer denies it", () => {
+    const denied = item("a", 2, [pass(R1, 1), fail(R2, 1)]);
+    expect(waitingLevel(denied, LEVELS)).toEqual(R1);
+  });
+
+  /*
+   * Including when the denial came from reviewer 1 themselves: the rule is the
+   * same wherever it came from, so the point restarts at the head of the chain
+   * and every level judges it again.
+   */
+  it("goes back to the first reviewer when the first reviewer denies it", () => {
+    const denied = item("a", 2, [fail(R1, 1)]);
+    expect(waitingLevel(denied, LEVELS)).toEqual(R1);
+  });
+
+  it("makes every level judge it again after a denial, in order", () => {
+    const after = (verdicts: FlowVerdict[]) => waitingLevel(item("a", 2, verdicts), LEVELS);
+    const history = [pass(R1, 1), pass(R2, 1), fail(A1, 1)];
+    expect(after(history)).toEqual(R1);
+    expect(after([...history, pass(R1, 2)])).toEqual(R2);
+    expect(after([...history, pass(R1, 2), pass(R2, 2)])).toEqual(A1);
+    expect(after([...history, pass(R1, 2), pass(R2, 2), pass(A1, 2)])).toEqual(A2);
+  });
+
   it("does not count a pass from an earlier round", () => {
     const again = item("a", 2, [pass(R1, 1), pass(R2, 1)]);
     expect(waitingLevel(again, LEVELS)).toEqual(R1);
