@@ -2,6 +2,8 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { leadListWhere } from "@/lib/sales/lead-list";
+import { ModuleStats } from "@/components/list/module-stats";
+import { leadFigures } from "@/lib/metrics/figures";
 import { LeadsScreen } from "./leads-screen";
 
 export const metadata = { title: "Lead Management · Sales CRM" };
@@ -20,7 +22,7 @@ export default async function LeadsPage({
   // Shared with the export, so a download holds exactly what this screen shows.
   const where = leadListWhere(ownership, { q, state, source, fu }, now);
 
-  const [leads, stageCounts, sources, lostReasons, projects, unitTypes, formFields] = await Promise.all([
+  const [leads, statRows, stageCounts, sources, lostReasons, projects, unitTypes, formFields] = await Promise.all([
     prisma.lead.findMany({
       where,
       orderBy: [{ nextActionAt: "asc" }, { createdAt: "desc" }],
@@ -33,6 +35,8 @@ export default async function LeadsPage({
         _count: { select: { followUps: true, siteVisits: true } },
       },
     }),
+    // The band reads the whole pipeline the viewer can see, not the filtered page.
+    prisma.lead.findMany({ where: ownership, select: { state: true, createdAt: true, budgetMax: true } }),
     prisma.lead.groupBy({ by: ["state"], where: ownership, _count: true }),
     prisma.leadSource.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.lostReason.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
@@ -52,6 +56,12 @@ export default async function LeadsPage({
 
   return (
     <div>
+      <ModuleStats
+        figures={leadFigures(
+          statRows.map((l) => ({ stage: l.state, createdAt: l.createdAt, budgetMax: l.budgetMax })),
+          now.getTime(),
+        )}
+      />
       <LeadsScreen
         totalLeads={totalLeads}
         openLeads={openLeads}

@@ -8,6 +8,8 @@ import { PERM } from "@/lib/permissions/codes";
 import { grnListWhere, grnMatch, readGrnListParams } from "@/lib/material/list-filters";
 import { vendorOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
+import { ModuleStats } from "@/components/list/module-stats";
+import { grnFigures } from "@/lib/metrics/figures";
 import { ListNote } from "@/components/list/list-note";
 import { GrnCard } from "./grn-card";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
@@ -25,7 +27,10 @@ export default async function GrnListPage({
   const filtered = Boolean(params.q || params.status || params.project || params.from || params.to);
 
 
-  const [grns, vendors] = await Promise.all([
+  const nowMs = new Date().getTime();
+  const inScope = grnListWhere(ctx, { ...params, q: "", status: null, project: null, from: undefined, to: undefined });
+
+  const [grns, statRows, vendors] = await Promise.all([
     prisma.grn.findMany({
       // Shared with the export, so a download holds exactly what this screen shows.
       where: grnListWhere(ctx, params),
@@ -47,6 +52,13 @@ export default async function GrnListPage({
         },
       },
     }),
+    prisma.grn.findMany({
+      where: inScope,
+      select: {
+        status: true, grnDate: true,
+        items: { select: { acceptedQty: true, rejectedQty: true } },
+      },
+    }),
     vendorOptions(),
   ]);
 
@@ -66,6 +78,13 @@ export default async function GrnListPage({
             </Link>
           ) : null
         }
+      />
+
+      <ModuleStats
+        figures={grnFigures(
+          statRows.map((g) => ({ status: g.status, receivedAt: g.grnDate, items: g.items })),
+          nowMs,
+        )}
       />
 
       <ListToolbar

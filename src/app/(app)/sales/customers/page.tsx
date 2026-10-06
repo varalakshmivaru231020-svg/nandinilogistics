@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { customerListWhere, readCustomerListParams } from "@/lib/sales/customer-list";
 import { PageHeader } from "@/components/ui/primitives";
+import { ModuleStats } from "@/components/list/module-stats";
+import { customerFigures } from "@/lib/metrics/figures";
 import { CustomersScreen } from "./customers-screen";
 
 export const metadata = { title: "Customers" };
@@ -31,12 +33,20 @@ export default async function CustomersPage({
     },
   });
 
+  // The band reads every customer in scope, not the filtered page.
+  const statRows = await prisma.customer.findMany({
+    where: customerListWhere({ ...params, q: "" }, canSeeKyc),
+    select: { bookings: { select: { totalAmount: true, receivedAmount: true } } },
+  });
+
   return (
     <div>
       <PageHeader
         title="Customers"
         description="Booked customers with their KYC, bookings and collection position."
       />
+
+      <ModuleStats figures={customerFigures(statRows)} />
 
       <CustomersScreen
         customers={customers.map((c) => ({

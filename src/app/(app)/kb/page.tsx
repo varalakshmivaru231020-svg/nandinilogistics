@@ -1,6 +1,8 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { ModuleStats } from "@/components/list/module-stats";
+import { articleFigures } from "@/lib/metrics/figures";
 import { KbScreen } from "./kb-screen";
 
 export const metadata = { title: "Knowledge Base" };
@@ -18,7 +20,7 @@ export default async function KnowledgeBasePage({
 
   const visible = canSeeDrafts ? {} : { isPublished: true };
 
-  const [articles, totalArticles] = await Promise.all([
+  const [articles, totalArticles, statRows] = await Promise.all([
     prisma.kbArticle.findMany({
       where: {
         ...visible,
@@ -40,10 +42,16 @@ export default async function KnowledgeBasePage({
       },
     }),
     prisma.kbArticle.count({ where: visible }),
+    // The band reads every article the viewer may see, not the search results.
+    prisma.kbArticle.findMany({
+      where: visible,
+      select: { isPublished: true, attachments: { select: { id: true } } },
+    }),
   ]);
 
   return (
     <div>
+      <ModuleStats figures={articleFigures(statRows)} />
       <KbScreen
         query={q}
         totalArticles={totalArticles}

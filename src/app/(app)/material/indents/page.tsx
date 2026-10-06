@@ -9,6 +9,8 @@ import {
 } from "@/lib/material/list-filters";
 import { projectOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
+import { ModuleStats } from "@/components/list/module-stats";
+import { indentFigures } from "@/lib/metrics/figures";
 import { ListNote } from "@/components/list/list-note";
 import { fulfilLines } from "@/lib/material/indent-lines";
 import { qty } from "@/lib/utils";
@@ -50,7 +52,12 @@ export default async function IndentsPage({
   // Shared with the export, so a download holds exactly what this screen shows.
   const where = indentListWhere(ctx, ownership, params);
 
-  const [indents, total, projects] = await Promise.all([
+  // What the band reads: every indent in scope, whatever the filters say.
+  const inScope = indentListWhere(ctx, ownership, {
+    ...params, q: "", status: null, project: null, from: undefined, to: undefined,
+  });
+
+  const [indents, total, statRows, projects] = await Promise.all([
     prisma.indent.findMany({
       where,
       orderBy: { raisedAt: "desc" },
@@ -70,6 +77,13 @@ export default async function IndentsPage({
       },
     }),
     prisma.indent.count({ where }),
+    prisma.indent.findMany({
+      where: inScope,
+      select: {
+        status: true, estimatedValue: true, raisedAt: true,
+        approvals: { select: { approvedAt: true }, orderBy: { approvedAt: "asc" }, take: 1 },
+      },
+    }),
     projectOptions(ctx),
   ]);
 
@@ -99,6 +113,8 @@ export default async function IndentsPage({
        * space-y sets margin-bottom in Tailwind 4, so an mb-0 on the toolbar
        * cancelled it and the two cards met with no gap at all.
        */}
+      <ModuleStats figures={indentFigures(statRows)} />
+
       <div className="space-y-3.5">
         <ListToolbar
           searchPlaceholder="Search indent no., item, project, activity…"

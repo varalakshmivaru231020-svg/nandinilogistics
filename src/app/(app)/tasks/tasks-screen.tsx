@@ -8,6 +8,7 @@ import type { TaskKind, TaskPriority, TaskStatus } from "@prisma/client";
 import { PageHeader } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { cn, formatDateTime } from "@/lib/utils";
+import { ModuleStats } from "@/components/list/module-stats";
 import { STATUS_LABEL, isOverdue } from "@/lib/tasks/lifecycle";
 import {
   acceptTaskAction, deleteTasksAction, reassignTasksAction, setPriorityAction, startTaskAction,
@@ -147,25 +148,28 @@ export function TasksScreen({
         }
       />
 
-      {/* The scope's §4.1 widgets. */}
-      <div className="mb-3.5 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat value={String(countFor("Overdue"))} label="Overdue" tone={countFor("Overdue") > 0 ? "bad" : undefined} />
-        <Stat value={String(summary.dueToday)} label="Due today" />
-        <Stat value={String(summary.dueThisWeek)} label="Due this week" />
-        <Stat value={String(summary.pendingApprovals)} label="Waiting on you" tone={summary.pendingApprovals > 0 ? "warn" : undefined} />
-        <Stat
-          value={`${summary.high}/${summary.medium}/${summary.low}`}
-          label="High / Med / Low"
-        />
-        {myScore && (
-          <Stat
-            value={myScore.score === null ? "—" : `${myScore.score}%`}
-            label="Your score"
-            hint={`${myScore.onTime} on time · ${myScore.late} late`}
-            tone={myScore.score !== null && myScore.score < 70 ? "bad" : "good"}
-          />
-        )}
-      </div>
+      {/* The scope's §4.1 widgets, on the strip every module uses. */}
+      <ModuleStats
+        figures={[
+          { value: String(countFor("Overdue")), label: "Overdue", tone: countFor("Overdue") > 0 ? "bad" as const : undefined },
+          { value: String(summary.dueToday), label: "Due today" },
+          { value: String(summary.dueThisWeek), label: "Due this week" },
+          {
+            value: String(summary.pendingApprovals),
+            label: "Waiting on you",
+            tone: summary.pendingApprovals > 0 ? "warn" as const : undefined,
+          },
+          { value: `${summary.high}/${summary.medium}/${summary.low}`, label: "High / Med / Low" },
+          ...(myScore
+            ? [{
+                value: myScore.score === null ? "—" : `${myScore.score}%`,
+                label: "Your score",
+                hint: `${myScore.onTime} on time · ${myScore.late} late`,
+                tone: (myScore.score !== null && myScore.score < 70 ? "bad" : "good") as "bad" | "good",
+              }]
+            : []),
+        ]}
+      />
 
       <div className="mb-3.5 flex flex-wrap items-center gap-[7px] rounded-[12px] border border-line-400 bg-white px-3.5 py-[11px]">
         {FILTERS.filter((f) => f === "All" || countFor(f) > 0).map((f) => (
@@ -544,21 +548,3 @@ function RowAction({
   return null;
 }
 
-/** One of the design's stat tiles. */
-function Stat({
-  value, label, hint, tone,
-}: { value: string; label: string; hint?: string; tone?: "bad" | "warn" | "good" }) {
-  return (
-    <div className={cn(
-      "rounded-[12px] border px-3.5 py-3",
-      tone === "bad" ? "border-bad-300 bg-bad-025"
-        : tone === "warn" ? "border-warn-400 bg-warn-050"
-          : tone === "good" ? "border-good-400 bg-good-050"
-            : "border-line-400 bg-white",
-    )}>
-      <div className="num font-display text-[21px] font-extrabold text-navy-950">{value}</div>
-      <div className="mt-0.5 text-[11px] font-semibold text-muted-500">{label}</div>
-      {hint && <div className="mt-0.5 text-[10.5px] font-medium text-muted-400">{hint}</div>}
-    </div>
-  );
-}

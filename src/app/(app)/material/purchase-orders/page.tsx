@@ -10,6 +10,8 @@ import {
 } from "@/lib/material/list-filters";
 import { vendorOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
+import { ModuleStats } from "@/components/list/module-stats";
+import { purchaseOrderFigures } from "@/lib/metrics/figures";
 import { ListNote } from "@/components/list/list-note";
 import { PoApproveButton } from "./approve-button";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
@@ -54,7 +56,9 @@ export default async function PurchaseOrdersPage({
 
   // Shared with the export, so a download holds exactly what this screen shows.
   const where = poListWhere(ctx, params);
-  const [orders, total, vendors] = await Promise.all([
+  // The band reads the module, not the filtered page.
+  const inScope = poListWhere(ctx, { ...params, q: "", status: null, project: null, from: undefined, to: undefined });
+  const [orders, total, statRows, vendors] = await Promise.all([
     prisma.purchaseOrder.findMany({
       where,
       orderBy: { poDate: "desc" },
@@ -72,6 +76,10 @@ export default async function PurchaseOrdersPage({
       },
     }),
     prisma.purchaseOrder.count({ where }),
+    prisma.purchaseOrder.findMany({
+      where: inScope,
+      select: { status: true, totalAmount: true, expectedDate: true },
+    }),
     vendorOptions(),
   ]);
 
@@ -204,6 +212,8 @@ export default async function PurchaseOrdersPage({
       />
 
       <div className="space-y-3.5">
+        <ModuleStats figures={purchaseOrderFigures(statRows, nowMs)} />
+
         <ListToolbar
                     searchPlaceholder="Search PO no., vendor, item, indent…"
           filters={[

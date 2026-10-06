@@ -4,6 +4,8 @@ import { PERM } from "@/lib/permissions/codes";
 import { employeeListWhere, maskId, readEmployeeListParams } from "@/lib/hr/list-filters";
 import { parseAttendanceRange } from "@/lib/hr/attendance-report";
 import { loadAttendanceReport } from "@/lib/hr/attendance-report-data";
+import { ModuleStats } from "@/components/list/module-stats";
+import { employeeFigures } from "@/lib/metrics/figures";
 import { HrScreen } from "./hr-screen";
 
 export const metadata = { title: "Users & Attendance" };
@@ -72,8 +74,23 @@ export default async function WorkforcePage({
 
   const report = canReport && range.ok ? await loadAttendanceReport(prisma, range, peopleParams) : [];
 
+  /*
+   * The band reads every employee on record and today's marks against them, so
+   * it does not move when somebody searches. "Not marked" is the figure that
+   * actually gets acted on — it is who the supervisor still has to account for.
+   */
+  const statRows = await prisma.employee.findMany({
+    select: {
+      status: true,
+      attendance: Number.isNaN(markDate.getTime())
+        ? { where: { id: "none" }, select: { status: true, overtimeHours: true } }
+        : { where: { attendanceOn: markDate }, select: { status: true, overtimeHours: true } },
+    },
+  });
+
   return (
     <div>
+      <ModuleStats figures={employeeFigures(statRows)} />
       <HrScreen
         tab={tab}
         date={date}

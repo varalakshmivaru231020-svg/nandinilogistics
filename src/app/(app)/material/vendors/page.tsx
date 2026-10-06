@@ -4,6 +4,8 @@ import { PERM } from "@/lib/permissions/codes";
 import { onTimeStats, readVendorListParams, vendorListWhere } from "@/lib/material/list-filters";
 import { categoryOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
+import { ModuleStats } from "@/components/list/module-stats";
+import { vendorFigures } from "@/lib/metrics/figures";
 import { ListNote } from "@/components/list/list-note";
 import Link from "next/link";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
@@ -30,7 +32,7 @@ export default async function VendorsPage({
   const filtered = Boolean(params.q || params.status || params.category);
 
 
-  const [vendors, categories] = await Promise.all([
+  const [vendors, statRows, categories] = await Promise.all([
     prisma.vendor.findMany({
       // Shared with the export, so a download holds exactly what this screen shows.
       where: vendorListWhere(params),
@@ -46,6 +48,10 @@ export default async function VendorsPage({
           },
         },
       },
+    }),
+    // The band reads every vendor, not the filtered page.
+    prisma.vendor.findMany({
+      select: { status: true, rating: true, purchaseOrders: { select: { totalAmount: true } } },
     }),
     categoryOptions(),
   ]);
@@ -76,6 +82,8 @@ export default async function VendorsPage({
         title="Vendors"
         description="Indent (internal request to store) → PM approval → store stock check → issue from stock, or PO to vendor for the shortfall → GRN → 3-way match"
       />
+
+      <ModuleStats figures={vendorFigures(statRows)} />
 
       <ListToolbar
         searchPlaceholder="Search vendor, contact, mobile, GSTIN…"

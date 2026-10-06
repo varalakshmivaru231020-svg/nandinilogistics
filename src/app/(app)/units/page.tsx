@@ -2,6 +2,8 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { Badge, Card, CardBody, PageHeader } from "@/components/ui/primitives";
+import { ModuleStats } from "@/components/list/module-stats";
+import { unitFigures } from "@/lib/metrics/figures";
 import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
 import { qty } from "@/lib/utils";
 import { readUnitListParams, unitListWhere } from "@/lib/units/unit-list";
@@ -62,7 +64,7 @@ export default async function UnitsPage({
   const usesForm = can.create || can.update;
   const rowControls = can.update || can.changeStatus || can.delete;
 
-  const [units, total, projects, blocks, unitTypes, formBlocks, formUnitTypes] = await Promise.all([
+  const [units, total, statRows, projects, blocks, unitTypes, formBlocks, formUnitTypes] = await Promise.all([
     prisma.unit.findMany({
       where,
       orderBy: [{ unitNumber: "asc" }],
@@ -76,6 +78,11 @@ export default async function UnitsPage({
       },
     }),
     prisma.unit.count({ where }),
+    // The band reads every flat in scope, not the filtered page.
+    prisma.unit.findMany({
+      where: { project: projectScope },
+      select: { status: true, superBuiltUpArea: true },
+    }),
     prisma.project.findMany({ where: projectScope, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
     prisma.block.findMany({
       where: {
@@ -195,6 +202,8 @@ export default async function UnitsPage({
             </div>
           }
         />
+
+        <ModuleStats figures={unitFigures(statRows)} />
 
         <div className="space-y-3">
           <UnitFilters

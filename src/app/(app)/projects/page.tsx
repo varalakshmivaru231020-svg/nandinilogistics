@@ -7,6 +7,8 @@ import { PERM } from "@/lib/permissions/codes";
 import { Badge, Card, EmptyState } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 import { ListToolbar } from "@/components/list/list-toolbar";
+import { ModuleStats } from "@/components/list/module-stats";
+import { projectFigures } from "@/lib/metrics/figures";
 import {
   PROJECT_STATUSES, projectFiltersApplied, projectListWhere,
   readProjectListParams,
@@ -51,7 +53,9 @@ export default async function ProjectsPage({
   // never lists a choice that finds nothing.
   const inScope = projectListWhere(ctx, { q: "", status: "", type: "", city: "", manager: "" });
 
-  const [projects, types, cities, managers] = await Promise.all([
+  const nowMs = new Date().getTime();
+
+  const [projects, statRows, types, cities, managers] = await Promise.all([
     prisma.project.findMany({
       where,
       orderBy: [{ status: "asc" }, { name: "asc" }],
@@ -61,6 +65,16 @@ export default async function ProjectsPage({
         projectManager: { select: { name: true } },
         activities: { select: { status: true } },
         _count: { select: { units: true, phases: true, team: true } },
+      },
+    }),
+    // The band reads the whole module, not the filtered page: a dashboard that
+    // moves every time somebody types in the search box is not a dashboard.
+    prisma.project.findMany({
+      where: inScope,
+      select: {
+        status: true, targetDate: true, actualEndDate: true,
+        activities: { select: { status: true } },
+        _count: { select: { units: true } },
       },
     }),
     prisma.projectType.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
@@ -92,6 +106,19 @@ export default async function ProjectsPage({
           <NewProjectButton types={types} />
         )}
       </div>
+
+      <ModuleStats
+        figures={projectFigures(
+          statRows.map((p) => ({
+            status: p.status,
+            targetDate: p.targetDate,
+            actualEndDate: p.actualEndDate,
+            units: p._count.units,
+            activities: p.activities,
+          })),
+          nowMs,
+        )}
+      />
 
       <ListToolbar
         searchPlaceholder="Search project name, code, RERA number, city or manager…"

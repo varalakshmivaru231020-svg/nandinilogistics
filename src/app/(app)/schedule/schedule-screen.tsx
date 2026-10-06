@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/modal";
 import { Alert, Card, EmptyState, Field, Select, Textarea } from "@/components/ui/primitives";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
 import { groupSchedule, type ScheduleCategory } from "@/lib/schedule/groups";
+import { ModuleStats, type StatFigure } from "@/components/list/module-stats";
 import {
   addMainCategoryAction, addSubActivityAction, completeActivityAction, startActivityAction,
   updateActivityAction,
@@ -180,11 +181,22 @@ export function ScheduleScreen({
     (a) => a.status !== "COMPLETED" && a.plannedEnd && new Date(a.plannedEnd).getTime() < nowMs,
   );
 
-  const stats: Array<{ v: string; l: string }> = [
-    { v: `${done.length} of ${activities.length}`, l: "Activities completed" },
-    { v: started.length ? `${startedOnTime.length} of ${started.length}` : "—", l: "Started on time" },
-    { v: done.length ? `${finishedOnTime.length} of ${done.length}` : "—", l: "Completed on time" },
-    { v: String(overdue.length), l: overdue.length === 1 ? "Activity overdue" : "Activities overdue" },
+  const stats: StatFigure[] = [
+    { value: `${done.length} of ${activities.length}`, label: "Activities completed" },
+    {
+      value: started.length ? `${startedOnTime.length} of ${started.length}` : "—",
+      label: "Started on time",
+    },
+    {
+      value: done.length ? `${finishedOnTime.length} of ${done.length}` : "—",
+      label: "Completed on time",
+      tone: done.length && finishedOnTime.length === done.length ? "good" : undefined,
+    },
+    {
+      value: String(overdue.length),
+      label: overdue.length === 1 ? "Activity overdue" : "Activities overdue",
+      tone: overdue.length > 0 ? "bad" : undefined,
+    },
   ];
 
   // Group into the design's main-category tree.
@@ -262,14 +274,7 @@ export function ScheduleScreen({
       {/* --------------------------------- Plan -------------------------------- */}
       {tab === "plan" && (
         <>
-          <div className="mb-3.5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
-            {stats.map((k) => (
-              <div key={k.l} className="rounded-[12px] border border-line-400 bg-white px-4 py-3.5">
-                <div className="num font-display text-[19px] font-extrabold text-navy-950">{k.v}</div>
-                <div className="mt-[3px] text-[11.5px] font-semibold text-muted-600">{k.l}</div>
-              </div>
-            ))}
-          </div>
+          <ModuleStats figures={stats} />
 
           {adding !== null && (
             <AddPanel

@@ -1,6 +1,8 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { ModuleStats } from "@/components/list/module-stats";
+import { followUpFigures } from "@/lib/metrics/figures";
 import { FollowUpsScreen } from "./follow-ups-screen";
 
 export const metadata = { title: "Follow-ups" };
@@ -54,6 +56,21 @@ export default async function FollowUpsPage({
 
   const now = new Date();
 
+  /*
+   * The band reads the whole pipeline the viewer can see, so it does not move
+   * when somebody searches. Open follow-ups are the leads carrying a next
+   * action; logged ones are the contacts already recorded against them.
+   */
+  const [openRows, loggedCount] = await Promise.all([
+    prisma.lead.findMany({
+      where: { ...ownership, nextActionAt: { not: null }, state: { notIn: ["BOOKED", "LOST"] } },
+      select: { nextActionAt: true },
+    }),
+    prisma.leadFollowUp.count({ where: { lead: ownership } }),
+  ]);
+  const endOfToday = new Date(now);
+  endOfToday.setHours(23, 59, 59, 999);
+
   const rows = leads
     .map((l) => {
       // A lead with a pending site visit is shown as a visit, not a call.
@@ -78,7 +95,16 @@ export default async function FollowUpsPage({
     .filter((r) => type === "all" || r.channel === type);
 
   return (
-    <FollowUpsScreen
+    <div>
+      <ModuleStats
+        figures={followUpFigures(
+          openRows.flatMap((l) => (l.nextActionAt ? [{ dueAt: l.nextActionAt }] : [])),
+          loggedCount,
+          now.getTime(),
+          endOfToday.getTime(),
+        )}
+      />
+      <FollowUpsScreen
       rows={rows}
       view={view === "list" ? "list" : view === "calendar" ? "calendar" : "grid"}
       query={q}
@@ -86,6 +112,7 @@ export default async function FollowUpsPage({
       month={month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`}
       nowMs={now.getTime()}
       canLog={ctx.has(PERM.sales.followUp.create)}
-    />
+      />
+    </div>
   );
 }

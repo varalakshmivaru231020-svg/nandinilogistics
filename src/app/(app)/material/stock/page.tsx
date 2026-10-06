@@ -5,6 +5,8 @@ import { PERM } from "@/lib/permissions/codes";
 import { readStockListParams, stockListWhere, stockState } from "@/lib/material/list-filters";
 import { unitOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
+import { ModuleStats } from "@/components/list/module-stats";
+import { itemFigures } from "@/lib/metrics/figures";
 import { ListNote } from "@/components/list/list-note";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -32,7 +34,7 @@ export default async function StockPage({
   const filtered = Boolean(params.q || params.store || params.category);
 
 
-  const [balances, units] = await Promise.all([
+  const [balances, statRows, units] = await Promise.all([
     prisma.stockBalance.findMany({
       // Shared with the export, so a download holds exactly what this screen shows.
       where: stockListWhere(params),
@@ -47,6 +49,15 @@ export default async function StockPage({
             category: { select: { name: true } },
           },
         },
+      },
+    }),
+    // The band reads the whole item master and the stock it holds, whatever
+    // the store or category filters say.
+    prisma.item.findMany({
+      where: { status: "ACTIVE" },
+      select: {
+        reorderLevel: true,
+        stockBalances: { select: { quantity: true, avgRate: true } },
       },
     }),
     unitOptions(),
@@ -198,6 +209,15 @@ export default async function StockPage({
             </Link>
           ) : null
         }
+      />
+
+      <ModuleStats
+        figures={itemFigures(
+          statRows.map((i) => ({
+            reorderLevel: i.reorderLevel,
+            balances: i.stockBalances.map((b) => ({ quantity: b.quantity, valuationRate: b.avgRate })),
+          })),
+        )}
       />
 
       <ListToolbar
