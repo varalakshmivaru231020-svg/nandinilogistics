@@ -2,6 +2,7 @@ import { requireAuth } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { LIVE_PERMISSIONS } from "@/lib/permissions/registry";
+import { MASTERS, masterPerm } from "@/lib/masters/registry";
 import { Card, EmptyState } from "@/components/ui/primitives";
 import { cn, moneyShort } from "@/lib/utils";
 import { ListNote } from "@/components/list/list-note";
@@ -24,6 +25,13 @@ const SECTIONS = [
   { key: "limits", label: "Approval Limits", add: "+ New limit" },
   { key: "leadcfg", label: "Lead Settings", add: null },
   { key: "workforce", label: "Workforce Setup", add: null },
+  /*
+   * Every registry master — cities, document types, delay reasons, print
+   * contacts and the rest — had a working screen at /masters/<key> and nothing
+   * anywhere that linked to it. They were reachable only by typing the URL,
+   * which is the same as not being reachable.
+   */
+  { key: "reference", label: "Reference Data", add: null },
 ] as const;
 
 /** The stages the pipeline moves through, in order. */
@@ -52,6 +60,7 @@ export default async function MastersPage({
     limits: ctx.has(PERM.admin.approvalLimit.view),
     leadcfg: ctx.has(PERM.masters.lostReason.view),
     workforce: ctx.has(PERM.masters.designation.view),
+    reference: MASTERS.some((m) => ctx.has(masterPerm(m, "view"))),
   };
 
   const sections = SECTIONS.filter((s) => may[s.key]);
@@ -136,7 +145,56 @@ export default async function MastersPage({
             canDelete={ctx.has(PERM.masters.designation.delete)}
           />
         )}
+        {active.key === "reference" && (
+          <ReferenceData visible={MASTERS.filter((m) => ctx.has(masterPerm(m, "view")))} />
+        )}
       </div>
+    </div>
+  );
+}
+
+/* ----------------------------- Reference data ----------------------------- */
+
+/**
+ * The registry masters, grouped the way the registry groups them.
+ *
+ * Each one is a link to the screen the registry already generates — the list,
+ * the form, search, import, export and the status toggle all exist; what was
+ * missing was any way to get to them.
+ */
+function ReferenceData({ visible }: { visible: typeof MASTERS }) {
+  const groups = [...new Set(visible.map((m) => m.group))];
+
+  if (visible.length === 0) {
+    return (
+      <Card>
+        <EmptyState
+          title="No reference data available to you"
+          description="Your role does not include view access to any of these masters."
+        />
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3.5">
+      {groups.map((group) => (
+        <div key={group} className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
+          <p className="text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">{group}</p>
+          <div className="mt-2.5 grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))]">
+            {visible.filter((m) => m.group === group).map((m) => (
+              <Link
+                key={m.key}
+                href={`/masters/${m.key}`}
+                className="rounded-[10px] border border-line-300 px-3.5 py-2.5 transition-colors hover:border-brand-500 hover:bg-brand-100/40"
+              >
+                <span className="block text-[12.5px] font-bold text-navy-900">{m.label}</span>
+                <span className="mt-0.5 block text-[11px] font-medium text-muted-400">{m.description}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
