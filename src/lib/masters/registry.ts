@@ -403,9 +403,11 @@ export const MASTERS: MasterDef[] = [
     description: "Printed at the foot of a purchase order — a title and what follows it.",
     group: "System",
     icon: "Phone",
-    searchFields: ["code", "name", "value"],
+    searchFields: ["name", "value"],
+    // There is nothing to refer to a contact line by except what it says, so it
+    // carries no code — the title is the whole of its identity.
+    defaultSort: { field: "sortOrder", dir: "asc" },
     fields: [
-      CODE,
       { ...NAME, label: "Title", placeholder: "Mobile", colSpan: 1 },
       {
         name: "value",

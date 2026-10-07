@@ -749,8 +749,8 @@ model DelayReason {
 /// number on every sheet printed tomorrow follows a change made today.
 model PrintContact {
   id    String @id @default(cuid())
-  code  String @unique
-  /// The title printed before the colon.
+  /// The title printed before the colon. There is no code: a contact line is
+  /// referred to by what it says and nothing else.
   name  String
   /// What is printed after it.
   value String
