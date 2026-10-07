@@ -3,6 +3,11 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import { scoreTasks } from "@/lib/tasks/performance";
+import {
+  articleFigures, customerFigures, employeeFigures, followUpFigures, grnFigures,
+  indentFigures, itemFigures, leadFigures, projectFigures, purchaseOrderFigures,
+  unitFigures, vendorFigures, type StatFigure,
+} from "@/lib/metrics/figures";
 import { PerformanceDashboard, type ModuleCard } from "./performance-dashboard";
 
 export const metadata = { title: "Performance" };
@@ -21,9 +26,62 @@ export default async function PerformancePage() {
   const scope = projectScopeFilter(ctx);
   const now = new Date();
   const nowMs = now.getTime();
-  const weekAgo = new Date(nowMs - 7 * 86_400_000);
 
   const cards: ModuleCard[] = [];
+
+  /**
+   * A card built from the figures a module's own screen opens with.
+   *
+   * The dashboard and the module band then cannot disagree, because there is
+   * one piece of arithmetic and both read it. The first figure leads the card;
+   * the rest sit under it.
+   */
+  function cardFrom(
+    key: string,
+    title: string,
+    href: string,
+    figures: StatFigure[],
+    lead = 0,
+  ) {
+    const head = figures[lead];
+    if (!head) return;
+    const rest = figures.filter((_, i) => i !== lead);
+    cards.push({
+      key,
+      title,
+      href,
+      headline: head.value,
+      headlineLabel: head.label.toLowerCase(),
+      tone: head.tone === "brand" ? "plain" : head.tone ?? "plain",
+      rows: rest.map((f) => ({
+        label: f.label,
+        value: f.value,
+        tone: f.tone === "brand" ? undefined : f.tone,
+      })),
+    });
+  }
+
+  /* -------------------------------- Projects -------------------------------- */
+  if (ctx.has(PERM.project.project.view)) {
+    const rows = await prisma.project.findMany({
+      where: scope,
+      select: {
+        status: true, targetDate: true, actualEndDate: true,
+        activities: { select: { status: true } },
+        _count: { select: { units: true } },
+      },
+    });
+    const figures = projectFigures(
+      rows.map((r) => ({
+        status: r.status, targetDate: r.targetDate, actualEndDate: r.actualEndDate,
+        units: r._count.units, activities: r.activities,
+      })),
+      nowMs,
+    );
+    // Lead on schedule progress — the one figure that says whether the
+    // portfolio is moving, rather than how many projects there are.
+    cardFrom("projects", "Project Management", "/projects", figures, 4);
+  }
 
   /* ----------------------------- Task Management ---------------------------- */
   let people: Array<{
@@ -80,12 +138,28 @@ export default async function PerformancePage() {
       .sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
 
     /* ------------------------------- Checklists ----------------------------- */
+    /*
+     * Measured per point, not per task.
+     *
+     * A checklist task no longer goes to Rework — a denied point starts its own
+     * next round and goes back to reviewer 1 while the rest carry on — so the
+     * old reading of this card, which counted tasks at status REWORK, could
+     * only ever report nothing. What is worth knowing is how many points had to
+     * be judged more than once, which is the same question the old figure was
+     * reaching for.
+     */
     const checklistTasks = tasks.filter((t) => t.kind === "CHECKLIST");
     const inReview = checklistTasks.filter((t) => ["UNDER_REVIEW", "UNDER_APPROVAL"].includes(t.status));
-    const rework = checklistTasks.filter((t) => t.status === "REWORK");
     const closed = checklistTasks.filter((t) => t.status === "CLOSED");
-    const firstPass = closed.length
-      ? Math.round(((closed.length - rework.length) / closed.length) * 100)
+
+    const points = await prisma.taskChecklistItem.findMany({
+      where: { taskChecklist: { task: seesAll ? {} : { OR: [{ assigneeId: ctx.id }, { createdById: ctx.id }] } } },
+      select: { round: true, reviews: { select: { id: true }, take: 1 } },
+    });
+    const judged = points.filter((p) => p.reviews.length > 0);
+    const sentBack = points.filter((p) => p.round > 1);
+    const firstPass = judged.length
+      ? Math.round(((judged.length - sentBack.length) / judged.length) * 100)
       : null;
 
     cards.push({
@@ -94,12 +168,16 @@ export default async function PerformancePage() {
       href: "/checklists",
       headline: String(checklistTasks.length),
       headlineLabel: "checklist tasks",
-      tone: rework.length ? "warn" : "plain",
+      tone: sentBack.length ? "warn" : "plain",
       rows: [
         { label: "Being checked", value: String(inReview.length) },
-        { label: "Sent back", value: String(rework.length), tone: rework.length ? "warn" : undefined },
+        { label: "Points sent back", value: String(sentBack.length), tone: sentBack.length ? "warn" : undefined },
         { label: "Closed", value: String(closed.length) },
-        { label: "Passed first time", value: firstPass === null ? "—" : `${firstPass}%` },
+        {
+          label: "Points passed first time",
+          value: firstPass === null ? "—" : `${firstPass}%`,
+          tone: firstPass !== null && firstPass < 70 ? "warn" : undefined,
+        },
       ],
     });
   }
@@ -174,109 +252,144 @@ export default async function PerformancePage() {
   }
 
   /* ------------------------------- Procurement ------------------------------ */
-  if (ctx.has(PERM.material.grn.view)) {
-    const [grns, mismatched, openPos, reorder] = await Promise.all([
-      prisma.grn.count({ where: { createdAt: { gte: weekAgo } } }),
-      prisma.vendorInvoice.count({ where: { status: "MISMATCH" } }),
-      prisma.purchaseOrder.count({ where: { ...scope, status: { in: ["APPROVED", "PARTIALLY_RECEIVED"] } } }),
-      ctx.has(PERM.material.reorder.view)
-        ? prisma.stockBalance.count({ where: { quantity: { lte: 0 } } })
-        : Promise.resolve(0),
-    ]);
-
-    cards.push({
-      key: "material",
-      title: "Material & Inventory",
-      href: "/material/grn",
-      headline: String(openPos),
-      headlineLabel: "orders still arriving",
-      tone: mismatched ? "bad" : "plain",
-      rows: [
-        { label: "Receipts this week", value: String(grns) },
-        { label: "Invoice mismatches", value: String(mismatched), tone: mismatched ? "bad" : undefined },
-        { label: "Out of stock", value: String(reorder), tone: reorder ? "warn" : undefined },
-      ],
+  if (ctx.has(PERM.material.indent.view)) {
+    const rows = await prisma.indent.findMany({
+      where: scope,
+      select: {
+        status: true, estimatedValue: true, raisedAt: true,
+        approvals: { select: { approvedAt: true }, orderBy: { approvedAt: "asc" }, take: 1 },
+      },
     });
+    cardFrom("indents", "Requirement Indents", "/material/indents", indentFigures(rows), 1);
+  }
+
+  if (ctx.has(PERM.material.purchaseOrder.view)) {
+    const rows = await prisma.purchaseOrder.findMany({
+      where: scope,
+      select: { status: true, totalAmount: true, expectedDate: true },
+    });
+    // Lead on deliveries that have slipped — the figure somebody has to chase.
+    cardFrom("purchase-orders", "Purchase Orders", "/material/purchase-orders",
+      purchaseOrderFigures(rows, nowMs), 3);
+  }
+
+  if (ctx.has(PERM.material.grn.view)) {
+    const [rows, mismatched] = await Promise.all([
+      prisma.grn.findMany({
+        select: {
+          status: true, grnDate: true,
+          items: { select: { acceptedQty: true, rejectedQty: true } },
+        },
+      }),
+      prisma.vendorInvoice.count({ where: { status: "MISMATCH" } }),
+    ]);
+    const figures = grnFigures(
+      rows.map((g) => ({ status: g.status, receivedAt: g.grnDate, items: g.items })),
+      nowMs,
+    );
+    // The three-way match belongs here and nowhere else: it is the receipt that
+    // did not agree with what was ordered or what was billed.
+    figures.push({
+      value: String(mismatched),
+      label: "Invoice mismatches",
+      tone: mismatched ? "bad" : undefined,
+    });
+    cardFrom("grn", "Goods Receipt", "/material/grn", figures, 3);
+  }
+
+  if (ctx.has(PERM.material.stock.view)) {
+    const rows = await prisma.item.findMany({
+      where: { status: "ACTIVE" },
+      select: { reorderLevel: true, stockBalances: { select: { quantity: true, avgRate: true } } },
+    });
+    const figures = itemFigures(
+      rows.map((i) => ({
+        reorderLevel: i.reorderLevel,
+        balances: i.stockBalances.map((b) => ({ quantity: b.quantity, valuationRate: b.avgRate })),
+      })),
+    );
+    cardFrom("stock", "Item Master & Stock", "/material/stock", figures, 1);
+  }
+
+  if (ctx.has(PERM.masters.vendor.view)) {
+    const rows = await prisma.vendor.findMany({
+      select: { status: true, rating: true, purchaseOrders: { select: { totalAmount: true } } },
+    });
+    cardFrom("vendors", "Vendors", "/material/vendors", vendorFigures(rows), 3);
   }
 
   /* ---------------------------------- Sales --------------------------------- */
   if (ctx.has(PERM.sales.lead.view)) {
-    const [leads, booked, lost, overdueFollowUps] = await Promise.all([
-      prisma.lead.count(),
-      prisma.lead.count({ where: { state: "BOOKED" } }),
-      prisma.lead.count({ where: { state: "LOST" } }),
-      ctx.has(PERM.sales.followUp.view)
-        ? prisma.lead.count({ where: { nextActionAt: { lt: now }, state: { notIn: ["BOOKED", "LOST"] } } })
-        : Promise.resolve(0),
-    ]);
-    const decided = booked + lost;
-    const conversion = decided ? Math.round((booked / decided) * 100) : null;
-
-    cards.push({
-      key: "sales",
-      title: "Leads & Sales",
-      href: "/sales/leads",
-      headline: conversion === null ? "—" : `${conversion}%`,
-      headlineLabel: "of decided leads booked",
-      tone: conversion === null ? "plain" : conversion >= 30 ? "good" : conversion >= 15 ? "warn" : "bad",
-      rows: [
-        { label: "Leads", value: String(leads) },
-        { label: "Booked", value: String(booked) },
-        { label: "Lost", value: String(lost) },
-        { label: "Follow-ups overdue", value: String(overdueFollowUps), tone: overdueFollowUps ? "bad" : undefined },
-      ],
+    const seesAllLeads = ctx.has(PERM.sales.lead.viewAll);
+    const ownership = seesAllLeads ? {} : { ownerId: ctx.id };
+    const rows = await prisma.lead.findMany({
+      where: ownership,
+      select: { state: true, createdAt: true, budgetMax: true },
     });
+    const figures = leadFigures(
+      rows.map((l) => ({ stage: l.state, createdAt: l.createdAt, budgetMax: l.budgetMax })),
+      nowMs,
+    );
+    // Lead on conversion: the one figure that says whether selling is working.
+    cardFrom("sales", "Leads & Sales", "/sales/leads", figures, 4);
+
+    if (ctx.has(PERM.sales.followUp.view)) {
+      const endOfToday = new Date(now);
+      endOfToday.setHours(23, 59, 59, 999);
+      const [open, logged] = await Promise.all([
+        prisma.lead.findMany({
+          where: { ...ownership, nextActionAt: { not: null }, state: { notIn: ["BOOKED", "LOST"] } },
+          select: { nextActionAt: true },
+        }),
+        prisma.leadFollowUp.count({ where: { lead: ownership } }),
+      ]);
+      cardFrom(
+        "follow-ups", "Follow-ups", "/sales/follow-ups",
+        followUpFigures(
+          open.flatMap((l) => (l.nextActionAt ? [{ dueAt: l.nextActionAt }] : [])),
+          logged, nowMs, endOfToday.getTime(),
+        ),
+        1,
+      );
+    }
+  }
+
+  if (ctx.has(PERM.sales.customer.view)) {
+    const rows = await prisma.customer.findMany({
+      select: { bookings: { select: { totalAmount: true, receivedAmount: true } } },
+    });
+    // Lead on what is still owed — the figure collections is judged on.
+    cardFrom("customers", "Customers", "/sales/customers", customerFigures(rows), 4);
   }
 
   /* ---------------------------------- Flats --------------------------------- */
   if (ctx.has(PERM.unit.unit.view)) {
-    const units = await prisma.unit.groupBy({ by: ["status"], _count: true });
-    const count = (s: string) => units.find((u) => u.status === s)?._count ?? 0;
-    const total = units.reduce((n, u) => n + u._count, 0);
-    const sold = count("BOOKED") + count("AGREEMENT") + count("REGISTERED");
-    const pct = total ? Math.round((sold / total) * 100) : null;
-
-    cards.push({
-      key: "units",
-      title: "Available Flats",
-      href: "/units/board",
-      headline: pct === null ? "—" : `${pct}%`,
-      headlineLabel: "sold",
-      tone: "plain",
-      rows: [
-        { label: "Available", value: String(count("AVAILABLE")) },
-        { label: "Held", value: String(count("HELD")) },
-        { label: "Booked", value: String(sold) },
-        { label: "Total", value: String(total) },
-      ],
+    const rows = await prisma.unit.findMany({
+      where: { project: scope },
+      select: { status: true, superBuiltUpArea: true },
     });
+    cardFrom("units", "Available Flats", "/units/board", unitFigures(rows), 4);
   }
 
   /* -------------------------------- Workforce ------------------------------- */
   if (ctx.has(PERM.hr.employee.view)) {
-    const [employees, presentToday] = await Promise.all([
-      prisma.employee.count({ where: { status: "ACTIVE" } }),
-      prisma.attendanceEntry.count({
-        where: {
-          attendanceOn: new Date(now.toISOString().slice(0, 10)),
-          status: { in: ["PRESENT", "HALF_DAY"] },
-        },
-      }),
-    ]);
-    const pct = employees ? Math.round((presentToday / employees) * 100) : null;
-
-    cards.push({
-      key: "hr",
-      title: "Workforce",
-      href: "/hr",
-      headline: pct === null ? "—" : `${pct}%`,
-      headlineLabel: "marked present today",
-      tone: pct === null ? "plain" : pct >= 85 ? "good" : "warn",
-      rows: [
-        { label: "Active employees", value: String(employees) },
-        { label: "Present today", value: String(presentToday) },
-      ],
+    const today = new Date(now.toISOString().slice(0, 10));
+    const rows = await prisma.employee.findMany({
+      select: {
+        status: true,
+        attendance: { where: { attendanceOn: today }, select: { status: true, overtimeHours: true } },
+      },
     });
+    // Lead on who has not been accounted for today.
+    cardFrom("hr", "Users & Attendance", "/hr", employeeFigures(rows), 4);
+  }
+
+  /* ----------------------------- Knowledge base ----------------------------- */
+  if (ctx.has(PERM.kb.article.view)) {
+    const rows = await prisma.kbArticle.findMany({
+      select: { isPublished: true, attachments: { select: { id: true } } },
+    });
+    cardFrom("kb", "Knowledge Base", "/kb", articleFigures(rows), 1);
   }
 
   return (

@@ -81,9 +81,14 @@ export interface IndentRow {
   approvals: Array<{ approvedAt: Date | string }>;
 }
 
+/** Raised and not yet decided. */
+export const INDENT_WAITING = ["SUBMITTED", "PM_APPROVED"] as const;
+/** Cleared approval — including the ones that have gone on to be ordered. */
+export const INDENT_CLEARED = ["ADMIN_APPROVED", "PARTIALLY_ORDERED", "ORDERED", "CLOSED"] as const;
+
 export function indentFigures(rows: IndentRow[]): StatFigure[] {
-  const waiting = rows.filter((i) => i.status === "SUBMITTED" || i.status === "PM_APPROVED").length;
-  const approved = rows.filter((i) => i.status === "ADMIN_APPROVED").length;
+  const waiting = rows.filter((i) => (INDENT_WAITING as readonly string[]).includes(i.status)).length;
+  const approved = rows.filter((i) => (INDENT_CLEARED as readonly string[]).includes(i.status)).length;
   const rejected = rows.filter((i) => i.status === "REJECTED").length;
   const value = rows.reduce((n, i) => n + Number(i.estimatedValue ?? 0), 0);
 
@@ -121,15 +126,22 @@ export interface PurchaseOrderRow {
   expectedDate: Date | string | null;
 }
 
-/** The statuses in which an order is still expecting goods. */
-const PO_OPEN = ["APPROVED", "PARTIALLY_RECEIVED", "SENT"];
+/** Placed, and still expecting goods. */
+export const PO_OPEN = ["APPROVED", "PARTIALLY_RECEIVED"] as const;
+/**
+ * Raised and not yet approved. PENDING_APPROVAL is the single-step status kept
+ * so historic orders keep resolving; new ones use the two named levels.
+ */
+export const PO_WAITING = [
+  "PENDING_APPROVAL", "PENDING_PM_APPROVAL", "PENDING_ADMIN_APPROVAL",
+] as const;
 
 export function purchaseOrderFigures(rows: PurchaseOrderRow[], nowMs: number): StatFigure[] {
-  const waiting = rows.filter((p) => p.status === "SUBMITTED" || p.status === "PM_APPROVED").length;
-  const open = rows.filter((p) => PO_OPEN.includes(p.status)).length;
+  const waiting = rows.filter((p) => (PO_WAITING as readonly string[]).includes(p.status)).length;
+  const open = rows.filter((p) => (PO_OPEN as readonly string[]).includes(p.status)).length;
   const received = rows.filter((p) => p.status === "RECEIVED").length;
   const overdue = rows.filter((p) => {
-    if (!PO_OPEN.includes(p.status)) return false;
+    if (!(PO_OPEN as readonly string[]).includes(p.status)) return false;
     const d = at(p.expectedDate);
     return d !== null && d < nowMs;
   }).length;
@@ -153,7 +165,9 @@ export interface GrnRow {
   items: Array<{ acceptedQty: unknown; rejectedQty: unknown }>;
 }
 
-export function grnFigures(rows: GrnRow[], nowMs: number): StatFigure[] {
+export function grnFigures(all: GrnRow[], nowMs: number): StatFigure[] {
+  // A cancelled receipt is not a receipt.
+  const rows = all.filter((g) => g.status !== "CANCELLED");
   const monthAgo = nowMs - 30 * 86_400_000;
   const recent = rows.filter((g) => (at(g.receivedAt) ?? 0) >= monthAgo).length;
   const lines = rows.flatMap((g) => g.items);
@@ -328,10 +342,17 @@ export interface UnitRow {
   superBuiltUpArea: unknown;
 }
 
+/**
+ * A flat that has gone. Booking is the commitment; the agreement and the
+ * registration are the paperwork that follows it, and all three mean the flat
+ * is no longer for sale.
+ */
+export const UNIT_GONE = ["BOOKED", "AGREEMENT", "REGISTERED"] as const;
+
 export function unitFigures(rows: UnitRow[]): StatFigure[] {
   const by = (s: string) => rows.filter((u) => u.status === s).length;
   const available = by("AVAILABLE");
-  const gone = by("SOLD") + by("BOOKED");
+  const gone = rows.filter((u) => (UNIT_GONE as readonly string[]).includes(u.status)).length;
   // Area rather than money: a flat carries no price of its own, it is priced
   // off whichever price list is in force on the day, so a rupee figure here
   // would be one this screen cannot honestly stand behind.
@@ -342,7 +363,7 @@ export function unitFigures(rows: UnitRow[]): StatFigure[] {
   return [
     { value: num(rows.length), label: "Flats" },
     { value: num(available), label: "Available", tone: available > 0 ? "good" : undefined },
-    { value: num(by("HOLD")), label: "On hold", tone: by("HOLD") > 0 ? "warn" : undefined },
+    { value: num(by("HELD")), label: "On hold", tone: by("HELD") > 0 ? "warn" : undefined },
     { value: num(gone), label: "Booked or sold" },
     { value: pct(gone, rows.length), label: "Sold through" },
     { value: `${num(Math.round(unsoldArea))} sq.ft`, label: "Unsold area" },

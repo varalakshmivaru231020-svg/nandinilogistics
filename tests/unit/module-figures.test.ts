@@ -75,6 +75,19 @@ describe("indents", () => {
     expect(read(indentFigures(rows), "Awaiting approval")).toBe("2");
   });
 
+  /*
+   * An indent that has gone on to be ordered cleared approval to get there, so
+   * it belongs in the approved figure rather than nowhere.
+   */
+  it("counts an indent that has moved on to ordering as approved", () => {
+    const moved = [
+      { status: "ORDERED", estimatedValue: 0, raisedAt: "2026-10-01T00:00:00Z", approvals: [] },
+      { status: "PARTIALLY_ORDERED", estimatedValue: 0, raisedAt: "2026-10-01T00:00:00Z", approvals: [] },
+      { status: "CLOSED", estimatedValue: 0, raisedAt: "2026-10-01T00:00:00Z", approvals: [] },
+    ];
+    expect(read(indentFigures(moved), "Approved")).toBe("3");
+  });
+
   it("adds the value in Indian notation", () => {
     expect(read(indentFigures(rows), "Value raised")).toBe("₹4.10 L");
   });
@@ -92,11 +105,20 @@ describe("indents", () => {
 
 describe("purchase orders", () => {
   const rows = [
-    { status: "SUBMITTED", totalAmount: 100000, expectedDate: "2026-11-01" },
+    { status: "PENDING_PM_APPROVAL", totalAmount: 100000, expectedDate: "2026-11-01" },
     { status: "APPROVED", totalAmount: 200000, expectedDate: "2026-09-01" },
     { status: "PARTIALLY_RECEIVED", totalAmount: 300000, expectedDate: "2026-12-01" },
     { status: "RECEIVED", totalAmount: 50000, expectedDate: "2026-01-01" },
   ];
+
+  it("counts orders at any of the approval levels as waiting", () => {
+    const waiting = [
+      { status: "PENDING_APPROVAL", totalAmount: 0, expectedDate: null },
+      { status: "PENDING_PM_APPROVAL", totalAmount: 0, expectedDate: null },
+      { status: "PENDING_ADMIN_APPROVAL", totalAmount: 0, expectedDate: null },
+    ];
+    expect(read(purchaseOrderFigures(waiting, NOW), "Awaiting approval")).toBe("3");
+  });
 
   it("counts orders still expecting goods", () => {
     expect(read(purchaseOrderFigures(rows, NOW), "Open")).toBe("2");
@@ -118,6 +140,15 @@ describe("goods receipt", () => {
     { status: "POSTED", receivedAt: "2026-10-01T00:00:00Z", items: [{ acceptedQty: 90, rejectedQty: 10 }] },
     { status: "POSTED", receivedAt: "2026-01-01T00:00:00Z", items: [{ acceptedQty: 100, rejectedQty: 0 }] },
   ];
+
+  it("leaves a cancelled receipt out of every figure", () => {
+    const withCancelled = [
+      ...rows,
+      { status: "CANCELLED", receivedAt: "2026-10-05T00:00:00Z", items: [{ acceptedQty: 999, rejectedQty: 999 }] },
+    ];
+    expect(read(grnFigures(withCancelled, NOW), "Receipts")).toBe("2");
+    expect(read(grnFigures(withCancelled, NOW), "Rejected quantity")).toBe("5%");
+  });
 
   it("counts only the recent ones in the 30-day figure", () => {
     expect(read(grnFigures(rows, NOW), "Last 30 days")).toBe("1");
@@ -252,13 +283,25 @@ describe("flats", () => {
   const rows = [
     { status: "AVAILABLE", superBuiltUpArea: 1200 },
     { status: "AVAILABLE", superBuiltUpArea: 1400 },
-    { status: "HOLD", superBuiltUpArea: 1300 },
+    { status: "HELD", superBuiltUpArea: 1300 },
     { status: "BOOKED", superBuiltUpArea: 1250 },
-    { status: "SOLD", superBuiltUpArea: 1100 },
+    { status: "REGISTERED", superBuiltUpArea: 1100 },
   ];
 
-  it("counts booked and sold together as gone", () => {
+  it("counts booked, agreement and registered together as gone", () => {
     expect(read(unitFigures(rows), "Booked or sold")).toBe("2");
+    const all = [
+      { status: "BOOKED", superBuiltUpArea: 0 },
+      { status: "AGREEMENT", superBuiltUpArea: 0 },
+      { status: "REGISTERED", superBuiltUpArea: 0 },
+    ];
+    expect(read(unitFigures(all), "Booked or sold")).toBe("3");
+  });
+
+  it("does not count a held flat as gone — it is still for sale", () => {
+    const held = [{ status: "HELD", superBuiltUpArea: 0 }];
+    expect(read(unitFigures(held), "Booked or sold")).toBe("0");
+    expect(read(unitFigures(held), "On hold")).toBe("1");
   });
 
   it("counts area only for what is still available", () => {
