@@ -546,6 +546,7 @@ const MASTER_RESOURCES: Array<[resource: string, entity: string, group: string]>
   ["chargeHead", "charge head", "Masters · Sales"],
   ["bank", "bank", "Masters · Sales"],
   ["numberingSeries", "numbering series", "Masters · System"],
+  ["printContact", "print contact", "Masters · System"],
 ];
 
 for (const [resource, entity, group] of MASTER_RESOURCES) {

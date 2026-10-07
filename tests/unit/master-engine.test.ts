@@ -9,10 +9,10 @@ const numbering = getMaster("numbering-series")!;
 const cities = getMaster("cities")!;
 
 describe("master registry", () => {
-  it("registers all 22 masters with unique keys and models", () => {
-    expect(MASTERS).toHaveLength(22);
-    expect(new Set(MASTERS.map((m) => m.key)).size).toBe(22);
-    expect(new Set(MASTERS.map((m) => m.model)).size).toBe(22);
+  it("registers all 23 masters with unique keys and models", () => {
+    expect(MASTERS).toHaveLength(23);
+    expect(new Set(MASTERS.map((m) => m.key)).size).toBe(23);
+    expect(new Set(MASTERS.map((m) => m.model)).size).toBe(23);
   });
 
   it("gives every master at least one searchable field", () => {

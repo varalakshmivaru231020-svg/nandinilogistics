@@ -25,6 +25,13 @@ export default async function PrintPurchaseOrderPage({ params }: { params: Promi
   const { id } = await params;
   const ctx = await requirePermission(PERM.material.purchaseOrder.view, PERM.material.purchaseOrder.print);
 
+  // The contact lines printed at the foot, in the order the master gives them.
+  const printContacts = await prisma.printContact.findMany({
+    where: { status: "ACTIVE" },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, value: true },
+  });
+
   const po = await prisma.purchaseOrder.findUnique({
     where: { id },
     include: {
@@ -202,6 +209,27 @@ export default async function PrintPurchaseOrderPage({ params }: { params: Promi
           </div>
         ))}
       </section>
+
+      {/*
+        Whatever the office wants on the bottom of the sheet — a mobile, an
+        email, a landline — as many lines as they add to the master. Typed into
+        the template it would have to be found and changed in every document
+        that carries it; here a correction made today is on everything printed
+        tomorrow.
+      */}
+      {printContacts.length > 0 && (
+        <section className="print-keep mt-[18px] border-t border-line-300 pt-3">
+          <SectionLabel>Contact</SectionLabel>
+          <div className="mt-1.5 flex flex-wrap gap-x-6 gap-y-1">
+            {printContacts.map((c) => (
+              <p key={c.id} className="text-[11.5px]">
+                <span className="text-muted-600">{c.name}:</span>{" "}
+                <span className="num font-semibold">{c.value}</span>
+              </p>
+            ))}
+          </div>
+        </section>
+      )}
 
       <p className="mt-5 text-[10.5px] text-muted-300">
         This purchase order is valid only with both approvals recorded above. Any revision supersedes

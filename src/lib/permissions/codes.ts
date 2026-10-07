@@ -3,7 +3,7 @@
  * Source: src/lib/permissions/registry.ts
  * Regenerate: pnpm perms:codegen
  *
- * 543 permission codes.
+ * 550 permission codes.
  */
 
 export const PERM = {
@@ -577,6 +577,15 @@ export const PERM = {
       "toggleStatus": "masters.numberingSeries.toggleStatus",
       "export": "masters.numberingSeries.export",
       "import": "masters.numberingSeries.import",
+    },
+    "printContact": {
+      "view": "masters.printContact.view",
+      "create": "masters.printContact.create",
+      "update": "masters.printContact.update",
+      "delete": "masters.printContact.delete",
+      "toggleStatus": "masters.printContact.toggleStatus",
+      "export": "masters.printContact.export",
+      "import": "masters.printContact.import",
     },
   },
   "admin": {

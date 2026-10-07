@@ -744,6 +744,25 @@ model DelayReason {
   @@map("m_delay_reasons")
 }
 
+/// A line of contact detail printed at the foot of a document — "Mobile",
+/// "Email", "Office". Kept as data rather than typed into the template so the
+/// number on every sheet printed tomorrow follows a change made today.
+model PrintContact {
+  id    String @id @default(cuid())
+  code  String @unique
+  /// The title printed before the colon.
+  name  String
+  /// What is printed after it.
+  value String
+
+  sortOrder Int          @default(0)
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@map("m_print_contacts")
+}
+
 model Amenity {
   id        String       @id @default(cuid())
   code      String       @unique
