@@ -17,7 +17,8 @@ import {
   type AgendaItem, type AgendaKind,
 } from "@/lib/calendar/agenda";
 import {
-  cancelCalendarTaskAction, createCalendarTaskAction, respondToCalendarTaskAction,
+  cancelCalendarTaskAction, completeCalendarTaskAction, createCalendarTaskAction,
+  extendCalendarTaskAction, respondToCalendarTaskAction,
 } from "./actions";
 
 /**
@@ -416,37 +417,149 @@ export function CalendarScreen({
       )}
 
       {openEvent && (
-        <Modal
-          open
+        <CalendarTaskSheet
+          item={openEvent}
+          can={can}
           onClose={() => router.push("/calendar")}
-          title={openEvent.title}
-          description={openEvent.subtitle ?? undefined}
-          size="sm"
-          footer={
-            <>
-              <Button variant="outline" onClick={() => router.push("/calendar")}>Close</Button>
-              {can.cancel && (
-                <Button
-                  variant="danger"
-                  loading={busy}
-                  onClick={() => run(
-                    () => cancelCalendarTaskAction(openEvent.id.replace("event:", ""), "Cancelled from the calendar."),
-                    "Calendar task cancelled.",
-                  )}
-                >
-                  Cancel this task
-                </Button>
-              )}
-            </>
-          }
-        >
-          <p className="num text-[12.5px] font-semibold text-navy-900">
-            {formatDateTime(openEvent.at)}
-            {openEvent.endAt ? ` → ${formatDateTime(openEvent.endAt)}` : ""}
-          </p>
-        </Modal>
+          onDone={(m) => { toast(m); router.push("/calendar"); router.refresh(); }}
+        />
       )}
+
     </div>
+  );
+}
+
+/**
+ * What you can do to a calendar task: finish it, push it out, or call it off.
+ *
+ * Each is offered only when it is possible — a finished task cannot be extended,
+ * a cancelled one cannot be finished — and only when the viewer holds the
+ * permission. The server checks both again.
+ */
+function CalendarTaskSheet({
+  item, can, onClose, onDone,
+}: {
+  item: AgendaItem;
+  can: Record<string, boolean>;
+  onClose: () => void;
+  onDone: (m: string) => void;
+}) {
+  const id = item.id.replace("event:", "");
+  const [mode, setMode] = React.useState<null | "complete" | "extend" | "cancel">(null);
+  const [remark, setRemark] = React.useState("");
+  const [newEnd, setNewEnd] = React.useState(item.endAt ? item.endAt.slice(0, 16) : "");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function send() {
+    setBusy(true);
+    setError(null);
+    const res =
+      mode === "complete" ? await completeCalendarTaskAction(id, remark)
+        : mode === "extend" ? await extendCalendarTaskAction(id, newEnd, remark)
+          : await cancelCalendarTaskAction(id, remark);
+    setBusy(false);
+    if (!res.ok) { setError(res.error ?? "That did not work."); return; }
+    onDone(
+      mode === "complete" ? "Marked done."
+        : mode === "extend" ? "Finish moved — everyone on it has been told."
+          : "Calendar task cancelled.",
+    );
+  }
+
+  const confirmLabel = mode === "complete" ? "Mark done" : mode === "extend" ? "Move the finish" : "Cancel it";
+  const needsReason = mode === "extend" || mode === "cancel";
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={item.title}
+      description={item.subtitle ?? undefined}
+      size="sm"
+      footer={
+        mode === null ? (
+          <Button variant="outline" onClick={onClose}>Close</Button>
+        ) : (
+          <>
+            <Button variant="outline" onClick={() => { setMode(null); setError(null); }}>Back</Button>
+            <Button
+              variant={mode === "cancel" ? "danger" : "success"}
+              loading={busy}
+              onClick={send}
+              disabled={
+                (needsReason && remark.trim().length < 3) || (mode === "extend" && !newEnd)
+              }
+            >
+              {confirmLabel}
+            </Button>
+          </>
+        )
+      }
+    >
+      <div className="space-y-3.5">
+        {error && <Alert tone="error">{error}</Alert>}
+
+        <div className="rounded-[10px] bg-surface-sunken px-3.5 py-3">
+          <p className="num text-[12.5px] font-semibold text-navy-900">
+            {formatDateTime(item.at)}
+            {item.endAt ? ` → ${formatDateTime(item.endAt)}` : ""}
+          </p>
+          {item.movedFrom && (
+            <p className="num mt-1 text-[11.5px] font-medium text-warn-800">
+              Was due to end {formatDateTime(item.movedFrom)}
+              {item.extendedCount ? ` · moved ${item.extendedCount} time${item.extendedCount === 1 ? "" : "s"}` : ""}
+            </p>
+          )}
+          {item.done && (
+            <p className="mt-1 text-[11.5px] font-bold text-good-700">This task is done.</p>
+          )}
+        </div>
+
+        {mode === null && (
+          <div className="flex flex-wrap gap-2">
+            {can.complete && !item.done && (
+              <Button variant="success" onClick={() => { setMode("complete"); setRemark(""); }}>
+                Mark as completed
+              </Button>
+            )}
+            {can.extend && !item.done && (
+              <Button variant="outline" onClick={() => { setMode("extend"); setRemark(""); }}>
+                Extend
+              </Button>
+            )}
+            {can.cancel && (
+              <Button variant="danger" onClick={() => { setMode("cancel"); setRemark(""); }}>
+                Cancel
+              </Button>
+            )}
+            {item.done && !can.cancel && (
+              <p className="text-[12.5px] font-medium text-muted-500">Nothing left to do on this one.</p>
+            )}
+          </div>
+        )}
+
+        {mode === "extend" && (
+          <Field label="New finish" required hint="It has to be later than it ends now.">
+            <Input type="datetime-local" value={newEnd} onChange={(e) => setNewEnd(e.target.value)} />
+          </Field>
+        )}
+
+        {mode !== null && (
+          <Field
+            label={mode === "complete" ? "Remark" : "Why"}
+            required={needsReason}
+            hint={
+              mode === "complete"
+                ? "Optional — everyone on it is told either way."
+                : "Everyone on it sees this."
+            }
+          >
+            <Textarea rows={2} value={remark} onChange={(e) => setRemark(e.target.value)} />
+          </Field>
+        )}
+      </div>
+    </Modal>
   );
 }
 

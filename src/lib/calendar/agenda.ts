@@ -42,6 +42,11 @@ export interface AgendaItem {
   tone: AgendaTone;
   /** Waiting on this viewer to accept or decline. */
   needsResponse?: boolean;
+  /** Finished. It stays on the calendar — it happened — but it is not waiting. */
+  done?: boolean;
+  /** Where it was going to end before it was pushed out, and how many times. */
+  movedFrom?: string | null;
+  extendedCount?: number;
 }
 
 export const AGENDA_LABEL: Record<AgendaKind, string> = {
@@ -179,6 +184,8 @@ export function filterKinds(items: AgendaItem[], kinds: AgendaKind[]): AgendaIte
 const WAITS: AgendaKind[] = ["TASK", "FOLLOW_UP", "SITE_VISIT", "APPROVAL", "INVITE"];
 
 export function isOverdue(item: AgendaItem, nowMs: number): boolean {
+  // Something finished is never overdue, whatever its date.
+  if (item.done) return false;
   if (!WAITS.includes(item.kind)) return false;
   return Date.parse(item.endAt ?? item.at) < nowMs;
 }

@@ -97,6 +97,8 @@ export default async function CalendarPage({
         respond: ctx.has(PERM.calendar.event.respond),
         cancel: ctx.has(PERM.calendar.event.cancel),
         update: ctx.has(PERM.calendar.event.update),
+        complete: ctx.has(PERM.calendar.event.complete),
+        extend: ctx.has(PERM.calendar.event.extend),
       }}
     />
   );

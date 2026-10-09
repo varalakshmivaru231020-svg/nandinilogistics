@@ -68,7 +68,9 @@ async function calendarEvents(
     orderBy: { startAt: "asc" },
     select: {
       id: true, title: true, description: true, startAt: true, endAt: true,
-      allDay: true, location: true,
+      allDay: true, location: true, status: true,
+      originalEndAt: true, extendedCount: true,
+      completedAt: true, completedBy: { select: { name: true } },
       createdBy: { select: { id: true, name: true } },
       project: { select: { name: true } },
       attendees: { select: { userId: true, response: true, user: { select: { name: true } } } },
@@ -77,9 +79,15 @@ async function calendarEvents(
 
   return rows.map((e) => {
     const me = e.attendees.find((a) => a.userId === ctx.id);
-    const waiting = me?.response === "PENDING";
+    const done = e.status === "COMPLETED";
+    // A finished task is not waiting on anybody, whatever the invitation says.
+    const waiting = !done && me?.response === "PENDING";
     const accepted = e.attendees.filter((a) => a.response === "ACCEPTED").length;
     const subtitle = [
+      done ? `Done${e.completedBy ? ` by ${e.completedBy.name}` : ""}` : null,
+      e.extendedCount > 0
+        ? `moved ${e.extendedCount} time${e.extendedCount === 1 ? "" : "s"}`
+        : null,
       e.location,
       e.project?.name,
       e.attendees.length
@@ -97,8 +105,11 @@ async function calendarEvents(
       endAt: e.endAt.toISOString(),
       allDay: e.allDay,
       href: `/calendar?event=${e.id}`,
-      tone: waiting ? ("plum" as const) : ("brand" as const),
+      tone: done ? ("good" as const) : waiting ? ("plum" as const) : ("brand" as const),
       needsResponse: waiting,
+      done,
+      movedFrom: e.originalEndAt ? e.originalEndAt.toISOString() : null,
+      extendedCount: e.extendedCount,
     };
   });
 }

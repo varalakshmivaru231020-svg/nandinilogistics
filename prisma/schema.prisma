@@ -216,6 +216,7 @@ model User {
   notifications          Notification[]      @relation("NotificationRecipient")
   calendarEventsCreated  CalendarEvent[]     @relation("CalendarEventBy")
   calendarInvites        CalendarAttendee[]  @relation("CalendarAttendeeUser")
+  calendarEventsDone     CalendarEvent[]     @relation("CalendarEventDoneBy")
   scheduleTemplates      ScheduleTemplate[]
   posApprovedAsPm        PurchaseOrder[]     @relation("PoPmApprover")
   posApprovedAsAdmin     PurchaseOrder[]     @relation("PoAdminApprover")
@@ -1151,11 +1152,22 @@ model CalendarEvent {
   projectId   String?
   createdById String
   status      CalendarEventStatus @default(SCHEDULED)
+
+  /// Where it was going to end before anybody moved it. Set once, on the first
+  /// extension, and never written again — the same idea as a schedule
+  /// baseline, so "how far has this slipped" stays answerable.
+  originalEndAt DateTime?
+  extendedCount Int       @default(0)
+
+  completedAt   DateTime?
+  completedById String?
+
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
-  project   Project? @relation(fields: [projectId], references: [id])
-  createdBy User     @relation("CalendarEventBy", fields: [createdById], references: [id])
+  project     Project? @relation(fields: [projectId], references: [id])
+  createdBy   User     @relation("CalendarEventBy", fields: [createdById], references: [id])
+  completedBy User?    @relation("CalendarEventDoneBy", fields: [completedById], references: [id])
 
   attendees CalendarAttendee[]
 

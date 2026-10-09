@@ -200,6 +200,151 @@ export async function cancelCalendarTaskAction(id: string, remark: string): Prom
 }
 
 /**
+ * Marking a calendar task done.
+ *
+ * Whoever raised it can, and so can anybody who accepted it — they are the ones
+ * who did the thing. Somebody who declined it cannot: it was not theirs.
+ */
+export async function completeCalendarTaskAction(
+  id: string,
+  remark: string,
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.calendar.event.complete);
+
+    const event = await prisma.calendarEvent.findUnique({
+      where: { id },
+      select: {
+        id: true, title: true, status: true, createdById: true, projectId: true,
+        attendees: { select: { userId: true, response: true } },
+      },
+    });
+    if (!event) throw new Error("That calendar task no longer exists.");
+    if (event.status === "CANCELLED") throw new Error("That calendar task was cancelled.");
+    if (event.status === "COMPLETED") throw new Error("It is already marked done.");
+
+    const accepted = event.attendees.some((a) => a.userId === ctx.id && a.response === "ACCEPTED");
+    const admin = ctx.has(PERM.calendar.agenda.viewAll);
+    if (event.createdById !== ctx.id && !accepted && !admin) {
+      throw new Error("Only whoever raised this or took it on can mark it done.");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.calendarEvent.update({
+        where: { id },
+        data: { status: "COMPLETED", completedAt: new Date(), completedById: ctx.id },
+      });
+
+      const tell = [event.createdById, ...event.attendees.map((a) => a.userId)]
+        .filter((u) => u !== ctx.id);
+      if (tell.length > 0) {
+        await tx.notification.createMany({
+          data: [...new Set(tell)].map((userId) => ({
+            userId,
+            kind: "CALENDAR_COMPLETED",
+            title: `Done: ${event.title}`,
+            body: remark.trim() || `Marked done by ${ctx.name}.`,
+            href: `/calendar?event=${id}`,
+            entity: "CalendarEvent",
+            entityId: id,
+          })),
+        });
+      }
+    });
+
+    await recordAudit({
+      action: "UPDATE", entity: "CalendarEvent", entityId: id, userId: ctx.id,
+      projectId: event.projectId ?? undefined,
+      summary: `Marked calendar task "${event.title}" done` + (remark.trim() ? ` — ${remark.trim()}` : ""),
+    });
+
+    refresh();
+    return null;
+  });
+}
+
+/**
+ * Pushing a calendar task's finish out.
+ *
+ * The first extension keeps the original end, and every later one leaves it
+ * where it is — so "this was meant to be done on the 12th" survives however
+ * many times the date moves. A reason is required: an extension with no reason
+ * is a date nobody can account for later.
+ */
+export async function extendCalendarTaskAction(
+  id: string,
+  newEndAt: string,
+  reason: string,
+): Promise<ActionResult<{ extendedCount: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.calendar.event.extend);
+
+    const event = await prisma.calendarEvent.findUnique({
+      where: { id },
+      select: {
+        id: true, title: true, status: true, startAt: true, endAt: true,
+        originalEndAt: true, extendedCount: true, createdById: true, projectId: true,
+        attendees: { select: { userId: true } },
+      },
+    });
+    if (!event) throw new Error("That calendar task no longer exists.");
+    if (event.status === "CANCELLED") throw new Error("That calendar task was cancelled.");
+    if (event.status === "COMPLETED") throw new Error("It is already done — there is nothing to extend.");
+    if (event.createdById !== ctx.id && !ctx.has(PERM.calendar.agenda.viewAll)) {
+      throw new Error("Only whoever raised a calendar task can move its finish.");
+    }
+    if (!reason.trim()) throw new Error("Say why it needs longer.");
+
+    const end = new Date(newEndAt);
+    const problem = spanProblem(event.startAt, end);
+    if (problem) throw new Error(problem);
+    if (end.getTime() <= event.endAt.getTime()) {
+      throw new Error("An extension has to move the finish later than it is now.");
+    }
+
+    const extendedCount = event.extendedCount + 1;
+    await prisma.$transaction(async (tx) => {
+      await tx.calendarEvent.update({
+        where: { id },
+        data: {
+          endAt: end,
+          extendedCount,
+          // Written once. A later extension leaves it where it is.
+          ...(event.originalEndAt === null ? { originalEndAt: event.endAt } : {}),
+        },
+      });
+
+      const tell = event.attendees.map((a) => a.userId).filter((u) => u !== ctx.id);
+      if (tell.length > 0) {
+        await tx.notification.createMany({
+          data: tell.map((userId) => ({
+            userId,
+            kind: "CALENDAR_EXTENDED",
+            title: `Moved: ${event.title}`,
+            body: reason.trim(),
+            href: `/calendar?event=${id}`,
+            entity: "CalendarEvent",
+            entityId: id,
+          })),
+        });
+      }
+    });
+
+    const day = (d: Date) => d.toISOString().slice(0, 16).replace("T", " ");
+    await recordAudit({
+      action: "UPDATE", entity: "CalendarEvent", entityId: id, userId: ctx.id,
+      projectId: event.projectId ?? undefined,
+      summary:
+        `Extended calendar task "${event.title}" from ${day(event.endAt)} to ${day(end)}` +
+        ` (extension ${extendedCount}) — ${reason.trim()}`,
+    });
+
+    refresh();
+    return { extendedCount };
+  });
+}
+
+/**
  * Accepting or declining a calendar task you were put on.
  *
  * This is the whole point of assigning being an invitation: until somebody

@@ -542,6 +542,10 @@ crud({
       "Assigning invites them; it is on them once they accept."],
     ["respond", "Accept or decline a calendar task", "BUTTON"],
     ["cancel", "Cancel a calendar task", "BUTTON"],
+    ["complete", "Mark a calendar task done", "BUTTON",
+      "The person it is on can finish it, not only whoever raised it."],
+    ["extend", "Push a calendar task's finish out", "BUTTON",
+      "The first extension keeps the original end, so slippage stays visible."],
   ],
 });
 

@@ -156,6 +156,24 @@ describe("what counts as overdue", () => {
     expect(isOverdue(running, now)).toBe(false);
   });
 
+  /*
+   * Something finished is never late, whatever its date says. Without this a
+   * task marked done last week keeps sitting in the overdue count forever.
+   */
+  it("is false for anything already done", () => {
+    const late = item({ kind: "TASK", at: at(2026, 10, 1), endAt: null });
+    expect(isOverdue(late, now)).toBe(true);
+    expect(isOverdue({ ...late, done: true }, now)).toBe(false);
+  });
+
+  it("keeps a finished item out of the day's overdue tally", () => {
+    const tally = dayTally([
+      item({ kind: "TASK", at: at(2026, 10, 8), endAt: null }),
+      item({ kind: "TASK", at: at(2026, 10, 8), endAt: null, done: true }),
+    ], now);
+    expect(tally).toEqual({ total: 2, overdue: 1, needsResponse: 0 });
+  });
+
   it("tallies a day into total, overdue and waiting on a reply", () => {
     const tally = dayTally([
       item({ kind: "TASK", at: at(2026, 10, 8), endAt: null }),
