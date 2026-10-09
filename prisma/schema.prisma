@@ -214,6 +214,8 @@ model User {
   grnsInspected          Grn[]               @relation("GrnInspector")
   settingsUpdated        AppSetting[]        @relation("SettingUpdatedBy")
   notifications          Notification[]      @relation("NotificationRecipient")
+  calendarEventsCreated  CalendarEvent[]     @relation("CalendarEventBy")
+  calendarInvites        CalendarAttendee[]  @relation("CalendarAttendeeUser")
   scheduleTemplates      ScheduleTemplate[]
   posApprovedAsPm        PurchaseOrder[]     @relation("PoPmApprover")
   posApprovedAsAdmin     PurchaseOrder[]     @relation("PoAdminApprover")
@@ -895,6 +897,7 @@ model Project {
   units             Unit[]
   team              UserProject[]
   documents         ProjectDocument[]
+  calendarEvents    CalendarEvent[]
   amenities         ProjectAmenity[]
   progressLogs      SiteProgressLog[]
   activities        ScheduleActivity[]
@@ -1118,6 +1121,69 @@ model AppSetting {
 
 /// Something one person needs to act on, addressed to them. Personal: a user
 /// only ever sees their own.
+/// Whether someone a calendar task was assigned to has taken it on.
+enum CalendarResponse {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum CalendarEventStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+/// A calendar task: something with a start, an end and the people it is on.
+///
+/// Everything else the calendar shows — tasks, follow-ups, visits, approvals,
+/// schedule activities — already lives in its own module and is only read.
+/// This is the one thing the calendar owns.
+model CalendarEvent {
+  id          String              @id @default(cuid())
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime
+  /// A whole-day entry carries no useful time of day.
+  allDay      Boolean             @default(false)
+  location    String?
+  projectId   String?
+  createdById String
+  status      CalendarEventStatus @default(SCHEDULED)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  project   Project? @relation(fields: [projectId], references: [id])
+  createdBy User     @relation("CalendarEventBy", fields: [createdById], references: [id])
+
+  attendees CalendarAttendee[]
+
+  @@index([startAt])
+  @@index([createdById])
+  @@map("calendar_events")
+}
+
+/// One person a calendar task was assigned to, and whether they took it on.
+///
+/// Assigning does not put it on somebody's plate — accepting does. Until then
+/// it sits on their calendar as an invitation waiting on them.
+model CalendarAttendee {
+  id          String           @id @default(cuid())
+  eventId     String
+  userId      String
+  response    CalendarResponse @default(PENDING)
+  respondedAt DateTime?
+  remark      String?
+
+  event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User          @relation("CalendarAttendeeUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId, response])
+  @@map("calendar_attendees")
+}
+
 model Notification {
   id        String    @id @default(cuid())
   userId    String

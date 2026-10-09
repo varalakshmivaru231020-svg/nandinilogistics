@@ -46,6 +46,7 @@ export const NAVIGATION: NavSection[] = [
           PERM.dashboard.sales.view,
         ],
       },
+      { label: "Calendar", href: "/calendar", icon: "schedule", permission: PERM.calendar.agenda.view },
       { label: "Approvals", href: "/approvals", icon: "checklists", permission: PERM.approvals.queue.view, badge: "approvals" },
     ],
   },

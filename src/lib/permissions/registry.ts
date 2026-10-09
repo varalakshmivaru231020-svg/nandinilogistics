@@ -22,6 +22,7 @@ import type { ModuleDef, PermissionDef, PermissionKind } from "./types";
 export const MODULES: ModuleDef[] = [
   { key: "dashboard", label: "Dashboards", sortOrder: 10 },
   { key: "approvals", label: "Approvals", sortOrder: 15 },
+  { key: "calendar", label: "Calendar", sortOrder: 18 },
   { key: "project", label: "Project Management", sortOrder: 20 },
   { key: "task", label: "Task Management", sortOrder: 30 },
   { key: "checklist", label: "Checklist Management", sortOrder: 40 },
@@ -519,6 +520,32 @@ crud({
 });
 
 // ===========================================================================
+// CALENDAR
+// ===========================================================================
+
+const G_CAL = "Calendar";
+
+perm("calendar", "agenda", "view", "Calendar", G_CAL, "PAGE",
+  "One calendar across tasks, follow-ups, visits, approvals and the schedule.");
+perm("calendar", "agenda", "viewAll", "See everyone's calendar", G_CAL, "TAB",
+  "Without it a person sees only what is on them.");
+
+crud({
+  module: "calendar",
+  resource: "event",
+  entity: "calendar task",
+  group: G_CAL,
+  exportable: false,
+  importable: false,
+  extra: [
+    ["assign", "Assign a calendar task to someone", "BUTTON",
+      "Assigning invites them; it is on them once they accept."],
+    ["respond", "Accept or decline a calendar task", "BUTTON"],
+    ["cancel", "Cancel a calendar task", "BUTTON"],
+  ],
+});
+
+// ===========================================================================
 // MASTERS — every master gets the full CRUD + status + export set
 // ===========================================================================
 
@@ -853,6 +880,13 @@ export const NOT_YET_BUILT: ReadonlySet<string> = new Set([
   "sales.customer.update",
   "sales.demand.create",
   "sales.demand.delete",
+  /*
+   * A calendar task is cancelled, not deleted: the people it was on were told
+   * it existed and are told it is off, and a row that vanishes tells them
+   * nothing. The permission stays registered so a role can be given it if that
+   * ever changes.
+   */
+  "calendar.event.delete",
   "sales.demand.export",
   "sales.demand.update",
   "sales.followUp.delete",

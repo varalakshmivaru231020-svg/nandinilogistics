@@ -108,6 +108,15 @@ export const ROLES: RoleSeed[] = [
     description: "Runs the project end to end — structure, schedule, first-level approvals.",
     level: 20,
     grant: [
+      // A calendar is everybody's: see your own agenda, raise a task, change
+      // or cancel your own, and answer one that was put on you.
+      "calendar.agenda.view",
+      "calendar.event.view",
+      "calendar.event.create",
+      "calendar.event.update",
+      "calendar.event.cancel",
+      "calendar.event.respond",
+      "calendar.event.assign",
       ...TASK_PARTICIPANT,
 
       "dashboard.projectManager.view",
@@ -158,6 +167,14 @@ export const ROLES: RoleSeed[] = [
     description: "Executes and reports from site — raises indents, receives material, logs progress.",
     level: 30,
     grant: [
+      // A calendar is everybody's: see your own agenda, raise a task, change
+      // or cancel your own, and answer one that was put on you.
+      "calendar.agenda.view",
+      "calendar.event.view",
+      "calendar.event.create",
+      "calendar.event.update",
+      "calendar.event.cancel",
+      "calendar.event.respond",
       ...TASK_PARTICIPANT,
 
       "dashboard.supervisor.view",
@@ -214,6 +231,14 @@ export const ROLES: RoleSeed[] = [
     description: "Controls material and stock — PO, GRN, issue, return, transfer, vendor payments.",
     level: 30,
     grant: [
+      // A calendar is everybody's: see your own agenda, raise a task, change
+      // or cancel your own, and answer one that was put on you.
+      "calendar.agenda.view",
+      "calendar.event.view",
+      "calendar.event.create",
+      "calendar.event.update",
+      "calendar.event.cancel",
+      "calendar.event.respond",
       ...TASK_PARTICIPANT,
 
       "material.vendor.manageCategories",
@@ -270,6 +295,15 @@ export const ROLES: RoleSeed[] = [
     description: "Owns the pipeline — assignment, discount approval, pricing and hold extensions.",
     level: 25,
     grant: [
+      // A calendar is everybody's: see your own agenda, raise a task, change
+      // or cancel your own, and answer one that was put on you.
+      "calendar.agenda.view",
+      "calendar.event.view",
+      "calendar.event.create",
+      "calendar.event.update",
+      "calendar.event.cancel",
+      "calendar.event.respond",
+      "calendar.event.assign",
       ...TASK_PARTICIPANT,
 
       "kb.article.view",
@@ -299,6 +333,14 @@ export const ROLES: RoleSeed[] = [
     description: "Owns lead to booking — follow-ups, site visits, cost sheets, collections.",
     level: 30,
     grant: [
+      // A calendar is everybody's: see your own agenda, raise a task, change
+      // or cancel your own, and answer one that was put on you.
+      "calendar.agenda.view",
+      "calendar.event.view",
+      "calendar.event.create",
+      "calendar.event.update",
+      "calendar.event.cancel",
+      "calendar.event.respond",
       ...TASK_PARTICIPANT,
 
       "kb.article.view",
@@ -354,6 +396,15 @@ export const ROLES: RoleSeed[] = [
     description: "Runs the work on site — schedule, progress, quality checks and the material it needs.",
     level: 28,
     grant: [
+      // A calendar is everybody's: see your own agenda, raise a task, change
+      // or cancel your own, and answer one that was put on you.
+      "calendar.agenda.view",
+      "calendar.event.view",
+      "calendar.event.create",
+      "calendar.event.update",
+      "calendar.event.cancel",
+      "calendar.event.respond",
+      "calendar.event.assign",
       ...TASK_PARTICIPANT,
 
       "dashboard.supervisor.view",
@@ -420,6 +471,15 @@ export const ROLES: RoleSeed[] = [
     description: "Back office — records, documents, masters and the paperwork that keeps them straight.",
     level: 40,
     grant: [
+      // A calendar is everybody's: see your own agenda, raise a task, change
+      // or cancel your own, and answer one that was put on you.
+      "calendar.agenda.view",
+      "calendar.event.view",
+      "calendar.event.create",
+      "calendar.event.update",
+      "calendar.event.cancel",
+      "calendar.event.respond",
+      "calendar.event.assign",
       ...TASK_PARTICIPANT,
 
       "dashboard.supervisor.view",
