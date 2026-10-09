@@ -23,7 +23,12 @@ export const metadata = { title: "Performance" };
  */
 export default async function PerformancePage() {
   const ctx = await requirePermission(PERM.dashboard.performance.view);
+  // Two shapes of the same scope. Most rows carry a projectId of their own;
+  // a Project is scoped by its own id. Passing the wrong one is not a type
+  // error — a Prisma where clause is a plain object — so it only shows up as a
+  // 500 for anyone whose scope is not empty, which is everyone but the Owner.
   const scope = projectScopeFilter(ctx);
+  const projectScope = projectScopeFilter(ctx, "id");
   const now = new Date();
   const nowMs = now.getTime();
 
@@ -64,7 +69,7 @@ export default async function PerformancePage() {
   /* -------------------------------- Projects -------------------------------- */
   if (ctx.has(PERM.project.project.view)) {
     const rows = await prisma.project.findMany({
-      where: scope,
+      where: projectScope,
       select: {
         status: true, targetDate: true, actualEndDate: true,
         activities: { select: { status: true } },
@@ -365,7 +370,8 @@ export default async function PerformancePage() {
   /* ---------------------------------- Flats --------------------------------- */
   if (ctx.has(PERM.unit.unit.view)) {
     const rows = await prisma.unit.findMany({
-      where: { project: scope },
+      // A unit carries its own projectId, so it is scoped directly.
+      where: scope,
       select: { status: true, superBuiltUpArea: true },
     });
     cardFrom("units", "Available Flats", "/units/board", unitFigures(rows), 4);

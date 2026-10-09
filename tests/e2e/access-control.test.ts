@@ -65,8 +65,14 @@ suite("access control, end to end", () => {
       // the supervisor holds both; sales sees only the knowledge base.
       ["/hr", ["owner", "pm", "supervisor"], ["sales"]],
       ["/kb", ["owner", "pm", "supervisor", "store", "sales"], []],
-      ["/tasks", ["owner"], ["sales", "store", "supervisor", "pm"]],
-      ["/checklists", ["owner"], ["sales", "store", "supervisor", "pm"]],
+      /*
+       * Tasks and checklists are participatory: anybody can be given a task,
+       * raise one, or be named on a review level, so the role matrix hands the
+       * codes to every role and src/lib/tasks/lifecycle.ts decides who may act
+       * on the task in front of them. The page is open; the actions are not.
+       */
+      ["/tasks", ["owner", "pm", "supervisor", "store", "sales", "saleshead"], []],
+      ["/checklists", ["owner", "pm", "supervisor", "store", "sales", "saleshead"], []],
     ];
 
     for (const [route, allowed, denied] of matrix) {
@@ -139,11 +145,14 @@ suite("access control, end to end", () => {
   });
 
   /*
-   * Tasks and Checklists were inert previews once. They were built into real
-   * screens deliberately, so what is asserted now is that they work and are
-   * still gated — not that they refuse to do anything.
+   * Tasks and Checklists were inert previews once, then real screens the Owner
+   * alone could open. Both are now participatory by design — every role holds
+   * the view codes, and what a person may DO is decided per task by
+   * src/lib/tasks/lifecycle.ts (tests/unit/task-lifecycle.test.ts covers that
+   * matrix). So what is asserted here is that they are real screens for a
+   * participant, not that they refuse one.
    */
-  describe("tasks and checklists are real screens, still gated", () => {
+  describe("tasks and checklists are real screens, open to participants", () => {
     for (const route of ["/tasks", "/checklists"]) {
       it(`serves ${route} to the Owner`, async () => {
         const { status, html } = await visit(route, tokens.owner);
@@ -151,9 +160,10 @@ suite("access control, end to end", () => {
         expect(html).not.toContain("pending client verification");
       });
 
-      it(`refuses ${route} to someone without the permission`, async () => {
-        const { status } = await visit(route, tokens.sales);
-        expect([307, 403]).toContain(status);
+      it(`serves ${route} to a participant who is not the Owner`, async () => {
+        const { status, html } = await visit(route, tokens.sales);
+        expect(status).toBe(200);
+        expect(html).not.toContain("pending client verification");
       });
     }
   });
