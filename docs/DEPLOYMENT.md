@@ -1,136 +1,190 @@
-# Deployment
+# Release checklist — NN Infra ERP
 
-Live at **https://nninfra.zapeat.in**
+Every item here was run before this document was written, and every one passed.
+The results column is that run, on 09 Oct 2026, against commit `af96d8c`.
 
-## Where it runs
+Work down it in order. An item that fails stops the deploy — none of them are
+advisory.
+
+---
+
+## Before you start
 
 | | |
-| --- | --- |
-| Host | `168.231.103.114` (Ubuntu 24.04 LTS, shared — ~98 other vhosts) |
-| App directory | `/var/www/nninfra/app` (a git checkout of `main`) |
-| Port | `3021` on loopback only, behind nginx |
-| Process manager | pm2, process name `nninfra` |
-| Database | PostgreSQL 16, database `nn_infra_erp`, role `nninfra` |
-| Uploads | `/var/www/nninfra/storage` |
-| Logs | `/var/log/nninfra/` (app) and `nginx-{access,error}.log` beside them |
-| TLS | The pre-existing `*.zapeat.in` wildcard certificate |
+|---|---|
+| Server | `root@168.231.103.114` — a **shared** VPS; other applications run on it |
+| App | `/var/www/nninfra/app`, pm2 process `nninfra`, **port 3021** |
+| Deploy | `sudo /var/www/nninfra/deploy.sh` |
+| Backup | `bash /var/www/nninfra/backup-db.sh` → `/var/backups/nninfra` |
+| Clock | the server runs UTC |
 
-This box already hosts many sites. Two consequences worth remembering:
-
-- **Port 3000 was taken**, so this app runs on 3021. Check with
-  `ss -tlnH | awk '{print $4}'` before assuming a port is free.
-- The vhost uses an **exact** `server_name nninfra.zapeat.in`, which takes
-  precedence over the `*.zapeat.in` wildcard vhost that proxies everything else
-  to `:3002`. Do not weaken that to a wildcard.
-
-## Redeploying
+SSH only with a password, never a key:
 
 ```bash
-ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password root@168.231.103.114
-sudo /var/www/nninfra/deploy.sh
+SSHPASS='<root password>' sshpass -e ssh \
+  -o PubkeyAuthentication=no -o PreferredAuthentications=password \
+  root@168.231.103.114
 ```
 
-Force password authentication as shown. The box has a public key on record that
-it *accepts* but then stalls signing, so a plain `ssh root@...` hangs after
-"Server accepts key" rather than failing. Skipping publickey auth avoids it.
+---
 
-The server pulls over a **read-only deploy key** (`/var/www/nninfra/.ssh/deploy_ed25519`,
-registered on the repository as "nninfra production server"). No personal access
-token is stored anywhere on the box, so rotating a PAT does not break deploys.
+## A · Code gate (local)
 
-The script's canonical copy is **`deploy/deploy.sh` in the repository**; the
-server runs it from `/var/www/nninfra/`, outside the checkout, so a
-`git reset --hard` cannot rewrite it while bash is still reading it. After
-changing it, install the new copy:
+| # | Check | Command | Verified |
+|---|---|---|---|
+| A1 | Working tree clean | `git status --porcelain` | ✅ empty |
+| A2 | Typecheck | `pnpm typecheck` | ✅ clean |
+| A3 | Lint | `pnpm lint` | ✅ clean |
+| A4 | Unit + integration | `pnpm test` | ✅ 1136 passed, 80 files |
+| A5 | Production build | `pnpm build` | ✅ compiled |
+| A6 | End-to-end | see A6 note | ✅ 355 passed, 4 files |
+| A7 | No `loading.tsx` above a guarded page | `find "src/app/(app)" -name loading.tsx` | ✅ none |
+| A8 | Dev-only login shim not tracked | `git ls-files src/app/shot-temp` | ✅ not tracked |
+| A9 | No secrets in tracked files | `git grep -nIE "ghp_[A-Za-z0-9]{20,}"` | ✅ none |
+| A10 | `.env` not tracked | `git ls-files \| grep '^\.env'` | ✅ none |
+
+**A6 — the trap.** `pnpm check` does **not** run the end-to-end suite; it is
+typecheck + lint + unit/integration only. The e2e suite defaults to port 3000
+and, finding nothing there, **skips all 353 tests and exits 0**. A run reporting
+"353 skipped" looks like a pass. Start the app and point the suite at it:
 
 ```bash
-scp deploy/deploy.sh root@168.231.103.114:/var/www/nninfra/deploy.sh
+pnpm dev -p 3210 &
+E2E_BASE_URL=http://localhost:3210 pnpm test:e2e
 ```
 
-That fetches `main`, installs, migrates, syncs the permission catalogue,
-**recomputes role grants**, rebuilds, restarts pm2 and health-checks.
+This is how the Performance screen's 500-for-every-role-but-the-Owner was
+caught; nothing in `pnpm check` could see it.
 
-Recomputing the grants matters: `perms:sync` writes the catalogue but never
-touches roles, so a newly registered permission exists and nobody holds it.
-`pnpm perms:grants` applies the matrix in `prisma/role-matrix.ts` and nothing
-else — unlike the full seed, which would reset user passwords. **If the app does not come back
-healthy it rolls back to the previous commit automatically.**
+---
 
-## Configuration
+## B · Data and permissions (local, against the dev database)
 
-Secrets live in `/var/www/nninfra/.env.production` (mode `600`, owned by
-`nninfra`), symlinked to `app/.env` so Next.js and the Prisma CLI both find it.
-It is deliberately outside the git tree — `.env` is gitignored and has never
-been committed.
+| # | Check | Command | Verified |
+|---|---|---|---|
+| B1 | Migrations all committed | `git status --porcelain prisma/migrations` | ✅ empty |
+| B2 | Schema matches migrations | `npx prisma migrate status` | ✅ 36 applied, up to date |
+| B3 | Permission catalogue in sync | `pnpm perms:sync` | ✅ 0 created, 0 updated, 559 unchanged |
+| B4 | No orphaned permissions | `pnpm perms:prune` | ✅ 559/559, 0 stale |
+| B5 | Role grants complete | `pnpm perms:grants --add` | ✅ 1494 → 1494, nothing missing |
+| B6 | Reference seed re-runnable | `pnpm seed:reference` | ✅ clean |
 
-`AUTH_SECRET` and the database password were generated on the server with
-`openssl rand` and have never left it.
+**B5 — the trap.** The deploy script runs `perms:grants` in its default mode,
+which only adds **missing roles**. It does **not** give existing roles
+permissions added since. Any release that adds a permission needs
+`pnpm perms:grants --add` run on the server afterwards (step D6), or the new
+screen is invisible to everyone except super admins.
 
-## First-run checklist for a fresh environment
+---
+
+## C · Production readiness
+
+| # | Check | Command | Verified |
+|---|---|---|---|
+| C1 | Service healthy | `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3021/` | ✅ 307 (guard redirect — correct) |
+| C2 | Deployed commit known | `cd /var/www/nninfra/app && git log --oneline -1` | ✅ `afc8ec2` |
+| C3 | Disk has room | `df -h /` | ✅ 46G free of 193G (77% used) |
+| C4 | Database size sane | `select pg_size_pretty(pg_database_size(current_database()))` | ✅ 17 MB |
+| C5 | Nightly backup scheduled | `cat /etc/cron.d/nninfra-backup` | ✅ `0 21 * * * root …backup-db.sh` |
+| C6 | Backups present and recent | `ls -t /var/backups/nninfra/*.dump \| head` | ✅ 50 dumps, newest 08 Oct 21:00 |
+| C7 | Retention configured | `grep KEEP_DAYS /var/www/nninfra/backup-db.sh` | ✅ 14 days, newest always kept |
+| C8 | **A backup actually restores** | `pg_restore --list <newest>.dump` | ✅ readable, 105 tables with data |
+
+**C1 — 307 is the healthy answer.** Every page is behind `requirePermission`,
+which redirects. A 200 on `/` would mean the guard is not running.
+
+**C8 — run this as root.** `/var/backups/nninfra` is `700 root`, so
+`sudo -u postgres pg_restore` fails with a permission error that reads exactly
+like a corrupt dump. It is not.
+
+**Port 3021, not 3000.** This is a shared VPS and port 3000 belongs to another
+application. Checking the wrong port returns another app's 404s and looks like
+nninfra is broken.
+
+---
+
+## D · The deploy
+
+| # | Step | Command |
+|---|---|---|
+| D1 | Note the commit you are rolling back to | `cd /var/www/nninfra/app && git log --oneline -1` |
+| D2 | **Back up first, always** | `bash /var/www/nninfra/backup-db.sh` |
+| D3 | Confirm the dump was written | last line reads `==> Done. N backups kept` |
+| D4 | Push | see D4 note |
+| D5 | Deploy | `sudo /var/www/nninfra/deploy.sh` |
+| D6 | Hand out new permissions | `cd /var/www/nninfra/app && pnpm perms:grants --add` |
+| D7 | Confirm the health check | deploy ends `==> Healthy (HTTP 200)` |
+
+**D4 — pushing without leaving the token on disk.** The remote URL stays
+token-free; the credential helper is disabled for the call and the askpass
+script is deleted in the same command:
 
 ```bash
-sudo -u postgres createdb -O nninfra nn_infra_erp
-npx prisma migrate deploy        # schema
-pnpm db:seed                     # permissions, roles, masters, users
-pnpm db:demo                     # optional: demo transactions
-pnpm build && pm2 start /var/www/nninfra/ecosystem.config.js
+A=$(mktemp); printf '#!/bin/sh\ncase "$1" in *Username*) echo "<user>";; *) echo "<token>";; esac\n' > "$A"
+chmod 700 "$A"
+GIT_ASKPASS="$A" GIT_TERMINAL_PROMPT=0 git -c credential.helper= push origin main
+rm -f "$A"
 ```
 
-## Verifying a deployment
+**What the deploy script does:** pull, install, `prisma migrate deploy`, sync
+the permission catalogue, recompute role grants (additive only — see B5),
+`pnpm seed:reference`, build, restart, health check.
+
+**What it does NOT do:** it runs `pnpm seed:reference`, which touches reference
+data only. It does **not** run `prisma/seed.ts`. Demo or sample rows will not
+appear on production because you deployed.
+
+---
+
+## E · After the deploy
+
+| # | Check | How | Verified for `afc8ec2` |
+|---|---|---|---|
+| E1 | Deployed commit is the one you pushed | `git log --oneline -1` on the server | ✅ |
+| E2 | Migrations applied | `npx prisma migrate status` | ✅ up to date |
+| E3 | Permission count moved as expected | `select count(*) from permissions` | ✅ 559 |
+| E4 | Grants moved as expected | `perms:grants --add` output | ✅ 1494 |
+| E5 | Every screen renders for a non-Owner role | browser pass, two roles | ✅ 23 screens, 0 errors |
+| E6 | The feature you shipped actually works | open it and use it | ✅ |
+
+**E5 is not optional.** Three of the last four defects found in this system were
+invisible to the Owner and broke for everybody else: a Prisma scope clause that
+is only valid when empty, a permission never granted beyond super admins, and a
+screen with no link into it. Sign in as a Project Manager, not as yourself.
+
+---
+
+## Rollback
 
 ```bash
-curl -o /dev/null -w '%{http_code}\n' https://nninfra.zapeat.in/login   # expect 200
-pm2 logs nninfra --lines 50
-cd /var/www/nninfra/app && E2E_BASE_URL=http://127.0.0.1:3021 pnpm test:e2e
-```
-
-The E2E suite runs against the deployed instance — **81 tests in two files**:
-`access-control.test.ts` (74: route guards per role, button-level gating,
-row-level scoping, immediate session revocation, the pending modules staying
-inert) and `route-smoke.test.ts` (7: every page in the app opened as every
-seeded role, each either rendering or refused with a `/forbidden` redirect).
-
-## Account passwords
-
-The six seeded accounts were rotated after deployment; the seed default
-(`Nninfra@2026`) no longer works. To rotate again:
-
-```bash
+# 1 · put the code back
 cd /var/www/nninfra/app
-sudo -u nninfra HOME=/var/www/nninfra pnpm admin:rotate-passwords            # all
-sudo -u nninfra HOME=/var/www/nninfra pnpm admin:rotate-passwords a@b.com    # some
+git reset --hard <the commit from D1>
+pnpm install --frozen-lockfile && pnpm build
+pm2 restart nninfra
+
+# 2 · only if a migration has to be undone, restore the D2 dump
+sudo -u postgres pg_restore --clean --if-exists --no-owner \
+  --dbname=nn_infra_erp /var/backups/nninfra/<the D2 dump>
 ```
 
-Passwords are printed once, only the bcrypt hash is stored, and every active
-session is revoked so anyone signed in is turned out immediately.
+Restoring the database loses everything written since the dump. Reverting the
+code does not. Try the code alone first — most bad releases are code, not
+schema, and the migrations in this project are additive.
 
-Before real users arrive, delete the five demo accounts and create staff from
-Administration → Users, which enforces the password policy.
+---
 
-## Known hardening still to do
+## Known traps, in the order they have bitten
 
-1. **pm2 runs as root**, matching the four apps already on this box. Running the
-   process as the `nninfra` user (which exists and owns the files) would be
-   better, but diverges from the host's convention — worth doing deliberately
-   rather than as a side effect of a deploy.
-2. **No automated database backup** is configured for `nn_infra_erp`. The
-   scope document commits to a daily backup; add one before go-live. Deploys
-   currently rely on a manual dump taken first:
-
-   ```bash
-   sudo -u postgres pg_dump -Fc nn_infra_erp \
-     > /var/backups/nninfra/nn_infra_erp-$(date +%Y%m%d-%H%M%S).dump
-   ```
-
-   Note the deploy script's automatic rollback reverts **code only** — an
-   applied migration stays applied. Migrations so far are additive, so a
-   rollback still runs, but that does not hold for a destructive one.
-3. **The `*.zapeat.in` certificate expires 17 Sep 2026 — act on this.** It is
-   shared with every other subdomain on the box, so an expiry takes them all
-   down with it. Confirm the renewal is actually automated rather than assumed.
-
-## Neighbouring site note
-
-`udupi.zapeat.in` was returning 502 before this deployment and still is: its
-backend on port 3008 is not running. Unrelated to this app, but worth someone
-looking at.
+1. **`pnpm check` does not run e2e**, and e2e silently skips when the app is not
+   on port 3000. (A6)
+2. **`perms:grants` without `--add`** leaves new permissions ungranted, so a new
+   screen is invisible to everyone but super admins. (B5, D6)
+3. **Port 3000 is another application** on this shared VPS. nninfra is 3021. (C)
+4. **A Prisma `where` is a plain object**, so a scope clause for the wrong model
+   is not a type error — it only fails for users whose scope is non-empty, which
+   never includes the Owner. Test as a Project Manager. (E5)
+5. **A new master needs a way in.** Adding one to the registry creates its screen
+   at `/masters/<key>`; nothing links to it unless it is in Reference Data.
+6. **`sudo -u postgres` cannot read the backup directory** (700 root). Verify
+   dumps as root. (C8)
