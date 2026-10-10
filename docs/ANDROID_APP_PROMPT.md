@@ -5,7 +5,7 @@ ERP. It is written to be handed to a developer or a coding agent with no prior
 knowledge of the system.
 
 Everything here is taken from the running web application, not from memory:
-18 navigation modules, 73 screens, **177 server actions** and **550 permission
+19 navigation modules, 74 screens, **183 server actions** and **561 permission
 codes**. Where this document names a permission, that is the exact string the
 server checks.
 
@@ -124,7 +124,8 @@ for them without consulting the set.
 | project | 44 | hr | 17 |
 | admin | 39 | checklist | 12 |
 | reports | 26 | dashboard | 7 |
-| kb | 7 | approvals | 1 |
+| kb | 7 | calendar | 11 |
+| approvals | 1 | | |
 
 Fetch the full list from `/permissions/catalogue` and generate a Kotlin
 `Perm` object from it at build time, mirroring the web's generated
@@ -244,6 +245,68 @@ Permission `dashboard.performance.view`. Sixteen module cards plus the
 **performance matrix** — per person: tasks, on time, late, still overdue, average
 delay, controllable and uncontrollable extensions, score. A viewer without
 `task.performance.viewAll` sees only their own row.
+
+### 7.3 Calendar — `/calendar` · `calendar.agenda.view`
+
+One calendar across every module that carries a date. **This is the most
+valuable screen on a phone** — it is the thing somebody opens on site to find
+out what is on them today — so build it early and build it well.
+
+Band: on this view, waiting on your answer, overdue, tasks due, follow-ups and
+visits, approvals dated.
+
+**What it aggregates**, each source queried only when the viewer holds its
+permission and inside their project scope:
+
+| Source | From | Shown at |
+|---|---|---|
+| Calendar task | the calendar's own record | its start, with its span |
+| Invitation | a calendar task you have not answered | same, marked for a reply |
+| Task | `task.dueAt`, not closed or completed | the due moment |
+| Follow-up | `lead.nextActionAt`, lead not booked or lost | the next action |
+| Site visit | `siteVisit.scheduledAt`, not yet visited | the slot |
+| Approval | indent `requiredByDate`, PO `expectedDate` | that day, all-day |
+| Activity | schedule activity span, not completed | every day it runs |
+
+Only approvals with a date of their own appear. The rest of the queue has no
+day to sit on — it is simply waiting — so the calendar links to Approvals
+rather than piling undated rows onto today.
+
+**Three views.** Month (six-week grid, Monday first, always 42 squares so the
+height never changes), week, and a rolling 30-day agenda. Filter chips per
+source with counts. A day panel beside the grid.
+
+**The calendar task** is the one thing this module owns:
+
+- A title, a start, an end, optionally all-day, a project and a location.
+- **Assigning is an invitation.** Until somebody accepts, it is on nobody: it
+  sits on their calendar marked as waiting on their answer and is counted apart
+  from their real work. Accepting puts it on their calendar. Declining needs a
+  reason, takes it off their calendar, and tells whoever raised it.
+- **Mark as completed** — whoever raised it, or anybody who accepted it.
+  Somebody who declined cannot.
+- **Extend** — the finish moves later, never earlier, never without a reason.
+  The first extension keeps the original end and later ones leave it alone, so
+  how far it has slipped stays answerable. Show "was due to end …" and "moved N
+  times".
+- **Cancel** — with a reason; everyone on it is told.
+- A finished task offers neither complete nor extend. A cancelled one offers
+  nothing.
+
+**Rules that are easy to get wrong**
+
+- The day an item lands on is read from **local** date parts, never from
+  `toISOString().slice(0,10)` — the UTC day puts anything after 05:30 IST on
+  the wrong square.
+- A span belongs on **every** day it crosses, not only its first.
+- **Something done is never overdue**, whatever its date. Without that, a task
+  marked done last week sits in the overdue count forever.
+- Only things that wait on somebody can be overdue — a meeting that has
+  finished is not late, it happened.
+
+On Android: month as a pager (swipe between months), the day panel as a bottom
+sheet, the task as a sheet with the three actions, and the agenda view as the
+default on a phone — it answers "what is next" without pinching a grid.
 
 ### 7.3 Approvals — `/approvals`
 Permission `approvals.queue.view`. Everything waiting on a decision in one list,
@@ -489,6 +552,16 @@ the server checks.
 `generateUnits` `unit.unit.create` · `createPriceList`
 `unit.priceList.create` · `activatePriceList` `…activate`
 
+### Calendar
+`createCalendarTask` `calendar.event.create` (with people: also
+`calendar.event.assign`) · `updateCalendarTask` `calendar.event.update` ·
+`completeCalendarTask` `calendar.event.complete` · `extendCalendarTask`
+`calendar.event.extend` · `cancelCalendarTask` `calendar.event.cancel` ·
+`respondToCalendarTask` `calendar.event.respond`
+
+Seeing everyone's calendar rather than only your own is
+`calendar.agenda.viewAll`.
+
 ### Workforce, knowledge, checklists
 `createEmployee` `hr.employee.create` · `updateEmployee` `…update` ·
 `deleteEmployee` `…delete` · `setEmployeeStatus` `…update` · `markAttendance`
@@ -555,9 +628,11 @@ The build is done when, for every module in §7:
 5. Every action in §8 that the viewer holds is reachable, and none that they do
    not hold is drawn.
 6. A 403 from the server is shown as the server's sentence.
-7. The checklist flow in §7.5 behaves exactly as described — verify by denying a
+7. The calendar aggregates every source in §7.3 for the right viewer, and a
+   calendar task can be accepted, declined, completed, extended and cancelled.
+8. The checklist flow behaves exactly as described — verify by denying a
    point at approval level and watching that point alone return to reviewer 1.
-8. The app works offline for attendance and checklist judging, and replays
+9. The app works offline for attendance and checklist judging, and replays
    cleanly.
 
 ---
@@ -566,13 +641,14 @@ The build is done when, for every module in §7:
 
 1. Auth, permission catalogue, workspace, navigation shell, design system.
 2. Dashboard, Approvals, Notifications.
-3. Tasks and Checklists — the largest behavioural surface.
-4. Indents, Purchase Orders, Goods Receipt.
-5. Schedule.
-6. Leads, Follow-ups, Customers, Flats.
-7. Users & Attendance (offline-first).
-8. Projects, Item Master, Vendors, Knowledge Base.
-9. Performance, Reports, Exports, Printing.
+3. **Calendar** — the screen a phone is opened for.
+4. Tasks and Checklists — the largest behavioural surface.
+5. Indents, Purchase Orders, Goods Receipt.
+6. Schedule.
+7. Leads, Follow-ups, Customers, Flats.
+8. Users & Attendance (offline-first).
+9. Projects, Item Master, Vendors, Knowledge Base.
+10. Performance, Reports, Exports, Printing.
 
 ---
 
