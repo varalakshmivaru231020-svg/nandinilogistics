@@ -153,10 +153,20 @@ second.
 
 Cache the permission set. Re-fetch it from `GET /api/mobile/v1/me` on every cold
 start and on resume — that is how a permission taken away this morning reaches a
-phone that signed in last night. **A super admin bypasses every check**:
-`has(code)` returns true for them, and their `permissions` array arrives
-**empty**, so an app that tests membership instead of calling `has()` will hide
-the entire application from the owner.
+phone that signed in last night.
+
+**Implement exactly one check, and route every decision through it:**
+
+```kotlin
+fun has(code: String) = user.isSuperAdmin || code in user.permissions
+```
+
+`isSuperAdmin` short-circuits, and it has to, because the array alone does not
+tell you what a super admin may do. It is whatever their roles and overrides
+resolve to: the seeded Owner holds the `OWNER_ADMIN` role and arrives with 560
+codes, while a super admin created with no role at all arrives with an **empty**
+array and may still do everything. Testing membership directly is right for one
+of those and catastrophically wrong for the other.
 
 Three refusals, each said differently, and none of them a retry of the password
 field:
@@ -714,9 +724,9 @@ And of the transport, before any module is trusted:
     password field.
 12. A permission removed while the app is backgrounded is gone from the UI after
     resume, because `/me` was re-read — not after the next cold start.
-13. Signing in as the Owner does not hide the application. The owner's
-    `permissions` array is **empty** and `isSuperAdmin` is true; an app that
-    tests set membership instead of `has()` shows them nothing.
+13. Nothing anywhere tests `code in permissions` directly — every call goes
+    through `has()`. Verify with a super admin who holds no role: their array is
+    empty and the whole application must still be there.
 
 ---
 

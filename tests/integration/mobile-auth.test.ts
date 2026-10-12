@@ -4,6 +4,7 @@ import { prisma, seededUsers } from "./helpers";
 import { POST as login } from "@/app/api/mobile/v1/auth/login/route";
 import { POST as logout } from "@/app/api/mobile/v1/auth/logout/route";
 import { GET as me } from "@/app/api/mobile/v1/me/route";
+import { GET as calendar } from "@/app/api/mobile/v1/calendar/route";
 import { PERM } from "@/lib/permissions/codes";
 
 /**
@@ -149,6 +150,64 @@ describe("the guard on every endpoint", () => {
 
     const after = await me(get("/me", { authorization: `Bearer ${token}` }));
     expect(after.status).toBe(401);
+  });
+});
+
+describe("what a super admin's permission set actually looks like", () => {
+  /*
+   * The trap the build brief now warns about, pinned so the warning cannot
+   * drift away from the truth. A super admin's array is whatever their roles
+   * resolve to — the seeded Owner holds OWNER_ADMIN and so arrives with a large
+   * set, while one created with no role arrives empty and may still do
+   * everything. An app that tests `code in permissions` is right for the first
+   * and shows an empty application to the second.
+   */
+  it("is populated for the seeded Owner, and the flag is what carries the authority", async () => {
+    const { owner } = await seededUsers();
+    const data = await signIn(owner.email);
+    const user = data.user as { isSuperAdmin: boolean; permissions: string[] };
+
+    expect(user.isSuperAdmin).toBe(true);
+    expect(user.permissions.length).toBeGreaterThan(100);
+
+    const row = await prisma.session.findFirst({
+      where: { userId: owner.id },
+      orderBy: { createdAt: "desc" },
+      select: { tokenId: true },
+    });
+    issuedTokenIds.push(row!.tokenId);
+  });
+});
+
+describe("the calendar over the wire", () => {
+  it("aggregates the viewer's own sources onto a six-week grid", async () => {
+    const { token } = await signIn(pmEmail);
+    const res = await calendar(
+      get("/calendar?view=month&on=2026-10-10", { authorization: `Bearer ${token}` }),
+    );
+    const json = await body(res);
+    expect(res.status).toBe(200);
+
+    const data = json.data as {
+      grid: string[];
+      items: unknown[];
+      tally: { total: number };
+      serverTime: string;
+    };
+    // Always six weeks, so the panel under the grid never changes height.
+    expect(data.grid).toHaveLength(42);
+    expect(data.grid[0]).toBe("2026-09-28");
+    expect(data.tally.total).toBe(data.items.length);
+    // The instant overdue is measured against — never the phone's own clock.
+    expect(Date.parse(data.serverTime)).toBeGreaterThan(0);
+  });
+
+  it("refuses a view it does not recognise rather than guessing at a month", async () => {
+    const { token } = await signIn(pmEmail);
+    const res = await calendar(
+      get("/calendar?view=decade", { authorization: `Bearer ${token}` }),
+    );
+    expect(res.status).toBe(422);
   });
 });
 

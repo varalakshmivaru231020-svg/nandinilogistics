@@ -28,7 +28,12 @@ export interface AuthContext {
   email: string;
   isSuperAdmin: boolean;
   roles: Array<{ id: string; code: string; name: string; level: number }>;
-  /** Resolved permission codes. Empty for a super admin — use `has()` instead. */
+  /**
+   * Resolved permission codes — whatever this user's roles and overrides come
+   * to, which for a super admin is not the same as what they may do. One who
+   * holds no role has an empty set and may still do everything, so never read
+   * this set to make a decision; call `has()`, which short-circuits on the flag.
+   */
   permissions: Set<string>;
   /** Project ids the user is mapped to. Meaningless when `canAccessAllProjects`. */
   projectIds: string[];
