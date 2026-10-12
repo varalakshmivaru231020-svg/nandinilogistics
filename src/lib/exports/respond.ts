@@ -3,6 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 
 import { recordAudit } from "@/lib/audit";
+import { PERM } from "@/lib/permissions/codes";
 import { getAuthContext, type AuthContext } from "@/lib/rbac/context";
 import {
   EXPORT_MIME, exportFileName, isExportFormat, toCsv, toPdf, toXlsx,
@@ -25,27 +26,67 @@ import type { ReportResult } from "@/lib/reports/types";
 /** A ceiling against an accidental unbounded read — not a page size. */
 export const EXPORT_MAX_ROWS = 20_000;
 
+/**
+ * `json` is not an export format — it is the Android client reading the list.
+ *
+ * Deliberately not added to `ExportFormat`: the web's export menu is built from
+ * that type, and a JSON file is not something anybody wants to download. Adding
+ * it there would put a fourth item in a menu nobody asked for.
+ */
+export type ListFormat = ExportFormat | "json";
+
 export type ExportGate =
-  | { ok: true; ctx: AuthContext; format: ExportFormat; params: URLSearchParams }
+  | { ok: true; ctx: AuthContext; format: ListFormat; params: URLSearchParams }
   | { ok: false; response: NextResponse };
 
 /**
  * Signed in, holding every listed permission, asking for a format we produce —
  * or the response to send instead. Pass the list's view permission *and* its
  * export permission: holding export alone must not reveal a list one cannot see.
+ *
+ * `format=json` is the same query read by the Android client, and it is gated
+ * differently on purpose: **reading a list is not exporting it**, so the export
+ * permission is not required, and `admin.mobile.use` is — it is the app asking.
+ * Someone who may see indents but not export them can still see them on a
+ * phone, which is what the web already lets them do on screen.
  */
 export async function exportGate(request: Request, ...codes: string[]): Promise<ExportGate> {
   const ctx = await getAuthContext();
   if (!ctx) return { ok: false, response: new NextResponse("Sign-in required.", { status: 401 }) };
-  if (codes.length === 0 || !codes.every((c) => ctx.has(c))) {
-    return { ok: false, response: new NextResponse("You do not have permission to export this list.", { status: 403 }) };
-  }
+
   const params = new URL(request.url).searchParams;
   const format = params.get("format") ?? "csv";
-  if (!isExportFormat(format)) {
+  const asList = format === "json";
+
+  if (!asList && !isExportFormat(format)) {
     return { ok: false, response: new NextResponse("Choose csv, xlsx or pdf.", { status: 400 }) };
   }
-  return { ok: true, ctx, format, params };
+
+  const needed = asList
+    ? [...codes.filter((c) => !c.endsWith(".export")), PERM.admin.mobile.use]
+    : codes;
+
+  if (needed.length === 0 || !needed.every((c) => ctx.has(c))) {
+    const missing = needed.find((c) => !ctx.has(c));
+    if (asList) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          {
+            ok: false,
+            error: missing === PERM.admin.mobile.use
+              ? "This account is not allowed to use the mobile app."
+              : `You do not have permission to see that list (${missing}).`,
+            code: missing,
+          },
+          { status: 403 },
+        ),
+      };
+    }
+    return { ok: false, response: new NextResponse("You do not have permission to export this list.", { status: 403 }) };
+  }
+
+  return { ok: true, ctx, format: asList ? "json" : (format as ExportFormat), params };
 }
 
 /** Rows capped at EXPORT_MAX_ROWS, with a note for the summary when they were. */
@@ -60,7 +101,7 @@ export function capRows<T>(rows: T[]): { rows: T[]; note: string } {
 /** Builds the file, records the export, and returns the download. */
 export async function exportResponse(opts: {
   ctx: AuthContext;
-  format: ExportFormat;
+  format: ListFormat;
   /** Heading of the file and stem of its name, e.g. "Bookings". */
   title: string;
   /** Audit entity, e.g. "Booking". */
@@ -72,6 +113,31 @@ export async function exportResponse(opts: {
 }): Promise<NextResponse> {
   const { ctx, format, title, entity, filters, result } = opts;
   const now = new Date();
+
+  /*
+   * The list, as the app reads it: the same rows, the same columns and the same
+   * filter description the file would have carried. No audit row — a list read
+   * is not an export, and one row per scroll would drown the trail that
+   * actually matters.
+   */
+  if (format === "json") {
+    return NextResponse.json(
+      {
+        ok: true,
+        data: {
+          title,
+          filters,
+          columns: result.columns,
+          rows: result.rows,
+          summary: result.summary ?? [],
+          total: result.rows.length,
+          emptyMessage: result.emptyMessage ?? null,
+          serverTime: now.toISOString(),
+        },
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  }
   const meta = { title, filters, generatedBy: ctx.name, generatedAt: now };
 
   let body: Buffer;

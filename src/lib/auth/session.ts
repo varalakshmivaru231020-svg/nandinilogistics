@@ -1,6 +1,6 @@
 import "server-only";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { randomUUID } from "crypto";
 
@@ -124,12 +124,32 @@ export async function revokeSessionToken(tokenId: string): Promise<void> {
     .catch(() => undefined);
 }
 
-/** Verifies the cookie signature only. Revocation is checked in getAuthContext. */
+/**
+ * The session this request carries — from the cookie, or from the bearer
+ * header when there is no cookie.
+ *
+ * The fallback is what lets the Android client run the real server actions
+ * rather than reimplementations of them. An action resolves its actor through
+ * `getAuthContext()`, which came through here, which read only the cookie: so
+ * every one of the 152 actions answered "Sign-in required" to a phone holding a
+ * perfectly good token. Rather than teach each action about bearer tokens, or
+ * make the client send its token twice, the one place that reads a session
+ * reads both.
+ *
+ * It takes nothing away from the browser. A cookie still wins, and a token in a
+ * header is the stricter of the two — a cross-site form can make a browser send
+ * a cookie, and cannot make it send this.
+ *
+ * Signature only; revocation and expiry are checked in `getAuthContext`.
+ */
 export async function readSessionToken(): Promise<SessionPayload | null> {
   const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
-  if (!token) return null;
-  return verifySessionToken(token);
+  const cookie = jar.get(SESSION_COOKIE)?.value;
+  if (cookie) return verifySessionToken(cookie);
+
+  const bearer = bearerToken((await headers()).get("authorization"));
+  if (!bearer) return null;
+  return verifySessionToken(bearer);
 }
 
 export async function destroySession(): Promise<void> {

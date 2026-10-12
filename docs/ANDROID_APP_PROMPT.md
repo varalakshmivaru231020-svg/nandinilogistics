@@ -84,38 +84,57 @@ usable API for Android**: each is a POST to an opaque id with a React-flavoured
 body that changes whenever the component tree does, and a page answers in HTML.
 So the app talks to a boundary of its own at **`/api/mobile/v1`**.
 
-**What already exists** (see `src/lib/api/mobile.ts`):
+**The boundary, in full** (`src/lib/api/mobile.ts` and the registries beside it):
 
-| Endpoint | Method | Returns |
+| Endpoint | Method | What it is |
 |---|---|---|
-| `/api/mobile/v1/auth/login` | POST | `{ token, expiresAt, user }` |
-| `/api/mobile/v1/auth/logout` | POST | `{ signedOut: true }` |
-| `/api/mobile/v1/me` | GET | `{ user, projects, serverTime }` |
-| `/api/mobile/v1/calendar?view=&on=` | GET | `{ view, grid, items, counts, tally, serverTime }` |
+| `/auth/login` | POST | `{ token, expiresAt, user }` — see §4.1 |
+| `/auth/logout` | POST | Revokes this device's session |
+| `/me` | GET | `{ user, projects, serverTime }` |
+| `/actions` | GET | Every action the app may call, and its arguments |
+| `/do/<module>/<action>` | POST | Runs it — `{ "args": [...] }`, positional |
+| `/lists` | GET | Every list the app may read |
+| `/list/<module>/<list>` | GET | `{ title, filters, columns, rows, summary, total }` |
+| `/reports` | GET | Only the reports **this caller** may run |
+| `/report/<key>` | GET | One report, with its filter spec |
+| `/calendar?view=&on=` | GET | `{ view, grid, items, counts, tally }` |
 
-**What still has to be built**: one endpoint per server action listed in §8, and
-one list endpoint per module in §7. The rules, which the four above already
-follow — copy them rather than inventing a second convention:
+All paths are under `/api/mobile/v1`.
 
-- `mobileRoute([PERM...], handler)` wraps every endpoint. The codes are the same
-  ones the web page passes to `requirePermission()` and the web action passes to
-  `authorize()` — the same code, never a looser one. **The boundary carries no
-  authority of its own**: nothing is trusted because the app drew it.
-- Every endpoint additionally requires `admin.mobile.use`. `mobileRoute` adds it;
-  you do not list it.
-- Every response is one of exactly two shapes: `{ ok: true, data }` or
-  `{ ok: false, error: "<human sentence>", code?, fieldErrors? }`. The error
-  string is written for the user — show it verbatim, never a status code.
-- List endpoints take the same query parameters the web reads from the URL
-  (§7 per module) and return `{ rows, total, figures }`.
-- `figures` is the module metric band (§6.3), computed server-side by
-  `src/lib/metrics/figures.ts` so the phone and the web cannot disagree.
-- Anything dated sends `serverTime`. **The phone's clock is not evidence** —
-  overdue is decided against the server's instant, the same way the web passes
-  `nowMs` down instead of reading the clock during render.
-- The project being viewed goes in an **`X-Project`** header. A project the
-  holder cannot reach is ignored, not refused — it is a view filter, never an
-  access decision.
+**Do not transcribe the action list into the app.** Generate the call sites from
+`/actions`, the way the web generates `PERM` from the permission registry: a
+signature that changes should break your build, not a button. There are **152
+actions** and **24 lists**, and both registries are generated from the server by
+`pnpm mobile:sync`, so neither can drift from what the web does.
+
+Three things about this worth knowing before you build against it:
+
+- **The actions are the web's own actions.** `/do/...` dispatches to the very
+  function the web button calls. It does its own `authorize()`, its own state
+  checks, its own `recordAudit()`, and answers in the envelope below. So a
+  refusal on the phone is the same refusal, in the same words, for the same
+  reason — not a reimplementation that agrees with the web today.
+- **A list is the screen's own query.** `/list/...` is that list's export route
+  answering with rows instead of a file: the same filters, the same project
+  scope, the same rule hiding other people's records. The query parameters are
+  the ones the web reads from its URL — the table in §7.24 is the reference for
+  both. `columns` comes back with the rows, so one table widget renders all 24.
+- **Reading a list is not exporting it.** `/list` does not require the module's
+  `.export` permission; the export routes still do. Someone who may see indents
+  but not export them sees them on the phone, exactly as they do on screen.
+
+**What is still missing**, and what to do until it lands:
+
+- **Detail endpoints.** A detail screen needs a record with its relations
+  joined, and the web pages do that inline — there is no shared function to
+  dispatch to yet. Until there is, build detail from the list row plus the
+  actions; the list carries enough for every screen in §7 except the documents
+  (indent, PO, GRN, cost sheet), which need their lines.
+- **Attachments.** `/do/...` accepts `multipart/form-data`: send the arguments
+  as a JSON field named `args` and the string `"@formdata"` in place of the
+  `form` argument, and the request's own FormData is handed to the action.
+- **The metric band** for six screens — see §7.18 and §7.21. `figures.ts` has
+  no function for them; use the list's `summary`.
 
 **Status codes the app must act on differently:**
 

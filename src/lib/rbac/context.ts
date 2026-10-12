@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
+import { headers } from "next/headers";
 
 import { prisma } from "@/lib/db";
 import {
@@ -153,7 +154,14 @@ export async function buildAuthContext(
 export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
   const session = await readSessionToken();
   if (!session) return null;
-  return buildAuthContext(session, await readWorkspaceCookie());
+  /*
+   * A browser names its workspace in a cookie; the Android client names it in
+   * the `X-Project` header, because it has no cookie jar. Either way it is only
+   * ever a view filter — `buildAuthContext` drops a project the holder cannot
+   * reach — so reading it from a header grants nothing.
+   */
+  const chosen = (await readWorkspaceCookie()) ?? (await headers()).get("x-project")?.trim() ?? null;
+  return buildAuthContext(session, chosen || null);
 });
 
 /**
