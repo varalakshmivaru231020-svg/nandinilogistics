@@ -398,6 +398,13 @@ Detail tabs — **Overview**, **Tasks**, **Team Mapping**, **Documents**,
   beneath, each downloadable. Upload has no expiry field.
 - Team mapping: a searchable people picker; mapping grants project access.
 
+**Site Progress is also its own screen** — `/projects/progress` ·
+`project.progressLog.view`. Filters: project, log date. `createProgressLog`
+records a day's work against an activity, `deleteProgressLog` removes one;
+somebody else's logs need `project.progressLog.viewAll`. There is no metric
+band. This is a daily, on-site, one-handed screen — treat it like attendance and
+**build it offline-first**.
+
 ### 7.6 Tasks — `/tasks`
 Band: overdue, due today, due this week, waiting on you, high/med/low, your score.
 Filters: All, Overdue, Today, This week, by priority, assigned to me, raised by
@@ -480,7 +487,7 @@ Detail: orders, on-time record, bank and payment terms.
 Issues `/material/issues`, Returns `/material/returns`, Transfers
 `/material/transfers`, Vendor Invoices `/material/invoices` (three-way match),
 Payments `/material/payments`, Reorder `/material/reorder`. Each has the search,
-filters and date range listed in its web `ListToolbar` — see the table in §7.20.
+filters and date range listed in its web `ListToolbar` — see the table in §7.24.
 
 ### 7.16 Leads · CRM — `/sales/leads` · `sales.lead.view`
 Band: leads, new this week, in the pipeline, booked, conversion, pipeline value.
@@ -502,7 +509,58 @@ Without `sales.lead.viewAll` a user sees only their own pipeline.
   `AVAILABLE`, `HELD`, `BOOKED`, `AGREEMENT`, `REGISTERED`, `BLOCKED`.
   Band: flats, available, on hold, booked or sold, sold through, unsold area.
 
-### 7.18 Users & Attendance — `/hr` · `hr.employee.view`
+### 7.18 Bookings & Collections — `/sales/bookings` · `sales.booking.view`
+The money half of the CRM, and four screens rather than one.
+
+- **Bookings** `/sales/bookings` — one row per sale. Filters: status, project,
+  date range. Search: booking no, customer, phone, unit. `createBooking` takes a
+  cost sheet and a unit and moves the unit to `BOOKED`; `advanceBooking` moves it
+  along to `AGREEMENT` and `REGISTERED`; `cancelBooking` releases the unit again.
+  `raiseDemand` raises a payment demand against the booking's schedule.
+- **Receipts** `/sales/receipts` · `sales.receipt.view` — collections against a
+  booking. Filters: mode, status, project, date range. `createReceipt` records
+  one, `clearReceipt` marks a cheque or transfer realised, `bounceReceipt` undoes
+  it with a reason. Printable under `sales.receipt.print`.
+- **Customers** and their KYC are in §7.17; `verifyKyc` lives there.
+
+No metric band on these two — `figures.ts` has no function for them, and the
+app must not invent one. The summary row the web shows is the total booked and
+the total received, and that is what the phone shows.
+
+### 7.19 Cost sheets — `/sales/cost-sheets` · `sales.costSheet.view`
+Band: quoted, booked, discount pending, expired-not-booked.
+
+The price quoted to a customer, and the one screen where the app must not do
+its own arithmetic. `src/lib/sales/cost-sheet.ts` is pure and shared by the
+server action *and* the web's client preview, so what an executive sees before
+saving is what gets stored. **The phone previews by calling the server**, not by
+reimplementing the sheet: a rounding difference here is a different price on a
+signed document.
+
+`createCostSheet` resolves the price list by effective date — never by "the
+current one". `approveDiscount` (`sales.costSheet.approveDiscount`) is a
+separate step, and a sheet waiting on it cannot be booked.
+
+### 7.20 Site visits — `/sales/site-visits` · `sales.siteVisit.view`
+Band: scheduled, scheduled and past due, completed. Filters: status, visit date.
+
+`scheduleSiteVisit`, `completeSiteVisit`, `cancelSiteVisit`. Contact details are
+behind `sales.lead.viewContact` and someone else's visits behind
+`sales.lead.viewAll` — a sales executive sees their own.
+
+A scheduled visit is one of the seven sources on the calendar (§7.3), so the two
+screens must agree about what is past due. Both measure against the server's
+instant, not the handset's.
+
+### 7.21 Price lists — `/units/price-lists` · `unit.priceList.view`
+Rate revisions, each with an effective date. `createPriceList` adds a version;
+`activatePriceList` (`unit.priceList.activate`) makes it current **from its
+effective date forward** — past bookings keep the rate they were written at.
+
+No band. It is a short list, and the only thing that matters on it is which
+version is active and from when.
+
+### 7.22 Users & Attendance — `/hr` · `hr.employee.view`
 Band: on record, active, present today, absent today, not marked today, overtime.
 Three tabs: **Employees**, **Mark Attendance**, **Attendance Report**.
 - Employee photo and Aadhaar/PAN copies. Identity numbers are masked without
@@ -511,10 +569,10 @@ Three tabs: **Employees**, **Mark Attendance**, **Attendance Report**.
   active employees, Present / Half day / Absent, overtime hours, work done.
   **Build it offline-first** — mark on site, sync later.
 
-### 7.19 Knowledge Base — `/kb` · `kb.article.view`
+### 7.23 Knowledge Base — `/kb` · `kb.article.view`
 Articles with categories, attachments, publish/draft.
 
-### 7.20 Search and filter reference
+### 7.24 Search and filter reference
 
 | Module | Search fields | Filters |
 |---|---|---|
@@ -533,13 +591,29 @@ Articles with categories, attachments, publish/draft.
 | Bookings | booking no, customer, phone, unit | status, project, date range |
 | Receipts | receipt no, reference, booking, customer, unit | mode, status, project, date range |
 | Cost sheets | cost sheet no, lead, unit, project | status, project |
+| Site visits | lead, customer, unit, executive | status, visit date |
+| Price lists | version name, project | project, active |
+| Progress logs | activity, project, logged by | project, log date |
 
 ---
 
 ## 8. Every action and its permission
 
-177 actions. The app calls these and no others. The permission named is the one
-the server checks.
+**153 actions in scope**, by name. The app calls these and no others, and the
+permission named is the one the server checks. (183 exist in all; 29 belong to
+the Masters & Users module, and `runAction` is the wrapper they all go through
+rather than an action of its own.)
+
+Names and definitions are not quite the same count: `requestExtension` exists
+twice — once for a task's deadline and once for a schedule activity's — and it
+appears below under both, with a different permission each time.
+
+Four of the 153 are listed here only to be **excluded**, because the web offers
+them from a screen that is otherwise in scope and a builder copying that screen
+would otherwise ship master-data creation from a phone — see §12:
+`addUom` (from the item form), `addItemCategory` (from the vendor form),
+`createEmploymentType` and `deleteEmploymentType` (from the employee form). The
+pickers they feed stay **readable**; the "+ New…" beside them is not drawn.
 
 ### Tasks
 `acceptTask` `task.task.accept` · `startTask` `task.task.start` ·
@@ -573,7 +647,10 @@ the server checks.
 ### Other material
 `createIssue` `material.issue.create` · `acknowledgeIssue` `…acknowledge` ·
 `cancelIssue` `…cancel` · `raiseReturn` `material.return.create` ·
-`approveReturn` / `rejectReturn` `material.return.approve` ·
+`approveReturn` / `rejectReturn` `material.return.approve` · `deleteReturn`
+→ `material.return.delete`, **or** `material.return.create` when it is the
+raiser's own pending return (the service enforces the raiser rule; the action
+authorizes `…view` first only to get a context) ·
 `createTransfer` `material.transfer.create` · `approveTransfer` `…approve` ·
 `receiveTransfer` `…receive` · `createVendorInvoice`
 `material.vendorInvoice.create` · `approveInvoice` `…approve` ·
@@ -591,7 +668,8 @@ the server checks.
 `decideExtensionPm` `schedule.extension.approve` · `decideExtensionAdmin`
 `schedule.extension.approveAdmin` · `saveScheduleAsTemplate`
 `schedule.template.save` · `applyTemplate` `…apply` · `deleteTemplate`
-`…delete` · `importActivities` `schedule.activity.import`
+`…delete` · `importActivities` `schedule.activity.import` ·
+`previewActivityImport` `schedule.activity.import`
 
 ### Projects
 `createProject` `project.project.create` · `updateProject` `…update` ·
@@ -605,11 +683,13 @@ the server checks.
 `createLead` `sales.lead.create` · `updateLead` `…update` · `assignLead`
 `…assign` · `changeLeadStage` → `sales.lead.markLost` for Lost, else
 `sales.lead.changeStage` · `addLeadNote` `sales.lead.note` · `importLeads`
-`sales.lead.import` · `logFollowUp` `sales.followUp.create` ·
+`sales.lead.import` · `previewLeadImport` `sales.lead.import` · `logFollowUp`
+`sales.followUp.create` ·
 `scheduleSiteVisit` `sales.siteVisit.schedule` · `completeSiteVisit`
 `…complete` · `cancelSiteVisit` `…cancel` · `createCostSheet`
 `sales.costSheet.create` · `approveDiscount` `…approveDiscount` · `holdUnit`
-`unit.hold.create` · `releaseHold` `unit.hold.release` · `createBooking`
+`unit.hold.create` · `releaseHold` `unit.hold.release` · `blockUnitForLead`
+`unit.hold.create` · `releaseUnitForLead` `unit.hold.release` · `createBooking`
 `sales.booking.create` · `advanceBooking` → `sales.booking.agreement` or
 `sales.booking.register` · `cancelBooking` `…cancel` · `createCustomer`
 `sales.customer.create` · `verifyKyc` `sales.customer.verifyKyc` ·
@@ -619,7 +699,8 @@ the server checks.
 ### Units
 `createUnit` `unit.unit.create` · `updateUnit` `…update` · `deleteUnit`
 `…delete` · `changeUnitStatus` `…changeStatus` · `importUnits` `…import` ·
-`generateUnits` `unit.unit.create` · `createPriceList`
+`generateUnits` `unit.unit.create` · `previewUnitImport` `unit.unit.import` ·
+`createPriceList`
 `unit.priceList.create` · `activatePriceList` `…activate`
 
 ### Calendar
@@ -640,8 +721,16 @@ Seeing everyone's calendar rather than only your own is
 `kb.article.publish` · `saveChecklist` → `checklist.checklist.create` or
 `…update` · `duplicateChecklist` `…create` · `deleteChecklist` `…delete` ·
 `addCheckpoint` / `updateCheckpoint` / `deleteCheckpoint` / `moveCheckpoint`
-`checklist.checklist.update` · `saveCategory` → `checklist.category.create` or
+`checklist.checklist.update` · `setChecklistActive` `checklist.checklist.update` · `saveCategory` → `checklist.category.create` or
 `…update` · `deleteCategory` `checklist.category.delete`
+
+### Session, workspace and notifications
+Not module actions, and not permission-guarded — they act only on the caller's
+own session or their own notifications, so there is no code to check:
+
+`login` · `logout` · `setWorkspace` (the chosen project; it can only ever narrow
+to one the holder already reaches) · `markNotificationRead` ·
+`markAllNotificationsRead`
 
 ### Admin (build only if the brief includes it)
 Users, roles, permissions, approval limits, sessions and settings under
@@ -663,34 +752,50 @@ The badge count is the unread count from `/api/mobile/v1/notifications`.
 **A notification is a deep link, not a copy of the record.** By the time it is
 tapped the permission may be gone, or someone else may have decided it. So the
 destination is always re-fetched, and the three answers it can give are all
-designed for: the record, "decided by someone else while you were away" (§9.4),
+designed for: the record, "decided by someone else while you were away" (§9.5),
 or the refusal screen. Never a crash, and never a decision button on a record
 that has already been decided.
 
-### 9.2 Printing
+### 9.2 The project switcher and your own account
+Two screens that belong to no module.
+
+- **`/workspace`** — the project chooser, offered once after signing in and
+  reachable from the app bar after that. `setWorkspace` stores the choice. It is
+  a **view filter, never an access decision**: it can only ever narrow to a
+  project the holder already reaches, and choosing one does not grant anything.
+  The app sends it as the `X-Project` header (§3.1); the server ignores a
+  project the holder cannot reach rather than refusing the request.
+- **`/account`** — needs no permission beyond being signed in, because a person
+  may always see their own access. It shows their roles, their department and
+  designation, the projects mapped to them, their approval limits, and the
+  per-user ALLOW/DENY overrides sitting on top of their roles. It is the screen
+  that answers "why can't I do this?", so build it early: it saves the
+  explaining that otherwise lands on whoever administers the system.
+
+### 9.3 Printing
 Print routes exist for purchase orders, indents, issues, bookings, cost sheets,
 demands, receipts and vendor payments. The server renders them; the app requests
 a PDF and hands it to the system viewer or the share sheet. Do not re-implement
 the layout.
 
-### 9.3 Exports
+### 9.4 Exports
 Every list with an export permission offers CSV/XLSX. The export takes the same
 query the screen is showing, so a download holds exactly those rows.
 
-### 9.4 Optimistic concurrency
+### 9.5 Optimistic concurrency
 Several actions take `expectedUpdatedAt`. If the record changed since the app
 read it, the server refuses with a sentence saying so. Send it, and on refusal
 re-fetch and show what changed before retrying. This matters most for the
 offline outbox: a queued approval must not overwrite a decision made meanwhile.
 
-### 9.5 Offline
+### 9.6 Offline
 - Cache the last list page and every opened detail.
 - Queue mutations in a Room outbox with their `expectedUpdatedAt`.
 - Replay in order on reconnect through WorkManager.
 - Show each queued item with a "pending" mark and let the user cancel it.
 - Attendance marking and checklist judging must work fully offline.
 
-### 9.6 Accessibility
+### 9.7 Accessibility
 TalkBack labels on every icon-only control, 48dp targets, support the system font
 scale to 200% without clipping, and never carry meaning by colour alone.
 
@@ -702,7 +807,7 @@ The build is done when, for every module in §7:
 
 1. The list shows the same rows as the web for the same user, filter and search.
 2. The metric band matches the web's figures exactly.
-3. Every filter in the §7.20 table works, is removable, and survives rotation
+3. Every filter in the §7.24 table works, is removable, and survives rotation
    and process death.
 4. Search covers exactly the listed fields.
 5. Every action in §8 that the viewer holds is reachable, and none that they do

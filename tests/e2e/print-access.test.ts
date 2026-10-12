@@ -3,6 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../integration/helpers";
 import { revokeTestSessions, sessionFor, serverIsUp, visit } from "./session";
 
+/** This file's own session tag, so a parallel file cannot revoke its cookies. */
+const LABEL = "print-access";
+
 /**
  * Every print view, over HTTP, against the permissions and project mappings the
  * database actually holds. Nothing here hard-codes who may print what: for each
@@ -151,14 +154,14 @@ suite("print views, end to end", () => {
   beforeAll(async () => {
     for (const role of ROLES) {
       const email = `${role}@nninfra.example`;
-      tokens[role] = await sessionFor(email);
+      tokens[role] = await sessionFor(email, LABEL);
       holdings[role] = await holdingOf(email);
     }
     for (const route of ROUTES) targets[route.path] = await route.pick();
   });
 
   afterAll(async () => {
-    await revokeTestSessions();
+    await revokeTestSessions(LABEL);
     await prisma.$disconnect();
   });
 

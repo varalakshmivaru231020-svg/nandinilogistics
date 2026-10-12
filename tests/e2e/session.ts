@@ -5,8 +5,16 @@ import { prisma } from "../integration/helpers";
 
 export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
-/** Mints a real, revocable session the running app will accept. */
-export async function sessionFor(email: string): Promise<string> {
+/**
+ * Mints a real, revocable session the running app will accept.
+ *
+ * `label` names the test file that owns it, and it matters: vitest runs the
+ * e2e files in parallel, and `revokeTestSessions` used to delete every session
+ * tagged `vitest-e2e` — so whichever file finished first pulled the cookies out
+ * from under the others, which then saw 307s to /login and reported the screen
+ * as broken. One label per file, and each file revokes only its own.
+ */
+export async function sessionFor(email: string, label: string): Promise<string> {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) throw new Error(`No seeded user ${email}. Run \`pnpm db:seed\`.`);
 
@@ -16,7 +24,7 @@ export async function sessionFor(email: string): Promise<string> {
       userId: user.id,
       tokenId,
       expiresAt: new Date(Date.now() + 3600_000),
-      userAgent: "vitest-e2e",
+      userAgent: `vitest-e2e:${label}`,
     },
   });
 
@@ -31,8 +39,13 @@ export async function sessionFor(email: string): Promise<string> {
   return token;
 }
 
-export async function revokeTestSessions() {
-  await prisma.session.deleteMany({ where: { userAgent: "vitest-e2e" } });
+/** Revokes one file's sessions, or every test session when given no label. */
+export async function revokeTestSessions(label?: string) {
+  await prisma.session.deleteMany({
+    where: label
+      ? { userAgent: `vitest-e2e:${label}` }
+      : { userAgent: { startsWith: "vitest-e2e" } },
+  });
 }
 
 export interface Visit {

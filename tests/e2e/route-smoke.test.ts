@@ -5,6 +5,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../integration/helpers";
 import { revokeTestSessions, sessionFor, serverIsUp, visit } from "./session";
 
+/** This file's own session tag, so a parallel file cannot revoke its cookies. */
+const LABEL = "route-smoke";
+
 /**
  * Every page in the app, opened as every seeded role. A page either renders
  * (200), or is refused by the permission model (307 to /forbidden) — anything
@@ -42,11 +45,11 @@ const tokens: Record<string, string> = {};
 
 suite("every route renders or is refused, for every role", () => {
   beforeAll(async () => {
-    for (const role of ROLES) tokens[role] = await sessionFor(`${role}@nninfra.example`);
+    for (const role of ROLES) tokens[role] = await sessionFor(`${role}@nninfra.example`, LABEL);
   });
 
   afterAll(async () => {
-    await revokeTestSessions();
+    await revokeTestSessions(LABEL);
     await prisma.$disconnect();
   });
 

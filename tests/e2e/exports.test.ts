@@ -3,6 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../integration/helpers";
 import { BASE_URL, revokeTestSessions, sessionFor, serverIsUp } from "./session";
 
+/** This file's own session tag, so a parallel file cannot revoke its cookies. */
+const LABEL = "exports";
+
 /**
  * Every export route, over HTTP, against the permissions the database actually
  * grants. Nothing here hard-codes who may export what: for each seeded role the
@@ -85,13 +88,13 @@ suite("exports, end to end", () => {
   beforeAll(async () => {
     for (const role of ROLES) {
       const email = `${role}@nninfra.example`;
-      tokens[role] = await sessionFor(email);
+      tokens[role] = await sessionFor(email, LABEL);
       holdings[role] = await permissionsOf(email);
     }
   });
 
   afterAll(async () => {
-    await revokeTestSessions();
+    await revokeTestSessions(LABEL);
     await prisma.$disconnect();
   });
 

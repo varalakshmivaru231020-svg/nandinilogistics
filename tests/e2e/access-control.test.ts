@@ -3,6 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../integration/helpers";
 import { revokeTestSessions, sessionFor, serverIsUp, visit } from "./session";
 
+/** This file's own session tag, so a parallel file cannot revoke its cookies. */
+const LABEL = "access-control";
+
 /**
  * End-to-end proof that the permission model is enforced by the server, not
  * merely reflected in the UI. Requires `pnpm dev` (or `pnpm start`) running.
@@ -20,12 +23,12 @@ const tokens: Record<string, string> = {};
 suite("access control, end to end", () => {
   beforeAll(async () => {
     for (const role of ["owner", "pm", "supervisor", "store", "sales", "saleshead"]) {
-      tokens[role] = await sessionFor(`${role}@nninfra.example`);
+      tokens[role] = await sessionFor(`${role}@nninfra.example`, LABEL);
     }
   });
 
   afterAll(async () => {
-    await revokeTestSessions();
+    await revokeTestSessions(LABEL);
     await prisma.$disconnect();
   });
 
@@ -262,7 +265,7 @@ suite("access control, end to end", () => {
 
   describe("session revocation takes effect immediately", () => {
     it("stops accepting a revoked session on the very next request", async () => {
-      const token = await sessionFor("sales@nninfra.example");
+      const token = await sessionFor("sales@nninfra.example", LABEL);
       expect((await visit("/dashboard", token)).status).toBe(200);
 
       const { payload } = JSON.parse(
@@ -270,15 +273,15 @@ suite("access control, end to end", () => {
       ) as never as { payload?: never };
       void payload;
 
-      // Revoke every test session, then try again with the same cookie.
-      await revokeTestSessions();
+      // Revoke this file's sessions, then try again with the same cookie.
+      await revokeTestSessions(LABEL);
       const after = await visit("/dashboard", token);
       expect(after.status).toBe(307);
       expect(after.location).toContain("/login");
 
       // Re-mint for any remaining tests in the file.
       for (const role of ["owner", "pm", "supervisor", "store", "sales", "saleshead"]) {
-        tokens[role] = await sessionFor(`${role}@nninfra.example`);
+        tokens[role] = await sessionFor(`${role}@nninfra.example`, LABEL);
       }
     });
   });
