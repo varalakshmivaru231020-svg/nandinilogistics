@@ -3,7 +3,11 @@ import "server-only";
 import { cache } from "react";
 
 import { prisma } from "@/lib/db";
-import { readSessionToken } from "@/lib/auth/session";
+import {
+  readSessionToken,
+  verifySessionToken,
+  type SessionPayload,
+} from "@/lib/auth/session";
 import { PERM } from "@/lib/permissions/codes";
 import { resolveEffectivePermissions } from "./resolve";
 import { readWorkspaceCookie } from "@/lib/workspace";
@@ -44,13 +48,19 @@ export interface AuthContext {
 }
 
 /**
- * Loads the current actor for this request. Memoised with React `cache`, so
- * a page that guards ten buttons still hits the database once.
+ * Builds the actor from a verified session payload.
+ *
+ * Takes the payload and the chosen workspace rather than reading them, because
+ * the two transports find them in different places: a browser sends both as
+ * cookies, the Android app sends the token as a bearer header and names the
+ * project it is looking at. Everything after that — revocation, status,
+ * permission resolution, project scope — has to be identical for both, so it
+ * happens once, here.
  */
-export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
-  const session = await readSessionToken();
-  if (!session) return null;
-
+export async function buildAuthContext(
+  session: SessionPayload,
+  chosenProjectId: string | null,
+): Promise<AuthContext | null> {
   // The JWT is signed, but the session row is what makes revocation immediate.
   const sessionRow = await prisma.session.findUnique({
     where: { tokenId: session.tokenId },
@@ -104,10 +114,12 @@ export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
   const canAccessAll = has(PERM.project.project.accessAll);
 
   // A workspace the person may not reach is no workspace at all — a mapping can
-  // be taken away after the cookie was written.
-  const chosen = await readWorkspaceCookie();
+  // be taken away after the cookie was written, and a phone can ask for any
+  // project id it likes.
   const workspaceProjectId =
-    chosen && (canAccessAll || projectIds.includes(chosen)) ? chosen : null;
+    chosenProjectId && (canAccessAll || projectIds.includes(chosenProjectId))
+      ? chosenProjectId
+      : null;
 
   return {
     id: user.id,
@@ -126,7 +138,34 @@ export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
     hasAll: (...codes) => codes.every(has),
     approvalLimitFor: (scope) => roleLimits[scope] ?? 0,
   };
+}
+
+/**
+ * Loads the current actor for this request from the session cookie. Memoised
+ * with React `cache`, so a page that guards ten buttons still hits the
+ * database once.
+ */
+export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
+  const session = await readSessionToken();
+  if (!session) return null;
+  return buildAuthContext(session, await readWorkspaceCookie());
 });
+
+/**
+ * The same actor, from a bearer token instead of a cookie.
+ *
+ * Not memoised: a route handler resolves the context once, and `cache` keys on
+ * nothing here, so sharing it between two requests in one render pass would be
+ * wrong rather than merely wasteful.
+ */
+export async function getAuthContextFromToken(
+  token: string,
+  chosenProjectId: string | null = null,
+): Promise<AuthContext | null> {
+  const session = await verifySessionToken(token);
+  if (!session) return null;
+  return buildAuthContext(session, chosenProjectId);
+}
 
 /**
  * Prisma `where` fragment that keeps a query inside the user's mapped projects.

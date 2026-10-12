@@ -647,6 +647,16 @@ perm("admin", "audit", "view", "Audit trail", G_ADMIN_SYS, "PAGE", "Every create
 perm("admin", "audit", "export", "Export audit trail", G_ADMIN_SYS, "BUTTON");
 perm("admin", "session", "view", "Active sessions", G_ADMIN_SYS, "PAGE");
 perm("admin", "session", "revoke", "Revoke a session", G_ADMIN_SYS, "BUTTON");
+
+/*
+ * The mobile app is a client, not a second system. It carries no permissions of
+ * its own — every endpoint it calls re-checks the same codes the web screen
+ * does. This is the one thing that is true of the phone and not of the desk:
+ * taking it away stops a role signing in from a phone without changing
+ * anything they may do at a desktop.
+ */
+perm("admin", "mobile", "use", "Sign in from the mobile app", G_ADMIN_SYS, "ACTION",
+  "Without it the Android app refuses the sign-in even when the password is right.");
 perm("admin", "settings", "view", "Platform settings", G_ADMIN_SYS, "PAGE");
 perm("admin", "settings", "update", "Change platform settings", G_ADMIN_SYS, "BUTTON");
 

@@ -82,6 +82,14 @@ const TASK_PARTICIPANT = [
   "checklist.category.view",
 ];
 
+/**
+ * The mobile app is a client, not a second system: it carries no permissions of
+ * its own, and every endpoint it calls re-checks the same codes the web screen
+ * does. This one code is what an administrator takes away to stop a role
+ * signing in from a phone, without touching what they may do at a desk.
+ */
+const MOBILE_APP = ["admin.mobile.use"];
+
 interface RoleSeed {
   code: string;
   name: string;
@@ -108,6 +116,8 @@ export const ROLES: RoleSeed[] = [
     description: "Runs the project end to end — structure, schedule, first-level approvals.",
     level: 20,
     grant: [
+      ...MOBILE_APP,
+
       // A calendar is everybody's: see your own agenda, raise a task, change
       // or cancel your own, and answer one that was put on you.
       "calendar.agenda.view",
@@ -169,6 +179,8 @@ export const ROLES: RoleSeed[] = [
     description: "Executes and reports from site — raises indents, receives material, logs progress.",
     level: 30,
     grant: [
+      ...MOBILE_APP,
+
       // A calendar is everybody's: see your own agenda, raise a task, change
       // or cancel your own, and answer one that was put on you.
       "calendar.agenda.view",
@@ -235,6 +247,8 @@ export const ROLES: RoleSeed[] = [
     description: "Controls material and stock — PO, GRN, issue, return, transfer, vendor payments.",
     level: 30,
     grant: [
+      ...MOBILE_APP,
+
       // A calendar is everybody's: see your own agenda, raise a task, change
       // or cancel your own, and answer one that was put on you.
       "calendar.agenda.view",
@@ -301,6 +315,8 @@ export const ROLES: RoleSeed[] = [
     description: "Owns the pipeline — assignment, discount approval, pricing and hold extensions.",
     level: 25,
     grant: [
+      ...MOBILE_APP,
+
       // A calendar is everybody's: see your own agenda, raise a task, change
       // or cancel your own, and answer one that was put on you.
       "calendar.agenda.view",
@@ -341,6 +357,8 @@ export const ROLES: RoleSeed[] = [
     description: "Owns lead to booking — follow-ups, site visits, cost sheets, collections.",
     level: 30,
     grant: [
+      ...MOBILE_APP,
+
       // A calendar is everybody's: see your own agenda, raise a task, change
       // or cancel your own, and answer one that was put on you.
       "calendar.agenda.view",
@@ -406,6 +424,8 @@ export const ROLES: RoleSeed[] = [
     description: "Runs the work on site — schedule, progress, quality checks and the material it needs.",
     level: 28,
     grant: [
+      ...MOBILE_APP,
+
       // A calendar is everybody's: see your own agenda, raise a task, change
       // or cancel your own, and answer one that was put on you.
       "calendar.agenda.view",
@@ -483,6 +503,8 @@ export const ROLES: RoleSeed[] = [
     description: "Back office — records, documents, masters and the paperwork that keeps them straight.",
     level: 40,
     grant: [
+      ...MOBILE_APP,
+
       // A calendar is everybody's: see your own agenda, raise a task, change
       // or cancel your own, and answer one that was put on you.
       "calendar.agenda.view",
