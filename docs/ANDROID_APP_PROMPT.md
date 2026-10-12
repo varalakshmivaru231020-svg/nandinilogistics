@@ -5,7 +5,7 @@ ERP. It is written to be handed to a developer or a coding agent with no prior
 knowledge of the system.
 
 Everything here is taken from the running web application, not from memory:
-19 navigation modules, 74 screens, **183 server actions** and **561 permission
+19 navigation modules, 75 screens, **183 server actions** and **562 permission
 codes**. Where this document names a permission, that is the exact string the
 server checks.
 
@@ -80,23 +80,62 @@ and a patchy connection.
 ### 3.1 The server contract
 
 The web app is Next.js 16 with React server actions. **Server actions are not a
-usable API for Android.** Before the app is built, the server must expose a REST
-or tRPC surface that wraps the same service layer the actions call. The rule for
-whoever builds it:
+usable API for Android**: each is a POST to an opaque id with a React-flavoured
+body that changes whenever the component tree does, and a page answers in HTML.
+So the app talks to a boundary of its own at **`/api/mobile/v1`**.
 
-- One endpoint per server action listed in §8, same name, same arguments.
-- Each endpoint calls `authorize(PERM...)` with the code given in §8 — the same
-  code, not a looser one.
-- Each returns the same `ActionResult` shape the web uses:
-  `{ ok: true, data }` or `{ ok: false, error: "<human sentence>" }`. The error
-  string is written for the user; show it verbatim.
+**What already exists** (see `src/lib/api/mobile.ts`):
+
+| Endpoint | Method | Returns |
+|---|---|---|
+| `/api/mobile/v1/auth/login` | POST | `{ token, expiresAt, user }` |
+| `/api/mobile/v1/auth/logout` | POST | `{ signedOut: true }` |
+| `/api/mobile/v1/me` | GET | `{ user, projects, serverTime }` |
+| `/api/mobile/v1/calendar?view=&on=` | GET | `{ view, grid, items, counts, tally, serverTime }` |
+
+**What still has to be built**: one endpoint per server action listed in §8, and
+one list endpoint per module in §7. The rules, which the four above already
+follow — copy them rather than inventing a second convention:
+
+- `mobileRoute([PERM...], handler)` wraps every endpoint. The codes are the same
+  ones the web page passes to `requirePermission()` and the web action passes to
+  `authorize()` — the same code, never a looser one. **The boundary carries no
+  authority of its own**: nothing is trusted because the app drew it.
+- Every endpoint additionally requires `admin.mobile.use`. `mobileRoute` adds it;
+  you do not list it.
+- Every response is one of exactly two shapes: `{ ok: true, data }` or
+  `{ ok: false, error: "<human sentence>", code?, fieldErrors? }`. The error
+  string is written for the user — show it verbatim, never a status code.
 - List endpoints take the same query parameters the web reads from the URL
   (§7 per module) and return `{ rows, total, figures }`.
 - `figures` is the module metric band (§6.3), computed server-side by
   `src/lib/metrics/figures.ts` so the phone and the web cannot disagree.
+- Anything dated sends `serverTime`. **The phone's clock is not evidence** —
+  overdue is decided against the server's instant, the same way the web passes
+  `nowMs` down instead of reading the clock during render.
+- The project being viewed goes in an **`X-Project`** header. A project the
+  holder cannot reach is ignored, not refused — it is a view filter, never an
+  access decision.
 
-Auth: session cookie today. For the app, issue a bearer token on login with the
-same session lifetime and revocation (`/admin/sessions` must be able to kill it).
+**Status codes the app must act on differently:**
+
+| Status | Means | The app does |
+|---|---|---|
+| 401 | Not signed in, or the session was revoked | Sign in again |
+| 403 | Signed in and not allowed | Say why; **never** retry or re-prompt |
+| 422 | The body did not validate | Field errors from `fieldErrors` |
+| 409 | Someone else decided it first | Re-fetch; see §9.4 |
+
+Confusing 401 with 403 is the trap: a missing permission arriving as "your
+session expired" puts the app in a loop of signing a user back in to be refused
+the same way.
+
+**Auth.** `POST /auth/login` returns a bearer token; send it as
+`Authorization: Bearer <token>`. It is an ordinary session — one row behind the
+JWT — so it appears in Administration → Active sessions beside the browsers,
+with the `device` string you sent as its user agent, and revoking it there stops
+the app on its **next request**, not whenever the token expires. There is an
+integration test for exactly that (`tests/integration/mobile-auth.test.ts`).
 
 ---
 
@@ -104,17 +143,33 @@ same session lifetime and revocation (`/admin/sessions` must be able to kill it)
 
 ### 4.1 Login
 
-`POST /auth/login` with email and password. Response carries the user, their
-roles, `isSuperAdmin`, the resolved permission code set, the project ids they are
-mapped to, `canAccessAllProjects`, and their approval limits.
+`POST /api/mobile/v1/auth/login` with `{ email, password, device }`. `device` is
+a name an administrator will recognise in the session list — the handset model
+is a good one. The response carries the token, its expiry, and under `user`: the
+roles, `isSuperAdmin`, the whole resolved permission code set, the project ids
+they are mapped to, `canAccessAllProjects`, `workspaceProjectId` and the
+approval limits. One round trip, so the first screen can be drawn without a
+second.
 
-Cache the permission set. Re-fetch on resume and after any role change pushed by
-a notification. **A super admin bypasses every check** — `has(code)` returns true
-for them without consulting the set.
+Cache the permission set. Re-fetch it from `GET /api/mobile/v1/me` on every cold
+start and on resume — that is how a permission taken away this morning reaches a
+phone that signed in last night. **A super admin bypasses every check**:
+`has(code)` returns true for them, and their `permissions` array arrives
+**empty**, so an app that tests membership instead of calling `has()` will hide
+the entire application from the owner.
+
+Three refusals, each said differently, and none of them a retry of the password
+field:
+
+| Response | Say |
+|---|---|
+| 401 `credentials` | "Email or password is incorrect." Same answer whether or not the address exists. |
+| 403 `inactive` | The account is suspended. Nothing to retry. |
+| 403 `admin.mobile.use` | This account may not use the app. **The web still works.** |
 
 ### 4.2 The permission codes
 
-550 codes, shaped `module.resource.action`. By module:
+562 codes, shaped `module.resource.action`. By module:
 
 | Module | Codes | Module | Codes |
 |---|---|---|---|
@@ -122,10 +177,15 @@ for them without consulting the set.
 | material | 88 | task | 24 |
 | sales | 74 | unit | 19 |
 | project | 44 | hr | 17 |
-| admin | 39 | checklist | 12 |
-| reports | 26 | dashboard | 7 |
-| kb | 7 | calendar | 11 |
+| admin | 40 | checklist | 12 |
+| reports | 26 | calendar | 11 |
+| dashboard | 7 | kb | 7 |
 | approvals | 1 | | |
+
+One of those 40 `admin` codes exists because the phone exists:
+**`admin.mobile.use`**. It is not a feature — it is the switch an administrator
+throws to stop a role signing in from a device without changing anything they
+may do at a desk. Every endpoint requires it on top of its own codes.
 
 Fetch the full list from `/permissions/catalogue` and generate a Kotlin
 `Perm` object from it at build time, mirroring the web's generated
@@ -308,7 +368,7 @@ On Android: month as a pager (swipe between months), the day panel as a bottom
 sheet, the task as a sheet with the three actions, and the agenda view as the
 default on a phone — it answers "what is next" without pinching a grid.
 
-### 7.3 Approvals — `/approvals`
+### 7.4 Approvals — `/approvals`
 Permission `approvals.queue.view`. Everything waiting on a decision in one list,
 oldest first: indents, purchase orders, vendor invoices, material returns, stock
 transfers, schedule extensions, task closures, task extensions, checklist review
@@ -318,7 +378,7 @@ it, how long it has waited and who it waits on. Decide inline where the web does
 checklist levels link to the task instead, because a checklist is settled point
 by point.
 
-### 7.4 Projects — `/projects`
+### 7.5 Projects — `/projects`
 Band: projects, ongoing, completed, past target date, schedule progress, units.
 Search: name, code, RERA number, city, manager.
 Filters: status, type, city, manager.
@@ -328,7 +388,7 @@ Detail tabs — **Overview**, **Tasks**, **Team Mapping**, **Documents**,
   beneath, each downloadable. Upload has no expiry field.
 - Team mapping: a searchable people picker; mapping grants project access.
 
-### 7.5 Tasks — `/tasks`
+### 7.6 Tasks — `/tasks`
 Band: overdue, due today, due this week, waiting on you, high/med/low, your score.
 Filters: All, Overdue, Today, This week, by priority, assigned to me, raised by
 me, has checklist. Search by title, number, assignee.
@@ -354,12 +414,12 @@ hold requests.
 - Judging a point is two buttons — Approve or Deny — with an optional remark and
   optional photos.
 
-### 7.6 Task Reports — `/tasks/reports` · permission `task.report.view`
-### 7.7 Checklists — `/checklists` · permission `checklist.checklist.view`
+### 7.7 Task Reports — `/tasks/reports` · permission `task.report.view`
+### 7.8 Checklists — `/checklists` · permission `checklist.checklist.view`
 Checklist masters with categories and checkpoints. Create, duplicate, reorder,
 activate.
 
-### 7.8 Schedule — `/schedule` · permission `schedule.activity.view`
+### 7.9 Schedule — `/schedule` · permission `schedule.activity.view`
 Three tabs: **Schedule**, **Extension requests**, **Reports**.
 Band: activities completed, started on time, completed on time, overdue.
 - Main categories hold sub-activities. Progress rolls up.
@@ -373,7 +433,7 @@ Band: activities completed, started on time, completed on time, overdue.
 - Reports: schedule vs actual grouped by main category with sub-activities under
   each; and PM performance.
 
-### 7.9 Indents — `/material/indents` · `material.indent.view`
+### 7.10 Indents — `/material/indents` · `material.indent.view`
 Band: indents, awaiting approval, approved, rejected, value raised, average days
 to approve.
 Search: indent no., item, project, activity. Filters: project, status, date range.
@@ -381,7 +441,7 @@ Flow: draft → submit → PM approval → store stock check → issue from stoc
 the shortfall. Rows show the chain as a stepper and the fulfilment split.
 Without `material.indent.viewAll` a user sees only indents they raised.
 
-### 7.10 Purchase Orders — `/material/purchase-orders` · `material.purchaseOrder.view`
+### 7.11 Purchase Orders — `/material/purchase-orders` · `material.purchaseOrder.view`
 Band: orders, awaiting approval, open, delivery overdue, received, value ordered.
 Search: PO no., vendor, item, indent. Filters: vendor, status, date range.
 Two approval levels. Revision supersedes. **Printable PO** carries the letterhead,
@@ -389,30 +449,30 @@ vendor contact and GSTIN, the site address and the project manager's contact, an
 the contact lines from the Print Contacts master at its foot.
 Rates are hidden without `material.purchaseOrder.viewRate`.
 
-### 7.11 Goods Receipt — `/material/grn` · `material.grn.view`
+### 7.12 Goods Receipt — `/material/grn` · `material.grn.view`
 Band: receipts, last 30 days, with rejections, rejected share.
 Search: GRN no., PO, vendor, receiver. Filters: vendor, invoice, date range.
 Accepted, rejected and short quantities per line; inspection; posting moves stock.
 Attachments at creation and after.
 
-### 7.12 Item Master & Stock — `/material/stock` · `material.stock.view`
+### 7.13 Item Master & Stock — `/material/stock` · `material.stock.view`
 Band: items, below reorder level, out of stock, stock value.
 Search: item name, code, specification. Filters: unit, stock state.
 Item detail: balances per store, the ledger, reorder level.
 **Stock only ever moves through the posting service** — never write a balance.
 
-### 7.13 Vendors — `/material/vendors` · `material.vendor.view`
+### 7.14 Vendors — `/material/vendors` · `material.vendor.view`
 Band: vendors, active, with orders placed, average rating, ordered to date.
 Search: vendor, contact, mobile, GSTIN. Filters: status, category.
 Detail: orders, on-time record, bank and payment terms.
 
-### 7.14 Also in Material
+### 7.15 Also in Material
 Issues `/material/issues`, Returns `/material/returns`, Transfers
 `/material/transfers`, Vendor Invoices `/material/invoices` (three-way match),
 Payments `/material/payments`, Reorder `/material/reorder`. Each has the search,
-filters and date range listed in its web `ListToolbar` — see the table in §7.18.
+filters and date range listed in its web `ListToolbar` — see the table in §7.20.
 
-### 7.15 Leads · CRM — `/sales/leads` · `sales.lead.view`
+### 7.16 Leads · CRM — `/sales/leads` · `sales.lead.view`
 Band: leads, new this week, in the pipeline, booked, conversion, pipeline value.
 **Board and list views.** The board is one horizontal row of stages — New,
 Contacted, Site Visit, Negotiation, Booked, Lost — scrolling sideways, never
@@ -421,7 +481,7 @@ wrapping. Drag between stages where the permission allows; Lost needs
 Lead detail: notes, follow-ups, site visits, cost sheets, unit holds.
 Without `sales.lead.viewAll` a user sees only their own pipeline.
 
-### 7.16 Follow-ups, Customers, Flats
+### 7.17 Follow-ups, Customers, Flats
 - **Follow-ups** `/sales/follow-ups` — band: open, overdue, due today, contacts
   logged, followed up. Grid, list and calendar views.
 - **Customers** `/sales/customers` — band: customers, bookings, booked value,
@@ -432,7 +492,7 @@ Without `sales.lead.viewAll` a user sees only their own pipeline.
   `AVAILABLE`, `HELD`, `BOOKED`, `AGREEMENT`, `REGISTERED`, `BLOCKED`.
   Band: flats, available, on hold, booked or sold, sold through, unsold area.
 
-### 7.17 Users & Attendance — `/hr` · `hr.employee.view`
+### 7.18 Users & Attendance — `/hr` · `hr.employee.view`
 Band: on record, active, present today, absent today, not marked today, overtime.
 Three tabs: **Employees**, **Mark Attendance**, **Attendance Report**.
 - Employee photo and Aadhaar/PAN copies. Identity numbers are masked without
@@ -441,10 +501,10 @@ Three tabs: **Employees**, **Mark Attendance**, **Attendance Report**.
   active employees, Present / Half day / Absent, overtime hours, work done.
   **Build it offline-first** — mark on site, sync later.
 
-### 7.18 Knowledge Base — `/kb` · `kb.article.view`
+### 7.19 Knowledge Base — `/kb` · `kb.article.view`
 Articles with categories, attachments, publish/draft.
 
-#### Search and filter reference
+### 7.20 Search and filter reference
 
 | Module | Search fields | Filters |
 |---|---|---|
@@ -584,8 +644,18 @@ Users, roles, permissions, approval limits, sessions and settings under
 ### 9.1 Notifications
 In-app notification centre plus FCM push. Nine events: task assigned, accepted,
 started, completed; level active; checklist failed; extension requested and
-decided; status changed. Tapping opens the record. The badge count is the unread
-count from `/notifications`.
+decided; status changed. A calendar task put on somebody is a tenth, and it is
+the one that carries its actions inline — Accept and Decline, because the whole
+point of an invitation is that it is answered quickly.
+
+The badge count is the unread count from `/api/mobile/v1/notifications`.
+
+**A notification is a deep link, not a copy of the record.** By the time it is
+tapped the permission may be gone, or someone else may have decided it. So the
+destination is always re-fetched, and the three answers it can give are all
+designed for: the record, "decided by someone else while you were away" (§9.4),
+or the refusal screen. Never a crash, and never a decision button on a record
+that has already been decided.
 
 ### 9.2 Printing
 Print routes exist for purchase orders, indents, issues, bookings, cost sheets,
@@ -622,7 +692,7 @@ The build is done when, for every module in §7:
 
 1. The list shows the same rows as the web for the same user, filter and search.
 2. The metric band matches the web's figures exactly.
-3. Every filter in the §7.18 table works, is removable, and survives rotation
+3. Every filter in the §7.20 table works, is removable, and survives rotation
    and process death.
 4. Search covers exactly the listed fields.
 5. Every action in §8 that the viewer holds is reachable, and none that they do
@@ -635,11 +705,27 @@ The build is done when, for every module in §7:
 9. The app works offline for attendance and checklist judging, and replays
    cleanly.
 
+And of the transport, before any module is trusted:
+
+10. Revoking the device under Administration → Active sessions signs the app
+    out on its **next request** — not when the token expires.
+11. A 403 never triggers a re-authentication. Deny `admin.mobile.use` on a test
+    user and confirm the app says why once and stops, rather than looping on the
+    password field.
+12. A permission removed while the app is backgrounded is gone from the UI after
+    resume, because `/me` was re-read — not after the next cold start.
+13. Signing in as the Owner does not hide the application. The owner's
+    `permissions` array is **empty** and `isSuperAdmin` is true; an app that
+    tests set membership instead of `has()` shows them nothing.
+
 ---
 
 ## 11. Build order
 
-1. Auth, permission catalogue, workspace, navigation shell, design system.
+1. Auth — sign-in, the three refusals, token storage, `/me` on resume — the
+   permission catalogue, workspace, navigation shell and design system. Finish
+   acceptance criteria 10–13 here. Every later module rests on them, and each
+   one is cheap now and expensive to retrofit.
 2. Dashboard, Approvals, Notifications.
 3. **Calendar** — the screen a phone is opened for.
 4. Tasks and Checklists — the largest behavioural surface.
