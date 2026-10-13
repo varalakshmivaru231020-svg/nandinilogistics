@@ -58,7 +58,7 @@ void main() {
     test('keeps the web\'s own order', () {
       final sections = visibleNavigation(sessionWith(const [], superAdmin: true).can, held: const {});
       expect(sections.map((s) => s.label),
-          ['Overview', 'Execution', 'Procurement', 'Sales', 'Workforce']);
+          ['Overview', 'Execution', 'Procurement', 'Sales', 'Workforce', 'Administration']);
     });
 
     /*
@@ -90,8 +90,9 @@ void main() {
      */
     test('a prefix gate opens for one held code and shuts for none', () {
       final withOne = sessionWith(['reports.indentAgeing.view']);
-      final labels = (Session s) =>
-          visibleNavigation(s.can, held: s.permissions).expand((x) => x.modules).map((m) => m.label);
+      Iterable<String> labels(Session s) => visibleNavigation(s.can, held: s.permissions)
+          .expand((x) => x.modules)
+          .map((m) => m.label);
 
       expect(labels(withOne), contains('Reports'));
       expect(labels(sessionWith(['material.indent.view'])), isNot(contains('Reports')));

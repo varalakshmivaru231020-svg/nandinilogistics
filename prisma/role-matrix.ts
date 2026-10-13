@@ -133,6 +133,7 @@ export const ROLES: RoleSeed[] = [
 
       "dashboard.projectManager.view",
       "approvals.queue.view",
+      "approvals.queue.export",
       "dashboard.widget.viewFinancials",
       "project.*.*",
       "schedule.*.*",
@@ -267,6 +268,7 @@ export const ROLES: RoleSeed[] = [
       "kb.article.view",
       "dashboard.storeManager.view",
       "approvals.queue.view",
+      "approvals.queue.export",
       "dashboard.widget.viewFinancials",
       "project.project.view",
       "material.indent.view",

@@ -121,6 +121,73 @@ suite("the mobile boundary", () => {
       expect(b.filters).toContain("draft");
     });
 
+    /*
+     * The six that were unreachable until their export routes existed:
+     * Approvals, Tasks, Task Reports, Checklists, Follow-ups and the Knowledge
+     * Base. Every module in the web's navigation is now on the phone, and this
+     * is the check that each of them answers rather than merely being listed.
+     */
+    it("serves the six modules that used to have no endpoint", async () => {
+      const broken: string[] = [];
+      for (const key of [
+        "approvals", "tasks", "tasks/reports", "checklists", "sales/follow-ups", "kb",
+      ]) {
+        const { status, body } = await get(`/list/${key}`);
+
+        /*
+         * A 403 is a right answer, not a broken one: the signed-in Project
+         * Manager may not see follow-ups, and the boundary says so with the
+         * code. What must never happen is a 404 — that would mean the module
+         * is not served at all, which is the state these six were in.
+         */
+        if (status === 403) {
+          if (!body.code) broken.push(`${key} → 403 with no code to act on`);
+          continue;
+        }
+        if (status !== 200 || !body.ok) {
+          broken.push(`${key} → ${status} ${body.error ?? ""}`);
+          continue;
+        }
+        const d = body.data as unknown as { columns: unknown[]; filters: string };
+        if (!Array.isArray(d.columns) || d.columns.length === 0) broken.push(`${key} → no columns`);
+        if (typeof d.filters !== "string") broken.push(`${key} → no filter description`);
+      }
+      expect(broken).toEqual([]);
+    });
+
+    /*
+     * The ownership rule travels with the list. Without `task.task.viewAll` a
+     * person gets the tasks they raised, were given, or were named on — and the
+     * list says so, rather than looking like the whole organisation's.
+     */
+    it("applies the task ownership rule, and says it has", async () => {
+      const { body } = await get("/list/tasks");
+      const d = body.data as unknown as { filters: string };
+      expect(d.filters).toBe("Yours only");
+    });
+
+    it("takes the task screen's own filters", async () => {
+      const all = await get("/list/tasks");
+      const high = await get("/list/tasks?priority=HIGH");
+      const a = all.body.data as unknown as { total: number };
+      const b = high.body.data as unknown as { total: number; filters: string };
+      expect(b.filters).toBe("HIGH priority · Yours only");
+      expect(b.total).toBeLessThanOrEqual(a.total);
+    });
+
+    /*
+     * A draft is somebody's unfinished writing. Without `kb.article.update` the
+     * list shows published articles only — and this is the one place a leak
+     * would not be obvious from the screen.
+     */
+    it("hides knowledge base drafts from a reader who may not edit", async () => {
+      const { body } = await get("/list/kb");
+      const d = body.data as unknown as { filters: string; rows: Array<{ state: string }> };
+      if (d.filters.includes("Published only")) {
+        expect(d.rows.every((r) => r.state === "Published")).toBe(true);
+      }
+    });
+
     it("answers 404 for a list that does not exist, not 403", async () => {
       const { status, body } = await get("/list/material/unicorns");
       expect(status).toBe(404);

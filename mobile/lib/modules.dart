@@ -45,6 +45,7 @@ class Section {
 const navigation = <Section>[
   Section('Overview', [
     Module(label: 'Calendar', permission: 'calendar.agenda.view', icon: Icons.calendar_month_rounded, route: '/calendar'),
+    Module(label: 'Approvals', permission: 'approvals.queue.view', icon: Icons.fact_check_rounded, list: 'approvals'),
     /*
      * Gated by prefix, not by one code: every report has its own
      * `reports.<key>.view`, and the screen lists only the ones the caller may
@@ -54,8 +55,11 @@ const navigation = <Section>[
   ]),
   Section('Execution', [
     Module(label: 'Projects', permission: 'project.project.view', icon: Icons.home_work_rounded, list: 'projects/projects'),
-    Module(label: 'Site Progress', permission: 'project.progressLog.view', icon: Icons.timeline_rounded, list: 'projects/progress'),
+    Module(label: 'Tasks', permission: 'task.task.view', icon: Icons.checklist_rounded, list: 'tasks'),
+    Module(label: 'Task Reports', permission: 'task.report.view', icon: Icons.bar_chart_rounded, list: 'tasks/reports'),
+    Module(label: 'Checklists', permission: 'checklist.checklist.view', icon: Icons.rule_rounded, list: 'checklists'),
     Module(label: 'Schedule', permission: 'schedule.activity.view', icon: Icons.view_timeline_rounded, list: 'schedule/activities'),
+    Module(label: 'Site Progress', permission: 'project.progressLog.view', icon: Icons.timeline_rounded, list: 'projects/progress'),
   ]),
   Section('Procurement', [
     Module(label: 'Indents', permission: 'material.indent.view', icon: Icons.assignment_rounded, list: 'material/indents'),
@@ -72,6 +76,7 @@ const navigation = <Section>[
   ]),
   Section('Sales', [
     Module(label: 'Leads · CRM', permission: 'sales.lead.view', icon: Icons.person_search_rounded, list: 'sales/leads'),
+    Module(label: 'Follow-ups', permission: 'sales.followUp.view', icon: Icons.phone_forwarded_rounded, list: 'sales/follow-ups'),
     Module(label: 'Site Visits', permission: 'sales.siteVisit.view', icon: Icons.directions_walk_rounded, list: 'sales/site-visits'),
     Module(label: 'Cost Sheets', permission: 'sales.costSheet.view', icon: Icons.calculate_rounded, list: 'sales/cost-sheets'),
     Module(label: 'Bookings', permission: 'sales.booking.view', icon: Icons.bookmark_added_rounded, list: 'sales/bookings'),
@@ -83,6 +88,11 @@ const navigation = <Section>[
   Section('Workforce', [
     Module(label: 'Employees', permission: 'hr.employee.view', icon: Icons.badge_rounded, list: 'hr/employees'),
     Module(label: 'Attendance', permission: 'hr.attendance.view', icon: Icons.how_to_reg_rounded, list: 'hr/attendance'),
+  ]),
+  // The web calls this section Administration; Masters & Users is the rest of
+  // it, and is web-only by design (brief §12).
+  Section('Administration', [
+    Module(label: 'Knowledge Base', permission: 'kb.article.view', icon: Icons.menu_book_rounded, list: 'kb'),
   ]),
 ];
 

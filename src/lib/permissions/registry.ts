@@ -142,6 +142,8 @@ perm("dashboard", "widget", "viewFinancials", "See money figures on dashboards",
 // has the permission to decide, so this grants sight of the queue, never the
 // power to act on anything in it.
 perm("approvals", "queue", "view", "Approvals queue", G_APPROVALS, "PAGE", "Everything waiting on you — indents, purchase orders, extensions, invoices, returns, transfers — with filter and search.");
+perm("approvals", "queue", "export", "Export the approvals queue", G_APPROVALS, "BUTTON",
+  "The queue as a file, and what the Android client reads to show it.");
 
 // ===========================================================================
 // MODULE 01 — PROJECT MANAGEMENT
@@ -402,7 +404,7 @@ crud({
   ],
 });
 
-crud({ module: "sales", resource: "followUp", entity: "follow-up", group: G_SALES_LEAD, exportable: false });
+crud({ module: "sales", resource: "followUp", entity: "follow-up", group: G_SALES_LEAD });
 
 // Duties rather than access: who is handed new leads, and who is told when a
 // follow-up lapses. Resolved without the super-admin bypass, so administering
@@ -835,12 +837,10 @@ export const NOT_YET_BUILT: ReadonlySet<string> = new Set([
   "checklist.category.export",
   "checklist.category.view",
   "checklist.checklist.execute",
-  "checklist.checklist.export",
   "checklist.checklist.verify",
   "hr.employee.uploadDocument",
   "hr.employmentType.update",
   "hr.employmentType.view",
-  "kb.article.export",
   "masters.leadField.export",
   "masters.leadField.import",
   "masters.leadField.toggleStatus",
@@ -923,8 +923,6 @@ export const NOT_YET_BUILT: ReadonlySet<string> = new Set([
   // commenting; neither is a separate control of its own.
   "task.task.assign",
   "task.task.attach",
-  // The task list exports through the reports screen, not from the list.
-  "task.task.export",
   "unit.hold.view",
   // The design's flats panel has no extension step: a hold is released or booked.
   "unit.hold.extend",

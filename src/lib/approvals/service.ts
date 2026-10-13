@@ -1,0 +1,363 @@
+import "server-only";
+
+import { prisma } from "@/lib/db";
+import { PERM } from "@/lib/permissions/codes";
+import { projectScopeFilter, type AuthContext } from "@/lib/rbac/context";
+import { earliestWaitingLevel } from "@/lib/tasks/checklist-flow";
+import { byOldestFirst, type ApprovalRow } from "./queue";
+
+/**
+ * Everything waiting for a decision, gathered from wherever it lives.
+ *
+ * Extracted from the page so the screen, the export and the Android client all
+ * read one queue. It was 300 lines inside a React component, which meant the
+ * only way to see the queue was to render it — and a second copy for the phone
+ * would have been a second answer to "what is waiting on me".
+ *
+ * Two rules it exists to keep:
+ *
+ *   - A person sees a row only if their role lets them see that kind of
+ *     document, and can act on it only if their role lets them decide it. The
+ *     queue is never a way round a permission.
+ *   - A task decision appears only where they are the one it waits on — the
+ *     Assigner for a closure or an extension, the named level for a review or
+ *     an approval.
+ */
+export async function loadApprovalQueue(ctx: AuthContext): Promise<ApprovalRow[]> {
+  const scope = projectScopeFilter(ctx);
+
+  const rows: ApprovalRow[] = [];
+
+  // Indents waiting on the Project Manager.
+  if (ctx.has(PERM.material.indent.view)) {
+    const indents = await prisma.indent.findMany({
+      where: { ...scope, status: { in: ["SUBMITTED", "PM_APPROVED"] } },
+      orderBy: { raisedAt: "asc" },
+      select: {
+        id: true, indentNo: true, purpose: true, raisedAt: true, status: true,
+        estimatedValue: true,
+        project: { select: { name: true } },
+        raisedBy: { select: { name: true } },
+        items: { take: 1, select: { item: { select: { name: true } } } },
+        _count: { select: { items: true } },
+      },
+    });
+    for (const i of indents) {
+      const first = i.items[0]?.item.name;
+      const more = i._count.items - 1;
+      rows.push({
+        id: i.id,
+        kind: "INDENT",
+        reference: i.indentNo,
+        title: first ? `${first}${more > 0 ? ` +${more} more` : ""}` : i.purpose ?? "Material request",
+        raisedBy: i.raisedBy?.name ?? "—",
+        raisedAt: i.raisedAt.toISOString(),
+        projectName: i.project?.name ?? null,
+        value: Number(i.estimatedValue),
+        waitingOn: i.status === "SUBMITTED" ? "Project Manager" : "Owner / Admin",
+        href: `/material/indents/${i.id}`,
+        canDecide:
+          i.status === "SUBMITTED"
+            ? ctx.has(PERM.material.indent.approvePm)
+            : ctx.has(PERM.material.indent.approveAdmin),
+      });
+    }
+  }
+
+  // Purchase orders, at whichever level they are waiting.
+  if (ctx.has(PERM.material.purchaseOrder.view)) {
+    const pos = await prisma.purchaseOrder.findMany({
+      where: {
+        ...scope,
+        status: { in: ["DRAFT", "PENDING_APPROVAL", "PENDING_PM_APPROVAL", "PENDING_ADMIN_APPROVAL"] },
+      },
+      orderBy: { poDate: "asc" },
+      select: {
+        id: true, poNo: true, poDate: true, status: true, totalAmount: true,
+        project: { select: { name: true } },
+        vendor: { select: { name: true } },
+        createdBy: { select: { name: true } },
+      },
+    });
+    for (const p of pos) {
+      const atAdmin = p.status === "PENDING_ADMIN_APPROVAL";
+      rows.push({
+        id: p.id,
+        kind: "PO",
+        reference: p.poNo,
+        title: p.vendor?.name ?? "Purchase order",
+        raisedBy: p.createdBy?.name ?? "—",
+        raisedAt: p.poDate.toISOString(),
+        projectName: p.project?.name ?? null,
+        value: Number(p.totalAmount),
+        waitingOn: atAdmin ? "Owner / Admin" : "Project Manager",
+        href: `/material/purchase-orders/${p.id}`,
+        canDecide: atAdmin
+          ? ctx.has(PERM.material.purchaseOrder.approveAdmin)
+          : ctx.has(PERM.material.purchaseOrder.approvePm),
+      });
+    }
+  }
+
+  // Schedule extensions, which go to the PM and then to Admin for the date.
+  if (ctx.has(PERM.schedule.extension.view)) {
+    const extensions = await prisma.scheduleExtension.findMany({
+      where: { status: { in: ["REQUESTED", "PM_APPROVED"] } },
+      orderBy: { requestedAt: "asc" },
+      select: {
+        id: true, requestedDays: true, reason: true, requestedAt: true, status: true,
+        activity: {
+          select: { name: true, project: { select: { id: true, name: true } } },
+        },
+        requestedBy: { select: { name: true } },
+      },
+    });
+    for (const e of extensions) {
+      const reachable =
+        ctx.canAccessAllProjects ||
+        (e.activity?.project && ctx.projectIds.includes(e.activity.project.id));
+      if (!reachable) continue;
+      const atAdmin = e.status === "PM_APPROVED";
+      rows.push({
+        id: e.id,
+        kind: "EXTENSION",
+        reference: e.activity?.name ?? "Activity",
+        title: `${e.requestedDays} more day(s) — ${e.reason ?? "no reason given"}`,
+        raisedBy: e.requestedBy?.name ?? "—",
+        raisedAt: e.requestedAt.toISOString(),
+        projectName: e.activity?.project?.name ?? null,
+        value: null,
+        waitingOn: atAdmin ? "Owner / Admin" : "Project Manager",
+        href: "/schedule?tab=extensions",
+        // The Admin step also records whether the delay was genuine or
+        // avoidable, so it is decided on the schedule, not from here.
+        canDecide: !atAdmin && ctx.has(PERM.schedule.extension.approve),
+      });
+    }
+  }
+
+  // Vendor invoices waiting to be passed for payment.
+  if (ctx.has(PERM.material.vendorInvoice.view)) {
+    const invoices = await prisma.vendorInvoice.findMany({
+      // An invoice waits once it is in, matched or not — a mismatch is exactly
+      // the kind that needs a person.
+      where: { status: { in: ["DRAFT", "MATCHED", "MISMATCH"] } },
+      orderBy: { invoiceDate: "asc" },
+      select: {
+        id: true, invoiceNo: true, invoiceDate: true, totalAmount: true, status: true,
+        vendor: { select: { name: true } },
+      },
+    });
+    for (const v of invoices) {
+      rows.push({
+        id: v.id,
+        kind: "INVOICE",
+        reference: v.invoiceNo,
+        title: `${v.vendor?.name ?? "Vendor invoice"}${v.status === "MISMATCH" ? " · three-way match failed" : ""}`,
+        raisedBy: v.vendor?.name ?? "—",
+        raisedAt: v.invoiceDate.toISOString(),
+        projectName: null,
+        value: Number(v.totalAmount),
+        waitingOn: "Accounts",
+        href: `/material/invoices/${v.id}`,
+        canDecide: ctx.has(PERM.material.vendorInvoice.approve),
+      });
+    }
+  }
+
+  // Material returns to the vendor.
+  if (ctx.has(PERM.material.return.view)) {
+    const returns = await prisma.materialReturn.findMany({
+      where: { ...scope, status: "PENDING" },
+      orderBy: { returnDate: "asc" },
+      select: {
+        id: true, returnNo: true, returnDate: true, reason: true,
+        project: { select: { name: true } },
+        raisedBy: { select: { name: true } },
+      },
+    });
+    for (const r of returns) {
+      rows.push({
+        id: r.id,
+        kind: "RETURN",
+        reference: r.returnNo,
+        title: r.reason ?? "Material return",
+        raisedBy: r.raisedBy?.name ?? "—",
+        raisedAt: r.returnDate.toISOString(),
+        projectName: r.project?.name ?? null,
+        value: null,
+        waitingOn: "Store Manager",
+        href: `/material/returns/${r.id}`,
+        canDecide: ctx.has(PERM.material.return.approve),
+      });
+    }
+  }
+
+  // Stock moving between stores.
+  if (ctx.has(PERM.material.transfer.view)) {
+    const transfers = await prisma.stockTransfer.findMany({
+      where: { status: "PENDING" },
+      orderBy: { transferDate: "asc" },
+      select: {
+        id: true, transferNo: true, transferDate: true,
+        fromStore: { select: { name: true } },
+        toStore: { select: { name: true } },
+      },
+    });
+    for (const t of transfers) {
+      rows.push({
+        id: t.id,
+        kind: "TRANSFER",
+        reference: t.transferNo,
+        title: `${t.fromStore?.name ?? "—"} → ${t.toStore?.name ?? "—"}`,
+        raisedBy: t.fromStore?.name ?? "—",
+        raisedAt: t.transferDate.toISOString(),
+        projectName: null,
+        value: null,
+        waitingOn: "Store Manager",
+        href: "/material/transfers",
+        canDecide: ctx.has(PERM.material.transfer.approve),
+      });
+    }
+  }
+
+  // ---- Task Management -----------------------------------------------------
+  // A person sees a task decision only where they are the one it waits on:
+  // the Assigner for a closure or an extension, the named level for a review
+  // or an approval. Admin sees them all, as the scope gives Admin everything.
+  if (ctx.has(PERM.task.task.view)) {
+    const seesAll = ctx.has(PERM.task.task.viewAll);
+
+    // Completed standalone tasks, waiting on whoever raised them.
+    const closures = await prisma.task.findMany({
+      where: {
+        status: "COMPLETED",
+        kind: "STANDALONE",
+        ...(seesAll ? {} : { createdById: ctx.id }),
+      },
+      orderBy: { completedAt: "asc" },
+      select: {
+        id: true, taskNo: true, title: true, completedAt: true, completionRemark: true,
+        project: { select: { name: true } },
+        assignee: { select: { name: true } },
+      },
+    });
+    for (const t of closures) {
+      rows.push({
+        id: t.id,
+        kind: "TASK_CLOSURE",
+        reference: t.taskNo,
+        title: t.completionRemark ?? t.title,
+        raisedBy: t.assignee.name,
+        raisedAt: (t.completedAt ?? new Date()).toISOString(),
+        projectName: t.project?.name ?? null,
+        value: null,
+        waitingOn: "Assigner",
+        href: `/tasks/${t.id}`,
+        canDecide: ctx.has(PERM.task.task.close),
+      });
+    }
+
+    // Due-date extensions, waiting on the Assigner to decide and classify.
+    const taskExtensions = await prisma.taskExtension.findMany({
+      where: {
+        status: "REQUESTED",
+        ...(seesAll ? {} : { task: { createdById: ctx.id } }),
+      },
+      orderBy: { requestedAt: "asc" },
+      select: {
+        id: true, reason: true, requestedAt: true, isHoldRequest: true, proposedDueAt: true,
+        requestedBy: { select: { name: true } },
+        task: { select: { id: true, taskNo: true, project: { select: { name: true } } } },
+      },
+    });
+    for (const e of taskExtensions) {
+      rows.push({
+        id: e.id,
+        kind: "TASK_EXTENSION",
+        reference: e.task.taskNo,
+        title: `${e.isHoldRequest ? "Hold" : "Extension"} to ${e.proposedDueAt.toISOString().slice(0, 10)} — ${e.reason}`,
+        raisedBy: e.requestedBy.name,
+        raisedAt: e.requestedAt.toISOString(),
+        projectName: e.task.project?.name ?? null,
+        value: null,
+        waitingOn: "Assigner",
+        // The row's id is the extension, which is what the decision acts on;
+        // the link goes to the task, which is where a person reads it.
+        href: `/tasks/${e.task.id}`,
+        canDecide: ctx.has(PERM.task.task.approveExtension),
+      });
+    }
+
+    // Checklist tasks sitting at a review or an approval level.
+    const atLevels = await prisma.task.findMany({
+      where: { status: { in: ["UNDER_REVIEW", "UNDER_APPROVAL"] } },
+      orderBy: { completedAt: "asc" },
+      select: {
+        id: true, taskNo: true, title: true, status: true, round: true, completedAt: true,
+        project: { select: { name: true } },
+        assignee: { select: { name: true } },
+        levels: {
+          select: {
+            id: true, kind: true, level: true, userId: true,
+            user: { select: { name: true } },
+          },
+        },
+        checklists: {
+          select: {
+            items: {
+              select: {
+                id: true, round: true,
+                reviews: {
+                  select: { round: true, verdict: true, level: { select: { kind: true, level: true } } },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    for (const t of atLevels) {
+      // Points travel one at a time, so the row is about the earliest level
+      // still holding one — not about the task having reached a level.
+      const levels = t.levels.map((l) => ({ kind: l.kind, level: l.level, userId: l.userId }));
+      const items = t.checklists.flatMap((c) =>
+        c.items.map((i) => ({
+          id: i.id,
+          round: i.round,
+          verdicts: i.reviews.map((r) => ({
+            kind: r.level.kind, level: r.level.level, round: r.round,
+            verdict: r.verdict as "PASS" | "FAIL",
+          })),
+        })),
+      );
+      const at = earliestWaitingLevel(items, levels);
+      if (!at) continue;
+      const next = t.levels.find((l) => l.kind === at.kind && l.level === at.level);
+      if (!next) continue;
+      const kind = at.kind;
+
+      const mine = next.userId === ctx.id;
+      if (!mine && !seesAll) continue;
+
+      rows.push({
+        id: t.id,
+        kind: kind === "REVIEW" ? "TASK_REVIEW" : "TASK_APPROVAL",
+        reference: t.taskNo,
+        title: t.title,
+        raisedBy: t.assignee.name,
+        raisedAt: (t.completedAt ?? new Date()).toISOString(),
+        projectName: t.project?.name ?? null,
+        value: null,
+        waitingOn: `${kind === "REVIEW" ? "Reviewer" : "Approver"} L${next.level} · ${next.user.name}`,
+        href: `/tasks/${t.id}`,
+        // A checklist level is settled by approving or denying each line, so it
+        // is decided on the task rather than by a yes from the queue; the row
+        // is here to say it is waiting, and takes you there.
+        canDecide: false,
+      });
+    }
+  }
+
+  return byOldestFirst(rows);
+}

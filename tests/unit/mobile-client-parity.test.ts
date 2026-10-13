@@ -45,22 +45,17 @@ describe("the app and the boundary agree about the lists", () => {
 });
 
 /**
- * What the app has not reached yet, stated once so it is a known quantity
- * rather than something rediscovered each time somebody opens the drawer.
+ * Every module in the web's navigation is now reachable from the phone, and
+ * this is what keeps it that way.
  *
- * Every one of these is a module the web has in its navigation. They are absent
- * from the phone because the web has no export route for them to answer from —
- * not because anybody decided a supervisor does not need tasks.
+ * It used to list six exceptions — Approvals, Tasks, Task Reports, Checklists,
+ * Follow-ups and Knowledge Base — each absent because the web had no export
+ * route for it to answer from. They have one now, so the list is empty, and a
+ * new module added to the web's navigation without a way to reach it from a
+ * phone fails here rather than going unnoticed.
  */
-describe("the modules the phone cannot reach, and why", () => {
-  const awaitingAnEndpoint = [
-    "/approvals",
-    "/checklists",
-    "/kb",
-    "/sales/follow-ups",
-    "/tasks",
-    "/tasks/reports",
-  ];
+describe("every module in the web's navigation is reachable", () => {
+  const awaitingAnEndpoint: string[] = [];
 
   /**
    * A nav href and its list key are not always the same string: the web's

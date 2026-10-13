@@ -5,7 +5,7 @@ ERP. It is written to be handed to a developer or a coding agent with no prior
 knowledge of the system.
 
 Everything here is taken from the running web application, not from memory:
-19 navigation modules, 75 screens, **183 server actions** and **562 permission
+20 navigation modules, 75 screens, **183 server actions** and **564 permission
 codes**. Where this document names a permission, that is the exact string the
 server checks.
 
@@ -129,7 +129,8 @@ All paths are under `/api/mobile/v1`.
 **Do not transcribe the action list into the app.** Generate the call sites from
 `/actions`, the way the web generates `PERM` from the permission registry: a
 signature that changes should break your build, not a button. There are **152
-actions** and **24 lists**, and both registries are generated from the server by
+actions** and **30 lists** — every module in the web's navigation except
+Masters & Users — and both registries are generated from the server by
 `pnpm mobile:sync`, so neither can drift from what the web does.
 
 Three things about this worth knowing before you build against it:
@@ -223,18 +224,18 @@ field:
 
 ### 4.2 The permission codes
 
-562 codes, shaped `module.resource.action`. By module:
+564 codes, shaped `module.resource.action`. By module:
 
 | Module | Codes | Module | Codes |
 |---|---|---|---|
 | masters | 168 | schedule | 24 |
 | material | 88 | task | 24 |
-| sales | 74 | unit | 19 |
+| sales | 75 | unit | 19 |
 | project | 44 | hr | 17 |
 | admin | 40 | checklist | 12 |
 | reports | 26 | calendar | 11 |
 | dashboard | 7 | kb | 7 |
-| approvals | 1 | | |
+| approvals | 2 | | |
 
 One of those 40 `admin` codes exists because the phone exists:
 **`admin.mobile.use`**. It is not a feature — it is the switch an administrator
@@ -638,6 +639,12 @@ Articles with categories, attachments, publish/draft.
 | Site visits | lead, customer, unit, executive | status, visit date |
 | Price lists | version name, project | project, active |
 | Progress logs | activity, project, logged by | project, log date |
+| Approvals | — (the queue is oldest-first, unfiltered) | — |
+| Tasks | task no., title, given to, raised by | mine, priority, assignee, assigner, has, due range |
+| Task reports | — (one row per person) | due range |
+| Checklists | checklist, category | category, active |
+| Follow-ups | lead, phone, requirement | due=overdue, next-action range |
+| Knowledge Base | title, summary, body, category | category |
 
 ---
 

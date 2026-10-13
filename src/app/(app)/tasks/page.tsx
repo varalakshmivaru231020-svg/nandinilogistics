@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { scoreTasks } from "@/lib/tasks/performance";
+import { readTaskListParams, taskListWhere } from "@/lib/tasks/list-filters";
 import { TasksScreen } from "./tasks-screen";
 
 export const metadata = { title: "Task Management" };
@@ -53,54 +54,12 @@ export default async function TasksPage({
   const { filter = "All", mine, priority, assignee, assigner, from, to, q, has } = await searchParams;
 
   const seesEverything = ctx.has(PERM.task.task.viewAll);
-  const projectScope = ctx.canAccessAllProjects
-    ? {}
-    : { OR: [{ projectId: { in: ctx.projectIds } }, { projectId: null }] };
 
-  const ownScope = {
-    OR: [
-      { assigneeId: ctx.id },
-      { createdById: ctx.id },
-      { levels: { some: { userId: ctx.id } } },
-    ],
-  };
-
-  // The scope's §3.4: status and "mine" as chips, the rest as a filter bar.
-  const dueRange =
-    from || to
-      ? {
-          dueAt: {
-            ...(from ? { gte: new Date(`${from}T00:00:00.000Z`) } : {}),
-            ...(to ? { lte: new Date(`${to}T23:59:59.999Z`) } : {}),
-          },
-        }
-      : {};
-
-  const where = {
-    ...(seesEverything ? projectScope : {}),
-    ...(seesEverything ? {} : ownScope),
-    ...(mine === "to" ? { assigneeId: ctx.id } : {}),
-    ...(mine === "by" ? { createdById: ctx.id } : {}),
-    ...(priority && ["HIGH", "MEDIUM", "LOW"].includes(priority)
-      ? { priority: priority as "HIGH" | "MEDIUM" | "LOW" }
-      : {}),
-    ...(assignee ? { assigneeId: assignee } : {}),
-    ...(assigner ? { createdById: assigner } : {}),
-    ...(has === "checklist" ? { kind: "CHECKLIST" as const } : {}),
-    ...(has === "plain" ? { kind: "STANDALONE" as const } : {}),
-    // Searched by the number on it, its title, or whoever it is for.
-    ...(q?.trim()
-      ? {
-          OR: [
-            { taskNo: { contains: q.trim(), mode: "insensitive" as const } },
-            { title: { contains: q.trim(), mode: "insensitive" as const } },
-            { assignee: { name: { contains: q.trim(), mode: "insensitive" as const } } },
-            { createdBy: { name: { contains: q.trim(), mode: "insensitive" as const } } },
-          ],
-        }
-      : {}),
-    ...dueRange,
-  };
+  // The filters, the ownership rule and the project scope all live in
+  // src/lib/tasks/list-filters.ts, so this screen, its export and the mobile
+  // list cannot disagree about what the list contains.
+  const params = readTaskListParams({ mine, priority, assignee, assigner, from, to, q, has });
+  const where = taskListWhere(ctx, params);
 
   const [tasks, people] = await Promise.all([
     prisma.task.findMany({

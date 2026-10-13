@@ -3,7 +3,7 @@
  * Source: src/lib/permissions/registry.ts
  * Regenerate: pnpm perms:codegen
  *
- * 562 permission codes.
+ * 564 permission codes.
  */
 
 export const PERM = {
@@ -33,6 +33,7 @@ export const PERM = {
   "approvals": {
     "queue": {
       "view": "approvals.queue.view",
+      "export": "approvals.queue.export",
     },
   },
   "project": {
@@ -281,6 +282,7 @@ export const PERM = {
       "create": "sales.followUp.create",
       "update": "sales.followUp.update",
       "delete": "sales.followUp.delete",
+      "export": "sales.followUp.export",
       "receiveEscalation": "sales.followUp.receiveEscalation",
     },
     "siteVisit": {
