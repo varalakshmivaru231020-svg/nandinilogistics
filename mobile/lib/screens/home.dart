@@ -40,7 +40,7 @@ class HomeScreenState extends State<HomeScreen> {
     widget.api.projectId = _session.projectId;
   }
 
-  List<Section> get _sections => visibleNavigation(_session.can);
+  List<Section> get _sections => visibleNavigation(_session.can, held: _session.permissions);
 
   @override
   Widget build(BuildContext context) {
@@ -154,7 +154,7 @@ class _Overview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sections = visibleNavigation(session.can);
+    final sections = visibleNavigation(session.can, held: session.permissions);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Container(
         color: T.navy,

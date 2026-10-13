@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nninfra/modules.dart';
+import 'package:nninfra/session.dart';
 
 import 'support.dart';
 
@@ -27,7 +28,7 @@ void main() {
 
     test('and the application is not empty for them', () {
       final owner = sessionWith(const [], superAdmin: true);
-      final sections = visibleNavigation(owner.can);
+      final sections = visibleNavigation(owner.can, held: owner.permissions);
       expect(sections, isNotEmpty);
       expect(
         sections.expand((s) => s.modules).length,
@@ -38,7 +39,7 @@ void main() {
 
   group('the navigation is built from what they may open', () {
     test('leaves out a module whose permission they lack', () {
-      final sections = visibleNavigation(sessionWith(['material.indent.view']).can);
+      final sections = visibleNavigation(sessionWith(['material.indent.view']).can, held: const {'material.indent.view'});
       final labels = sections.expand((s) => s.modules).map((m) => m.label);
       expect(labels, contains('Indents'));
       expect(labels, isNot(contains('Purchase Orders')));
@@ -46,16 +47,16 @@ void main() {
 
     /* A heading with nothing under it is a promise the app cannot keep. */
     test('drops a section that has nothing left in it', () {
-      final sections = visibleNavigation(sessionWith(['material.indent.view']).can);
+      final sections = visibleNavigation(sessionWith(['material.indent.view']).can, held: const {'material.indent.view'});
       expect(sections.map((s) => s.label), ['Procurement']);
     });
 
     test('is empty for somebody who has been given nothing', () {
-      expect(visibleNavigation(sessionWith(const []).can), isEmpty);
+      expect(visibleNavigation(sessionWith(const []).can, held: const {}), isEmpty);
     });
 
     test('keeps the web\'s own order', () {
-      final sections = visibleNavigation(sessionWith(const [], superAdmin: true).can);
+      final sections = visibleNavigation(sessionWith(const [], superAdmin: true).can, held: const {});
       expect(sections.map((s) => s.label),
           ['Overview', 'Execution', 'Procurement', 'Sales', 'Workforce']);
     });
@@ -68,6 +69,42 @@ void main() {
       for (final m in navigation.expand((s) => s.modules)) {
         expect(m.list != null || m.route != null, isTrue, reason: m.label);
       }
+    });
+
+    /*
+     * And somewhere that exists. A 'Dashboard' tile shipped pointing at
+     * `/dashboard`, which the shell does not dispatch, so it fell through to
+     * the screen the person was already on — a tile that did nothing. Nothing
+     * caught it, because the test above only asked whether a route was set.
+     */
+    test('every route is one the shell actually opens', () {
+      for (final m in navigation.expand((s) => s.modules)) {
+        if (m.route == null) continue;
+        expect(dispatchedRoutes, contains(m.route), reason: '${m.label} → ${m.route}');
+      }
+    });
+
+    /*
+     * Reports are gated per report. Somebody holding one should find the way
+     * in, and somebody holding none should not see the tile at all.
+     */
+    test('a prefix gate opens for one held code and shuts for none', () {
+      final withOne = sessionWith(['reports.indentAgeing.view']);
+      final labels = (Session s) =>
+          visibleNavigation(s.can, held: s.permissions).expand((x) => x.modules).map((m) => m.label);
+
+      expect(labels(withOne), contains('Reports'));
+      expect(labels(sessionWith(['material.indent.view'])), isNot(contains('Reports')));
+    });
+
+    test('and opens for a super admin carrying no codes at all', () {
+      final owner = sessionWith(const [], superAdmin: true);
+      expect(
+        visibleNavigation(owner.can, held: owner.permissions)
+            .expand((x) => x.modules)
+            .map((m) => m.label),
+        contains('Reports'),
+      );
     });
   });
 }

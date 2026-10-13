@@ -8,15 +8,22 @@ import 'package:flutter/material.dart';
 class Module {
   const Module({
     required this.label,
-    required this.permission,
     required this.icon,
+    this.permission,
+    this.prefix,
     this.list,
     this.route,
-  });
+  }) : assert(permission != null || prefix != null, 'a module needs a gate');
 
   final String label;
-  final String permission;
   final IconData icon;
+
+  /// The one code that opens it.
+  final String? permission;
+
+  /// Or: any code starting with this. Reports are gated per report, so the way
+  /// in is held by whoever holds at least one of them.
+  final String? prefix;
 
   /// The list key at `/api/mobile/v1/list/...`, for a module that is a list.
   final String? list;
@@ -37,14 +44,18 @@ class Section {
 /// carries a `route` instead, or is absent and said so in the brief.
 const navigation = <Section>[
   Section('Overview', [
-    Module(label: 'Dashboard', permission: 'dashboard.owner.view', icon: Icons.grid_view_rounded, route: '/dashboard'),
     Module(label: 'Calendar', permission: 'calendar.agenda.view', icon: Icons.calendar_month_rounded, route: '/calendar'),
+    /*
+     * Gated by prefix, not by one code: every report has its own
+     * `reports.<key>.view`, and the screen lists only the ones the caller may
+     * run. Somebody holding one report should find the way in.
+     */
+    Module(label: 'Reports', prefix: 'reports.', icon: Icons.insights_rounded, route: '/reports'),
   ]),
   Section('Execution', [
     Module(label: 'Projects', permission: 'project.project.view', icon: Icons.home_work_rounded, list: 'projects/projects'),
     Module(label: 'Site Progress', permission: 'project.progressLog.view', icon: Icons.timeline_rounded, list: 'projects/progress'),
     Module(label: 'Schedule', permission: 'schedule.activity.view', icon: Icons.view_timeline_rounded, list: 'schedule/activities'),
-    Module(label: 'Performance', permission: 'dashboard.performance.view', icon: Icons.insights_rounded, route: '/reports'),
   ]),
   Section('Procurement', [
     Module(label: 'Indents', permission: 'material.indent.view', icon: Icons.assignment_rounded, list: 'material/indents'),
@@ -75,11 +86,24 @@ const navigation = <Section>[
   ]),
 ];
 
+/// The routes the shell knows how to open. A module pointing anywhere else is
+/// a tile that does nothing, which is worse than a tile that is not there.
+const dispatchedRoutes = {'/calendar', '/reports'};
+
 /// Only the modules this viewer may open, sections with nothing in them gone.
-List<Section> visibleNavigation(bool Function(String) can) {
+List<Section> visibleNavigation(bool Function(String) can, {Set<String>? held}) {
+  bool opens(Module m) {
+    if (m.permission != null) return can(m.permission!);
+    // A prefix gate. `can` already answers true for a super admin, so asking it
+    // about the prefix itself settles that case before the set is consulted —
+    // a super admin holding no role at all has an empty set.
+    if (can(m.prefix!)) return true;
+    return (held ?? const <String>{}).any((c) => c.startsWith(m.prefix!));
+  }
+
   final out = <Section>[];
   for (final section in navigation) {
-    final allowed = section.modules.where((m) => can(m.permission)).toList();
+    final allowed = section.modules.where(opens).toList();
     if (allowed.isNotEmpty) out.add(Section(section.label, allowed));
   }
   return out;

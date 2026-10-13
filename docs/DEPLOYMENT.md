@@ -68,6 +68,14 @@ caught; nothing in `pnpm check` could see it.
 | B4 | No orphaned permissions | `pnpm perms:prune` | ✅ 559/559, 0 stale |
 | B5 | Role grants complete | `pnpm perms:grants --add` | ✅ 1494 → 1494, nothing missing |
 | B6 | Reference seed re-runnable | `pnpm seed:reference` | ✅ clean |
+| B7 | Mobile registries in step with the actions | `pnpm mobile:sync && git diff --exit-code src/lib/api` | — run it |
+
+**B7 — why it is here.** `src/lib/api/mobile-actions.ts` and `mobile-lists.ts`
+are generated from the server actions and the export routes. They are committed,
+so a release whose author forgot to regenerate them ships a boundary that is
+missing the action the release was about — and nothing on the web notices,
+because the web does not use them. Run it; if the diff is empty, they were in
+step.
 
 **B5 — the trap.** The deploy script runs `perms:grants` in its default mode,
 which only adds **missing roles**. It does **not** give existing roles
@@ -151,6 +159,28 @@ appear on production because you deployed.
 invisible to the Owner and broke for everybody else: a Prisma scope clause that
 is only valid when empty, a permission never granted beyond super admins, and a
 screen with no link into it. Sign in as a Project Manager, not as yourself.
+
+---
+
+## F · The Android client (only when `mobile/` changed)
+
+The app is released on its own schedule and is **not** touched by
+`deploy.sh` — it is an APK, not a server. But it talks to the boundary, so the
+order matters: the server goes first, always. An app built against an endpoint
+that is not deployed yet fails for every user at once, and cannot be rolled back
+from here.
+
+| # | Check | Command |
+|---|---|---|
+| F1 | Analyzer clean | `cd mobile && flutter analyze` |
+| F2 | Tests pass, including the usability suite | `cd mobile && flutter test` |
+| F3 | Built against the **real** host, not an emulator's loopback | `flutter build apk --release --split-per-abi --dart-define=NN_BASE_URL=https://<host>` |
+| F4 | `NN_BASE_URL` is in the APK you are about to hand out | the default is `http://10.0.2.2:3210`, which is a laptop seen from an emulator — a release carrying it reaches nothing |
+| F5 | Every role can still sign in | `admin.mobile.use` must be granted (B5/D6), or the app refuses with that code while the web works |
+
+**F4 is the one that bites.** The server address is baked in at build time.
+There is no setting to correct it afterwards and no error that explains it — the
+app simply cannot reach anything, and looks broken rather than misconfigured.
 
 ---
 

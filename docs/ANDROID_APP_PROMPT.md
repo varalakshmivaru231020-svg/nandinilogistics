@@ -64,18 +64,43 @@ and a patchy connection.
 
 ## 3. Architecture
 
+**Flutter**, not the Kotlin and Compose this section used to specify. The change
+was made when the first APK was built: Flutter is what is installed on the
+machine this is developed on and what the organisation's other two mobile apps
+already ship with, so an APK took minutes rather than an afternoon of toolchain
+work. Everything else in this document is unaffected — the boundary in §3.1 is
+plain HTTP and JSON, and cares nothing for the client's language.
+
 | Concern | Choice |
 |---|---|
-| Language | Kotlin |
-| UI | Jetpack Compose, Material 3 with the token overrides in §5 |
-| Min SDK | 26 · Target SDK current |
-| Architecture | MVVM + unidirectional data flow; one ViewModel per screen |
-| DI | Hilt |
-| Networking | Retrofit + OkHttp + kotlinx.serialization |
-| Local store | Room (cache + outbox) + DataStore (session, workspace, prefs) |
-| Images/files | Coil; OkHttp for uploads and downloads |
-| Navigation | Navigation-Compose, one route per screen in §7 |
-| Background | WorkManager for the outbox, uploads and notification sync |
+| Language | Dart · Flutter 3.35 |
+| UI | Material 3, with the tokens in §5 applied through one `ThemeData` |
+| Min SDK | Flutter's default · Target SDK current |
+| Architecture | `StatefulWidget` per screen over one API client. **No per-module screens** — see below |
+| Networking | `package:http`, one client that owns the token, the project header and the envelope |
+| Local store | `shared_preferences` for the token only. The permission set is **never** cached across launches |
+| Fonts | `google_fonts` — Sora and Public Sans, the web's own two |
+| Navigation | A shell with a drawer; `Navigator` for anything pushed on top |
+| Background | **Not built yet.** The outbox, uploads and notification sync in §9.6 need it |
+
+The client lives at **`mobile/`** in this repository, beside the server it talks
+to, with its own README.
+
+### 3.0 It is metadata-driven, and that is the point
+
+Nineteen modules were never going to be reached by writing nineteen screens.
+They are not:
+
+- **One list screen renders all 24 lists.** The boundary returns `columns` with
+  the rows, so the server decides what a list contains and what its current
+  filters amount to in words. There is no per-module list code, and adding a
+  list to the server adds it to the app.
+- **Call sites come from `/actions`**, not from transcribing §8.
+- **`can(code)` is the only permission check in the app**, and the drawer is
+  built from what it answers — so nothing in it refuses when tapped.
+
+Build anything new the same way. A screen that hard-codes one module's columns
+is a screen that will disagree with the web by the next release.
 
 ### 3.1 The server contract
 

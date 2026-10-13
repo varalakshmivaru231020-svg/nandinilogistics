@@ -84,6 +84,25 @@ lives at `src/app/(auth)/loading.tsx`, which sits below no guard.
 To stream part of a guarded page, put `<Suspense>` *inside* the page, after
 `requirePermission()` has already returned.
 
+## The mobile boundary
+
+The Android client at `mobile/` cannot call a server action, so it goes through
+`/api/mobile/v1` — and that boundary **dispatches to the web's own actions**
+rather than reimplementing them. Two consequences for any change here:
+
+- **Adding or changing a server action means running `pnpm mobile:sync`.** It
+  regenerates `src/lib/api/mobile-actions.ts` and `mobile-lists.ts` from the
+  signatures. `tests/unit/mobile-args.test.ts` fails when they are out of step.
+- **A list endpoint is that list's export route** answering `format=json`
+  (`src/lib/exports/respond.ts`). So a module with no export route has no list
+  on the phone. Writing a second query for mobile is how the two screens start
+  disagreeing.
+
+Every endpoint needs `admin.mobile.use` on top of its own codes — the one
+permission that exists because the phone exists. `readSessionToken()` accepts a
+bearer token where there is no cookie, which is what lets the actions work
+unchanged; a cookie still wins.
+
 ## Verifying a change
 
 ```bash
