@@ -1,5 +1,11 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:nninfra/api.dart';
 import 'package:nninfra/screens/sign_in.dart';
 import 'package:nninfra/session.dart';
 import 'package:nninfra/theme.dart';
@@ -121,6 +127,8 @@ void main() {
     expect(find.byKey(const Key('password')), findsOneWidget);
   });
 
+  group('when the server cannot be reached', connectionFailures);
+
   testWidgets('the password is hidden until asked for', (tester) async {
     await pumpSignIn(tester, FakeBoundary(const {}));
     TextField field() => tester.widget<TextField>(find.byKey(const Key('password')));
@@ -129,5 +137,104 @@ void main() {
     await tester.tap(find.byTooltip('Show password'));
     await tester.pumpAndSettle();
     expect(field().obscureText, isFalse);
+  });
+}
+
+/// What the screen does when the server was never reached.
+///
+/// Added after "login is not working on the phone, but the web is fine" — a
+/// report nobody could act on, because every failure looked the same and an
+/// unreachable host left the button turning for Android's own connect timeout
+/// with nothing on screen at all.
+void connectionFailures() {
+  testWidgets('says it could not reach the server, and which one', (tester) async {
+    useEmptyPrefs();
+    // A client that throws the way an unreachable host throws.
+    final api = Api(
+      baseUrl: 'http://192.168.1.50:3210',
+      client: MockClient((_) async => throw const SocketException('No route to host')),
+      timeout: const Duration(milliseconds: 200),
+    );
+    await tester.pumpWidget(MaterialApp(
+      theme: T.theme,
+      home: SignInScreen(auth: Auth(api), onSignedIn: (_) {}),
+    ));
+    await tester.pumpAndSettle();
+    await submit(tester);
+
+    expect(find.textContaining('Could not reach the server at 192.168.1.50:3210'), findsOneWidget);
+    // The address it was built with, because that is the thing that is wrong
+    // and there is nothing in the app to change it.
+    expect(find.byKey(const Key('server-address')), findsOneWidget);
+    expect(find.textContaining('http://192.168.1.50:3210'), findsOneWidget);
+  });
+
+  /*
+   * The password is not the problem, so the field stays and the button stays
+   * live. Treating this as final would tell somebody their account is barred
+   * when the real problem is the wifi.
+   */
+  testWidgets('leaves the password field and the button alone', (tester) async {
+    useEmptyPrefs();
+    final api = Api(
+      baseUrl: 'http://192.168.1.50:3210',
+      client: MockClient((_) async => throw const SocketException('No route to host')),
+      timeout: const Duration(milliseconds: 200),
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: SignInScreen(auth: Auth(api), onSignedIn: (_) {}),
+    ));
+    await tester.pumpAndSettle();
+    await submit(tester);
+
+    expect(find.byKey(const Key('password')), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.byKey(const Key('submit'))).onPressed, isNotNull);
+  });
+
+  /*
+   * The bug behind the report. A server that accepts the connection and then
+   * never answers used to leave `_busy` true for Android's default timeout —
+   * minutes of a turning button and no message.
+   */
+  testWidgets('gives up on a server that never answers, and says so', (tester) async {
+    useEmptyPrefs();
+    final api = Api(
+      baseUrl: 'http://192.168.1.50:3210',
+      // A future that never completes, and no timer with it — a pending timer
+      // would outlive the widget tree and fail the test on its own account.
+      client: MockClient((_) => Completer<http.Response>().future),
+      timeout: const Duration(milliseconds: 300),
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: SignInScreen(auth: Auth(api), onSignedIn: (_) {}),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('email')), 'pm@nninfra.example');
+    await tester.enterText(find.byKey(const Key('password')), 'x');
+    await tester.tap(find.byKey(const Key('submit')));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('did not answer within'), findsOneWidget);
+    // And the button is usable again, rather than still turning.
+    expect(tester.widget<FilledButton>(find.byKey(const Key('submit'))).onPressed, isNotNull);
+  });
+
+  /*
+   * An answer the app cannot read is not "login does not work" either. It is
+   * most likely a server older than the app, and it says so.
+   */
+  testWidgets('reports an account payload it cannot read', (tester) async {
+    useEmptyPrefs();
+    await pumpSignIn(tester, FakeBoundary({
+      '/auth/login': {'token': 'tok', 'expiresAt': '2030-01-01T00:00:00Z'},
+      // No `user` key at all.
+      '/me': {'projects': <dynamic>[]},
+    }));
+    await submit(tester);
+
+    expect(find.textContaining('could not read the account'), findsOneWidget);
+    expect(find.byKey(const Key('password')), findsOneWidget);
   });
 }

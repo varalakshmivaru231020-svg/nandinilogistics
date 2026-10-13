@@ -103,6 +103,7 @@ class SessionStore {
 class Auth {
   Auth(this.api, {SessionStore? store}) : store = store ?? SessionStore();
 
+  /// Public so a failure can name the address it tried. See `_Refusal`.
   final Api api;
   final SessionStore store;
 
@@ -119,6 +120,10 @@ class Auth {
   }
 
   /// True when the refusal is final — show it and stop, do not re-prompt.
+  ///
+  /// A server that was never reached is never final: the password may well be
+  /// right, and taking the field away would be telling somebody their account
+  /// is barred when the real problem is the wifi.
   static bool isFinal(ApiResult<dynamic> result) =>
       result.refused && result.code != 'credentials';
 
@@ -132,15 +137,38 @@ class Auth {
 
     final token = res.data!['token'] as String;
     api.token = token;
-    await store.write(token);
+    /*
+     * Keeping the token is a convenience, not part of signing in. If the
+     * device's storage refuses, the person is still signed in for this run —
+     * they will simply have to sign in again next time. Letting it throw here
+     * would fail a sign-in that had already succeeded.
+     */
+    try {
+      await store.write(token);
+    } catch (_) {
+      // Nothing to tell them: this costs them nothing until the next launch.
+    }
 
     final me = await api.get('/me');
     if (!me.ok) return ApiResult.fail(me.status, me.error!, me.code);
-    return ApiResult.ok(Session.fromPayload(
-      token,
-      me.data!['user'] as Map<String, dynamic>,
-      (me.data!['projects'] as List?) ?? const [],
-    ));
+
+    try {
+      return ApiResult.ok(Session.fromPayload(
+        token,
+        me.data!['user'] as Map<String, dynamic>,
+        (me.data!['projects'] as List?) ?? const [],
+      ));
+    } catch (error) {
+      // A shape the app does not understand — an older server, most likely.
+      // Said plainly, because "login does not work" is not something anybody
+      // can act on.
+      return ApiResult.fail(
+        0,
+        'Signed in, but could not read the account. The server may be a '
+        'different version from this app.',
+        'payload',
+      );
+    }
   }
 
   /// A stored token, checked against the server. Null when there is none or it

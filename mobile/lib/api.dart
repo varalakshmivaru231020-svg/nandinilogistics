@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
@@ -25,6 +27,9 @@ class ApiResult<T> {
   /// The session is gone or was revoked — the only case that re-authenticates.
   bool get needsSignIn => status == 401;
 
+  /// The server was never reached, so nothing was decided either way.
+  bool get unreachable => status == 0;
+
   /// Signed in and not allowed. Never a reason to ask for the password again.
   bool get refused => status == 403;
 }
@@ -35,11 +40,19 @@ class ApiResult<T> {
 /// token, the chosen project, and the envelope. Nothing above this layer builds
 /// a URL or reads a status code.
 class Api {
-  Api({required this.baseUrl, http.Client? client})
+  Api({required this.baseUrl, http.Client? client, this.timeout = const Duration(seconds: 15)})
       : _client = client ?? http.Client();
 
   final String baseUrl;
   final http.Client _client;
+
+  /// How long to wait before saying so.
+  ///
+  /// There has to be one. Android's own connect timeout on an unreachable host
+  /// is minutes long, and a sign-in button that spins for two minutes and then
+  /// says nothing is indistinguishable from an app that is broken — which is
+  /// exactly how it was first reported.
+  final Duration timeout;
 
   String? token;
   String? projectId;
@@ -78,16 +91,46 @@ class Api {
   Future<ApiResult<Map<String, dynamic>>> run(String action, List<Object?> args) =>
       post('/do/$action', body: {'args': args});
 
+  /// Where the app is pointing, for a message that has to be acted on.
+  ///
+  /// Baked in at build time, so when it is wrong there is nothing in the app to
+  /// change and no way to tell from the outside. Saying it is the difference
+  /// between "it does not work" and "it is looking at the wrong machine".
+  String get host => Uri.parse(baseUrl).host.isEmpty ? baseUrl : Uri.parse(baseUrl).authority;
+
+  /// Why a request never got an answer, in words the person can act on.
+  String describeFailure(Object error) {
+    if (error is TimeoutException) {
+      return 'The server at $host did not answer within ${timeout.inSeconds} seconds.';
+    }
+    if (error is SocketException) {
+      // The common one on a handset: right app, wrong network.
+      return 'Could not reach the server at $host. Check that this phone is on '
+          'the same network as it.';
+    }
+    if (error is HandshakeException) {
+      return 'Could not agree a secure connection with $host.';
+    }
+    if (error is http.ClientException) {
+      return 'The connection to $host failed: ${error.message}';
+    }
+    return 'Could not reach the server at $host.';
+  }
+
   Future<ApiResult<Map<String, dynamic>>> _send(
     Future<http.Response> Function() request,
   ) async {
     http.Response res;
     try {
-      res = await request();
-    } catch (_) {
-      // Offline, or the server is unreachable. Not a refusal, and not a reason
-      // to sign anybody out.
-      return const ApiResult.fail(0, 'No connection. This will be sent when you are back online.', 'offline');
+      res = await request().timeout(timeout);
+    } catch (error) {
+      /*
+       * Never reached, so nothing was decided — not a refusal, and not a reason
+       * to sign anybody out. It used to answer "this will be sent when you are
+       * back online", which was a promise the app could not keep: there is no
+       * outbox yet, and it hid every cause behind one sentence.
+       */
+      return ApiResult.fail(0, describeFailure(error), 'unreachable');
     }
 
     Map<String, dynamic> body;

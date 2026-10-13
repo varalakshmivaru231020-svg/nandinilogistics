@@ -21,6 +21,10 @@ class SignInScreenState extends State<SignInScreen> {
   bool _reveal = false;
   String? _error;
 
+  /// The server was never reached. Worth saying apart from a refusal, because
+  /// the password is not the problem and the fix is not on this screen.
+  bool _unreachable = false;
+
   /// True when the refusal is final: the password field is taken away, because
   /// typing it again cannot help and offering it says otherwise.
   bool _final = false;
@@ -36,18 +40,36 @@ class SignInScreenState extends State<SignInScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _unreachable = false;
     });
-    final res = await widget.auth.signIn(_email.text, _password.text, 'Android');
-    if (!mounted) return;
-    if (res.ok) {
-      widget.onSignedIn(res.data!);
-      return;
+
+    /*
+     * Wrapped, because the one thing worse than a sign-in that fails is a
+     * sign-in that neither succeeds nor fails: an unhandled throw here leaves
+     * `_busy` true and the button turning for ever, with nothing on screen.
+     * That is how this screen behaved when the server could not be reached.
+     */
+    try {
+      final res = await widget.auth.signIn(_email.text, _password.text, 'Android');
+      if (!mounted) return;
+      if (res.ok) {
+        widget.onSignedIn(res.data!);
+        return;
+      }
+      setState(() {
+        _busy = false;
+        _error = res.error;
+        _final = Auth.isFinal(res);
+        _unreachable = res.unreachable;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = 'Something went wrong signing in: $error';
+        _final = false;
+      });
     }
-    setState(() {
-      _busy = false;
-      _error = res.error;
-      _final = Auth.isFinal(res);
-    });
   }
 
   @override
@@ -138,7 +160,15 @@ class SignInScreenState extends State<SignInScreen> {
                     ),
                   if (_error != null) ...[
                     const SizedBox(height: 14),
-                    _Refusal(message: _error!, isFinal: _final),
+                    _Refusal(
+                      message: _error!,
+                      isFinal: _final,
+                      unreachable: _unreachable,
+                      // Baked in at build time, so when it is wrong there is
+                      // nothing in the app to change — and no way to tell
+                      // without being told.
+                      server: _unreachable ? widget.auth.api.baseUrl : null,
+                    ),
                   ],
                   const SizedBox(height: 17),
                   SizedBox(
@@ -197,17 +227,34 @@ class SignInScreenState extends State<SignInScreen> {
 }
 
 /// A refusal, toned by whether there is anything to try again.
+///
+/// Three different things, deliberately looking different: a password that was
+/// wrong (red, try again), an account that may not use the app (plum, stop),
+/// and a server that was never reached (amber — nothing to do with the
+/// password, and nothing on this screen will fix it).
 class _Refusal extends StatelessWidget {
-  const _Refusal({required this.message, required this.isFinal});
+  const _Refusal({
+    required this.message,
+    required this.isFinal,
+    this.unreachable = false,
+    this.server,
+  });
 
   final String message;
   final bool isFinal;
+  final bool unreachable;
+
+  /// The address the app was built against, shown only when it was not reached.
+  final String? server;
 
   @override
   Widget build(BuildContext context) {
-    final line = isFinal ? T.plumLine : T.badLine;
-    final bg = isFinal ? T.plumBg : T.badBg;
-    final ink = isFinal ? T.plum : T.bad;
+    final (bg, line, ink, icon) = unreachable
+        ? (T.warnBg, T.warnLine, T.warn, Icons.wifi_off_rounded)
+        : isFinal
+            ? (T.plumBg, T.plumLine, T.plum, Icons.phonelink_erase_rounded)
+            : (T.badBg, T.badLine, T.bad, Icons.error_outline_rounded);
+
     return Container(
       key: const Key('refusal'),
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
@@ -219,9 +266,24 @@ class _Refusal extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(isFinal ? Icons.phonelink_erase_rounded : Icons.error_outline_rounded, size: 17, color: ink),
+          Icon(icon, size: 17, color: ink),
           const SizedBox(width: 8),
-          Expanded(child: Text(message, style: T.body(12.5, color: ink, weight: FontWeight.w600))),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(message, style: T.body(12.5, color: ink, weight: FontWeight.w600)),
+                if (server != null) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    'This app was built to use $server',
+                    key: const Key('server-address'),
+                    style: T.numeric(11, color: ink, weight: FontWeight.w500),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );
