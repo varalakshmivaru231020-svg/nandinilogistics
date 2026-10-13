@@ -164,10 +164,21 @@ class SignInScreenState extends State<SignInScreen> {
                       message: _error!,
                       isFinal: _final,
                       unreachable: _unreachable,
-                      // Baked in at build time, so when it is wrong there is
-                      // nothing in the app to change — and no way to tell
-                      // without being told.
-                      server: _unreachable ? widget.auth.api.baseUrl : null,
+                      /*
+                       * Shown on *every* failure, not only when the server
+                       * cannot be reached.
+                       *
+                       * "Email or password is incorrect" is the right answer
+                       * and has to stay vague — revealing whether an address
+                       * exists is how account lists get built. But a build
+                       * pointed at a test server has a different set of
+                       * accounts in it, and a correct password for the real
+                       * system is wrong there. That reads as a broken app
+                       * unless the screen says which server it asked, and the
+                       * address is already in the binary of the build they
+                       * were handed, so saying it gives nothing away.
+                       */
+                      server: widget.auth.api.baseUrl,
                     ),
                   ],
                   const SizedBox(height: 17),
@@ -276,7 +287,9 @@ class _Refusal extends StatelessWidget {
                 if (server != null) ...[
                   const SizedBox(height: 5),
                   Text(
-                    'This app was built to use $server',
+                    unreachable
+                        ? 'This app was built to use $server'
+                        : 'Asked $server — accounts differ between servers',
                     key: const Key('server-address'),
                     style: T.numeric(11, color: ink, weight: FontWeight.w500),
                   ),

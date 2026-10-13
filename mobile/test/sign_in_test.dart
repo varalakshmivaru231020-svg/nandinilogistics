@@ -127,6 +127,36 @@ void main() {
     expect(find.byKey(const Key('password')), findsOneWidget);
   });
 
+  /*
+   * The report that led to this: "incorrect password on the phone, but the web
+   * works". It was neither — the build was pointed at a test server, whose
+   * database has a different set of accounts, so a password that is right for
+   * the real system is wrong there. The message has to stay vague about whether
+   * the address exists, so the screen names the server instead.
+   */
+  testWidgets('names the server it asked, even on a wrong password', (tester) async {
+    await pumpSignIn(tester, FakeBoundary({
+      '/auth/login': const Failure(401, 'Email or password is incorrect.', 'credentials'),
+    }));
+    await submit(tester);
+
+    expect(find.byKey(const Key('server-address')), findsOneWidget);
+    expect(find.textContaining('accounts differ between servers'), findsOneWidget);
+    expect(find.textContaining('http://test'), findsOneWidget);
+  });
+
+  /* And it still does not say whether the address is one it knows. */
+  testWidgets('never reveals whether the address exists', (tester) async {
+    await pumpSignIn(tester, FakeBoundary({
+      '/auth/login': const Failure(401, 'Email or password is incorrect.', 'credentials'),
+    }));
+    await submit(tester, email: 'nobody@nowhere.example');
+
+    expect(find.text('Email or password is incorrect.'), findsOneWidget);
+    expect(find.textContaining('no such'), findsNothing);
+    expect(find.textContaining('not found'), findsNothing);
+  });
+
   group('when the server cannot be reached', connectionFailures);
 
   testWidgets('the password is hidden until asked for', (tester) async {
