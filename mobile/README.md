@@ -6,18 +6,46 @@ same refusal, in the same words, for the same reason.
 
 ## Build
 
+The server address is **baked in at build time**. There is no setting inside the
+app to correct it, and nothing on screen explains it when it is wrong — the app
+simply reaches nothing and looks broken. So the build command is the decision.
+
 ```bash
-# where the server is, baked in at build time
+# A real phone, against a development machine on the same wifi.
+# Works out this machine's address, permits cleartext to it, and builds.
+./scripts/lan-apk.sh
+
+# Production.
 flutter build apk --release --split-per-abi \
   --dart-define=NN_BASE_URL=https://erp.example
 
-# the emulator reaches a laptop's dev server on 10.0.2.2
+# An emulator, which sees the host machine as 10.0.2.2.
 flutter build apk --debug --dart-define=NN_BASE_URL=http://10.0.2.2:3210
 ```
 
-`NN_BASE_URL` defaults to `http://10.0.2.2:3210`, which is a development
-machine seen from an Android emulator. A release build for anybody else must
-pass the real host, or the app will look for a server that is not there.
+`NN_BASE_URL` defaults to `http://10.0.2.2:3210` — a development machine as an
+**emulator** sees it, which means nothing on a real handset.
+
+### Testing on a real handset
+
+```bash
+cd ..            # the server
+pnpm dev -p 3210 # must print  Network: http://<this machine>:3210
+
+cd mobile
+./scripts/lan-apk.sh
+adb install -r build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+```
+
+The phone and the machine have to be on the same wifi, and the address changes
+whenever the router hands out a new lease — so a build older than the lease
+stops working, and the fix is to run the script again.
+
+Android has refused plain HTTP since API 28. `android/app/src/main/res/xml/
+network_security_config.xml` names the permitted addresses one at a time and the
+script keeps that list up to date. It is deliberately not a blanket permission:
+production is HTTPS, and a mistyped URL should fail loudly rather than quietly
+send a password in the clear.
 
 ## Test
 

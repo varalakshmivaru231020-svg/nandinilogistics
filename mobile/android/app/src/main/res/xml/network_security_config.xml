@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android has refused plain HTTP since API 28, and it is right to.
+
+  A test build points at a development machine on the office wifi, which has no
+  certificate and cannot get one, so those addresses are named here one at a
+  time. Everything else still has to be HTTPS, including production — so a
+  release built against the real host needs nothing from this file, and a
+  mistyped URL fails loudly instead of quietly sending a password in the clear.
+
+  `scripts/lan-apk.sh` rewrites the list and prints what it set. Add an address
+  by running that; do not widen this to a base-config, which would turn the
+  refusal off for every host at once.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- LAN:BEGIN — generated, do not hand-edit -->
+        <domain includeSubdomains="false">192.168.29.200</domain>
+        <!-- LAN:END -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>
