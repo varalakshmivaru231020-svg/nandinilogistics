@@ -8,6 +8,36 @@ advisory.
 
 ---
 
+## Last release
+
+`1901da4` · 13 Oct 2026 · 14 commits, from `bf19db7`. Every item below was run.
+
+| | |
+|---|---|
+| Rolled forward from | `fc26745` |
+| Backup taken first | `nninfra-20261013-111819.dump` — 420K, 107 tables |
+| Migrations | 37, schema up to date |
+| Permission catalogue | 564 codes, 0 created on the server |
+| Role grants | **1494 → 1524** — D6 was needed, as it always is |
+| Health | `==> Healthy (HTTP 200)` |
+| E5 route sweep | 24 routes × 2 non-super-admin roles, 0 errors |
+| E6 the feature | mobile boundary answering on production: `/me` 200 (75 permissions for a Supervisor), 30 lists, 152 actions, calendar 42-square grid, `/list/tasks` 10 rows marked "Yours only" |
+
+**What this release put live:** the mobile boundary at `/api/mobile/v1` — which
+had never been deployed, and answered 404 until now — the Calendar's complete,
+extend and cancel, and list endpoints for the six modules the phone could not
+reach.
+
+**Open, and not a deploy problem:** production is served over **plain HTTP on a
+bare IP** (`http://168.231.103.114:3021`). That was tolerable while the only
+client was a browser on a laptop; it is worse now that a phone app sends a
+password to it across the internet, readable by anything on the path. The
+Android client has to name that host in its cleartext allow-list to work at all,
+which is the signal that something is wrong. A domain and a certificate would
+let that line be deleted.
+
+---
+
 ## Before you start
 
 | | |

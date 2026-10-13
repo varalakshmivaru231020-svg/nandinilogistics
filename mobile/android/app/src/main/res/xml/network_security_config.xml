@@ -17,6 +17,15 @@
         <!-- LAN:BEGIN — generated, do not hand-edit -->
         <domain includeSubdomains="false">192.168.29.200</domain>
         <!-- LAN:END -->
+        <!--
+          Production, which is served over plain HTTP on a bare IP and has no
+          certificate. Listed because the app has to reach it, and flagged
+          because it should not stay that way: everything the app sends,
+          including the password, crosses the internet readable. A domain and a
+          certificate would let this line be deleted.
+        -->
+        <domain includeSubdomains="false">168.231.103.114</domain>
+
         <domain includeSubdomains="false">10.0.2.2</domain>
         <domain includeSubdomains="false">localhost</domain>
     </domain-config>
