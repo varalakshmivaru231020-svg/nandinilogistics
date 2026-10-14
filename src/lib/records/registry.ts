@@ -7,6 +7,15 @@ import { taskRecord } from "./task";
 import { indentRecord } from "./indent";
 import { calendarRecord } from "./calendar";
 import { leadRecord } from "./lead";
+import { purchaseOrderRecord } from "./purchase-order";
+import { grnRecord } from "./grn";
+import { invoiceRecord } from "./invoice";
+import { itemRecord } from "./item";
+import { issueRecord } from "./issue";
+import { returnRecord } from "./return";
+import { transferRecord } from "./transfer";
+import { vendorRecord } from "./vendor";
+import { bookingRecord } from "./booking";
 
 /**
  * Which modules can hand over a whole record, and the permission to ask.
@@ -34,6 +43,51 @@ export const RECORDS: Record<string, RecordDef> = {
     key: "material/indents",
     permission: PERM.material.indent.view,
     load: indentRecord,
+  },
+  "material/purchase-orders": {
+    key: "material/purchase-orders",
+    permission: PERM.material.purchaseOrder.view,
+    load: purchaseOrderRecord,
+  },
+  "material/grn": {
+    key: "material/grn",
+    permission: PERM.material.grn.view,
+    load: grnRecord,
+  },
+  "material/stock": {
+    key: "material/stock",
+    permission: PERM.material.stock.view,
+    load: itemRecord,
+  },
+  "material/invoices": {
+    key: "material/invoices",
+    permission: PERM.material.vendorInvoice.view,
+    load: invoiceRecord,
+  },
+  "material/issues": {
+    key: "material/issues",
+    permission: PERM.material.issue.view,
+    load: issueRecord,
+  },
+  "material/returns": {
+    key: "material/returns",
+    permission: PERM.material.return.view,
+    load: returnRecord,
+  },
+  "material/transfers": {
+    key: "material/transfers",
+    permission: PERM.material.transfer.view,
+    load: transferRecord,
+  },
+  "material/vendors": {
+    key: "material/vendors",
+    permission: PERM.material.vendor.view,
+    load: vendorRecord,
+  },
+  "sales/bookings": {
+    key: "sales/bookings",
+    permission: PERM.sales.booking.view,
+    load: bookingRecord,
   },
   "sales/leads": {
     key: "sales/leads",

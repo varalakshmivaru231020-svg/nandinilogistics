@@ -1,0 +1,368 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { postStockMovement } from "@/lib/inventory";
+
+import {
+  cleanupItemAndStore, demoProject, makeItemAndStore, n, prisma, seededUsers, tag,
+} from "../integration/helpers";
+import { BASE_URL, serverIsUp } from "./session";
+
+/**
+ * The records the material store works from, over real HTTP, against documents
+ * raised through the boundary itself.
+ *
+ * Nothing in the development database has an issue slip, a return or a
+ * transfer on it, so each is raised here with the same action the app calls and
+ * then read back as a record — which is the only way to prove the two halves
+ * fit. Every row is created under a unique tag and removed afterwards.
+ *
+ * What this is really checking is the shape a decision needs: an issue slip
+ * that can be acknowledged by the person holding the phone, a return the store
+ * can approve or reject, and a transfer whose receive arrives with every line
+ * pre-filled with what was sent.
+ */
+
+const up = await serverIsUp();
+const suite = up ? describe : describe.skip;
+const V1 = `${BASE_URL}/api/mobile/v1`;
+const PASSWORD = "Nninfra@2026";
+
+interface Envelope {
+  ok: boolean;
+  data?: Record<string, never>;
+  error?: string;
+  code?: string;
+}
+
+interface Action {
+  key: string;
+  label: string;
+  action: string;
+  args: unknown[];
+  remark: string;
+  fields?: Array<{
+    name: string;
+    label: string;
+    kind: string;
+    fixedRows?: boolean;
+    initialRows?: Array<Record<string, unknown>>;
+    row?: Array<{ name: string; hidden?: boolean }>;
+  }>;
+}
+
+interface Rec {
+  key: string;
+  id: string;
+  title: string;
+  subtitle: string | null;
+  pills: Array<{ label: string; tone: string }>;
+  chain?: Array<{ initials: string; state: string }>;
+  sections: Array<{ label: string; fields: Array<{ label: string; value: unknown }> }>;
+  collections: Array<{ key: string; label: string; rows: Array<Record<string, unknown>> }>;
+  actions: Action[];
+}
+
+suite("the material records", () => {
+  const suffix = tag();
+  let token = "";
+  let itemId = "";
+  let storeId = "";
+  let toStoreId = "";
+  let projectId = "";
+  let supervisorId = "";
+  let issueId = "";
+  let returnId = "";
+  let transferId = "";
+
+  const get = async (path: string) => {
+    const res = await fetch(`${V1}${path}`, { headers: { authorization: `Bearer ${token}` } });
+    return { status: res.status, body: (await res.json()) as Envelope };
+  };
+
+  const act = async (key: string, args: unknown[]) => {
+    const res = await fetch(`${V1}/do/${key}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ args }),
+    });
+    return { status: res.status, body: (await res.json()) as Envelope };
+  };
+
+  const record = async (module: string, id: string) => {
+    const { body } = await get(`/record/${module}/${id}`);
+    expect(body.ok, body.error).toBe(true);
+    return body.data as unknown as Rec;
+  };
+
+  beforeAll(async () => {
+    const res = await fetch(`${V1}/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "owner@nninfra.example",
+        password: PASSWORD,
+        device: "vitest-records",
+      }),
+    });
+    const json = (await res.json()) as Envelope;
+    if (!json.ok) throw new Error(`sign-in failed: ${json.error}`);
+    token = (json.data as unknown as { token: string }).token;
+
+    const [{ item, store }, project, users] = await Promise.all([
+      makeItemAndStore(suffix, 450),
+      demoProject(),
+      seededUsers(),
+    ]);
+    itemId = item.id;
+    storeId = store.id;
+    projectId = project.id;
+    supervisorId = users.supervisor.id;
+
+    const second = await prisma.store.create({
+      data: { code: `TSTST2-${suffix}`, name: `Test store two ${suffix}` },
+    });
+    toStoreId = second.id;
+
+    // Stock to issue and to move, put in by the one function that may.
+    await prisma.$transaction((tx) =>
+      postStockMovement(tx, {
+        itemId,
+        storeId,
+        projectId,
+        txnType: "GRN_IN",
+        quantity: 200,
+        rate: 450,
+        refType: "TEST",
+        refId: `seed-${suffix}`,
+        refNo: `SEED/${suffix}`,
+      }),
+    );
+  });
+
+  afterAll(async () => {
+    await prisma.materialReturnItem.deleteMany({ where: { materialReturn: { issueId } } });
+    await prisma.materialReturn.deleteMany({ where: { issueId } });
+    await prisma.materialIssueItem.deleteMany({ where: { issueId } });
+    await prisma.stockLedger.deleteMany({ where: { issueId } });
+    await prisma.materialIssue.deleteMany({ where: { id: issueId } });
+    await prisma.stockTransferItem.deleteMany({ where: { transferId } });
+    await prisma.stockTransfer.deleteMany({ where: { id: transferId } });
+    await cleanupItemAndStore(itemId, storeId);
+    await prisma.store.delete({ where: { id: toStoreId } }).catch(() => undefined);
+    await prisma.session.deleteMany({ where: { userAgent: "Mobile · vitest-records" } });
+    await prisma.$disconnect();
+  });
+
+  describe("an issue slip", () => {
+    it("is raised through the boundary", async () => {
+      const { body } = await act("material/issues/createIssue", [
+        {
+          projectId,
+          storeId,
+          issuedToId: supervisorId,
+          purpose: `Slab work ${suffix}`,
+          items: [{ itemId, issuedQty: 50 }],
+        },
+      ]);
+      expect(body.ok, body.error).toBe(true);
+      issueId = (body.data as unknown as { id: string }).id;
+    });
+
+    it("reads back with its lines and what is still out", async () => {
+      const rec = await record("material/issues", issueId);
+
+      expect(rec.pills.map((p) => p.label)).toContain("Awaiting acknowledgement");
+      const lines = rec.collections.find((c) => c.key.startsWith("lines:"))!;
+      expect(lines.rows).toHaveLength(1);
+      expect(lines.rows[0].trailing).toContain("50");
+      // Everything issued is still returnable, and the row says so.
+      expect(JSON.stringify(lines.rows[0].pills)).toContain("returnable");
+    });
+
+    /*
+     * The web points at the phone for this one — "Only <name> can acknowledge
+     * this slip — on the mobile app, at site" — and it could not be done,
+     * because the app had no screen for a slip. The action lets the recipient
+     * do it, and a super administrator on their behalf, so the sheet says
+     * whose receipt is being confirmed.
+     */
+    it("can be acknowledged, and says on whose behalf", async () => {
+      const rec = await record("material/issues", issueId);
+      const ack = rec.actions.find((a) => a.key === "acknowledge")!;
+      expect(ack, "the slip can be acknowledged").toBeDefined();
+      expect(ack.label).toBe("Acknowledge receipt");
+      // Issued to the supervisor, confirmed by the Owner — the sheet says so.
+      expect(String((ack as unknown as { confirm: string }).confirm)).toContain("on behalf");
+
+      const done = await act(ack.action, ack.args);
+      expect(done.body.ok, done.body.error).toBe(true);
+
+      const after = await record("material/issues", issueId);
+      expect(after.pills.map((p) => p.label)).toContain("Acknowledged");
+      expect(after.actions.map((a) => a.key)).not.toContain("acknowledge");
+      // And it cannot be acknowledged twice.
+      const again = await act("material/issues/acknowledgeIssue", [issueId]);
+      expect(again.body.ok).toBe(false);
+      expect(again.body.error).toContain("already acknowledged");
+    });
+
+    it("offers a return with every returnable line pre-filled", async () => {
+      const rec = await record("material/issues", issueId);
+      const raise = rec.actions.find((a) => a.key === "raiseReturn");
+      expect(raise, "the slip offers a return").toBeDefined();
+
+      // One object argument, with the reason and lines filled in from fields.
+      expect(raise!.args).toHaveLength(1);
+      const lines = raise!.fields!.find((f) => f.name === "lines")!;
+      expect(lines.kind).toBe("rows");
+      // The slip's own lines — none may be invented or dropped.
+      expect(lines.fixedRows).toBe(true);
+      expect(lines.initialRows).toHaveLength(1);
+      expect(lines.initialRows![0].quantity).toBe(50);
+      expect(String(lines.initialRows![0]._label)).toContain("returnable");
+      // The line's id is carried, not drawn.
+      expect(lines.row!.find((r) => r.name === "issueItemId")!.hidden).toBe(true);
+    });
+  });
+
+  describe("a return", () => {
+    it("is raised with the arguments the record described", async () => {
+      const rec = await record("material/issues", issueId);
+      const raise = rec.actions.find((a) => a.key === "raiseReturn")!;
+      const lines = raise.fields!.find((f) => f.name === "lines")!;
+
+      // Exactly what the client sends: the placeholders filled in.
+      const { body } = await act(raise.action, [
+        {
+          issueId,
+          reason: `Surplus after the pour ${suffix}`,
+          lines: lines.initialRows!.map((r) => ({
+            issueItemId: r.issueItemId,
+            quantity: 20,
+            condition: "Damaged",
+            remarks: "Bag torn",
+          })),
+        },
+      ]);
+      expect(body.ok, body.error).toBe(true);
+      returnId = (body.data as unknown as { id: string }).id;
+    });
+
+    it("waits for the store, and offers both decisions", async () => {
+      const rec = await record("material/returns", returnId);
+
+      expect(rec.pills.map((p) => p.label)).toContain("PENDING");
+      expect(rec.pills.map((p) => p.label)).toContain("1 damaged");
+      expect(rec.actions.map((a) => a.key)).toEqual(["approve", "reject", "delete"]);
+
+      // Rejecting needs a note; approving does not.
+      const reject = rec.actions.find((a) => a.key === "reject")!;
+      expect(reject.fields![0].name).toBe("note");
+      const lines = rec.collections.find((c) => c.key.startsWith("lines:"))!;
+      expect(JSON.stringify(lines.rows[0].pills)).toContain("Damaged");
+    });
+
+    it("approving it puts the quantity back at the issue rate", async () => {
+      const rec = await record("material/returns", returnId);
+      const approve = rec.actions.find((a) => a.key === "approve")!;
+      const before = await prisma.stockBalance.findUniqueOrThrow({
+        where: { itemId_storeId: { itemId, storeId } },
+      });
+
+      const { body } = await act(approve.action, [returnId, "Checked in by the store"]);
+      expect(body.ok, body.error).toBe(true);
+
+      const after = await prisma.stockBalance.findUniqueOrThrow({
+        where: { itemId_storeId: { itemId, storeId } },
+      });
+      expect(n(after.quantity) - n(before.quantity)).toBeCloseTo(20, 3);
+
+      // And the record now says what happened, with nothing left to decide.
+      const settled = await record("material/returns", returnId);
+      expect(settled.pills.map((p) => p.label)).toContain("APPROVED");
+      expect(settled.actions).toHaveLength(0);
+      expect(JSON.stringify(settled.sections)).toContain("back in");
+    });
+  });
+
+  describe("a transfer between stores", () => {
+    it("is raised, approved and received, each from its own record", async () => {
+      const made = await act("material/transfers/createTransfer", [
+        {
+          fromStoreId: storeId,
+          toStoreId,
+          remarks: `Shifting to the second store ${suffix}`,
+          items: [{ itemId, quantity: 30 }],
+        },
+      ]);
+      expect(made.body.ok, made.body.error).toBe(true);
+      transferId = (made.body.data as unknown as { id: string }).id;
+
+      const draft = await record("material/transfers", transferId);
+      expect(draft.pills[0].label).toBe("DRAFT");
+      expect(draft.chain!.map((c) => c.state)).toEqual(["done", "current", "pending"]);
+      const approve = draft.actions.find((a) => a.key === "approve")!;
+      expect(approve.label).toBe("Approve & send");
+
+      const sent = await act(approve.action, [transferId]);
+      expect(sent.body.ok, sent.body.error).toBe(true);
+
+      const transit = await record("material/transfers", transferId);
+      expect(transit.pills[0].label).toBe("IN TRANSIT");
+      const receive = transit.actions.find((a) => a.key === "receive")!;
+      const rows = receive.fields!.find((f) => f.name === "received")!;
+
+      // Every line, pre-filled with what left the store.
+      expect(rows.fixedRows).toBe(true);
+      expect(rows.initialRows).toHaveLength(1);
+      expect(rows.initialRows![0].receivedQty).toBe(30);
+
+      // Received two short, which the transfer records rather than refuses.
+      const got = await act(receive.action, [
+        transferId,
+        rows.initialRows!.map((r) => ({ lineId: r.lineId, receivedQty: 28 })),
+      ]);
+      expect(got.body.ok, got.body.error).toBe(true);
+
+      const done = await record("material/transfers", transferId);
+      expect(done.pills.map((p) => p.label)).toContain("RECEIVED");
+      expect(done.pills.map((p) => p.label).join(" ")).toContain("short");
+      expect(done.actions).toHaveLength(0);
+      const line = done.collections[0].rows[0];
+      expect(JSON.stringify(line.pills)).toContain("Short");
+    });
+  });
+
+  describe("a purchase order and its receipt", () => {
+    it("carries the lines, the trail and the stale guard", async () => {
+      const list = await get("/list/material/purchase-orders");
+      const rows = (list.body.data as unknown as { rows: Array<{ id: string }> }).rows;
+      if (rows.length === 0) return;
+
+      const rec = await record("material/purchase-orders", rows[0].id);
+      expect(rec.chain!.map((c) => c.initials)).toEqual(["R", "PM", "AD"]);
+      expect(rec.collections.map((c) => c.key.split(":")[0])).toEqual([
+        "lines", "grns", "invoices",
+      ]);
+      // Every write carries the order's own updatedAt, so a decision cannot
+      // land on a document the decider never saw.
+      for (const a of rec.actions) {
+        expect(a.args.some((x) => typeof x === "string" && /^\d{4}-\d{2}-\d{2}T/.test(x))).toBe(true);
+      }
+    });
+
+    it("a goods receipt says what the three-way match says", async () => {
+      const list = await get("/list/material/grn");
+      const rows = (list.body.data as unknown as { rows: Array<{ id: string }> }).rows;
+      if (rows.length === 0) return;
+
+      const rec = await record("material/grn", rows[0].id);
+      const lines = rec.collections.find((c) => c.key.startsWith("lines:"))!;
+      expect(lines.label).toContain("Ordered vs received");
+      // The match line is the web's own words, from the web's own helper.
+      expect(rec.pills.map((p) => p.label).join(" ")).toMatch(
+        /Not posted|Mismatch|Part receipt|matched|Awaiting invoice/,
+      );
+    });
+  });
+});

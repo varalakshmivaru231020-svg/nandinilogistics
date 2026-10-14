@@ -67,8 +67,16 @@ export interface RecordAction {
   /** What the button says — the web's own wording. */
   label: string;
   emphasis: "primary" | "approve" | "reject" | "outline";
-  /** The mobile action registry key. */
+  /**
+   * The mobile action registry key — empty where `form` is set, because then
+   * there is nothing to call until the form has been filled in.
+   */
   action: string;
+  /**
+   * Open this form instead of calling an action. The record's own id is
+   * handed to it, for a `$id` argument.
+   */
+  form?: string;
   /**
    * Positional arguments before the remark. A string of the form `$name` is
    * the value of the field of that name in `fields`, which is how an action

@@ -54,6 +54,7 @@ export async function GET(request: Request) {
       rows: rows.map((b) =>
         stockRow(
           {
+            itemId: b.itemId,
             code: b.item.code,
             name: b.item.name,
             category: b.item.category.name,

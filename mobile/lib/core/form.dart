@@ -46,6 +46,9 @@ class FieldDef {
     this.variantKind,
     this.row = const [],
     this.addLabel,
+    this.initialRows = const [],
+    this.fixedRows = false,
+    this.hidden = false,
     this.minRows = 0,
     this.minRowsMessage,
     this.leadWith,
@@ -79,6 +82,16 @@ class FieldDef {
   /// For `rows`: the fields of one line.
   final List<FieldDef> row;
   final String? addLabel;
+
+  /// For `rows`: the lines that are already there, each a map of field name to
+  /// its starting value. `_label` names the line.
+  final List<Map<String, Object?>> initialRows;
+
+  /// For `rows`: the lines are fixed — none may be added or removed.
+  final bool fixedRows;
+
+  /// Carried and submitted, never drawn.
+  final bool hidden;
   final int minRows;
   final String? minRowsMessage;
 
@@ -108,6 +121,12 @@ class FieldDef {
           .map(FieldDef.from)
           .toList(),
       addLabel: j['addLabel'] as String?,
+      initialRows: ((j['initialRows'] as List?) ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map((r) => r.map((k, v) => MapEntry(k, v as Object?)))
+          .toList(),
+      fixedRows: j['fixedRows'] == true,
+      hidden: j['hidden'] == true,
       minRows: (j['minRows'] as num?)?.toInt() ?? 0,
       minRowsMessage: j['minRowsMessage'] as String?,
       leadWith: j['leadWith'] as String?,
@@ -170,23 +189,31 @@ class FormDef {
 /// Held apart from the widget so that the confirmation sheet and the full-page
 /// form can share one set of controls.
 class FormValues {
-  FormValues(this.fields) {
+  FormValues(this.fields, {Map<String, Object?> seed = const {}}) {
+    label = seed['_label'] as String?;
     for (final f in fields) {
+      final start = seed.containsKey(f.name) ? seed[f.name] : f.initial;
       if (f.isText) {
-        _text[f.name] = TextEditingController(text: f.initial?.toString() ?? '');
+        _text[f.name] = TextEditingController(text: start?.toString() ?? '');
       } else if (f.kind == 'checkbox') {
-        values[f.name] = f.initial == true;
+        values[f.name] = start == true;
       } else if (f.kind == 'multi') {
         values[f.name] = <String>[];
       } else if (f.kind == 'rows') {
-        rows[f.name] = [for (var i = 0; i < (f.minRows > 0 ? 1 : 0); i++) FormValues(f.row)];
-      } else if (f.initial != null) {
-        values[f.name] = f.initial;
+        rows[f.name] = f.initialRows.isNotEmpty
+            ? f.initialRows.map((seed) => FormValues(f.row, seed: seed)).toList()
+            : [for (var i = 0; i < (f.minRows > 0 ? 1 : 0); i++) FormValues(f.row)];
+      } else if (start != null) {
+        values[f.name] = start;
       }
     }
   }
 
   final List<FieldDef> fields;
+
+  /// What this line is called, where it came with a name of its own.
+  String? label;
+
   final Map<String, Object?> values = {};
   final Map<String, TextEditingController> _text = {};
 
@@ -272,16 +299,36 @@ class FormValues {
   /// The arguments for the action, with `$name` standing for a field's value.
   List<Object?> args(FormDef def, {String? recordId}) {
     if (def.shape == 'formData') return [asMap()];
-    return def.order.map((slot) {
-      if (slot is! String || !slot.startsWith(r'$')) return slot;
-      final name = slot.substring(1);
-      if (name == 'values') return asMap();
-      if (name == 'id') return recordId;
-      final f = fields.firstWhere((x) => x.name == name,
-          orElse: () => FieldDef(name: name, label: name, kind: 'text'));
-      return read(f);
-    }).toList();
+    return def.order.map((slot) => fill(slot, this, recordId: recordId)).toList();
   }
+}
+
+/* ----------------------------------------------------------- substitution */
+
+/// One argument with its `$name` placeholders replaced by what was collected.
+///
+/// Walks objects and lists, because an action that takes a parsed input takes
+/// one object — raising a return is `{issueId, reason, lines}` — and only some
+/// of its keys come from the form.
+Object? fill(Object? slot, FormValues v, {String? recordId}) {
+  if (slot is Map) {
+    return slot.map((k, inner) => MapEntry('$k', fill(inner as Object?, v, recordId: recordId)));
+  }
+  if (slot is List) {
+    return slot.map((inner) => fill(inner as Object?, v, recordId: recordId)).toList();
+  }
+  if (slot is! String || !slot.startsWith(r'$')) return slot;
+
+  final name = slot.substring(1);
+  if (name == 'values') return v.asMap();
+  if (name == 'id') return recordId;
+
+  final f = v.fields.where((x) => x.name == name).firstOrNull;
+  if (f == null) return slot;
+  // A box left empty goes as an empty string, which is what a form sends; the
+  // boundary turns it into nothing where the action takes nothing.
+  return v.read(f) ??
+      (f.isText || f.kind == 'date' || f.kind == 'datetime' || f.kind == 'select' ? '' : null);
 }
 
 /* -------------------------------------------------------------- the widgets */
@@ -314,8 +361,9 @@ class _FormBodyState extends State<FormBody> {
 
   @override
   Widget build(BuildContext context) {
+    final drawn = v.fields.where((f) => !f.hidden).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      for (final f in v.fields) ...[
+      for (final f in drawn) ...[
         _control(f, v),
         SizedBox(height: widget.compact ? 12 : 14),
       ],
@@ -692,8 +740,8 @@ class _Lines extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Row(children: [
-              Expanded(child: Overline('Line ${i + 1}')),
-              if (lines.length > field.minRows)
+              Expanded(child: Overline(lines[i].label ?? 'Line ${i + 1}')),
+              if (!field.fixedRows && lines.length > field.minRows)
                 GestureDetector(
                   onTap: enabled
                       ? () {
@@ -713,18 +761,19 @@ class _Lines extends StatelessWidget {
         ),
         const SizedBox(height: 9),
       ],
-      Btn(
-        field.addLabel ?? 'Add line',
-        emphasis: Emphasis.outline,
-        icon: Icons.add_rounded,
-        expand: true,
-        onPressed: enabled
-            ? () {
-                lines.add(FormValues(field.row));
-                onChanged();
-              }
-            : null,
-      ),
+      if (!field.fixedRows)
+        Btn(
+          field.addLabel ?? 'Add line',
+          emphasis: Emphasis.outline,
+          icon: Icons.add_rounded,
+          expand: true,
+          onPressed: enabled
+              ? () {
+                  lines.add(FormValues(field.row));
+                  onChanged();
+                }
+              : null,
+        ),
     ]);
   }
 }

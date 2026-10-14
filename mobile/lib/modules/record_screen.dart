@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/act.dart';
 import '../core/api.dart';
 import '../core/form.dart';
+import 'form_screen.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
 
@@ -222,6 +223,19 @@ class RecordScreenState extends State<RecordScreen> {
   }
 
   Future<void> _run(Map<String, dynamic> a) async {
+    // An action that opens a form has nothing to call until it is filled in.
+    final form = a['form'] as String?;
+    if (form != null && form.isNotEmpty) {
+      final navigator = Navigator.of(context);
+      final made = await navigator.push<bool>(MaterialPageRoute(
+        builder: (_) => FormScreen(api: widget.api, formKey: form, recordId: widget.id),
+      ));
+      if (made != true) return;
+      _changed = true;
+      await _load();
+      return;
+    }
+
     final ok = await confirmAndRun(
       context,
       widget.api,

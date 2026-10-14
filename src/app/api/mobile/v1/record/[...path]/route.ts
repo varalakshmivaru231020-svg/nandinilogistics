@@ -1,3 +1,4 @@
+import { FORMS } from "@/lib/forms/registry";
 import { RECORDS } from "@/lib/records/registry";
 import { apiFail, apiOk, mobileRoute } from "@/lib/api/mobile";
 
@@ -41,5 +42,18 @@ export const GET = mobileRoute([], async (req, actor) => {
 
   const view = await def.load(actor, id);
   if (!view) return apiFail(404, "That record is not there, or is not yours to see.", "not-found");
-  return apiOk(view);
+
+  /*
+   * An action that opens a form is only offered where that form exists and
+   * this viewer may open it. A record names the form it wants; whether it is
+   * described yet is the form registry's business, and a button that leads to
+   * "not on the phone yet" is worse than no button.
+   */
+  const offered = view.actions.filter((a) => {
+    if (!a.form) return true;
+    const form = FORMS[a.form];
+    return Boolean(form) && actor.has(form.permission);
+  });
+
+  return apiOk(offered.length === view.actions.length ? view : { ...view, actions: offered });
 });

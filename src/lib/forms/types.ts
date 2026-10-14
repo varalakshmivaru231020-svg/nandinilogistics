@@ -68,6 +68,11 @@ export interface FormFieldDef {
   emptyLabel?: string;
   /** A line of its own, rather than half a row. */
   wide?: boolean;
+  /**
+   * Carried and submitted but never drawn — the id of the line a quantity
+   * belongs to, which the client has no business letting anybody edit.
+   */
+  hidden?: boolean;
   /** Where the web pre-fills it with something other than empty. */
   initial?: string | number | boolean;
   /**
@@ -80,6 +85,17 @@ export interface FormFieldDef {
   /** For `rows`: the fields of one line, and what the add button says. */
   row?: ReadonlyArray<FormFieldDef>;
   addLabel?: string;
+  /**
+   * For `rows`: lines that are already there, each a map of field name to its
+   * starting value. Receiving a transfer is every line it was sent with, each
+   * pre-filled with what left the store — the decision is how much of that
+   * actually arrived, so the lines cannot be invented or dropped.
+   *
+   * The reserved key `_label` names the line instead of "Line 1".
+   */
+  initialRows?: ReadonlyArray<Record<string, string | number | boolean>>;
+  /** For `rows`: the lines are fixed — none may be added or removed. */
+  fixedRows?: boolean;
   /** For `rows`: the fewest lines the action will accept, and its message. */
   minRows?: number;
   minRowsMessage?: string;

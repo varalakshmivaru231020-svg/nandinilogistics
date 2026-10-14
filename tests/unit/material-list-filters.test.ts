@@ -166,6 +166,8 @@ describe("valuation withheld without viewValuation", () => {
   const balance = {
     code: "CEM-01", name: "Cement", category: "Binders", uom: "BAG", store: "Central",
     quantity: 40, reorderLevel: 50, avgRate: 380, value: 15200,
+    // The item, not the balance: a stock row opens the item's own record.
+    itemId: "item-1",
   };
 
   it("drops rate and value columns, and their values", () => {

@@ -491,6 +491,8 @@ export function stockColumns(showValuation: boolean): ReportColumn[] {
 }
 
 export interface StockRowInput {
+  /** The item, not the balance: a stock row opens the item's own record. */
+  itemId: string;
   code: string; name: string; category: string; uom: string; store: string;
   quantity: number; reorderLevel: number; avgRate: number; value: number;
 }
@@ -499,6 +501,7 @@ export interface StockRowInput {
 export function stockRow(b: StockRowInput, showValuation: boolean): Record<string, unknown> {
   const state = stockState(b.quantity, b.reorderLevel);
   return {
+    id: b.itemId,
     code: b.code, name: b.name, category: b.category, uom: b.uom, store: b.store,
     quantity: b.quantity, reorderLevel: b.reorderLevel,
     state: state.label, short: state.short > 0 ? state.short : null,
