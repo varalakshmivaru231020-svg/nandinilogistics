@@ -58,6 +58,13 @@ export async function GET(request: Request) {
         yours: r.canDecide ? "Yes" : "No",
         href: r.href,
         id: r.id,
+        /*
+         * Not columns — the client needs them and a file does not. The CSV and
+         * the PDF are built from `columns`, so these ride along without
+         * appearing in either.
+         */
+        canDecide: r.canDecide,
+        decide: r.decide,
       })),
       summary: [{ label: "Waiting", value: note }],
       emptyMessage: "Nothing is waiting on you.",

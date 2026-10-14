@@ -11,7 +11,6 @@ dependencies:
     sdk: flutter
   http: ^1.2.2
   shared_preferences: ^2.3.3
-  google_fonts: ^6.2.1
   intl: ^0.19.0
 
 dev_dependencies:
@@ -21,3 +20,29 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Bundled, not fetched.
+  #
+  # google_fonts downloads at runtime, which fails in a test and — far worse —
+  # fails on a site with no signal, where the app would quietly fall back to
+  # the system face and lose the design's typography altogether. These are the
+  # exact weights the canvas uses and nothing else.
+  fonts:
+    - family: Sora
+      fonts:
+        - asset: assets/fonts/Sora-600.ttf
+          weight: 600
+        - asset: assets/fonts/Sora-700.ttf
+          weight: 700
+        - asset: assets/fonts/Sora-800.ttf
+          weight: 800
+    - family: PublicSans
+      fonts:
+        - asset: assets/fonts/PublicSans-400.ttf
+          weight: 400
+        - asset: assets/fonts/PublicSans-500.ttf
+          weight: 500
+        - asset: assets/fonts/PublicSans-600.ttf
+          weight: 600
+        - asset: assets/fonts/PublicSans-700.ttf
+          weight: 700

@@ -5,87 +5,84 @@ import { describe, expect, it } from "vitest";
 import { MOBILE_LIST_KEYS } from "@/lib/api/mobile-lists";
 
 /**
- * The Android client and the boundary, held together.
+ * The Android client's module registry, against the boundary.
  *
- * `mobile/lib/modules.dart` names a list key per module. A key that the server
- * does not serve is a tile that answers 404 when tapped; a list the server
- * serves that the app never names is a module nobody can reach from a phone.
- * Neither is visible from either side on its own, and neither fails anything —
- * so it fails here.
+ * `mobile/lib/core/modules.dart` names a key per module. For most of them the
+ * key is also the boundary's list key, so a typo there is a tile that answers
+ * 404 when tapped — invisible from either side alone, and failing nothing.
  *
- * This reads the Dart as text rather than running it, which is enough: the
- * question is only whether the two sets of strings agree.
+ * It also pins which modules the app claims to have **finished**. The first
+ * version of this app listed thirty modules and had built almost none of them,
+ * which is why it was rejected; the registry now carries a `built` flag and the
+ * drawer draws only those. This test is what keeps that flag honest.
+ *
+ * The Dart is read as text rather than run: the question is only whether two
+ * sets of strings agree.
  */
 
 const ROOT = join(__dirname, "..", "..");
-const modules = readFileSync(join(ROOT, "mobile", "lib", "modules.dart"), "utf8");
+const source = readFileSync(join(ROOT, "mobile", "lib", "core", "modules.dart"), "utf8");
 
-const appListKeys = [...modules.matchAll(/list: '([^']+)'/g)].map((m) => m[1]).sort();
+interface Entry {
+  key: string;
+  built: boolean;
+}
 
-describe("the app and the boundary agree about the lists", () => {
-  it("names no list the server does not serve", () => {
-    const unknown = appListKeys.filter((k) => !MOBILE_LIST_KEYS.includes(k));
-    expect(unknown, "these tiles would 404 — check mobile/lib/modules.dart").toEqual([]);
+const entries: Entry[] = [...source.matchAll(/Mod\(\s*key:\s*'([^']+)'([\s\S]*?)\),\n/g)].map(
+  (m) => ({ key: m[1], built: /built:\s*true/.test(m[2]) }),
+);
+
+/** Screens that are not a list: they have an endpoint of their own, or none. */
+const NOT_A_LIST = new Set(["dashboard", "approvals", "calendar", "checklists"]);
+
+describe("the app's module registry", () => {
+  it("was read at all", () => {
+    expect(entries.length).toBeGreaterThan(15);
+    expect(entries.some((e) => e.built)).toBe(true);
   });
 
   /*
-   * The other direction, which is the one that quietly loses a module: adding
-   * an export route to the web gives the phone a list for free, and nobody
-   * thinks to put it in the drawer.
+   * The one that catches a typo. Every module keyed to a list must name a list
+   * the server actually serves.
    */
-  it("reaches every list the server serves", () => {
-    const unreached = MOBILE_LIST_KEYS.filter((k) => !appListKeys.includes(k));
-    expect(unreached, "add these to mobile/lib/modules.dart").toEqual([]);
+  it("names no list the boundary does not serve", () => {
+    const unknown = entries
+      .filter((e) => !NOT_A_LIST.has(e.key))
+      .filter((e) => !MOBILE_LIST_KEYS.includes(e.key))
+      .map((e) => e.key);
+    expect(unknown, "these would 404 — check mobile/lib/core/modules.dart").toEqual([]);
   });
 
-  it("found both sets, so an empty scan cannot pass", () => {
-    expect(appListKeys.length).toBeGreaterThan(20);
-    expect(MOBILE_LIST_KEYS.length).toBe(appListKeys.length);
-  });
-});
-
-/**
- * Every module in the web's navigation is now reachable from the phone, and
- * this is what keeps it that way.
- *
- * It used to list six exceptions — Approvals, Tasks, Task Reports, Checklists,
- * Follow-ups and Knowledge Base — each absent because the web had no export
- * route for it to answer from. They have one now, so the list is empty, and a
- * new module added to the web's navigation without a way to reach it from a
- * phone fails here rather than going unnoticed.
- */
-describe("every module in the web's navigation is reachable", () => {
-  const awaitingAnEndpoint: string[] = [];
-
-  /**
-   * A nav href and its list key are not always the same string: the web's
-   * Workforce entry is one screen with three tabs, and its list is the employee
-   * export. These are the ones that differ.
+  /*
+   * A module cannot be finished if there is nothing for it to read. This would
+   * have caught the whole first attempt in one line, had the flag existed.
    */
-  const KEY_FOR: Record<string, string> = {
-    "/hr": "hr/employees",
-    "/projects": "projects/projects",
-    "/schedule": "schedule/activities",
-    "/units/board": "units",
-  };
+  it("claims nothing finished that it cannot read", () => {
+    const impossible = entries
+      .filter((e) => e.built && !NOT_A_LIST.has(e.key))
+      .filter((e) => !MOBILE_LIST_KEYS.includes(e.key))
+      .map((e) => e.key);
+    expect(impossible).toEqual([]);
+  });
 
-  it("is still exactly this list — no more, and no fewer", async () => {
-    const { NAVIGATION } = await import("@/lib/navigation");
-    const webHrefs = NAVIGATION.flatMap((s) => s.items.map((i) => i.href));
+  /*
+   * And the shape of the work left. Stated rather than discovered: the drawer
+   * shows the built ones and sums up the rest, so this number is the one the
+   * app tells its own user.
+   */
+  it("reports how much is still to build", () => {
+    const built = entries.filter((e) => e.built).map((e) => e.key);
+    const pending = entries.filter((e) => !e.built).map((e) => e.key);
 
-    // Masters & Users is web-only by design (brief §12), not awaiting anything.
-    const reachable = new Set(appListKeys);
-    const unreached = webHrefs.filter((href) => {
-      if (href.startsWith("/masters") || href.startsWith("/admin")) return false;
-      if (href === "/calendar" || href === "/dashboard" || href === "/dashboard/performance") {
-        return false;
-      }
-      const key = KEY_FOR[href] ?? href.replace(/^\//, "");
-      return !reachable.has(key);
-    });
+    // Built so far. Raise this deliberately, as each module is finished.
+    expect(built.sort()).toEqual(["approvals", "dashboard", "material/indents"]);
+    expect(pending.length).toBeGreaterThan(0);
 
-    expect(unreached.sort()).toEqual(
-      awaitingAnEndpoint.filter((h) => webHrefs.includes(h)).sort(),
-    );
+    // Every pending one has somewhere to read from when its turn comes, except
+    // the ones that need an endpoint of their own.
+    const orphan = pending
+      .filter((k) => !NOT_A_LIST.has(k))
+      .filter((k) => !MOBILE_LIST_KEYS.includes(k));
+    expect(orphan, "these have no endpoint to build against").toEqual([]);
   });
 });

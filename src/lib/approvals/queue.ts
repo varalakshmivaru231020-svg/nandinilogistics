@@ -75,6 +75,37 @@ export interface ApprovalRow {
   href: string;
   /** Whether this viewer may decide it, as opposed to merely see it waiting. */
   canDecide: boolean;
+  /**
+   * How to decide it, for a client that is not the web screen.
+   *
+   * The queue has always said *what* is waiting; it never said how to settle
+   * it. The web did not need telling — each row links to a screen that knows.
+   * A phone showing Approve and Reject on the row itself does need telling, and
+   * the alternative is the client mapping kind to action and guessing the
+   * argument order, which puts a second copy of that knowledge somewhere it
+   * cannot be checked.
+   *
+   * `approve` and `reject` are keys into the mobile action registry, and `args`
+   * are the leading positional arguments. A remark, where the action takes one,
+   * is appended by the caller.
+   *
+   * Null when the decision cannot be made from a queue at all: a checklist
+   * point is settled point by point on the task, and the Admin step of a
+   * schedule extension also records whether the delay was avoidable.
+   */
+  decide: ApprovalDecision | null;
+}
+
+export interface ApprovalDecision {
+  /** e.g. "material/indents/approveIndent" */
+  approve: string;
+  /** Positional arguments before the remark. */
+  approveArgs: unknown[];
+  /** Null where there is no refusal at this step — a closure is not rejected. */
+  reject: string | null;
+  rejectArgs: unknown[];
+  /** Whether the action's remark argument must be filled in. */
+  remarkRequired: boolean;
 }
 
 /** How long something has been waiting, as the design writes ageing. */

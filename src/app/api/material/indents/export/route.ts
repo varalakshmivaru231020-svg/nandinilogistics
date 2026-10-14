@@ -21,6 +21,8 @@ export async function GET(request: Request) {
   const params = readIndentListParams(gate.params);
   const ownership = ctx.has(PERM.material.indent.viewAll) ? {} : { raisedById: ctx.id };
   const showAgeing = ctx.has(PERM.material.indent.viewAgeing);
+  const canPm = ctx.has(PERM.material.indent.approvePm);
+  const canAdmin = ctx.has(PERM.material.indent.approveAdmin);
 
   const indents = await prisma.indent.findMany({
     where: indentListWhere(ctx, ownership, params),
@@ -79,6 +81,32 @@ export async function GET(request: Request) {
         requiredBy: i.requiredByDate,
         lines: i._count.items,
         status: i.status.replace(/_/g, " "),
+        /*
+         * How to settle it, where it is settleable — the same contract the
+         * approvals queue uses. Not columns: the file does not want them, and
+         * the alternative is the client reading a status string and deciding
+         * for itself which level it is at, which is the one piece of knowledge
+         * that must not be copied.
+         */
+        decide:
+          i.status === "SUBMITTED" && canPm
+            ? {
+                approve: "material/indents/approveIndent",
+                approveArgs: [i.id, "PM"],
+                reject: "material/indents/rejectIndent",
+                rejectArgs: [i.id],
+                remarkRequired: false,
+              }
+            : i.status === "PM_APPROVED" && canAdmin
+              ? {
+                  approve: "material/indents/approveIndent",
+                  approveArgs: [i.id, "ADMIN"],
+                  reject: "material/indents/rejectIndent",
+                  rejectArgs: [i.id],
+                  remarkRequired: false,
+                }
+              : null,
+        id: i.id,
         ...(showAgeing
           ? {
               waitingDays: ["SUBMITTED", "PM_APPROVED"].includes(i.status)

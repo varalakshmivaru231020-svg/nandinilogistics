@@ -9,6 +9,7 @@ const row = (over: Partial<ApprovalRow>): ApprovalRow => ({
   id: "1", kind: "INDENT", reference: "IND/NNS/0001", title: "OPC 53 Cement",
   raisedBy: "Ravi Shankar", raisedAt: "2026-09-01T00:00:00.000Z", projectName: "NN Skyline",
   value: 100000, waitingOn: "Project Manager", href: "/material/indents/1", canDecide: true,
+  decide: null,
   ...over,
 });
 
@@ -114,5 +115,59 @@ describe("Task Management joins the same queue", () => {
       row({ kind: "TASK_REVIEW", raisedAt: "2026-09-18T10:00:00.000Z" }),
     ];
     expect(byOldestFirst(rows)[0].kind).toBe("TASK_REVIEW");
+  });
+});
+
+/**
+ * A row that can be decided has to say how.
+ *
+ * The queue has always said what is waiting. The web never needed more — each
+ * row links to a screen that knows what to do. A phone puts Approve and Reject
+ * on the row itself, and the alternative to the server saying which action to
+ * call is the client mapping kind to action and guessing the argument order:
+ * a second copy of that knowledge, in the one place it cannot be checked.
+ */
+describe("the queue says how to settle a row, not just that it waits", () => {
+  it("names an action and its leading arguments", () => {
+    const r = row({
+      decide: {
+        approve: "material/indents/approveIndent",
+        approveArgs: ["i1", "PM"],
+        reject: "material/indents/rejectIndent",
+        rejectArgs: ["i1"],
+        remarkRequired: false,
+      },
+    });
+    expect(r.decide?.approve).toBe("material/indents/approveIndent");
+    // The level is the step it is actually at, not a guess from the wording.
+    expect(r.decide?.approveArgs).toEqual(["i1", "PM"]);
+  });
+
+  /*
+   * Some steps have no refusal. A purchase order is cancelled rather than
+   * rejected, and a task closure is sent back rather than denied — so `reject`
+   * is null and the screen draws one button, not a greyed-out second one.
+   */
+  it("allows a decision with no refusal at that step", () => {
+    const r = row({
+      decide: {
+        approve: "material/transfers/approveTransfer",
+        approveArgs: ["t1"],
+        reject: null,
+        rejectArgs: [],
+        remarkRequired: false,
+      },
+    });
+    expect(r.decide?.reject).toBeNull();
+  });
+
+  /*
+   * And some cannot be settled from a queue at all: a checklist point moves
+   * point by point on the task, and the Admin step of a schedule extension
+   * also records whether the delay was avoidable. Those carry no decision, so
+   * the row is a link rather than a pair of buttons.
+   */
+  it("carries nothing for a decision that belongs on its own screen", () => {
+    expect(row({ kind: "TASK_REVIEW", canDecide: false, decide: null }).decide).toBeNull();
   });
 });

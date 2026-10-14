@@ -60,6 +60,14 @@ export async function loadApprovalQueue(ctx: AuthContext): Promise<ApprovalRow[]
           i.status === "SUBMITTED"
             ? ctx.has(PERM.material.indent.approvePm)
             : ctx.has(PERM.material.indent.approveAdmin),
+        decide: {
+          approve: "material/indents/approveIndent",
+          // (id, level, remarks) — the level is the step it is actually at.
+          approveArgs: [i.id, i.status === "SUBMITTED" ? "PM" : "ADMIN"],
+          reject: "material/indents/rejectIndent",
+          rejectArgs: [i.id],
+          remarkRequired: false,
+        },
       });
     }
   }
@@ -95,6 +103,17 @@ export async function loadApprovalQueue(ctx: AuthContext): Promise<ApprovalRow[]
         canDecide: atAdmin
           ? ctx.has(PERM.material.purchaseOrder.approveAdmin)
           : ctx.has(PERM.material.purchaseOrder.approvePm),
+        decide: {
+          approve: atAdmin
+            ? "material/purchase-orders/approvePoAdmin"
+            : "material/purchase-orders/approvePoPm",
+          approveArgs: [p.id],
+          // A purchase order is cancelled rather than rejected; that is a
+          // bigger decision than a queue should offer, so it is not here.
+          reject: null,
+          rejectArgs: [],
+          remarkRequired: false,
+        },
       });
     }
   }
@@ -132,6 +151,16 @@ export async function loadApprovalQueue(ctx: AuthContext): Promise<ApprovalRow[]
         // The Admin step also records whether the delay was genuine or
         // avoidable, so it is decided on the schedule, not from here.
         canDecide: !atAdmin && ctx.has(PERM.schedule.extension.approve),
+        decide: atAdmin
+          ? null
+          : {
+              approve: "schedule/decideExtensionPm",
+              // (id, approve, remark)
+              approveArgs: [e.id, true],
+              reject: "schedule/decideExtensionPm",
+              rejectArgs: [e.id, false],
+              remarkRequired: true,
+            },
       });
     }
   }
@@ -161,6 +190,15 @@ export async function loadApprovalQueue(ctx: AuthContext): Promise<ApprovalRow[]
         waitingOn: "Accounts",
         href: `/material/invoices/${v.id}`,
         canDecide: ctx.has(PERM.material.vendorInvoice.approve),
+        decide: {
+          approve: "material/invoices/approveInvoice",
+          // (id, remarks, overrideMismatch) — the override is a separate
+          // decision and is made on the invoice, not from the queue.
+          approveArgs: [v.id],
+          reject: null,
+          rejectArgs: [],
+          remarkRequired: false,
+        },
       });
     }
   }
@@ -189,6 +227,13 @@ export async function loadApprovalQueue(ctx: AuthContext): Promise<ApprovalRow[]
         waitingOn: "Store Manager",
         href: `/material/returns/${r.id}`,
         canDecide: ctx.has(PERM.material.return.approve),
+        decide: {
+          approve: "material/returns/approveReturn",
+          approveArgs: [r.id],
+          reject: "material/returns/rejectReturn",
+          rejectArgs: [r.id],
+          remarkRequired: false,
+        },
       });
     }
   }
@@ -217,6 +262,13 @@ export async function loadApprovalQueue(ctx: AuthContext): Promise<ApprovalRow[]
         waitingOn: "Store Manager",
         href: "/material/transfers",
         canDecide: ctx.has(PERM.material.transfer.approve),
+        decide: {
+          approve: "material/transfers/approveTransfer",
+          approveArgs: [t.id],
+          reject: null,
+          rejectArgs: [],
+          remarkRequired: false,
+        },
       });
     }
   }
@@ -255,6 +307,14 @@ export async function loadApprovalQueue(ctx: AuthContext): Promise<ApprovalRow[]
         waitingOn: "Assigner",
         href: `/tasks/${t.id}`,
         canDecide: ctx.has(PERM.task.task.close),
+        decide: {
+          approve: "tasks/closeTask",
+          // (id, remark) — closing says why, so the remark is required.
+          approveArgs: [t.id],
+          reject: "tasks/sendBackTask",
+          rejectArgs: [t.id],
+          remarkRequired: true,
+        },
       });
     }
 
@@ -286,6 +346,14 @@ export async function loadApprovalQueue(ctx: AuthContext): Promise<ApprovalRow[]
         // the link goes to the task, which is where a person reads it.
         href: `/tasks/${e.task.id}`,
         canDecide: ctx.has(PERM.task.task.approveExtension),
+        decide: {
+          approve: "tasks/decideExtension",
+          // (extensionId, approve, remark)
+          approveArgs: [e.id, true],
+          reject: "tasks/decideExtension",
+          rejectArgs: [e.id, false],
+          remarkRequired: true,
+        },
       });
     }
 
@@ -355,6 +423,8 @@ export async function loadApprovalQueue(ctx: AuthContext): Promise<ApprovalRow[]
         // is decided on the task rather than by a yes from the queue; the row
         // is here to say it is waiting, and takes you there.
         canDecide: false,
+        // Settled point by point on the task itself — see TaskChecklist.
+        decide: null,
       });
     }
   }
