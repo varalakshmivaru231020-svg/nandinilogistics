@@ -367,11 +367,31 @@ void main() {
       expect(t?.id, 'cmv52ylbd0009pp7a4iyl2y5p');
     });
 
+    /// A schedule activity: the web's plan is one page per project, so the
+    /// activity's own id rides in the link for a client that has a screen for
+    /// one activity.
+    test('a schedule activity', () {
+      final t = recordFor('/schedule?project=cmtr6p586018ipp8x2ks2u7lt&activity=cmtscddly000nppou8uoy6i51');
+      expect(t?.module, 'schedule/activities');
+      expect(t?.id, 'cmtscddly000nppou8uoy6i51');
+    });
+
+    /// Where the web's route and the record's module are not the same words.
+    test('an employee, whose route is just /hr', () {
+      final t = recordFor('/hr/cmtvcr51201jypp9cyu8xpya0');
+      expect(t?.module, 'hr/employees');
+    });
+
+    test('a project', () {
+      expect(recordFor('/projects/cmtr6p586018ipp8x2ks2u7lt')?.module, 'projects/projects');
+    });
+
     /// A list route is not a record, and neither is a word like "reports".
     test('and nothing where there is no record', () {
       expect(recordFor('/tasks'), isNull);
       expect(recordFor('/tasks/reports'), isNull);
       expect(recordFor('/schedule?tab=extensions'), isNull);
+      expect(recordFor('/material/indents/new'), isNull);
       expect(recordFor(''), isNull);
     });
   });

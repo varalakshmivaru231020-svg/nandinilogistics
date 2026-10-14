@@ -180,7 +180,8 @@ describe("valuation withheld without viewValuation", () => {
   });
 
   it("drops the replenishment cost on reorder alerts", () => {
-    const r = { code: "C", name: "Cement", category: "B", uom: "BAG", onHand: 10, reorderLevel: 50, standardRate: 400 };
+    // The id is the item the row stands for, so a tap opens its record.
+    const r = { id: "item-1", code: "C", name: "Cement", category: "B", uom: "BAG", onHand: 10, reorderLevel: 50, standardRate: 400 };
     expect(reorderColumns(false).map((c) => c.key)).not.toContain("cost");
     expect(reorderRow(r, false)).not.toHaveProperty("cost");
     expect(reorderRow(r, true)).toMatchObject({ shortfall: 40, cost: 16000 });

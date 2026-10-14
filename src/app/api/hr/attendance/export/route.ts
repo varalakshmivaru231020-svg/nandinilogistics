@@ -72,6 +72,8 @@ export async function GET(request: Request) {
         { key: "overtime", header: "Overtime (hrs)", align: "right", format: "number" },
       ],
       rows: rows.map((r) => ({
+        // The worker, whose own record carries the days behind these totals.
+        id: r.id,
         code: r.code,
         name: r.name,
         type: r.employmentType,

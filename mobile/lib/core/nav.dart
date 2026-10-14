@@ -123,9 +123,15 @@ RecordTarget? recordFor(String href) {
   final path = href.split('?').first;
   final query = href.contains('?') ? Uri.splitQueryString(href.split('?')[1]) : const {};
 
-  // A calendar task links back to the calendar with its own id.
+  // A calendar task links back to the calendar with its own id, and a schedule
+  // activity to the plan with its own — the web's schedule is one page per
+  // project, but the app has a screen for one activity.
   final event = query['event'];
   if (event != null && event.isNotEmpty) return RecordTarget('calendar', event);
+  final activity = query['activity'];
+  if (activity != null && activity.isNotEmpty) {
+    return RecordTarget('schedule/activities', activity);
+  }
 
   final parts = path.split('/').where((p) => p.isNotEmpty).toList();
   if (parts.length < 2) return null;
@@ -134,7 +140,13 @@ RecordTarget? recordFor(String href) {
   if (id.length < 20) return null;
 
   final module = parts.sublist(0, parts.length - 1).join('/');
-  const alias = {'units': 'units', 'projects': 'projects/projects'};
+  // Where the web's route and the record's module are not the same words.
+  const alias = {
+    'units': 'units',
+    'projects': 'projects/projects',
+    'hr': 'hr/employees',
+    'material/stock': 'material/stock',
+  };
   return RecordTarget(alias[module] ?? module, id);
 }
 

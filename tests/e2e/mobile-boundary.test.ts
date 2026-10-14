@@ -305,7 +305,7 @@ suite("the mobile boundary", () => {
     });
 
     it("answers 404 for a form that is not described yet", async () => {
-      const { status, body } = await get("/form/material/vendors/create");
+      const { status, body } = await get("/form/admin/users/create");
       expect(status).toBe(404);
       expect(body.code).toBe("unknown-form");
     });
@@ -356,8 +356,13 @@ suite("the mobile boundary", () => {
       expect(rec.collections.length).toBeGreaterThan(0);
     });
 
-    it("answers 404 for a module whose record is not built, not 500", async () => {
-      const { status, body } = await get("/record/material/vendors/whatever");
+    /*
+     * Masters & Users is web-only by the brief, so there is no record for it
+     * and never will be — a plain 404, which the app reads as "not on the
+     * phone" rather than as a failure.
+     */
+    it("answers 404 for a module that has no record, not 500", async () => {
+      const { status, body } = await get("/record/admin/users/whatever");
       expect(status).toBe(404);
       expect(body.code).toBe("unknown-record");
     });

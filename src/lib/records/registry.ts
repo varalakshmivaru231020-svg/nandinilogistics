@@ -16,6 +16,19 @@ import { returnRecord } from "./return";
 import { transferRecord } from "./transfer";
 import { vendorRecord } from "./vendor";
 import { bookingRecord } from "./booking";
+import { costSheetRecord } from "./cost-sheet";
+import { customerRecord } from "./customer";
+import { activityRecord } from "./activity";
+import { checklistRecord } from "./checklist";
+import { employeeRecord } from "./employee";
+import { kbRecord } from "./kb";
+import { paymentRecord } from "./payment";
+import { priceListRecord } from "./price-list";
+import { progressLogRecord } from "./progress-log";
+import { unitRecord } from "./unit";
+import { projectRecord } from "./project";
+import { siteVisitRecord } from "./site-visit";
+import { receiptRecord } from "./receipt";
 
 /**
  * Which modules can hand over a whole record, and the permission to ask.
@@ -88,6 +101,96 @@ export const RECORDS: Record<string, RecordDef> = {
     key: "sales/bookings",
     permission: PERM.sales.booking.view,
     load: bookingRecord,
+  },
+  kb: {
+    key: "kb",
+    permission: PERM.kb.article.view,
+    load: kbRecord,
+  },
+  checklists: {
+    key: "checklists",
+    permission: PERM.checklist.checklist.view,
+    load: checklistRecord,
+  },
+  "units/price-lists": {
+    key: "units/price-lists",
+    permission: PERM.unit.priceList.view,
+    load: priceListRecord,
+  },
+  "projects/progress": {
+    key: "projects/progress",
+    permission: PERM.project.progressLog.view,
+    load: progressLogRecord,
+  },
+  "material/payments": {
+    key: "material/payments",
+    permission: PERM.material.vendorPayment.view,
+    load: paymentRecord,
+  },
+  /*
+   * The follow-up queue is a list of leads, not of follow-ups: its rows carry
+   * the lead's own id, and the lead is what somebody tapping one needs — the
+   * number to ring and the place to log the call.
+   */
+  "sales/follow-ups": {
+    key: "sales/follow-ups",
+    permission: PERM.sales.followUp.view,
+    load: leadRecord,
+  },
+  /*
+   * The attendance sheet is one row per worker and the reorder list one per
+   * item, so both open the record the row stands for rather than a record of
+   * their own.
+   */
+  "hr/attendance": {
+    key: "hr/attendance",
+    permission: PERM.hr.employee.view,
+    load: employeeRecord,
+  },
+  "material/reorder": {
+    key: "material/reorder",
+    permission: PERM.material.stock.view,
+    load: itemRecord,
+  },
+  "hr/employees": {
+    key: "hr/employees",
+    permission: PERM.hr.employee.view,
+    load: employeeRecord,
+  },
+  units: {
+    key: "units",
+    permission: PERM.unit.unit.view,
+    load: unitRecord,
+  },
+  "schedule/activities": {
+    key: "schedule/activities",
+    permission: PERM.schedule.activity.view,
+    load: activityRecord,
+  },
+  "projects/projects": {
+    key: "projects/projects",
+    permission: PERM.project.project.view,
+    load: projectRecord,
+  },
+  "sales/customers": {
+    key: "sales/customers",
+    permission: PERM.sales.customer.view,
+    load: customerRecord,
+  },
+  "sales/site-visits": {
+    key: "sales/site-visits",
+    permission: PERM.sales.siteVisit.view,
+    load: siteVisitRecord,
+  },
+  "sales/cost-sheets": {
+    key: "sales/cost-sheets",
+    permission: PERM.sales.costSheet.view,
+    load: costSheetRecord,
+  },
+  "sales/receipts": {
+    key: "sales/receipts",
+    permission: PERM.sales.receipt.view,
+    load: receiptRecord,
   },
   "sales/leads": {
     key: "sales/leads",

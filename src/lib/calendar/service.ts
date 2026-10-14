@@ -239,6 +239,7 @@ async function activityRows(
     take: 200,
     select: {
       id: true, code: true, name: true, plannedStart: true, plannedEnd: true,
+      projectId: true,
       project: { select: { name: true } },
     },
   });
@@ -253,7 +254,14 @@ async function activityRows(
           at: a.plannedStart.toISOString(),
           endAt: a.plannedEnd.toISOString(),
           allDay: true,
-          href: "/schedule",
+          /*
+           * The activity's own id rides in the link. The schedule screen is
+           * one page per project rather than one per activity, so the web
+           * opens the plan and ignores the parameter — but a client that has a
+           * screen for one activity can land on it, and the calendar stops
+           * being a dead end for every dated activity.
+           */
+          href: `/schedule?project=${a.projectId}&activity=${a.id}`,
           tone: "slate" as const,
         }]
       : [],

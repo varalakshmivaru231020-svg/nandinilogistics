@@ -546,11 +546,17 @@ export function reorderColumns(showValuation: boolean): ReportColumn[] {
 }
 
 export function reorderRow(
-  r: { code: string; name: string; category: string; uom: string; onHand: number; reorderLevel: number; standardRate: number },
+  r: {
+    /** The item, which is what a reorder row stands for and opens. */
+    id: string;
+    code: string; name: string; category: string; uom: string;
+    onHand: number; reorderLevel: number; standardRate: number;
+  },
   showValuation: boolean,
 ): Record<string, unknown> {
   const shortfall = Math.max(0, r.reorderLevel - r.onHand);
   return {
+    id: r.id,
     code: r.code, name: r.name, category: r.category, uom: r.uom,
     onHand: r.onHand, reorderLevel: r.reorderLevel, shortfall,
     ...(showValuation ? { cost: shortfall * r.standardRate } : {}),
