@@ -258,6 +258,23 @@ schema, and the migrations in this project are additive.
 
 ## Known traps, in the order they have bitten
 
+**A root-owned file inside `.next` fails the build, silently.** The deploy
+builds as `nninfra`. Anything root has left in `.next` — one file is enough —
+stops it with `EACCES: permission denied, open .next/server/app/_not-found.rsc`,
+and because the script exits there it never restarts, never health-checks and
+never rolls back. The repository ends up at the new commit while pm2 keeps
+serving the old build, so the site looks fine and the release is simply not
+there. Nothing in the log says "failed" unless you read to the end of it.
+
+It bit on 14 Oct: eight root-owned files from a diagnostic run in the app
+directory. The cure is `chown -R nninfra:nninfra /var/www/nninfra/app/.next`
+followed by a re-deploy, and the lesson is that **anything run as root in the
+app directory must be followed by that chown**. Check the end of the deploy
+log, not the middle: "==> Healthy (HTTP 200)" is the only line that means it
+worked.
+
+
+
 1. **`pnpm check` does not run e2e**, and e2e silently skips when the app is not
    on port 3000. (A6)
 2. **`perms:grants` without `--add`** leaves new permissions ungranted, so a new
