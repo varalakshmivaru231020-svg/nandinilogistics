@@ -145,10 +145,10 @@ export interface FormDef {
   onRecord?: boolean;
   /**
    * A form whose fields are not fixed. "Capture lead" is whatever Masters →
-   * Lead Settings says it is, so its fields are read from the same table the
-   * web drawer reads rather than written down here.
+   * Lead Settings says it is, and the attendance sheet is one line per active
+   * worker — both are read when the form is served rather than written here.
    */
-  dynamic?: "leadFields";
+  dynamic?: "leadFields" | "attendanceSheet";
   /**
    * What the form becomes for somebody holding a further permission. The
    * indent's own button reads "Raise indent & send for approval" for whoever

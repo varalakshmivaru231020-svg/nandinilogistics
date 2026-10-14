@@ -296,6 +296,169 @@ export const FORMS: Record<string, FormDef> = {
       },
     ],
   },
+  /* --------------------------------------------------------------- vendors */
+
+  // src/app/(app)/material/vendors/vendor-form.tsx
+  "material/vendors:create": {
+    key: "material/vendors:create",
+    module: "material/vendors",
+    title: "New vendor",
+    description:
+      "Vendor code is generated automatically. Only vendor name and mobile number are mandatory.",
+    submitLabel: "Create vendor",
+    permission: PERM.masters.vendor.create,
+    action: "material/vendors/createVendor",
+    shape: { kind: "positional", order: ["$values"] },
+    done: "Vendor created.",
+    fields: [
+      {
+        name: "name",
+        label: "Vendor name",
+        kind: "text",
+        required: true,
+        placeholder: "Sri Balaji Agencies",
+        wide: true,
+      },
+      { name: "contactPerson", label: "Contact person", kind: "text", placeholder: "B. Ramesh" },
+      {
+        name: "phone",
+        label: "Mobile number",
+        kind: "phone",
+        required: true,
+        placeholder: "98450 00000",
+      },
+      { name: "email", label: "Email", kind: "email", placeholder: "sales@vendor.in" },
+      { name: "gstin", label: "GSTIN", kind: "text", placeholder: "29ABCDE1234F1Z5", caps: true },
+      { name: "pan", label: "PAN", kind: "text", placeholder: "ABCDE1234F", caps: true },
+      // The design writes the terms in words; they are matched to the master.
+      { name: "paymentTerms", label: "Payment terms", kind: "text", placeholder: "30 days credit" },
+      {
+        name: "accountNumber",
+        label: "Bank account number",
+        kind: "text",
+        placeholder: "50100234567890",
+      },
+      { name: "ifsc", label: "IFSC code", kind: "text", placeholder: "HDFC0001234", caps: true },
+      {
+        name: "bankName",
+        label: "Bank & branch",
+        kind: "text",
+        placeholder: "HDFC Bank · Mysore Road",
+      },
+      { name: "upiId", label: "UPI ID", kind: "text", placeholder: "sribalaji@okhdfcbank" },
+      {
+        name: "categoryIds",
+        label: "Supply categories",
+        kind: "multi",
+        source: "itemCategories",
+        wide: true,
+      },
+      {
+        name: "addressLine",
+        label: "Address",
+        kind: "textarea",
+        placeholder: "Yard address, city",
+        wide: true,
+      },
+    ],
+  },
+
+  /* ------------------------------------------------------------- attendance */
+
+  // src/app/(app)/hr/hr-screen.tsx → MarkTab. One line per active worker,
+  // read when the form is served.
+  "hr/attendance:mark": {
+    key: "hr/attendance:mark",
+    module: "hr/attendance",
+    title: "Mark Attendance",
+    submitLabel: "Save attendance",
+    permission: PERM.hr.attendance.mark,
+    action: "hr/markAttendance",
+    shape: { kind: "positional", order: ["$attendanceOn", "$marks"] },
+    done: "Attendance saved.",
+    dynamic: "attendanceSheet",
+    fields: [],
+  },
+
+  /* ------------------------------------------------------- site progress */
+
+  // src/app/(app)/projects/progress/progress-screen.tsx → LogModal. The
+  // photographs and the coordinates the web attaches are not sent from here:
+  // there is no upload path at the boundary, and a log without them is still
+  // the day's record.
+  "projects/progress:create": {
+    key: "projects/progress:create",
+    module: "projects/progress",
+    title: "Log site progress",
+    submitLabel: "Save log",
+    permission: PERM.project.progressLog.create,
+    action: "projects/progress/createProgressLog",
+    shape: { kind: "formData" },
+    done: "Log saved.",
+    fields: [
+      { name: "projectId", label: "Project", kind: "select", required: true, source: "projects" },
+      { name: "logDate", label: "Date", kind: "date", required: true },
+      {
+        name: "title",
+        label: "What happened today",
+        kind: "text",
+        required: true,
+        placeholder: "Slab shuttering — 7th floor",
+        wide: true,
+      },
+      { name: "notes", label: "Notes", kind: "textarea", wide: true },
+      { name: "manpowerCount", label: "Workers on site", kind: "number" },
+      { name: "weather", label: "Weather", kind: "text", placeholder: "Clear / rain" },
+    ],
+  },
+
+  /* ------------------------------------------------------------ price lists */
+
+  // src/app/(app)/units/price-lists/price-lists-screen.tsx
+  "units/price-lists:create": {
+    key: "units/price-lists:create",
+    module: "units/price-lists",
+    title: "New price list version",
+    submitLabel: "Publish version",
+    permission: PERM.unit.priceList.create,
+    action: "units/price-lists/createPriceList",
+    shape: { kind: "formData" },
+    done: "Price list version published.",
+    fields: [
+      { name: "projectId", label: "Project", kind: "select", required: true, source: "projects" },
+      { name: "name", label: "Version name", kind: "text", required: true },
+      { name: "effectiveFrom", label: "Effective from", kind: "date", required: true },
+      { name: "baseRate", label: "Base rate (₹ per sq.ft)", kind: "money", required: true },
+      { name: "floorRise", label: "Floor rise (₹ per sq.ft per floor)", kind: "money" },
+      { name: "plcAmount", label: "PLC amount (₹)", kind: "money" },
+    ],
+  },
+
+  /* -------------------------------------------------------- knowledge base */
+
+  // src/app/(app)/kb/kb-screen.tsx → ArticleDrawer. The web's editor is rich
+  // text and its attachments are files; this writes the words.
+  "kb:create": {
+    key: "kb:create",
+    module: "kb",
+    title: "New article",
+    submitLabel: "Publish article",
+    permission: PERM.kb.article.create,
+    action: "kb/createArticle",
+    shape: { kind: "formData" },
+    done: "Article published.",
+    fields: [
+      {
+        name: "title",
+        label: "Name",
+        kind: "text",
+        required: true,
+        placeholder: "e.g. Sales pitch — NN Riverview",
+        wide: true,
+      },
+      { name: "body", label: "Description", kind: "textarea", required: true, wide: true },
+    ],
+  },
 };
 
 /** Every form defined against a list or record. */

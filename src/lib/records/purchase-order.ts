@@ -139,6 +139,103 @@ export async function purchaseOrderRecord(
     });
   }
 
+  /*
+   * Receiving at the gate, which is the reason a store keeper has a phone.
+   * The web picks the order and then shows what it is still waiting for; here
+   * the order is already in hand, so the lines arrive pre-filled with the
+   * balance still to come and the rate the order was placed at.
+   *
+   * Accepted plus rejected may not exceed what was received — the line's own
+   * rule — and what is marked accepted enters the store immediately.
+   */
+  const pendingLines = po.items
+    .map((l) => ({
+      line: l,
+      pending: Math.max(0, Number(l.orderedQty) - Number(l.receivedQty)),
+    }))
+    .filter((l) => l.pending > 0);
+
+  if (
+    pendingLines.length > 0 &&
+    ["APPROVED", "PARTIALLY_RECEIVED"].includes(po.status) &&
+    ctx.has(PERM.material.grn.create)
+  ) {
+    const stores = await prisma.store.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, project: { select: { code: true } } },
+    });
+    actions.push({
+      key: "receive",
+      label: "Receive goods",
+      emphasis: "primary",
+      action: "material/grn/createGrn",
+      args: [
+        {
+          poId: id,
+          storeId: "$storeId",
+          challanNo: "$challanNo",
+          challanDate: "$challanDate",
+          vehicleNo: "$vehicleNo",
+          remarks: "$remarks",
+          items: "$items",
+        },
+      ],
+      remark: "none",
+      fields: [
+        {
+          name: "storeId",
+          label: "Receiving store",
+          kind: "lookup",
+          required: true,
+          placeholder: "Search stores…",
+          options: stores.map((st) => ({
+            value: st.id,
+            label: st.name,
+            hint: st.project?.code ?? undefined,
+          })),
+        },
+        { name: "challanNo", label: "Challan number", kind: "text", placeholder: "DC-4471" },
+        { name: "challanDate", label: "Challan date", kind: "date" },
+        {
+          name: "vehicleNo",
+          label: "Vehicle number",
+          kind: "text",
+          placeholder: "KA 01 AB 1234",
+          caps: true,
+        },
+        { name: "remarks", label: "Remarks", kind: "textarea", wide: true },
+        {
+          name: "items",
+          label: "What arrived",
+          kind: "rows",
+          fixedRows: true,
+          wide: true,
+          initialRows: pendingLines.map(({ line, pending }) => ({
+            _label: `${line.item.name} · ${qty(pending, 3)} ${line.item.uom.name} still to come`,
+            poItemId: line.id,
+            itemId: line.itemId,
+            rate: Number(line.rate),
+            receivedQty: pending,
+            acceptedQty: pending,
+          })),
+          row: [
+            { name: "poItemId", label: "Line", kind: "text", hidden: true },
+            { name: "itemId", label: "Item", kind: "text", hidden: true },
+            { name: "rate", label: "Rate", kind: "number", hidden: true },
+            { name: "receivedQty", label: "Received", kind: "number", required: true },
+            { name: "acceptedQty", label: "Accepted", kind: "number", required: true },
+            { name: "rejectedQty", label: "Rejected", kind: "number" },
+            { name: "shortQty", label: "Short", kind: "number" },
+            { name: "rejectionReason", label: "Rejection reason", kind: "text" },
+          ],
+        },
+      ],
+      confirm:
+        "What you mark accepted enters the store as soon as this is created, at the order's rate.",
+    });
+  }
+
   if (po.status === "DRAFT" && ctx.has(PERM.material.purchaseOrder.delete)) {
     actions.push({
       key: "delete",

@@ -4,6 +4,9 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { assertProjectAccess } from "@/lib/rbac/guard";
 import type { AuthContext } from "@/lib/rbac/context";
+import { indentFulfilment } from "@/lib/material/indent-fulfilment";
+import { qty } from "@/lib/utils";
+
 import { money, toneOf, words, type RecordAction, type RecordView } from "./shared";
 
 /**
@@ -46,6 +49,19 @@ export async function indentRecord(ctx: AuthContext, id: string): Promise<Record
     _sum: { quantity: true },
   });
   const onHand = new Map(balances.map((b) => [b.itemId, Number(b._sum.quantity ?? 0)]));
+
+  // What has already gone out against this indent, net of what came back.
+  const issuedRows = await prisma.materialIssueItem.findMany({
+    where: { issue: { indentId: id, cancelledAt: null } },
+    select: { itemId: true, issuedQty: true, returnedQty: true },
+  });
+  const issuedByItem = new Map<string, number>();
+  for (const row of issuedRows) {
+    issuedByItem.set(
+      row.itemId,
+      (issuedByItem.get(row.itemId) ?? 0) + Number(row.issuedQty) - Number(row.returnedQty),
+    );
+  }
 
   const atPm = indent.status === "SUBMITTED";
   const atAdmin = indent.status === "PM_APPROVED";
@@ -116,6 +132,111 @@ export async function indentRecord(ctx: AuthContext, id: string): Promise<Record
       remark: "required",
       remarkLabel: "Why",
       confirm: "Everybody who has seen it is told it is off.",
+    });
+  }
+
+  /*
+   * Issuing against the indent, which is how the web raises an issue slip —
+   * `/material/issues/new?indent=<id>` — with the lines capped at what the
+   * store can hand over today. `indentFulfilment()` is the same arithmetic the
+   * web form previews, so the caps are identical.
+   */
+  const fulfil = indentFulfilment(
+    indent.items.map((i) => ({
+      required: Number(i.approvedQty ?? i.requestedQty),
+      onHand: onHand.get(i.itemId) ?? 0,
+      issued: issuedByItem.get(i.itemId) ?? 0,
+      uom: i.item.uom?.name ?? "",
+    })),
+  ).lines;
+
+  const issuable = indent.items
+    .map((item, n) => ({ item, line: fulfil[n] }))
+    .filter(({ line }) => line && line.canIssue > 0);
+
+  if (issuable.length > 0 && ctx.has(PERM.material.issue.create)) {
+    const [stores, recipients] = await Promise.all([
+      prisma.store.findMany({
+        where: { status: "ACTIVE" },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, project: { select: { code: true } } },
+      }),
+      prisma.user.findMany({
+        where: { status: "ACTIVE" },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, designation: { select: { name: true } } },
+      }),
+    ]);
+
+    actions.push({
+      key: "issue",
+      label: "Issue from stock",
+      emphasis: "primary",
+      action: "material/issues/createIssue",
+      args: [
+        {
+          projectId: indent.projectId,
+          indentId: id,
+          workPackageId: indent.workPackageId ?? undefined,
+          purpose: indent.purpose ?? undefined,
+          storeId: "$storeId",
+          issuedToId: "$issuedToId",
+          remarks: "$remarks",
+          items: "$items",
+        },
+      ],
+      remark: "none",
+      fields: [
+        {
+          name: "storeId",
+          label: "From store",
+          kind: "lookup",
+          required: true,
+          placeholder: "Search stores…",
+          options: stores.map((st) => ({
+            value: st.id,
+            label: st.name,
+            hint: st.project?.code ?? undefined,
+          })),
+        },
+        {
+          name: "issuedToId",
+          label: "Issued to · site person",
+          kind: "lookup",
+          required: true,
+          placeholder: "Search people…",
+          options: recipients.map((u) => ({
+            value: u.id,
+            label: u.name,
+            hint: u.designation?.name ?? undefined,
+          })),
+        },
+        {
+          name: "remarks",
+          label: "Remarks",
+          kind: "textarea",
+          placeholder: "e.g. loaded on hoist, acknowledged on mobile…",
+          wide: true,
+        },
+        {
+          name: "items",
+          label: "What is going out",
+          kind: "rows",
+          fixedRows: true,
+          wide: true,
+          initialRows: issuable.map(({ item, line }) => ({
+            _label: `${item.item.name} · ${qty(line.canIssue, 3)} ${item.item.uom?.name ?? ""} issuable now`,
+            itemId: item.itemId,
+            issuedQty: line.canIssue,
+          })),
+          row: [
+            { name: "itemId", label: "Item", kind: "text", hidden: true },
+            { name: "issuedQty", label: "Quantity", kind: "number", required: true },
+          ],
+        },
+      ],
+      confirm:
+        "Issuing reduces store stock and closes the indent line by line. The person it goes to acknowledges it on their phone.",
     });
   }
 

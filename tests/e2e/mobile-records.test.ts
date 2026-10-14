@@ -333,6 +333,45 @@ suite("the material records", () => {
     });
   });
 
+  describe("the forms a list offers", () => {
+    it("are only the ones this person may open", async () => {
+      const { body } = await get("/screen/material/vendors");
+      const screen = body.data as unknown as {
+        forms: Array<{ key: string; title: string; submitLabel: string }>;
+        record: boolean;
+      };
+      expect(screen.record, "a vendor row opens its record").toBe(true);
+      expect(screen.forms.map((f) => f.key)).toContain("material/vendors:create");
+    });
+
+    /** The sheet is the workforce, pre-filled with whatever is marked today. */
+    it("the attendance sheet arrives as one line per worker", async () => {
+      const { body } = await get("/form/hr/attendance/mark");
+      const form = body.data as unknown as {
+        title: string;
+        submitLabel: string;
+        fields: Array<{
+          name: string;
+          kind: string;
+          fixedRows?: boolean;
+          initialRows?: Array<Record<string, unknown>>;
+          row?: Array<{ name: string; options?: Array<{ value: string }> }>;
+        }>;
+      };
+
+      expect(form.title).toBe("Mark Attendance");
+      expect(form.submitLabel).toBe("Save attendance");
+      const sheet = form.fields.find((f) => f.name === "marks")!;
+      expect(sheet.kind).toBe("rows");
+      expect(sheet.fixedRows).toBe(true);
+      expect(sheet.initialRows!.length).toBeGreaterThan(0);
+      expect(sheet.initialRows![0].status).toBeTruthy();
+      // The web's own three marks.
+      const status = sheet.row!.find((r) => r.name === "status")!;
+      expect(status.options!.map((o) => o.value)).toEqual(["PRESENT", "ABSENT", "HALF_DAY"]);
+    });
+  });
+
   describe("a purchase order and its receipt", () => {
     it("carries the lines, the trail and the stale guard", async () => {
       const list = await get("/list/material/purchase-orders");
@@ -344,10 +383,47 @@ suite("the material records", () => {
       expect(rec.collections.map((c) => c.key.split(":")[0])).toEqual([
         "lines", "grns", "invoices",
       ]);
-      // Every write carries the order's own updatedAt, so a decision cannot
-      // land on a document the decider never saw.
-      for (const a of rec.actions) {
-        expect(a.args.some((x) => typeof x === "string" && /^\d{4}-\d{2}-\d{2}T/.test(x))).toBe(true);
+      /*
+       * Every write **to the order** carries its own updatedAt, so a decision
+       * cannot land on a document the decider never saw. Receiving against it
+       * creates a goods receipt rather than changing the order, so it does not
+       * — and it is the one action whose arguments are a parsed object.
+       */
+      for (const a of rec.actions.filter((x) => x.key !== "receive")) {
+        expect(
+          a.args.some((x) => typeof x === "string" && /^\d{4}-\d{2}-\d{2}T/.test(x)),
+          `${a.key} carries the stale guard`,
+        ).toBe(true);
+      }
+    });
+
+    /*
+     * Receiving at the gate: the order's own record offers it, with each line
+     * pre-filled with the balance still to come and the rate it was ordered
+     * at. The store keeper reduces what did not arrive.
+     */
+    it("offers receiving with the balance still to come pre-filled", async () => {
+      const list = await get("/list/material/purchase-orders");
+      const rows = (list.body.data as unknown as { rows: Array<{ id: string }> }).rows;
+      if (rows.length === 0) return;
+
+      for (const row of rows) {
+        const rec = await record("material/purchase-orders", row.id);
+        const receive = rec.actions.find((a) => a.key === "receive");
+        if (!receive) continue;
+
+        const lines = receive.fields!.find((f) => f.name === "items")!;
+        expect(lines.kind).toBe("rows");
+        expect(lines.fixedRows).toBe(true);
+        expect(lines.initialRows!.length).toBeGreaterThan(0);
+        const first = lines.initialRows![0];
+        // Received and accepted both start at the balance; the rate and the
+        // line's id ride along without being drawn.
+        expect(first.receivedQty).toBe(first.acceptedQty);
+        expect(first.rate).toBeTypeOf("number");
+        expect(String(first._label)).toContain("still to come");
+        expect(lines.row!.find((r) => r.name === "poItemId")!.hidden).toBe(true);
+        return;
       }
     });
 

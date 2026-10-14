@@ -128,3 +128,71 @@ export async function leadFormFields(ctx: AuthContext): Promise<ResolvedField[]>
 
   return fields;
 }
+
+/**
+ * The attendance sheet: one line per active worker, pre-filled with whatever
+ * is already marked for the day.
+ *
+ * This cannot be written down either — the lines are the workforce. The web
+ * marks a whole table at once and saves it in one call, and so does this: the
+ * action takes the marks as an array, and a line left on its current state is
+ * sent unchanged.
+ */
+export async function attendanceSheetFields(ctx: AuthContext): Promise<ResolvedField[]> {
+  void ctx;
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [employees, marks] = await Promise.all([
+    prisma.employee.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: { name: "asc" },
+      select: {
+        id: true, name: true, employeeCode: true,
+        employmentType: { select: { name: true } },
+      },
+    }),
+    prisma.attendanceEntry.findMany({
+      where: { attendanceOn: new Date(today) },
+      select: { employeeId: true, status: true, overtimeHours: true },
+    }),
+  ]);
+
+  const already = new Map(marks.map((m) => [m.employeeId, m]));
+
+  return [
+    { name: "attendanceOn", label: "Date", kind: "date", required: true, initial: today },
+    {
+      name: "marks",
+      label: "The sheet",
+      kind: "rows",
+      // The workforce, so a line cannot be added or dropped from a phone.
+      fixedRows: true,
+      wide: true,
+      initialRows: employees.map((e) => {
+        const mark = already.get(e.id);
+        return {
+          _label: `${e.name} · ${e.employeeCode} · ${e.employmentType.name}`,
+          employeeId: e.id,
+          status: mark?.status ?? "PRESENT",
+          overtimeHours: mark ? Number(mark.overtimeHours) : 0,
+        };
+      }),
+      row: [
+        { name: "employeeId", label: "Worker", kind: "text", hidden: true },
+        {
+          name: "status",
+          label: "Attendance",
+          kind: "select",
+          required: true,
+          // The web's own three marks, in its own order and words.
+          options: [
+            { value: "PRESENT", label: "Present" },
+            { value: "ABSENT", label: "Absent" },
+            { value: "HALF_DAY", label: "Half day" },
+          ],
+        },
+        { name: "overtimeHours", label: "Overtime hours", kind: "number" },
+      ],
+    },
+  ];
+}

@@ -3,7 +3,7 @@ import "server-only";
 import type { AuthContext } from "@/lib/rbac/context";
 import { loadOptions } from "@/lib/screens/resolve";
 
-import { leadFormFields } from "./lead-form";
+import { attendanceSheetFields, leadFormFields } from "./lead-form";
 import { FORMS } from "./registry";
 import type { FormDef, FormFieldDef, ResolvedField, ResolvedForm } from "./types";
 
@@ -50,7 +50,9 @@ export async function resolveForm(
     ...upgrade,
     fields: dynamic === "leadFields"
       ? await leadFormFields(ctx)
-      : await Promise.all(fields.map((f) => resolveField(f, ctx))),
+      : dynamic === "attendanceSheet"
+        ? await attendanceSheetFields(ctx)
+        : await Promise.all(fields.map((f) => resolveField(f, ctx))),
     serverTime: new Date().toISOString(),
   };
 }

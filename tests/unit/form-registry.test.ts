@@ -31,6 +31,11 @@ const SOURCE: Record<string, string> = {
   "sales/customers:create": "sales/customers/customers-screen.tsx",
   "sales/leads:create": "sales/leads/leads-screen.tsx",
   "material/indents:create": "material/indents/new/indent-form.tsx",
+  "material/vendors:create": "material/vendors/vendor-form.tsx",
+  "hr/attendance:mark": "hr/hr-screen.tsx",
+  "projects/progress:create": "projects/progress/progress-screen.tsx",
+  "units/price-lists:create": "units/price-lists/price-lists-screen.tsx",
+  "kb:create": "kb/kb-screen.tsx",
 };
 
 /**
@@ -59,7 +64,12 @@ function labelled(src: string, label: string): boolean {
  * carries its own picker and the picker needs a name. Nothing else belongs in
  * here: a label the web writes is the label the phone writes.
  */
-const OURS = new Set(["material/indents:create → Item"]);
+const OURS = new Set([
+  "material/indents:create → Item",
+  // The vendor form's category picker is a list of chips with an "add a new
+  // category" box rather than a labelled field.
+  "material/vendors:create → Supply categories",
+]);
 
 function source(key: string): string {
   return readFileSync(join(ROOT, "src", "app", "(app)", SOURCE[key]), "utf8");
@@ -134,6 +144,32 @@ describe("the lead form's mapping, against the drawer that does the same", () =>
 
   it("calls the nothing-chosen option what the drawer calls it", () => {
     expect(src.includes("Select…")).toBe(true);
+  });
+});
+
+/**
+ * The attendance sheet is the other form that cannot be written down: its
+ * lines are the workforce. What can drift is the three marks and the names the
+ * action reads, so those are checked against the tab that does the same.
+ */
+describe("the attendance sheet's mapping, against the tab that does the same", () => {
+  const src = source("hr/attendance:mark");
+
+  it("offers the web's own three marks, in its words", () => {
+    for (const [key, label] of [
+      ["PRESENT", "Present"],
+      ["ABSENT", "Absent"],
+      ["HALF_DAY", "Half day"],
+    ]) {
+      expect(src.includes(`"${key}"`), `mark ${key}`).toBe(true);
+      expect(src.includes(`"${label}"`), `mark label ${label}`).toBe(true);
+    }
+  });
+
+  it("sends what the action reads", () => {
+    for (const name of ["employeeId", "status", "overtimeHours"]) {
+      expect(src.includes(name), `attendance field ${name}`).toBe(true);
+    }
   });
 });
 
