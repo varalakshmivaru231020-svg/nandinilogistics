@@ -36,6 +36,8 @@ const SOURCE: Record<string, string> = {
   "projects/progress:create": "projects/progress/progress-screen.tsx",
   "units/price-lists:create": "units/price-lists/price-lists-screen.tsx",
   "kb:create": "kb/kb-screen.tsx",
+  "material/transfers:create": "material/transfers/transfers-screen.tsx",
+  "checklists:create": "checklists/checklists-screen.tsx",
 };
 
 /**
@@ -43,13 +45,14 @@ const SOURCE: Record<string, string> = {
  *
  * The web writes one several ways: a `label="…"` prop, the whole text of its
  * own element, text followed by a required mark — `>Project {REQUIRED}<` — and
- * text followed by a middot and something interpolated, as "Reqd qty · BAG"
- * and "On whom · they accept before it is theirs" are. All of them are the
- * same label.
+ * text followed by something interpolated: a middot and a unit, as "Reqd qty ·
+ * BAG" is, or the unit in brackets, as `Quantity${` (${s.uom})`}` is.
  */
 function labelled(src: string, label: string): boolean {
   if (src.includes(`label="${label}"`) || src.includes(`label={"${label}"}`)) return true;
   if (src.includes(`"${label}"`)) return true;
+  // A template literal that starts with the label: `Quantity${…}`.
+  if (src.includes(`label={\`${label}`)) return true;
   // `>Label<`, `>Label {REQUIRED}<`, `>Label <span…`, and the same after a
   // newline and indentation.
   const esc = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -69,7 +72,18 @@ const OURS = new Set([
   // The vendor form's category picker is a list of chips with an "add a new
   // category" box rather than a labelled field.
   "material/vendors:create → Supply categories",
+  // The checklist's category is the tab you are standing on when you add one,
+  // not a field on its form.
+  "checklists:create → Category",
+  // The transfer modal has no heading over its lines; a phone's rows need one.
+  "material/transfers:create → Items",
 ]);
+
+/**
+ * Arguments the web passes from outside its form, so they are not `name="…"`
+ * anywhere: the checklist's category is the tab you are standing on.
+ */
+const OUTSIDE_THE_FORM = new Set(["checklists:create → categoryId"]);
 
 function source(key: string): string {
   return readFileSync(join(ROOT, "src", "app", "(app)", SOURCE[key]), "utf8");
@@ -186,12 +200,14 @@ describe("the fields are the web's fields", () => {
 
       it("reads the same field names the web submits", () => {
         for (const f of form.fields) {
+          if (OUTSIDE_THE_FORM.has(`${key} → ${f.name}`)) continue;
           const used =
             src.includes(`name="${f.name}"`) ||
             // Collected by hand and appended to the FormData, as a multi-select
-            // and a line array are.
+            // and a line array are; or held in state and passed as a property
+            // of the object the action takes, which is shorthand by then.
             src.includes(`"${f.name}"`) ||
-            src.includes(`${f.name}:`);
+            new RegExp(`\\b${f.name}\\b`).test(src);
           expect(used, `${key} field ${f.name}`).toBe(true);
         }
       });

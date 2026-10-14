@@ -362,6 +362,96 @@ void main() {
     });
   });
 
+  group('lines that are already there', () {
+    /*
+     * The attendance sheet and a transfer's receive are not forms somebody
+     * fills from nothing: the lines are the workforce, or the lines that were
+     * sent. They arrive pre-filled and fixed — none to be added or dropped —
+     * each named, with the id it belongs to carried but never drawn.
+     */
+    Map<String, Object> attendance() => {
+          '/form/hr/attendance/mark': {
+            'key': 'hr/attendance:mark',
+            'module': 'hr/attendance',
+            'title': 'Mark Attendance',
+            'submitLabel': 'Save attendance',
+            'action': 'hr/markAttendance',
+            'shape': {'kind': 'positional', 'order': [r'$attendanceOn', r'$marks']},
+            'fields': [
+              field('attendanceOn', 'Date', 'date', required: true, initial: '2026-10-14'),
+              field('marks', 'The sheet', 'rows',
+                  row: [
+                    field('employeeId', 'Worker', 'text'),
+                    field('status', 'Attendance', 'select', required: true, options: [
+                      {'value': 'PRESENT', 'label': 'Present'},
+                      {'value': 'ABSENT', 'label': 'Absent'},
+                      {'value': 'HALF_DAY', 'label': 'Half day'},
+                    ]),
+                    field('overtimeHours', 'Overtime hours', 'number'),
+                  ]),
+            ],
+          },
+          '/do/hr/markAttendance': const {'saved': 2},
+        };
+
+    Map<String, Object> withSheet(List<Map<String, Object?>> rows) {
+      final form = attendance();
+      final def = (form['/form/hr/attendance/mark']! as Map<String, Object>);
+      final fields = (def['fields']! as List).cast<Map<String, dynamic>>();
+      fields[1] = {
+        ...fields[1],
+        'fixedRows': true,
+        'initialRows': rows,
+        'row': [
+          {...(fields[1]['row'] as List)[0] as Map<String, dynamic>, 'hidden': true},
+          ...((fields[1]['row'] as List).skip(1).cast<Map<String, dynamic>>()),
+        ],
+      };
+      return form;
+    }
+
+    testWidgets('each line is named and cannot be added to or removed',
+        (tester) async {
+      await pumpForm(tester, withSheet([
+        {'_label': 'Ravi Shankar · EMP-0001 · Site Supervisor', 'employeeId': 'e1', 'status': 'PRESENT', 'overtimeHours': 0},
+        {'_label': 'Girish Patil · EMP-0002 · Store Keeper', 'employeeId': 'e2', 'status': 'ABSENT', 'overtimeHours': 0},
+      ]), 'hr/attendance:mark');
+
+      // The line's own name, not "Line 1".
+      expect(find.text('RAVI SHANKAR · EMP-0001 · SITE SUPERVISOR'), findsOneWidget);
+      expect(find.text('GIRISH PATIL · EMP-0002 · STORE KEEPER'), findsOneWidget);
+      expect(find.text('LINE 1'), findsNothing);
+      // Fixed: nothing to add, nothing to remove.
+      expect(find.text('Add line'), findsNothing);
+      expect(find.text('Remove'), findsNothing);
+      // The id is carried, not drawn.
+      expect(find.text('Worker'), findsNothing);
+    });
+
+    testWidgets('what arrived pre-filled is what is sent back', (tester) async {
+      final b = await pumpForm(tester, withSheet([
+        {'_label': 'Ravi Shankar', 'employeeId': 'e1', 'status': 'PRESENT', 'overtimeHours': 0},
+        {'_label': 'Girish Patil', 'employeeId': 'e2', 'status': 'ABSENT', 'overtimeHours': 0},
+      ]), 'hr/attendance:mark');
+
+      // One mark changed; the other goes back as it came.
+      await tester.ensureVisible(find.text('Half day').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Half day').first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('submit')));
+      await tester.pumpAndSettle();
+
+      final args = b.actions.single.args;
+      expect(args.first, '2026-10-14');
+      expect(args[1], [
+        {'employeeId': 'e1', 'status': 'HALF_DAY', 'overtimeHours': 0},
+        {'employeeId': 'e2', 'status': 'ABSENT', 'overtimeHours': 0},
+      ]);
+    });
+  });
+
   group('review levels', () {
     /// Review level 1 is the assignee, and the action reads the list in level
     /// order — so whoever the assignee field names is sent first.

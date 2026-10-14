@@ -51,7 +51,11 @@ export async function purchaseOrderRecord(
         orderBy: { grnDate: "desc" },
         include: {
           receivedBy: { select: { name: true } },
-          items: { select: { receivedQty: true, acceptedQty: true, rejectedQty: true, shortQty: true } },
+          items: {
+            select: {
+              itemId: true, receivedQty: true, acceptedQty: true, rejectedQty: true, shortQty: true,
+            },
+          },
         },
       },
       invoices: { select: { id: true, invoiceNo: true, totalAmount: true, status: true } },
@@ -234,6 +238,78 @@ export async function purchaseOrderRecord(
       confirm:
         "What you mark accepted enters the store as soon as this is created, at the order's rate.",
     });
+  }
+
+  /*
+   * Recording the vendor's invoice, which the goods receipt screen points at:
+   * "Attach invoice now". It defaults to billing exactly what was received at
+   * the order's rate — the matching case — and anything above what was
+   * received is what the three-way match will flag.
+   */
+  if (!invoiced && canSeeRate && ctx.has(PERM.material.vendorInvoice.create)) {
+    const accepted = new Map<string, number>();
+    for (const g of po.grns) {
+      if (g.status !== "POSTED") continue;
+      for (const l of g.items) {
+        // Accepted quantity only: what was rejected was never really received.
+        accepted.set(l.itemId, (accepted.get(l.itemId) ?? 0) + Number(l.acceptedQty));
+      }
+    }
+    const billable = po.items
+      .map((l) => ({ line: l, received: accepted.get(l.itemId) ?? 0 }))
+      .filter((l) => l.received > 0);
+
+    if (billable.length > 0) {
+      actions.push({
+        key: "invoice",
+        label: "Record vendor invoice",
+        emphasis: "outline",
+        action: "material/invoices/createVendorInvoice",
+        args: [
+          {
+            poId: id,
+            invoiceNo: "$invoiceNo",
+            invoiceDate: "$invoiceDate",
+            remarks: "$remarks",
+            items: "$items",
+          },
+        ],
+        remark: "none",
+        fields: [
+          {
+            name: "invoiceNo",
+            label: "Vendor invoice number",
+            kind: "text",
+            required: true,
+            placeholder: "INV-2026-0412",
+          },
+          { name: "invoiceDate", label: "Invoice date", kind: "date", required: true },
+          { name: "remarks", label: "Remarks", kind: "textarea", wide: true },
+          {
+            name: "items",
+            label: "What is being billed",
+            kind: "rows",
+            fixedRows: true,
+            wide: true,
+            initialRows: billable.map(({ line, received }) => ({
+              _label: `${line.item.name} · ${qty(received, 3)} ${line.item.uom.name} received`,
+              itemId: line.itemId,
+              invoicedQty: received,
+              rate: Number(line.rate),
+              taxPct: Number(line.taxPct),
+            })),
+            row: [
+              { name: "itemId", label: "Item", kind: "text", hidden: true },
+              { name: "invoicedQty", label: "Billed qty", kind: "number", required: true },
+              { name: "rate", label: "Rate (₹)", kind: "money", required: true },
+              { name: "taxPct", label: "GST %", kind: "number" },
+            ],
+          },
+        ],
+        confirm:
+          "Billing more than was received, or above the order's rate, is matched as a variance and blocks payment until somebody overrides it.",
+      });
+    }
   }
 
   if (po.status === "DRAFT" && ctx.has(PERM.material.purchaseOrder.delete)) {

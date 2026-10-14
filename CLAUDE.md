@@ -126,6 +126,15 @@ rather than from anything it holds:
 - Adding a record or a form to a module means adding it there, not in the app.
   `/record` and `/form` answer a plain 404 for what is not built yet, and the
   app says so rather than showing an empty screen.
+- **A create that comes from a document belongs on that document's record**, as
+  an action carrying its fields — receiving goods is on the purchase order,
+  issuing and raising a PO are on the indent, a cost sheet is on the flat, a
+  receipt is on the demand. Only a create that starts from nothing belongs on
+  the list.
+- A `rows` field may arrive **pre-filled and fixed** (`initialRows`,
+  `fixedRows`), which is how the lines of a receipt, a return, a transfer and
+  the attendance sheet are sent: the lines are the document's own, so none can
+  be invented or dropped. `hidden` carries a line's id without drawing it.
 
 ## Verifying a change
 

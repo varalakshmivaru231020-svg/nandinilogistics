@@ -434,6 +434,87 @@ export const FORMS: Record<string, FormDef> = {
     ],
   },
 
+  /* -------------------------------------------------------------- transfers */
+
+  // src/app/(app)/material/transfers/transfers-screen.tsx → NewTransferModal.
+  // The web shows what each store holds as the quantity is typed; here the
+  // action's own availability check is what refuses too much, and it names the
+  // item and the quantity when it does.
+  "material/transfers:create": {
+    key: "material/transfers:create",
+    module: "material/transfers",
+    title: "New store transfer",
+    description: "Stock moves only when the transfer is approved.",
+    submitLabel: "Raise transfer",
+    permission: PERM.material.transfer.create,
+    action: "material/transfers/createTransfer",
+    shape: { kind: "positional", order: ["$values"] },
+    done: "Transfer raised.",
+    fields: [
+      {
+        name: "fromStoreId",
+        label: "From store",
+        kind: "lookup",
+        required: true,
+        source: "stores2",
+      },
+      {
+        name: "toStoreId",
+        label: "To store",
+        kind: "lookup",
+        required: true,
+        source: "stores2",
+      },
+      {
+        name: "items",
+        label: "Items",
+        kind: "rows",
+        addLabel: "Add line",
+        minRows: 1,
+        minRowsMessage: "Add at least one item",
+        wide: true,
+        row: [
+          { name: "itemId", label: "Item", kind: "lookup", required: true, source: "items" },
+          { name: "quantity", label: "Quantity", kind: "number", required: true },
+        ],
+      },
+      { name: "remarks", label: "Remarks", kind: "textarea", wide: true },
+    ],
+  },
+
+  /* ------------------------------------------------------------- checklists */
+
+  // src/app/(app)/checklists/checklists-screen.tsx. The points are added to it
+  // afterwards, one at a time, as they are on the web.
+  "checklists:create": {
+    key: "checklists:create",
+    module: "checklists",
+    title: "New checklist",
+    submitLabel: "Save",
+    permission: PERM.checklist.checklist.create,
+    action: "checklists/saveChecklist",
+    shape: { kind: "positional", order: [null, "$categoryId", "$values"] },
+    done: "Checklist saved.",
+    fields: [
+      {
+        name: "categoryId",
+        label: "Category",
+        kind: "select",
+        required: true,
+        source: "checklistCategories",
+      },
+      {
+        name: "name",
+        label: "Checklist name",
+        kind: "text",
+        required: true,
+        placeholder: "e.g. Column casting QC",
+        wide: true,
+      },
+      { name: "version", label: "Version", kind: "text", placeholder: "v1.0" },
+    ],
+  },
+
   /* -------------------------------------------------------- knowledge base */
 
   // src/app/(app)/kb/kb-screen.tsx → ArticleDrawer. The web's editor is rich

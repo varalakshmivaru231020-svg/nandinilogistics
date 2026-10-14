@@ -93,6 +93,81 @@ export async function unitRecord(ctx: AuthContext, id: string): Promise<RecordVi
     );
   }
 
+  /*
+   * Quoting the flat. Every line comes from a charge head in the master and a
+   * rate from the active price list, so the only decisions here are the lead
+   * it is for, which optional heads apply, and the discount — and the discount
+   * is only offered to somebody who may ask for one.
+   */
+  if (unit.status === "AVAILABLE" && ctx.has(PERM.sales.costSheet.create)) {
+    const [leads, heads] = await Promise.all([
+      prisma.lead.findMany({
+        where: {
+          state: { notIn: ["BOOKED", "LOST"] },
+          ...(ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id }),
+        },
+        orderBy: { name: "asc" },
+        take: 200,
+        select: { id: true, name: true, leadNo: true },
+      }),
+      prisma.chargeHead.findMany({
+        where: {
+          status: "ACTIVE",
+          isMandatory: false,
+          // The heads the engine decides for itself are not choices.
+          code: { notIn: ["BASE", "FLOORRISE", "PLC", "PARKING"] },
+        },
+        orderBy: { sortOrder: "asc" },
+        select: { code: true, name: true },
+      }),
+    ]);
+    // The web asks for the create permission here too: whoever may quote may
+    // ask for a discount. Approving one is a different permission and a
+    // personal ceiling.
+    const canDiscount = ctx.has(PERM.sales.costSheet.create);
+
+    actions.push({
+      key: "costSheet",
+      label: "Generate a cost sheet",
+      emphasis: "primary",
+      action: "sales/cost-sheets/createCostSheet",
+      args: [id, "$leadId", "$includeOptional", canDiscount ? "$discountAmount" : 0],
+      remark: "none",
+      fields: [
+        {
+          name: "leadId",
+          label: "Lead",
+          kind: "lookup",
+          hint: "Links the quote to the enquiry it came from.",
+          placeholder: "Search leads…",
+          emptyLabel: "— None —",
+          options: leads.map((l) => ({ value: l.id, label: l.name, hint: l.leadNo })),
+        },
+        {
+          name: "includeOptional",
+          label: "Optional charges",
+          note: "mandatory heads are always applied",
+          kind: "multi",
+          placeholder: "Add a charge",
+          options: heads.map((h) => ({ value: h.code, label: h.name })),
+          wide: true,
+        },
+        ...(canDiscount
+          ? [
+              {
+                name: "discountAmount",
+                label: "Discount",
+                kind: "money" as const,
+                hint: "A discount holds the sheet up until somebody with the ceiling approves it.",
+              },
+            ]
+          : []),
+      ],
+      confirm:
+        "Every line comes from a charge head in the master and a rate from the active price list.",
+    });
+  }
+
   if (activeHold && ctx.has(PERM.unit.hold.release)) {
     actions.push({
       key: "releaseHold",

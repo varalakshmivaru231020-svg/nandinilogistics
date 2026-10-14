@@ -245,15 +245,16 @@ class FormValues {
     }
     if (f.kind == 'multi') {
       final picked = (values[f.name] as List?)?.cast<String>() ?? const <String>[];
-      if (f.leadWith == null) return picked.isEmpty ? null : picked;
+      // An empty list, not nothing: an action that takes a list of ids takes
+      // the empty one, and `toFormData` appends nothing for it.
+      if (f.leadWith == null) return picked;
       // Review level 1 is the assignee, and the action reads the list in level
       // order — so whoever that field names goes first.
       final lead = values[f.leadWith!] ?? _text[f.leadWith!]?.text;
-      final all = [
+      return [
         if (lead != null && '$lead'.isNotEmpty) '$lead',
         ...picked.where((p) => p != '$lead'),
       ];
-      return all.isEmpty ? null : all;
     }
     return values[f.name];
   }
@@ -264,6 +265,8 @@ class FormValues {
     for (final f in fields) {
       final v = read(f);
       if (v == null) continue;
+      // An empty list is nothing to send in a form body.
+      if (v is List && v.isEmpty) continue;
       if (f.kind == 'checkbox') {
         // A browser sends a ticked box as "on" and leaves it out otherwise,
         // which is what every one of these actions reads.
@@ -325,11 +328,19 @@ Object? fill(Object? slot, FormValues v, {String? recordId}) {
 
   final f = v.fields.where((x) => x.name == name).firstOrNull;
   if (f == null) return slot;
-  // A box left empty goes as an empty string, which is what a form sends; the
-  // boundary turns it into nothing where the action takes nothing.
-  return v.read(f) ??
-      (f.isText || f.kind == 'date' || f.kind == 'datetime' || f.kind == 'select' ? '' : null);
+  /*
+   * One rule for an empty answer: a box or a chooser sends an empty string,
+   * which is what a form sends, and the boundary turns that into nothing for
+   * an argument whose action takes `| null`. A list sends the empty list.
+   */
+  return v.read(f) ?? (_sendsEmptyText(f.kind) ? '' : null);
 }
+
+/// The kinds whose empty answer is an empty string rather than nothing.
+bool _sendsEmptyText(String kind) => const {
+      'text', 'textarea', 'number', 'money', 'phone', 'email', 'suggest',
+      'date', 'datetime', 'select', 'lookup',
+    }.contains(kind);
 
 /* -------------------------------------------------------------- the widgets */
 

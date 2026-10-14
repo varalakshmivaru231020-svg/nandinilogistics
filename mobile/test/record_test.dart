@@ -323,6 +323,46 @@ void main() {
     });
   });
 
+  group('a list of ids', () {
+    /*
+     * An action that takes a list takes the empty one. It used to send nothing
+     * at all, which the boundary reads as a missing argument — "`includeOptional`
+     * is required" — on a cost sheet with no optional charges ticked.
+     */
+    testWidgets('an empty picker is sent as an empty list', (tester) async {
+      final b = await pumpRecord(tester, {
+        ...taskRecord(points: const [], actions: [
+          {
+            'key': 'costSheet', 'label': 'Generate a cost sheet', 'emphasis': 'primary',
+            'action': 'sales/cost-sheets/createCostSheet',
+            'args': ['u1', r'$leadId', r'$includeOptional', r'$discountAmount'],
+            'remark': 'none',
+            'fields': [
+              {
+                'name': 'leadId', 'label': 'Lead', 'kind': 'lookup',
+                'emptyLabel': '— None —',
+                'options': [{'value': 'l1', 'label': 'Rajesh Iyer'}],
+              },
+              {
+                'name': 'includeOptional', 'label': 'Optional charges', 'kind': 'multi',
+                'options': [{'value': 'CLUB', 'label': 'Club membership'}],
+              },
+              {'name': 'discountAmount', 'label': 'Discount', 'kind': 'money'},
+            ],
+          },
+        ]),
+        '/do/sales/cost-sheets/createCostSheet': const {'id': 'cs1'},
+      });
+
+      await tester.tap(find.text('Generate a cost sheet'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirm')));
+      await tester.pumpAndSettle();
+
+      expect(b.actions.single.args, ['u1', '', <String>[], '']);
+    });
+  });
+
   group('a module whose record screen is not built', () {
     /// Said plainly, rather than an empty screen or a raw error.
     testWidgets('says the list works and the record is coming', (tester) async {

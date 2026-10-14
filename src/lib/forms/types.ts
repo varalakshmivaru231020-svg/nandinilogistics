@@ -120,7 +120,7 @@ export type FormShape =
    * `$id` is the record the form was opened on, and anything else is passed
    * as the literal it is.
    */
-  | { kind: "positional"; order: ReadonlyArray<string | boolean | number> };
+  | { kind: "positional"; order: ReadonlyArray<string | boolean | number | null> };
 
 export interface FormDef {
   /** "sales/customers:create" — the module, then what the form does. */

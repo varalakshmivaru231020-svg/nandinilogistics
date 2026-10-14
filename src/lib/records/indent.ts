@@ -240,6 +240,106 @@ export async function indentRecord(ctx: AuthContext, id: string): Promise<Record
     });
   }
 
+  /*
+   * Raising the purchase order for the shortfall, which is the other half of
+   * the web's indent screen. The lines are pre-filled the way its own form
+   * pre-fills them: `toPurchaseQty` where the stock check set one, the
+   * approved quantity otherwise, at the indent's estimated rate.
+   */
+  const toBuy = indent.items
+    .map((i) => ({
+      item: i,
+      q:
+        Number(i.toPurchaseQty) > 0
+          ? Number(i.toPurchaseQty)
+          : Number(i.approvedQty ?? i.requestedQty),
+    }))
+    .filter((l) => l.q > 0);
+
+  if (
+    toBuy.length > 0 &&
+    ["ADMIN_APPROVED", "PM_APPROVED", "PARTIALLY_ORDERED"].includes(indent.status) &&
+    ctx.has(PERM.material.purchaseOrder.create)
+  ) {
+    const vendors = await prisma.vendor.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, code: true, phone: true },
+    });
+    actions.push({
+      key: "raisePo",
+      label: "Raise purchase order",
+      emphasis: "outline",
+      action: "material/purchase-orders/createPurchaseOrder",
+      args: [
+        {
+          projectId: indent.projectId,
+          vendorId: "$vendorId",
+          expectedDate: "$expectedDate",
+          terms: "$terms",
+          deliveryAddress: "$deliveryAddress",
+          items: "$items",
+        },
+        false,
+      ],
+      remark: "none",
+      fields: [
+        {
+          name: "vendorId",
+          label: "Vendor",
+          kind: "lookup",
+          required: true,
+          placeholder: "Search vendor by name, code or number…",
+          options: vendors.map((v) => ({
+            value: v.id,
+            label: v.name,
+            hint: [v.code, v.phone].filter(Boolean).join(" · "),
+          })),
+        },
+        { name: "expectedDate", label: "Delivery due", kind: "date" },
+        {
+          name: "terms",
+          label: "Payment & delivery terms",
+          kind: "text",
+          placeholder: "30 days credit · delivery at site",
+          wide: true,
+        },
+        {
+          name: "deliveryAddress",
+          label: "Remarks",
+          kind: "textarea",
+          placeholder: "e.g. deliver in two lots, unload at basement gate…",
+          wide: true,
+        },
+        {
+          name: "items",
+          label: "Order lines",
+          kind: "rows",
+          fixedRows: true,
+          wide: true,
+          initialRows: toBuy.map(({ item, q }) => ({
+            _label: `${item.item.name} · ${qty(q, 3)} ${item.item.uom?.name ?? ""} to buy`,
+            itemId: item.itemId,
+            indentId: id,
+            orderedQty: q,
+            rate: Number(item.estimatedRate),
+            specification: item.specification ?? "",
+          })),
+          row: [
+            { name: "itemId", label: "Item", kind: "text", hidden: true },
+            { name: "indentId", label: "Indent", kind: "text", hidden: true },
+            { name: "orderedQty", label: "Qty", kind: "number", required: true },
+            { name: "rate", label: "Rate ₹", kind: "money", required: true },
+            { name: "discountPct", label: "Disc %", kind: "number" },
+            { name: "taxPct", label: "GST %", kind: "number" },
+            { name: "specification", label: "Specification", kind: "text" },
+          ],
+        },
+      ],
+      confirm: "It is saved as a draft. Raised orders go to the Project Manager, then the Admin.",
+    });
+  }
+
   const lines = indent.items.map((i) => {
     const want = Number(i.requestedQty);
     const have = onHand.get(i.itemId) ?? 0;

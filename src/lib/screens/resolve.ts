@@ -163,6 +163,27 @@ export async function loadOptions(source: OptionSource, ctx: AuthContext): Promi
       });
       return rows.map((i) => ({ value: i.id, label: i.name, hint: `${i.code} · ${i.uom.code}` }));
     }
+    case "stores2": {
+      // Every active store, not only this project's: a transfer is between two
+      // of them, and the destination is often another site.
+      const rows = await prisma.store.findMany({
+        where: { status: "ACTIVE" },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, project: { select: { code: true } } },
+      });
+      return rows.map((st) => ({
+        value: st.id,
+        label: st.name,
+        hint: st.project?.code ?? undefined,
+      }));
+    }
+    case "checklistCategories": {
+      const rows = await prisma.checklistCategory.findMany({
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, name: true },
+      });
+      return rows.map((c) => ({ value: c.id, label: c.name }));
+    }
     case "checklists": {
       const rows = await prisma.checklist.findMany({
         where: { isActive: true },

@@ -49,7 +49,11 @@ export type OptionSource =
   /** The work packages of the projects this person can reach. */
   | "workPackages"
   /** Active checklist templates, with their category and point count. */
-  | "checklists";
+  | "checklists"
+  /** Every store, with the project it belongs to. */
+  | "stores2"
+  /** Checklist categories, for a new checklist. */
+  | "checklistCategories";
 
 export interface ScreenFilterDef {
   /** The query parameter, which is the same one the web reads from its URL. */
