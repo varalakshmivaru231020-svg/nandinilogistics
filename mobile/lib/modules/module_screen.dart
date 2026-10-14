@@ -6,6 +6,8 @@ import '../core/nav.dart';
 import '../core/session.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
+import 'form_screen.dart';
+import 'record_screen.dart';
 import 'spec.dart';
 
 /// A module's list, drawn to the pattern the canvas sets for one.
@@ -189,6 +191,13 @@ class ModuleScreenState extends State<ModuleScreen> {
                   '${widget.session.project?.code ?? "All projects"}',
           onBack: widget.onBack,
           actions: [
+            // The web's "New …" button, where this person may use it.
+            if ((_screen?.forms ?? const []).isNotEmpty)
+              BarButton(
+                icon: Icons.add_rounded,
+                label: _screen!.forms.length == 1 ? _screen!.forms.first.title : 'New',
+                onTap: _create,
+              ),
             if (relatedScreens[spec.key] != null)
               BarButton(
                 icon: Icons.more_vert_rounded,
@@ -324,6 +333,38 @@ class ModuleScreenState extends State<ModuleScreen> {
     );
   }
 
+  /// Opening the create form. One form goes straight there; more than one asks.
+  Future<void> _create() async {
+    final forms = _screen?.forms ?? const <FormRef>[];
+    if (forms.isEmpty) return;
+
+    final navigator = Navigator.of(context);
+    FormRef? pick = forms.first;
+    if (forms.length > 1) {
+      pick = await sheet<FormRef>(
+        context,
+        title: 'What are you making?',
+        body: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          for (final f in forms)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Btn(f.title,
+                  emphasis: Emphasis.outline,
+                  height: 50,
+                  expand: true,
+                  onPressed: () => Navigator.pop(ctx, f)),
+            ),
+        ]),
+      );
+    }
+    if (pick == null) return;
+
+    final made = await navigator.push<bool>(MaterialPageRoute(
+      builder: (_) => FormScreen(api: widget.api, formKey: pick!.key),
+    ));
+    if (made == true) await _load();
+  }
+
   void _openFilters() {
     sheet<void>(
       context,
@@ -381,8 +422,23 @@ class SpecRow extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
       border: decide != null ? T.warnLineStrong : T.line,
       onTap: () async {
-        final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
-          builder: (_) => SpecDetail(spec: spec, row: row, api: api),
+        // Taken before the await, so the lint and the reader can both see that
+        // no context crosses it.
+        final navigator = Navigator.of(context);
+        /*
+         * The record, from the server — with its children and its actions.
+         * The spec's own detail is the fallback for a module whose record
+         * screen is not built yet, and it says so rather than looking empty.
+         */
+        final changed = await navigator.push<bool>(MaterialPageRoute(
+          builder: (_) => row['id'] == null
+              ? SpecDetail(spec: spec, row: row, api: api)
+              : RecordScreen(
+                  api: api,
+                  module: spec.key,
+                  id: '${row["id"]}',
+                  fallbackTitle: spec.row.title(row),
+                ),
         ));
         if (changed == true) await onChanged();
       },
@@ -552,6 +608,7 @@ class SpecDetail extends StatelessWidget {
     Map<String, dynamic> decide, {
     required bool reject,
   }) async {
+    final navigator = Navigator.of(context);
     final action = (reject ? decide['reject'] : decide['approve']) as String;
     final args = ((reject ? decide['rejectArgs'] : decide['approveArgs']) as List?) ?? const [];
     final required = decide['remarkRequired'] == true;
@@ -574,7 +631,7 @@ class SpecDetail extends StatelessWidget {
         done: '$name ${reject ? "rejected" : "approved"}.',
       ),
     );
-    if (ok && context.mounted) Navigator.of(context).pop(true);
+    if (ok) navigator.pop(true);
   }
 }
 

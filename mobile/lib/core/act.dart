@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
 import 'api.dart';
+import 'form.dart';
 
 /// Running one of the web's actions, with the confirmation the design asks for.
 ///
@@ -26,6 +27,7 @@ class Act {
     this.emphasis = Emphasis.primary,
     this.remark = RemarkMode.none,
     this.remarkLabel = 'Remark',
+    this.fields = const [],
     this.done,
   });
 
@@ -35,7 +37,9 @@ class Act {
   final String action;
 
   /// The leading positional arguments. A remark, where one is collected, is
-  /// appended to these.
+  /// appended to these. An argument of the form `$name` is replaced by the
+  /// field of that name in [fields] — extending a calendar task needs a new
+  /// finish as well as a reason, and the web asks for both in one dialog.
   final List<Object?> args;
 
   final String label;
@@ -44,6 +48,9 @@ class Act {
   final Emphasis emphasis;
   final RemarkMode remark;
   final String remarkLabel;
+
+  /// What else the sheet collects before the remark, as the server described it.
+  final List<FieldDef> fields;
 
   /// What to say afterwards. Defaults to the label in the past tense, which is
   /// rarely good enough — pass the document number.
@@ -99,6 +106,7 @@ class _Confirm extends StatefulWidget {
 
 class _ConfirmState extends State<_Confirm> {
   final _remark = TextEditingController();
+  late final FormValues _extra = FormValues(widget.act.fields);
   bool _busy = false;
   String? _error;
   String? _errorDetail;
@@ -106,6 +114,7 @@ class _ConfirmState extends State<_Confirm> {
   @override
   void dispose() {
     _remark.dispose();
+    _extra.dispose();
     super.dispose();
   }
 
@@ -113,6 +122,11 @@ class _ConfirmState extends State<_Confirm> {
       widget.act.remark == RemarkMode.required && _remark.text.trim().isEmpty;
 
   Future<void> _go() async {
+    final missing = _extra.problem();
+    if (missing != null) {
+      setState(() => _error = missing);
+      return;
+    }
     if (_remarkMissing) {
       setState(() => _error = 'A remark is required for this.');
       return;
@@ -123,7 +137,13 @@ class _ConfirmState extends State<_Confirm> {
       _errorDetail = null;
     });
 
-    final args = [...widget.act.args];
+    // `$name` stands for one of the fields the sheet just collected.
+    final args = widget.act.args.map((a) {
+      if (a is! String || !a.startsWith(r'$')) return a;
+      final name = a.substring(1);
+      final f = _extra.fields.where((x) => x.name == name).firstOrNull;
+      return f == null ? a : _extra.read(f);
+    }).toList();
     if (widget.act.remark != RemarkMode.none) args.add(_remark.text.trim());
 
     final res = await widget.api.run(widget.act.action, args);
@@ -149,6 +169,7 @@ class _ConfirmState extends State<_Confirm> {
         Alert(widget.ceiling!, tone: Tone.info),
         const SizedBox(height: 12),
       ],
+      if (widget.act.fields.isNotEmpty) FormBody(values: _extra, enabled: !_busy, compact: true),
       if (widget.act.remark != RemarkMode.none) ...[
         Field(
           fieldKey: const Key('remark'),

@@ -1,0 +1,285 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:nninfra/core/nav.dart';
+import 'package:nninfra/design/tokens.dart';
+import 'package:nninfra/modules/record_screen.dart';
+
+import 'support.dart';
+
+/// A record, with its children and its actions.
+///
+/// The app used to build a detail screen from the list row, so a task had no
+/// checklist, an indent had no lines, and there was nothing to press. These
+/// check that what the server sends is what appears, and — the part that was
+/// missing entirely — that a **row's own** action runs.
+
+Map<String, Object> taskRecord({
+  List<Map<String, dynamic>> points = const [],
+  List<Map<String, dynamic>> actions = const [],
+}) =>
+    {
+      '/record/tasks/t1': {
+        'key': 'tasks',
+        'id': 't1',
+        'title': 'Flat handover — 1203',
+        'subtitle': 'T-9301 · NNS',
+        'pills': [
+          {'label': 'Under review L1', 'tone': 'warn'},
+          {'label': 'HIGH', 'tone': 'bad'},
+        ],
+        'sections': [
+          {
+            'label': 'The task',
+            'fields': [
+              {'label': 'Task no.', 'value': 'T-9301'},
+              {'label': 'Given to', 'value': 'Ravi Shankar'},
+              {'label': 'Due', 'value': '2026-10-20T10:00:00.000Z', 'format': 'datetime'},
+              {'label': 'Nothing here', 'value': null},
+              {'label': 'What is wanted', 'value': 'Hand the flat over.', 'wide': true},
+            ],
+          },
+        ],
+        'collections': [
+          {
+            'key': 'checklist:c1',
+            'label': 'Flat handover checklist · 1 of 2 approved',
+            'rows': points,
+            'emptyMessage': 'This checklist has no points.',
+          },
+        ],
+        'actions': actions,
+        'serverTime': '2026-10-14T06:00:00.000Z',
+      },
+    };
+
+Map<String, dynamic> point({
+  required String id,
+  required String title,
+  String? pill,
+  String tone = 'warn',
+  List<Map<String, dynamic>> actions = const [],
+  String trailing = '01',
+}) =>
+    {
+      'id': id,
+      'title': title,
+      'trailing': trailing,
+      'pills': pill == null ? [] : [{'label': pill, 'tone': tone}],
+      'actions': actions,
+    };
+
+Future<Boundary> pumpRecord(WidgetTester tester, Map<String, Object> routes) async {
+  useEmptyPrefs();
+  final b = Boundary(routes);
+  await tester.pumpWidget(MaterialApp(
+    theme: T.theme,
+    home: RecordScreen(api: b.api, module: 'tasks', id: 't1'),
+  ));
+  await tester.pumpAndSettle();
+  return b;
+}
+
+void main() {
+  group('a record shows what the server sent', () {
+    testWidgets('its heading, its pills and its fields', (tester) async {
+      await pumpRecord(tester, taskRecord(points: [point(id: 'p1', title: 'Snag list cleared')]));
+
+      expect(find.text('Flat handover — 1203'), findsOneWidget);
+      expect(find.text('T-9301 · NNS'), findsOneWidget);
+      expect(find.text('Under review L1'), findsOneWidget);
+      expect(find.text('Ravi Shankar'), findsOneWidget);
+      // A date is shown as a date and a time, not as an ISO string.
+      expect(find.textContaining('20 Oct 2026'), findsOneWidget);
+      expect(find.textContaining('2026-10-20T'), findsNothing);
+      // A long value gets a line of its own.
+      expect(find.text('Hand the flat over.'), findsOneWidget);
+    });
+
+    /// A field with nothing in it is left out rather than shown as a blank row.
+    testWidgets('leaves an empty field out', (tester) async {
+      await pumpRecord(tester, taskRecord(points: const []));
+      expect(find.text('Nothing here'), findsNothing);
+    });
+
+    /*
+     * The checklist. This is what the report was about: the task's status says
+     * "Under Review" and tells a reviewer nothing; the points say which one is
+     * standing in front of whom.
+     */
+    testWidgets('its children, with who holds each one', (tester) async {
+      await pumpRecord(tester, taskRecord(points: [
+        point(id: 'p1', title: 'Snag list cleared', pill: 'Approved', tone: 'good'),
+        point(
+          id: 'p2',
+          title: 'Meter readings recorded',
+          pill: 'Review L1 · Anil Deshpande',
+          trailing: '02',
+        ),
+      ]));
+
+      expect(find.text('FLAT HANDOVER CHECKLIST · 1 OF 2 APPROVED'), findsOneWidget);
+      expect(find.text('Snag list cleared'), findsOneWidget);
+      expect(find.text('Review L1 · Anil Deshpande'), findsOneWidget);
+      expect(find.text('02'), findsOneWidget);
+    });
+
+    testWidgets('says so when a collection is empty', (tester) async {
+      await pumpRecord(tester, taskRecord(points: const []));
+      expect(find.text('This checklist has no points.'), findsOneWidget);
+    });
+  });
+
+  group('a row carries its own action', () {
+    /*
+     * The thing that was missing. A checklist point is settled by the level
+     * holding it — there is no verdict on the whole task — so the buttons are
+     * on the point, and only on the one this person holds.
+     */
+    testWidgets('approving a point calls the server\'s action for that point',
+        (tester) async {
+      final b = await pumpRecord(tester, {
+        ...taskRecord(points: [
+          point(id: 'p1', title: 'Snag list cleared', pill: 'Approved', tone: 'good'),
+          point(id: 'p2', title: 'Meter readings recorded', pill: 'Review L1', actions: [
+            {
+              'key': 'pass', 'label': 'Approve', 'emphasis': 'approve',
+              'action': 'tasks/reviewChecklistItem', 'args': ['p2', 'PASS'],
+              'remark': 'optional', 'confirm': 'This point moves to the next level.',
+            },
+            {
+              'key': 'fail', 'label': 'Deny', 'emphasis': 'reject',
+              'action': 'tasks/reviewChecklistItem', 'args': ['p2', 'FAIL'],
+              'remark': 'required', 'remarkLabel': 'What is wrong',
+              'confirm': 'This point alone goes back to reviewer 1.',
+            },
+          ]),
+        ]),
+        '/do/tasks/reviewChecklistItem': const {'ok': true},
+      });
+
+      // Only the point they hold has buttons.
+      expect(find.text('Approve'), findsOneWidget);
+      expect(find.text('Deny'), findsOneWidget);
+
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('moves to the next level'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('confirm')));
+      await tester.pumpAndSettle();
+
+      expect(b.actions, hasLength(1));
+      expect(b.actions.single.action, 'tasks/reviewChecklistItem');
+      // The point's id, the verdict, then the remark the sheet collected.
+      expect(b.actions.single.args, ['p2', 'PASS', '']);
+    });
+
+    testWidgets('denying a point insists on a reason', (tester) async {
+      final b = await pumpRecord(tester, {
+        ...taskRecord(points: [
+          point(id: 'p2', title: 'Meter readings', pill: 'Review L1', actions: [
+            {
+              'key': 'fail', 'label': 'Deny', 'emphasis': 'reject',
+              'action': 'tasks/reviewChecklistItem', 'args': ['p2', 'FAIL'],
+              'remark': 'required', 'remarkLabel': 'What is wrong',
+            },
+          ]),
+        ]),
+        '/do/tasks/reviewChecklistItem': const {'ok': true},
+      });
+
+      await tester.tap(find.text('Deny'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirm')));
+      await tester.pumpAndSettle();
+      expect(find.text('A remark is required for this.'), findsOneWidget);
+      expect(b.actions, isEmpty);
+
+      await tester.enterText(find.byKey(const Key('remark')), 'Readings not taken.');
+      await tester.tap(find.byKey(const Key('confirm')));
+      await tester.pumpAndSettle();
+      expect(b.actions.single.args, ['p2', 'FAIL', 'Readings not taken.']);
+    });
+  });
+
+  group('the record\'s own actions', () {
+    testWidgets('the first is on the bar, the rest behind More', (tester) async {
+      await pumpRecord(tester, taskRecord(points: const [], actions: [
+        {'key': 'close', 'label': 'Close', 'emphasis': 'approve',
+         'action': 'tasks/closeTask', 'args': ['t1'], 'remark': 'required'},
+        {'key': 'sendBack', 'label': 'Send back', 'emphasis': 'reject',
+         'action': 'tasks/sendBackTask', 'args': ['t1'], 'remark': 'required'},
+        {'key': 'comment', 'label': 'Comment', 'emphasis': 'outline',
+         'action': 'tasks/addComment', 'args': ['t1'], 'remark': 'required'},
+      ]));
+
+      // One primary action, as the design insists.
+      expect(find.text('Close'), findsOneWidget);
+      expect(find.text('More'), findsOneWidget);
+      expect(find.text('Send back'), findsNothing);
+
+      await tester.tap(find.text('More'));
+      await tester.pumpAndSettle();
+      expect(find.text('Send back'), findsOneWidget);
+      expect(find.text('Comment'), findsOneWidget);
+    });
+
+    testWidgets('no bar at all when there is nothing to do', (tester) async {
+      await pumpRecord(tester, taskRecord(points: const [], actions: const []));
+      expect(find.text('More'), findsNothing);
+    });
+  });
+
+  group('a module whose record screen is not built', () {
+    /// Said plainly, rather than an empty screen or a raw error.
+    testWidgets('says the list works and the record is coming', (tester) async {
+      useEmptyPrefs();
+      final b = Boundary({
+        '/record/material/vendors/v1':
+            const Fail(404, 'There is no record screen for that yet: material/vendors', 'unknown-record'),
+      });
+      await tester.pumpWidget(MaterialApp(
+        theme: T.theme,
+        home: RecordScreen(api: b.api, module: 'material/vendors', id: 'v1'),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('no record screen for that yet'), findsOneWidget);
+      expect(find.textContaining('list and its filters work'), findsOneWidget);
+      // Nothing to retry — it is not a failure.
+      expect(find.text('Try again'), findsNothing);
+    });
+  });
+
+  group('a web link names the record behind it', () {
+    /*
+     * This is what makes the calendar and the approvals queue tappable: both
+     * carry the route the web would open, and that is what names the module
+     * and the id.
+     */
+    test('an indent link', () {
+      final t = recordFor('/material/indents/cmtr7prug000xpp1oac25rzum');
+      expect(t?.module, 'material/indents');
+      expect(t?.id, 'cmtr7prug000xpp1oac25rzum');
+    });
+
+    test('a task link', () {
+      expect(recordFor('/tasks/cmusd9imz0001ppo2vxu2h45l')?.module, 'tasks');
+    });
+
+    /// A calendar task links back to the calendar carrying its own id.
+    test('a calendar task', () {
+      final t = recordFor('/calendar?event=cmv52ylbd0009pp7a4iyl2y5p');
+      expect(t?.module, 'calendar');
+      expect(t?.id, 'cmv52ylbd0009pp7a4iyl2y5p');
+    });
+
+    /// A list route is not a record, and neither is a word like "reports".
+    test('and nothing where there is no record', () {
+      expect(recordFor('/tasks'), isNull);
+      expect(recordFor('/tasks/reports'), isNull);
+      expect(recordFor('/schedule?tab=extensions'), isNull);
+      expect(recordFor(''), isNull);
+    });
+  });
+}

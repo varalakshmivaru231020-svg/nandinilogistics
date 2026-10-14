@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../core/act.dart';
 import '../core/api.dart';
+import '../core/nav.dart';
 import '../core/session.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
+import 'form_screen.dart';
+import 'record_screen.dart';
 
 /// Every dated thing in the system, on one grid.
 ///
@@ -382,26 +385,12 @@ class CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
+  /// Raising one. The form is the web's own — all nine fields of it, including
+  /// the people it goes on, who are invited rather than told.
   Future<void> _newTask() async {
-    final title = TextEditingController();
-    final start = TextEditingController(text: '${_picked ?? _key(DateTime.now())}T10:00');
-    final end = TextEditingController(text: '${_picked ?? _key(DateTime.now())}T11:00');
-
-    final made = await sheet<bool>(
-      context,
-      title: 'New calendar task',
-      explain: 'It goes on your own calendar. Assigning it to somebody else is an '
-          'invitation they have to accept, and that is done on the web for now.',
-      body: (ctx) => _NewTask(
-        api: widget.api,
-        title: title,
-        start: start,
-        end: end,
-      ),
-    );
-    title.dispose();
-    start.dispose();
-    end.dispose();
+    final made = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => FormScreen(api: widget.api, formKey: 'calendar:create'),
+    ));
     if (made == true) await _load();
   }
 }
@@ -460,8 +449,6 @@ class _AgendaRow extends StatelessWidget {
   final Session session;
   final Future<void> Function() onChanged;
 
-  bool get _isTask => '${item["kind"]}' == 'EVENT' || '${item["kind"]}' == 'INVITE';
-
   /// The calendar task's own id, with the "event:" prefix the agenda adds.
   String get _eventId => '${item["id"]}'.replaceFirst('event:', '');
 
@@ -473,12 +460,11 @@ class _AgendaRow extends StatelessWidget {
         : '${at.hour.toString().padLeft(2, "0")}:${at.minute.toString().padLeft(2, "0")}';
     final tone = _toneOfKind['${item["kind"]}'] ?? Tone.draft;
     final waiting = item['needsResponse'] == true;
-    final done = item['done'] == true;
 
     return Panel(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       border: waiting ? T.plumLine : (late ? T.badLine : T.line),
-      onTap: _isTask && !done ? () => _openTask(context) : null,
+      onTap: recordFor('${item["href"]}') == null ? null : () => _open(context),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Container(
@@ -563,176 +549,26 @@ class _AgendaRow extends StatelessWidget {
     if (ok) await onChanged();
   }
 
-  /// Complete, extend or cancel — whatever this person may do to it.
-  void _openTask(BuildContext context) {
-    sheet<void>(
-      context,
-      title: '${item["title"]}',
-      explain: 'What you can do to this one.',
-      body: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        if (session.can('calendar.event.complete'))
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Btn('Mark as completed',
-                emphasis: Emphasis.approve,
-                icon: Icons.check_rounded,
-                height: 50,
-                expand: true,
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  final ok = await confirmAndRun(
-                    context,
-                    api,
-                    Act(
-                      action: 'calendar/completeCalendarTask',
-                      args: [_eventId],
-                      label: 'Mark completed',
-                      title: 'Mark as completed',
-                      explain: 'It stays on the calendar — it happened — but it stops '
-                          'waiting on anybody.',
-                      emphasis: Emphasis.approve,
-                      remark: RemarkMode.optional,
-                      done: 'Marked completed.',
-                    ),
-                  );
-                  if (ok) await onChanged();
-                }),
-          ),
-        if (session.can('calendar.event.extend'))
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Btn('Extend',
-                emphasis: Emphasis.outline,
-                icon: Icons.more_time_rounded,
-                height: 50,
-                expand: true,
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  notify(context,
-                      'Extending needs a new finish time — the date picker for it is next.');
-                }),
-          ),
-        if (session.can('calendar.event.cancel'))
-          Btn('Cancel this task',
-              emphasis: Emphasis.reject,
-              icon: Icons.close_rounded,
-              height: 50,
-              expand: true,
-              onPressed: () async {
-                Navigator.pop(ctx);
-                final ok = await confirmAndRun(
-                  context,
-                  api,
-                  Act(
-                    action: 'calendar/cancelCalendarTask',
-                    args: [_eventId],
-                    label: 'Cancel it',
-                    title: 'Cancel this task',
-                    explain: 'Everybody it was put on is told. Say why.',
-                    emphasis: Emphasis.reject,
-                    remark: RemarkMode.required,
-                    remarkLabel: 'Why',
-                    done: 'Cancelled.',
-                  ),
-                );
-                if (ok) await onChanged();
-              }),
-      ]),
-    );
-  }
-}
+  /// Opening whatever the row stands for.
+  ///
+  /// Every agenda row carries the route the web would open — a calendar task,
+  /// a task, an indent, a purchase order — and that names the record behind
+  /// it. So the calendar is a way into all of them rather than a list of
+  /// things that cannot be touched, and the actions on each come from the
+  /// record itself: complete, extend with its new finish, cancel, and for a
+  /// task its checklist.
+  Future<void> _open(BuildContext context) async {
+    final target = recordFor('${item["href"]}');
+    if (target == null) return;
 
-class _NewTask extends StatefulWidget {
-  const _NewTask({
-    required this.api,
-    required this.title,
-    required this.start,
-    required this.end,
-  });
-
-  final Api api;
-  final TextEditingController title;
-  final TextEditingController start;
-  final TextEditingController end;
-
-  @override
-  State<_NewTask> createState() => _NewTaskState();
-}
-
-class _NewTaskState extends State<_NewTask> {
-  bool _busy = false;
-  String? _error;
-
-  Future<void> _save() async {
-    if (widget.title.text.trim().isEmpty) {
-      setState(() => _error = 'Give it a title.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    final res = await widget.api.run('calendar/createCalendarTask', [
-      {
-        'title': widget.title.text.trim(),
-        'startAt': widget.start.text.trim(),
-        'endAt': widget.end.text.trim(),
-      }
-    ]);
-    if (!mounted) return;
-    if (res.ok) {
-      Navigator.pop(context, true);
-      return;
-    }
-    setState(() {
-      _busy = false;
-      _error = res.error;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Field(
-          fieldKey: const Key('task-title'),
-          label: 'What',
-          controller: widget.title,
-          hint: 'Walk the Block B slab',
-          enabled: !_busy),
-      const SizedBox(height: 11),
-      Row(children: [
-        Expanded(
-          child: Field(label: 'Starts', controller: widget.start, enabled: !_busy),
-        ),
-        const SizedBox(width: 9),
-        Expanded(
-          child: Field(label: 'Ends', controller: widget.end, enabled: !_busy),
-        ),
-      ]),
-      if (_error != null) ...[
-        const SizedBox(height: 12),
-        Alert(_error!),
-      ],
-      const SizedBox(height: 14),
-      Row(children: [
-        Expanded(
-          child: Btn('Cancel',
-              emphasis: Emphasis.outline,
-              height: 50,
-              expand: true,
-              onPressed: _busy ? null : () => Navigator.pop(context, false)),
-        ),
-        const SizedBox(width: 9),
-        Expanded(
-          flex: 2,
-          child: Btn('Put it on the calendar',
-              key: const Key('save-task'),
-              height: 50,
-              expand: true,
-              busy: _busy,
-              onPressed: _save),
-        ),
-      ]),
-    ]);
+    final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => RecordScreen(
+        api: api,
+        module: target.module,
+        id: target.id,
+        fallbackTitle: '${item["title"]}',
+      ),
+    ));
+    if (changed == true) await onChanged();
   }
 }

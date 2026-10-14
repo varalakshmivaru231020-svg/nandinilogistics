@@ -12,7 +12,10 @@ import { authorize, runAction, assertProjectAccess, PermissionError, type Action
 import { diff, recordAudit } from "@/lib/audit";
 import { nextDocumentNumber } from "@/lib/numbering";
 import { PERM } from "@/lib/permissions/codes";
-import { indentEstimatedValue, isIndentEditable, mayEditIndentAs } from "@/lib/material/procurement";
+import {
+  indentEstimatedValue, isIndentEditable, matchWorkPackage, mayEditIndentAs,
+  resolveIndentRates,
+} from "@/lib/material/procurement";
 import { applyIndentEdit } from "@/lib/material/procurement-edit";
 
 const APPROVAL_SCOPE = "material.indent";
@@ -20,7 +23,12 @@ const APPROVAL_SCOPE = "material.indent";
 const ItemLineSchema = z.object({
   itemId: z.string().min(1),
   requestedQty: z.coerce.number().positive("Quantity must be greater than zero"),
-  estimatedRate: z.coerce.number().min(0).default(0),
+  /*
+   * Left out by a caller with no item master to hand — the phone — and then
+   * resolved from the item's standard rate, as an edit already does. A rate
+   * that was given is kept, zero included.
+   */
+  estimatedRate: z.coerce.number().min(0).optional(),
   specification: z.string().trim().optional(),
 });
 
@@ -66,7 +74,31 @@ export async function createIndentAction(
     assertProjectAccess(ctx, v.projectId);
     if (submit) await authorize(PERM.material.indent.submit);
 
-    const estimatedValue = indentEstimatedValue(v.items);
+    /*
+     * Two things the web form worked out for itself, and so had to be worked
+     * out again by anything else that raised an indent: which work package the
+     * typed activity names, and what a line with no rate on it is worth. Both
+     * are decided here now, so the phone and the desk raise the same document.
+     */
+    const [packages, items] = await Promise.all([
+      v.workPackageId
+        ? []
+        : prisma.workPackage.findMany({
+            where: { status: "ACTIVE", phase: { projectId: v.projectId } },
+            select: { id: true, name: true },
+          }),
+      prisma.item.findMany({
+        where: { id: { in: [...new Set(v.items.map((i) => i.itemId))] } },
+        select: { id: true, standardRate: true },
+      }),
+    ]);
+
+    const workPackageId = v.workPackageId || matchWorkPackage(v.purpose, packages);
+    const lines = resolveIndentRates(
+      v.items,
+      new Map(items.map((i) => [i.id, Number(i.standardRate)])),
+    );
+    const estimatedValue = indentEstimatedValue(lines);
 
     const indent = await prisma.$transaction(async (tx) => {
       const indentNo = await nextDocumentNumber(tx, "INDENT", v.projectId);
@@ -74,7 +106,7 @@ export async function createIndentAction(
         data: {
           indentNo,
           projectId: v.projectId,
-          workPackageId: v.workPackageId || null,
+          workPackageId: workPackageId ?? null,
           raisedById: ctx.id,
           requiredByDate: new Date(v.requiredByDate),
           purpose: v.purpose || null,
@@ -82,7 +114,7 @@ export async function createIndentAction(
           estimatedValue,
           status: submit ? "SUBMITTED" : "DRAFT",
           items: {
-            create: v.items.map((i) => ({
+            create: lines.map((i) => ({
               itemId: i.itemId,
               requestedQty: i.requestedQty,
               estimatedRate: i.estimatedRate,

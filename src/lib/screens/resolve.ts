@@ -2,6 +2,9 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import { projectScopeFilter, type AuthContext } from "@/lib/rbac/context";
+import { formRefsFor } from "@/lib/forms/registry";
+import type { FormRef } from "@/lib/forms/types";
+
 import { SCREENS, type OptionSource, type ScreenDef } from "./registry";
 
 /**
@@ -27,11 +30,21 @@ export interface ResolvedScreen {
   searchPlaceholder: string | null;
   filters: ResolvedFilter[];
   dateRange: { label: string } | null;
+  /** What this viewer may create from here — the screen's "New …" button. */
+  forms: FormRef[];
 }
 
-type Options = Array<{ value: string; label: string }>;
+/** An option, with the second line the web's searchable dropdowns show. */
+type Options = Array<{ value: string; label: string; hint?: string }>;
 
-async function load(source: OptionSource, ctx: AuthContext): Promise<Options> {
+/**
+ * The options behind one named source.
+ *
+ * Exported because a form needs the very same lists a filter does — the
+ * project dropdown on "New indent" is the project dropdown on the indent list,
+ * and loading it twice from two places is how they come to disagree.
+ */
+export async function loadOptions(source: OptionSource, ctx: AuthContext): Promise<Options> {
   switch (source) {
     case "projects": {
       const rows = await prisma.project.findMany({
@@ -115,6 +128,59 @@ async function load(source: OptionSource, ctx: AuthContext): Promise<Options> {
       });
       return rows.map((t) => ({ value: t.id, label: t.name }));
     }
+    case "people": {
+      // The same list the calendar's assignee picker is given: everybody
+      // active, with designation and email as the line underneath.
+      const rows = await prisma.user.findMany({
+        where: { status: "ACTIVE" },
+        orderBy: { name: "asc" },
+        select: {
+          id: true, name: true, email: true,
+          designation: { select: { name: true } },
+        },
+      });
+      return rows.map((p) => ({
+        value: p.id,
+        label: p.name,
+        hint: [p.designation?.name, p.email].filter(Boolean).join(" · "),
+      }));
+    }
+    case "items": {
+      const rows = await prisma.item.findMany({
+        where: { status: "ACTIVE" },
+        orderBy: { name: "asc" },
+        select: {
+          id: true, code: true, name: true,
+          uom: { select: { code: true } },
+        },
+      });
+      return rows.map((i) => ({ value: i.id, label: i.name, hint: `${i.code} · ${i.uom.code}` }));
+    }
+    case "checklists": {
+      const rows = await prisma.checklist.findMany({
+        where: { isActive: true },
+        orderBy: { name: "asc" },
+        select: {
+          id: true, name: true,
+          category: { select: { name: true } },
+          _count: { select: { checkpoints: true } },
+        },
+      });
+      return rows.map((c) => ({
+        value: c.id,
+        label: c.name,
+        // The web's own second line: "Structural · 7 points".
+        hint: `${c.category.name} · ${c._count.checkpoints} point${c._count.checkpoints === 1 ? "" : "s"}`,
+      }));
+    }
+    case "workPackages": {
+      const rows = await prisma.workPackage.findMany({
+        where: { status: "ACTIVE", phase: { project: projectScopeFilter(ctx, "id") } },
+        orderBy: [{ sequence: "asc" }, { name: "asc" }],
+        select: { id: true, code: true, name: true },
+      });
+      return rows.map((w) => ({ value: w.id, label: w.name, hint: w.code }));
+    }
   }
 }
 
@@ -134,7 +200,7 @@ export async function resolveScreen(
       name: f.name,
       label: f.label,
       allLabel: f.allLabel ?? DEFAULT_ALL,
-      options: f.options ? [...f.options] : f.source ? await load(f.source, ctx) : [],
+      options: f.options ? [...f.options] : f.source ? await loadOptions(f.source, ctx) : [],
     });
   }
 
@@ -150,5 +216,6 @@ export async function resolveScreen(
         : def.searchPlaceholder,
     filters,
     dateRange: def.dateRange ?? null,
+    forms: formRefsFor(ctx, def.key),
   };
 }

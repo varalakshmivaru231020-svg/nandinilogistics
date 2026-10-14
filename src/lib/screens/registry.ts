@@ -41,7 +41,15 @@ export type OptionSource =
   | "managers"
   | "blocks"
   | "unitTypes"
-  | "leadSources";
+  | "leadSources"
+  /** Everybody active, with their designation and email as the hint. */
+  | "people"
+  /** Stock items, by code and name, for a document's lines. */
+  | "items"
+  /** The work packages of the projects this person can reach. */
+  | "workPackages"
+  /** Active checklist templates, with their category and point count. */
+  | "checklists";
 
 export interface ScreenFilterDef {
   /** The query parameter, which is the same one the web reads from its URL. */

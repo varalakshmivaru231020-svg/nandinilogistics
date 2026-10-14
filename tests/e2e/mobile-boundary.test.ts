@@ -256,6 +256,113 @@ suite("the mobile boundary", () => {
     });
   });
 
+  /*
+   * Forms and records: the two shapes the app had no idea of. A list row is a
+   * summary, so a detail screen built from one has no checklist and nothing to
+   * press; and nothing at all could be created, because a create screen is a
+   * set of fields the app never held.
+   */
+  describe("a form", () => {
+    it("is the web's own form, with its dropdowns filled in", async () => {
+      const { body } = await get("/form/calendar/create");
+      const form = body.data as unknown as {
+        title: string;
+        description: string;
+        submitLabel: string;
+        action: string;
+        fields: Array<{ name: string; label: string; kind: string; options?: unknown[] }>;
+      };
+
+      expect(form.title).toBe("New calendar task");
+      expect(form.description).toContain("They accept it before it lands on their calendar.");
+      expect(form.action).toBe("calendar/createCalendarTask");
+      // The names the action reads, in the order the web asks for them.
+      expect(form.fields.map((f) => f.name)).toEqual([
+        "title", "allDay", "startAt", "endAt", "projectId", "location",
+        "description", "attendeeIds",
+      ]);
+      // A dropdown arrives filled, scoped to this caller.
+      const people = form.fields.find((f) => f.name === "attendeeIds")!;
+      expect(people.kind).toBe("multi");
+      expect((people.options ?? []).length).toBeGreaterThan(0);
+    });
+
+    /** The indent's button follows the permission, as the web's does. */
+    it("fits the submit button to what this person may do", async () => {
+      const { body } = await get("/form/material/indents/create");
+      const form = body.data as unknown as {
+        submitLabel: string;
+        shape: { kind: string; order: unknown[] };
+      };
+      const maySubmit = (await signIn("pm@nninfra.example")).user.permissions.includes(
+        "material.indent.submit",
+      );
+
+      expect(form.submitLabel).toBe(
+        maySubmit ? "Raise indent & send for approval" : "Save as draft",
+      );
+      expect(form.shape.order[1]).toBe(maySubmit);
+    });
+
+    it("answers 404 for a form that is not described yet", async () => {
+      const { status, body } = await get("/form/material/vendors/create");
+      expect(status).toBe(404);
+      expect(body.code).toBe("unknown-form");
+    });
+
+    it("creates through the same action the web calls", async () => {
+      const at = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 16);
+      const { body } = await act("calendar/createCalendarTask", [
+        {
+          title: "Boundary test — joinery inspection",
+          startAt: `${at}:00+05:30`,
+          endAt: `${at}:00+05:30`.replace(/T(\d\d)/, (_, h) => `T${String(Number(h) + 2).padStart(2, "0")}`),
+          location: "Tower B · 6th floor",
+        },
+      ]);
+      expect(body.ok, body.error).toBe(true);
+      created = (body.data as unknown as { id: string }).id;
+
+      // And it reads back as a record, with the actions its raiser may take.
+      const read = await get(`/record/calendar/${created}`);
+      const rec = read.body.data as unknown as {
+        title: string;
+        actions: Array<{ key: string; args: unknown[]; fields?: Array<{ name: string }> }>;
+      };
+      expect(rec.title).toBe("Boundary test — joinery inspection");
+      const keys = rec.actions.map((a) => a.key);
+      expect(keys).toContain("complete");
+      expect(keys).toContain("cancel");
+      // Extending needs a new finish as well as a reason, so it says so.
+      const extend = rec.actions.find((a) => a.key === "extend");
+      expect(extend?.fields?.[0].name).toBe("newEndAt");
+      expect(extend?.args).toContain("$newEndAt");
+    });
+  });
+
+  describe("a record", () => {
+    it("carries the children the decision turns on", async () => {
+      const list = await get("/list/tasks");
+      const rows = (list.body.data as unknown as { rows: Array<{ id: string }> }).rows;
+      expect(rows.length).toBeGreaterThan(0);
+
+      const { body } = await get(`/record/tasks/${rows[0].id}`);
+      const rec = body.data as unknown as {
+        sections: Array<{ label: string }>;
+        collections: Array<{ key: string; label: string }>;
+      };
+      expect(rec.sections.length).toBeGreaterThan(0);
+      // A list row has none of this: the checklist, the comments, the history.
+      expect(rec.collections.length).toBeGreaterThan(0);
+    });
+
+    it("answers 404 for a module whose record is not built, not 500", async () => {
+      const { status, body } = await get("/record/material/vendors/whatever");
+      expect(status).toBe(404);
+      expect(body.code).toBe("unknown-record");
+    });
+  });
+
   describe("every endpoint still needs a session", () => {
     it("refuses the lot without a token", async () => {
       for (const path of ["/me", "/actions", "/lists", "/reports", "/list/material/indents"]) {

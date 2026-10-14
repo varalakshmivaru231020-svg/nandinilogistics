@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'tokens.dart';
 
@@ -533,6 +534,7 @@ class Field extends StatelessWidget {
     required this.label,
     required this.controller,
     this.hint,
+    this.note,
     this.error,
     this.keyboard,
     this.lines = 1,
@@ -540,12 +542,20 @@ class Field extends StatelessWidget {
     this.obscure = false,
     this.suffix,
     this.onSubmit,
+    this.onChanged,
+    this.formatters,
     this.fieldKey,
   });
 
   final String label;
   final TextEditingController controller;
+
+  /// The grey text inside the box before anything is typed.
   final String? hint;
+
+  /// The web's small print under the box — "Must be in the future."
+  final String? note;
+
   final String? error;
   final TextInputType? keyboard;
   final int lines;
@@ -553,6 +563,8 @@ class Field extends StatelessWidget {
   final bool obscure;
   final Widget? suffix;
   final VoidCallback? onSubmit;
+  final ValueChanged<String>? onChanged;
+  final List<TextInputFormatter>? formatters;
   final Key? fieldKey;
 
   @override
@@ -574,6 +586,8 @@ class Field extends StatelessWidget {
         keyboardType: keyboard,
         maxLines: lines,
         minLines: lines,
+        inputFormatters: formatters,
+        onChanged: onChanged,
         onSubmitted: onSubmit == null ? null : (_) => onSubmit!(),
         style: T.num(15, weight: FontWeight.w600),
         decoration: InputDecoration(
@@ -592,6 +606,9 @@ class Field extends StatelessWidget {
       if (wrong) ...[
         const SizedBox(height: 5),
         Text(error!, style: T.caption(color: T.badInk).copyWith(fontWeight: FontWeight.w500)),
+      ] else if (note != null) ...[
+        const SizedBox(height: 5),
+        Text(note!, style: T.caption().copyWith(fontWeight: FontWeight.w500)),
       ],
     ]);
   }

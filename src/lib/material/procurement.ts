@@ -44,6 +44,44 @@ export function poTotals(
 // Indent valuation
 // ---------------------------------------------------------------------------
 
+/**
+ * The work package an activity names, if it names one.
+ *
+ * The indent form has the work front typed rather than chosen — a datalist of
+ * the project's packages over a free-text box — and the spend still has to tie
+ * back to the package where the words match one. That matching was done in the
+ * web form's own `save()`, which meant a client that did not repeat it raised
+ * indents attributed to nothing. It belongs here, with the arithmetic, so that
+ * every caller gets it.
+ */
+export function matchWorkPackage(
+  activity: string | null | undefined,
+  packages: Array<{ id: string; name: string }>,
+): string | undefined {
+  const want = (activity ?? "").trim().toLowerCase();
+  if (!want) return undefined;
+  return packages.find((w) => w.name.toLowerCase() === want)?.id;
+}
+
+/**
+ * The lines of an indent with every rate settled.
+ *
+ * A line may arrive without one: the web form prefills the item's standard
+ * rate into a box, but a client with no item master to hand cannot, and a rate
+ * of zero would value the indent at nothing — which is what the approval
+ * ceilings are read against. A rate that **was** given is kept, zero included,
+ * because somebody meant it.
+ */
+export function resolveIndentRates<T extends { itemId: string; estimatedRate?: number }>(
+  lines: T[],
+  standardRate: Map<string, number>,
+): Array<T & { estimatedRate: number }> {
+  return lines.map((l) => ({
+    ...l,
+    estimatedRate: l.estimatedRate ?? standardRate.get(l.itemId) ?? 0,
+  }));
+}
+
 /** An indent's estimated value: requested quantity at the estimated rate, summed. */
 export function indentEstimatedValue(lines: Array<{ requestedQty: number; estimatedRate: number }>): number {
   return lines.reduce((sum, l) => sum + l.requestedQty * l.estimatedRate, 0);

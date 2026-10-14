@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../core/act.dart';
 import '../core/api.dart';
+import '../core/nav.dart';
 import '../core/session.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
+import 'record_screen.dart';
 
 /// Everything waiting on a decision, oldest first — and decided from here.
 ///
@@ -286,17 +288,24 @@ class _Row extends StatelessWidget {
     );
   }
 
-  void _openElsewhere(BuildContext context) {
-    // The screen this is settled on is not built yet. Saying so is better than
-    // a tap that appears to do nothing.
-    notify(context, 'This one is settled on the ${_where()} screen, which is not on the phone yet.');
-  }
-
-  String _where() {
-    final k = '${row["kind"]}'.toLowerCase();
-    if (k.contains('checklist') || k.contains('review') || k.contains('approval')) return 'task';
-    if (k.contains('extension')) return 'schedule';
-    return 'record';
+  /// Opens the record this row is about, so a decision that cannot be made
+  /// from the queue is one tap away from where it can be. The queue's `href`
+  /// is the web route, which is what names the module and the id.
+  Future<void> _openElsewhere(BuildContext context) async {
+    final target = recordFor('${row["href"] ?? ""}');
+    if (target == null) {
+      notify(context, 'This one is settled on a screen that is not on the phone yet.');
+      return;
+    }
+    final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => RecordScreen(
+        api: api,
+        module: target.module,
+        id: target.id,
+        fallbackTitle: '${row["reference"] ?? ""}',
+      ),
+    ));
+    if (changed == true) await onDecided();
   }
 
   Future<void> _decide(BuildContext context, {required bool reject}) async {

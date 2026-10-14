@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  indentEstimatedValue, isIndentEditable, isPoEditable, mayEditIndentAs, poLineChangeProblem,
-  poTotals, priceLine, rupeesInWords,
+  indentEstimatedValue, isIndentEditable, isPoEditable, matchWorkPackage, mayEditIndentAs,
+  poLineChangeProblem, poTotals, priceLine, resolveIndentRates, rupeesInWords,
 } from "@/lib/material/procurement";
 
 describe("purchase order pricing", () => {
@@ -39,6 +39,71 @@ describe("indent valuation", () => {
         { requestedQty: 3, estimatedRate: 1000 },
       ]),
     ).toBe(12_000);
+  });
+});
+
+/*
+ * Both of these were done by the web indent form and nowhere else, so anything
+ * else that raised an indent — the phone — attributed it to no work package
+ * and valued it at nothing. They live with the arithmetic now.
+ */
+describe("the work package an activity names", () => {
+  const packages = [
+    { id: "w1", name: "Tower B columns & slabs 1–7" },
+    { id: "w2", name: "Finishing — Tower A" },
+  ];
+
+  it("matches a name however it was typed", () => {
+    expect(matchWorkPackage("tower b columns & slabs 1–7", packages)).toBe("w1");
+    expect(matchWorkPackage("  Finishing — Tower A  ", packages)).toBe("w2");
+  });
+
+  it("is nothing where the words name no package", () => {
+    expect(matchWorkPackage("Slab casting floor 7", packages)).toBeUndefined();
+    expect(matchWorkPackage("", packages)).toBeUndefined();
+    expect(matchWorkPackage(null, packages)).toBeUndefined();
+    // A near miss is a miss: half a name is not an attribution.
+    expect(matchWorkPackage("Tower B columns", packages)).toBeUndefined();
+  });
+});
+
+describe("the rate on an indent line", () => {
+  const standard = new Map([["i1", 450], ["i2", 1000]]);
+
+  it("comes from the item master where the line carries none", () => {
+    expect(resolveIndentRates([{ itemId: "i1", requestedQty: 20 }], standard)).toEqual([
+      { itemId: "i1", requestedQty: 20, estimatedRate: 450 },
+    ]);
+  });
+
+  /// A rate that was given is kept — zero included, because somebody meant it.
+  it("keeps a rate that was given, zero included", () => {
+    expect(
+      resolveIndentRates(
+        [
+          { itemId: "i1", estimatedRate: 500 },
+          { itemId: "i2", estimatedRate: 0 },
+        ],
+        standard,
+      ),
+    ).toEqual([
+      { itemId: "i1", estimatedRate: 500 },
+      { itemId: "i2", estimatedRate: 0 },
+    ]);
+  });
+
+  it("values an indent the same either way", () => {
+    const fromPhone = resolveIndentRates(
+      [{ itemId: "i1", requestedQty: 20 }, { itemId: "i2", requestedQty: 3 }],
+      standard,
+    );
+    expect(indentEstimatedValue(fromPhone)).toBe(12_000);
+  });
+
+  it("is nothing for an item that is not in the master", () => {
+    expect(resolveIndentRates([{ itemId: "gone", requestedQty: 5 }], standard)).toEqual([
+      { itemId: "gone", requestedQty: 5, estimatedRate: 0 },
+    ]);
   });
 });
 

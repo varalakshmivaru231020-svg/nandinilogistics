@@ -105,6 +105,39 @@ const relatedScreens = <String, List<(String, String)>>{
   'hr/employees': [('hr/attendance', 'Attendance')],
 };
 
+/// A record behind a web link.
+class RecordTarget {
+  const RecordTarget(this.module, this.id);
+  final String module;
+  final String id;
+}
+
+/// Turns a web route into the record it points at.
+///
+/// The calendar and the approvals queue both carry an `href` — the route the
+/// web would open — and this is what lets a tap there land on the record rather
+/// than on a message saying it cannot. `/material/indents/abc` is the indent
+/// list plus an id; `/calendar?event=abc` is a calendar task.
+RecordTarget? recordFor(String href) {
+  if (href.isEmpty) return null;
+  final path = href.split('?').first;
+  final query = href.contains('?') ? Uri.splitQueryString(href.split('?')[1]) : const {};
+
+  // A calendar task links back to the calendar with its own id.
+  final event = query['event'];
+  if (event != null && event.isNotEmpty) return RecordTarget('calendar', event);
+
+  final parts = path.split('/').where((p) => p.isNotEmpty).toList();
+  if (parts.length < 2) return null;
+  final id = parts.last;
+  // Ids are cuids — a trailing word like "reports" or "new" is not one.
+  if (id.length < 20) return null;
+
+  final module = parts.sublist(0, parts.length - 1).join('/');
+  const alias = {'units': 'units', 'projects': 'projects/projects'};
+  return RecordTarget(alias[module] ?? module, id);
+}
+
 /// Reads `/screens` once, at sign-in.
 Future<List<NavSection>> loadNavigation(Api api) async {
   final res = await api.get('/screens');
@@ -135,6 +168,7 @@ class ScreenDef {
     required this.searchPlaceholder,
     required this.filters,
     required this.dateRangeLabel,
+    this.forms = const [],
   });
 
   final String key;
@@ -143,6 +177,11 @@ class ScreenDef {
   final String? searchPlaceholder;
   final List<ScreenFilter> filters;
   final String? dateRangeLabel;
+
+  /// What this person may create from here. Empty where they hold no create
+  /// permission, or where the form is not described yet — either way, no
+  /// button is drawn.
+  final List<FormRef> forms;
 
   static ScreenDef from(Map<String, dynamic> d) => ScreenDef(
         key: d['key'] as String,
@@ -153,6 +192,24 @@ class ScreenDef {
         filters: ((d['filters'] as List?) ?? const [])
             .map((f) => ScreenFilter.from(f as Map<String, dynamic>))
             .toList(),
+        forms: ((d['forms'] as List?) ?? const [])
+            .map((f) => FormRef.from(f as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+/// A form a screen offers, as its "New …" button needs it.
+class FormRef {
+  const FormRef({required this.key, required this.title, required this.submitLabel});
+
+  final String key;
+  final String title;
+  final String submitLabel;
+
+  static FormRef from(Map<String, dynamic> d) => FormRef(
+        key: '${d["key"]}',
+        title: '${d["title"]}',
+        submitLabel: '${d["submitLabel"]}',
       );
 }
 
