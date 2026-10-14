@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
 import '../modules/approvals.dart';
+import '../modules/calendar.dart';
 import '../modules/dashboard.dart';
-import '../modules/indents.dart';
+import '../modules/module_screen.dart';
+import '../modules/spec.dart';
 import 'api.dart';
 import 'modules.dart';
 import 'session.dart';
@@ -125,14 +127,27 @@ class HomeState extends State<Home> {
             if (_badges['approvals'] != n) setState(() => _badges['approvals'] = n);
           },
         );
-      case 'material/indents':
-        return IndentsScreen(
+      case 'calendar':
+        return CalendarScreen(
           api: widget.api,
           session: _session,
           bottom: _bottom,
           onBack: () => setState(() => _current = 'dashboard'),
         );
       default:
+        // Every list module is the same pattern with its own spec — the band,
+        // the filters, the row and the actions all come from `spec.dart`.
+        final spec = moduleSpecs[_current];
+        if (spec != null) {
+          return ModuleScreen(
+            api: widget.api,
+            session: _session,
+            spec: spec,
+            bottom: _bottom,
+            onBack: () => setState(() => _current = 'dashboard'),
+            onPickProject: _pickProjectFromModule,
+          );
+        }
         return DashboardScreen(
           api: widget.api,
           session: _session,
@@ -146,8 +161,16 @@ class HomeState extends State<Home> {
     }
   }
 
+  /// The chooser, reached from a module that cannot answer without a project
+  /// rather than from the drawer.
+  Future<void> _pickProjectFromModule() => _choose();
+
   Future<void> _pickProject() async {
     Navigator.pop(context);
+    await _choose();
+  }
+
+  Future<void> _choose() async {
     final chosen = await sheet<String>(
       context,
       title: 'Project',

@@ -18,8 +18,26 @@ export async function GET(request: Request) {
   if (!gate.ok) return gate.response;
   const { ctx, params } = gate;
 
-  const projectId = params.get("project") ?? "";
-  if (!projectId) return new NextResponse("Choose a project to export.", { status: 400 });
+  /*
+   * A schedule is per project — a Gantt across three sites is not a schedule.
+   * The workspace header names one, so the Android client gets it from there
+   * without having to ask twice; a browser passes it as a query parameter.
+   */
+  const projectId = params.get("project") || ctx.workspaceProjectId || "";
+  if (!projectId) {
+    // JSON when the caller is reading a list, so the app can act on the code
+    // rather than showing a sentence it cannot interpret.
+    return gate.format === "json"
+      ? NextResponse.json(
+          {
+            ok: false,
+            error: "Choose a project first — a schedule belongs to one project.",
+            code: "project-required",
+          },
+          { status: 400 },
+        )
+      : new NextResponse("Choose a project to export.", { status: 400 });
+  }
   if (!ctx.canAccessAllProjects && !ctx.projectIds.includes(projectId)) {
     return new NextResponse("This project is not mapped to you.", { status: 403 });
   }

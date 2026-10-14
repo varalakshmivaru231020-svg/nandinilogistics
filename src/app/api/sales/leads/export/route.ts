@@ -1,12 +1,6 @@
-import { NextResponse } from "next/server";
-
-import { recordAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
+import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
 import { PERM } from "@/lib/permissions/codes";
-import { getAuthContext } from "@/lib/rbac/context";
-import {
-  EXPORT_MIME, exportFileName, isExportFormat, toCsv, toPdf, toXlsx,
-} from "@/lib/reports/export";
 import type { ReportResult } from "@/lib/reports/types";
 import { describeLeadFilters, leadListWhere, readLeadListParams } from "@/lib/sales/lead-list";
 import { maskPhone } from "@/lib/utils";
@@ -27,19 +21,18 @@ const STAGE_LABEL: Record<string, string> = {
  *
  * Headers match the lead import where the values can go back in (Name, Phone,
  * Lead source, Project, Budget from…), so an edited export imports cleanly.
+ *
+ * It was the one list route that did its own gate and its own file writing,
+ * which is why `format=json` did nothing here and the Android client could not
+ * read leads at all while every other module worked. It goes through the shared
+ * responder now, like the rest.
  */
 export async function GET(request: Request) {
-  const ctx = await getAuthContext();
-  if (!ctx) return new NextResponse("Sign-in required.", { status: 401 });
-  if (!ctx.has(PERM.sales.lead.view) || !ctx.has(PERM.sales.lead.export)) {
-    return new NextResponse("You do not have permission to export leads.", { status: 403 });
-  }
+  const gate = await exportGate(request, PERM.sales.lead.view, PERM.sales.lead.export);
+  if (!gate.ok) return gate.response;
+  const { ctx } = gate;
 
-  const url = new URL(request.url);
-  const format = url.searchParams.get("format") ?? "csv";
-  if (!isExportFormat(format)) return new NextResponse("Choose csv, xlsx or pdf.", { status: 400 });
-
-  const params = readLeadListParams(url.searchParams);
+  const params = readLeadListParams(gate.params);
   const ownership = ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id };
   const now = new Date();
   const showContact = ctx.has(PERM.sales.lead.viewContact);
@@ -56,8 +49,7 @@ export async function GET(request: Request) {
       lostReason: { select: { name: true } },
     },
   });
-  const truncated = leads.length > MAX_ROWS;
-  const rowsIn = truncated ? leads.slice(0, MAX_ROWS) : leads;
+  const { rows: rowsIn, note } = capRows(leads);
 
   const contact = (phone: string | null) => (phone ? (showContact ? phone : maskPhone(phone)) : "");
 
@@ -96,9 +88,7 @@ export async function GET(request: Request) {
       nextActionAt: l.nextActionAt,
       createdAt: l.createdAt,
     })),
-    summary: [
-      { label: "Leads", value: rowsIn.length.toLocaleString("en-IN") + (truncated ? ` (first ${MAX_ROWS.toLocaleString("en-IN")})` : "") },
-    ],
+    summary: [{ label: "Leads", value: note }],
     emptyMessage: "No leads match these filters.",
   };
 
@@ -106,31 +96,16 @@ export async function GET(request: Request) {
   if (params.source !== "all" && params.source) {
     sourceName = (await prisma.leadSource.findUnique({ where: { id: params.source }, select: { name: true } }))?.name ?? null;
   }
-  const filters = describeLeadFilters(params, sourceName) + (ownership.ownerId ? " · Your pipeline" : "");
-  const meta = { title: "Leads", filters, generatedBy: ctx.name, generatedAt: now };
 
-  let body: Buffer;
-  try {
-    body = format === "csv"
-      ? Buffer.from(toCsv(result), "utf-8")
-      : format === "xlsx" ? await toXlsx(result, meta) : await toPdf(result, meta);
-  } catch (error) {
-    console.error(`[leads] ${format} export failed`, error);
-    return new NextResponse("The export could not be produced. Try another format.", { status: 500 });
-  }
-
-  await recordAudit({
-    action: "EXPORT",
+  return exportResponse({
+    ctx,
+    format: gate.format,
+    title: "Leads",
     entity: "Lead",
-    userId: ctx.id,
-    summary: `Exported ${rowsIn.length} leads as ${format.toUpperCase()} (${filters}${showContact ? "" : "; contacts masked"})`,
-  });
-
-  return new NextResponse(new Uint8Array(body), {
-    headers: {
-      "Content-Type": EXPORT_MIME[format],
-      "Content-Disposition": `attachment; filename="${exportFileName("Leads", format, now)}"`,
-      "Cache-Control": "no-store",
-    },
+    filters:
+      describeLeadFilters(params, sourceName) +
+      (ownership.ownerId ? " · Your pipeline" : "") +
+      (showContact ? "" : " · contacts masked"),
+    result,
   });
 }

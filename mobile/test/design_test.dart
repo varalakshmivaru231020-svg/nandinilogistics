@@ -241,10 +241,31 @@ void main() {
     /*
      * A module listed but unfinished is what made the first attempt feel
      * broken — a drawer full of entries that led nowhere. Only built modules
-     * are drawn, and the rest are summed up honestly at the foot.
+     * are offered, which is a property of `visible()` rather than of the
+     * pixels: the drawer is a lazy list, so an off-screen row is not in the
+     * tree and asserting on text would be asserting on scroll position.
      */
-    testWidgets('lists only finished modules, and says how many are not',
-        (tester) async {
+    test('offers only finished modules', () {
+      final offered = visible(sessionWith(const [], superAdmin: true).can)
+          .expand((g) => g.mods)
+          .toList();
+      expect(offered.every((m) => m.built), isTrue);
+
+      final unfinished = navigation.expand((g) => g.mods).where((m) => !m.built);
+      for (final m in unfinished) {
+        expect(offered.any((o) => o.key == m.key), isFalse, reason: m.label);
+      }
+    });
+
+    /// And the count at the foot is the truth about what is left.
+    test('counts what is still to build', () {
+      final can = sessionWith(const [], superAdmin: true).can;
+      final pending = pendingFor(can);
+      final unfinished = navigation.expand((g) => g.mods).where((m) => !m.built).length;
+      expect(pending, unfinished);
+    });
+
+    testWidgets('draws the groups and the first rows of the menu', (tester) async {
       useEmptyPrefs();
       await tester.pumpWidget(MaterialApp(
         theme: T.theme,
@@ -262,14 +283,9 @@ void main() {
       tester.state<ScaffoldState>(find.byType(Scaffold)).openDrawer();
       await tester.pumpAndSettle();
 
-      for (final m in navigation.expand((g) => g.mods)) {
-        if (m.built) {
-          expect(find.text(m.label), findsWidgets, reason: '${m.label} is built');
-        } else {
-          expect(find.text(m.label), findsNothing, reason: '${m.label} is not built');
-        }
-      }
-      expect(find.textContaining('still being built'), findsOneWidget);
+      expect(find.text('OVERVIEW'), findsOneWidget);
+      expect(find.text('Dashboard'), findsOneWidget);
+      expect(find.text('Approvals'), findsOneWidget);
     });
   });
 

@@ -66,23 +66,24 @@ describe("the app's module registry", () => {
   });
 
   /*
-   * And the shape of the work left. Stated rather than discovered: the drawer
-   * shows the built ones and sums up the rest, so this number is the one the
-   * app tells its own user.
+   * Nothing is pending. Every module in the web's navigation is reachable from
+   * the phone, and the drawer draws them all — so the honest note at its foot
+   * about what is still being built has nothing left to count.
+   *
+   * If a module is added to the web, this fails until the app has it too,
+   * which is the point.
    */
-  it("reports how much is still to build", () => {
-    const built = entries.filter((e) => e.built).map((e) => e.key);
-    const pending = entries.filter((e) => !e.built).map((e) => e.key);
+  it("has nothing left pending", () => {
+    const pending = entries.filter((e) => !e.built).map((e) => e.key).sort();
+    expect(pending).toEqual([]);
+  });
 
-    // Built so far. Raise this deliberately, as each module is finished.
-    expect(built.sort()).toEqual(["approvals", "dashboard", "material/indents"]);
-    expect(pending.length).toBeGreaterThan(0);
-
-    // Every pending one has somewhere to read from when its turn comes, except
-    // the ones that need an endpoint of their own.
-    const orphan = pending
+  it("every finished module reads from a list, or has its own screen", () => {
+    const orphan = entries
+      .filter((e) => e.built)
+      .map((e) => e.key)
       .filter((k) => !NOT_A_LIST.has(k))
       .filter((k) => !MOBILE_LIST_KEYS.includes(k));
-    expect(orphan, "these have no endpoint to build against").toEqual([]);
+    expect(orphan, "these have nothing to read").toEqual([]);
   });
 });
