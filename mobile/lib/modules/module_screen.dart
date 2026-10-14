@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/act.dart';
 import '../core/api.dart';
+import '../core/nav.dart';
 import '../core/session.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
@@ -22,6 +23,7 @@ class ModuleScreen extends StatefulWidget {
     required this.onBack,
     required this.bottom,
     required this.onPickProject,
+    required this.onOpenRelated,
   });
 
   final Api api;
@@ -33,6 +35,9 @@ class ModuleScreen extends StatefulWidget {
   /// Opens the workspace chooser, for a module that needs one.
   final VoidCallback onPickProject;
 
+  /// Opens a screen the web reaches from inside this one.
+  final void Function(String moduleKey) onOpenRelated;
+
   @override
   State<ModuleScreen> createState() => ModuleScreenState();
 }
@@ -40,6 +45,11 @@ class ModuleScreen extends StatefulWidget {
 class ModuleScreenState extends State<ModuleScreen> {
   bool _loading = true;
   String? _error;
+
+  /// How this screen is laid out, as the server describes it — the placeholder
+  /// it shows, the filters it offers and what each is called. Read from the
+  /// boundary rather than written here, so a label cannot differ from the web's.
+  ScreenDef? _screen;
 
   /// The server asked for a project before it will answer. A schedule belongs
   /// to one project, so this is a prompt rather than a failure.
@@ -62,6 +72,7 @@ class ModuleScreenState extends State<ModuleScreen> {
       _query.clear();
       _search.clear();
       _searching = false;
+      _screen = null;
       _load();
     }
   }
@@ -77,6 +88,14 @@ class ModuleScreenState extends State<ModuleScreen> {
       _loading = true;
       _error = null;
     });
+
+    // The descriptor once per screen; the rows on every refresh.
+    if (_screen == null || _screen!.key != widget.spec.key) {
+      final d = await widget.api.get('/screen/${widget.spec.key}');
+      if (!mounted) return;
+      if (d.ok) _screen = ScreenDef.from(d.data!);
+    }
+
     final res = await widget.api.get('/list/${widget.spec.key}', query: _query);
     if (!mounted) return;
     setState(() {
@@ -104,6 +123,40 @@ class ModuleScreenState extends State<ModuleScreen> {
 
   int get _applied => _query.keys.where((k) => k != 'q').length;
 
+  /// The noun the web counts in — "indents", "purchase orders", "receipts".
+  String _noun(int n) {
+    final noun = _screen?.countNoun;
+    if (noun == null) return n == 1 ? 'record' : 'records';
+    if (n == 1 && noun.endsWith('s')) return noun.substring(0, noun.length - 1);
+    if (n != 1 && !noun.endsWith('s')) return '${noun}s';
+    return noun;
+  }
+
+  void _openRelated() {
+    final related = relatedScreens[widget.spec.key] ?? const [];
+    sheet<void>(
+      context,
+      title: 'More in ${_screen?.title ?? widget.spec.title}',
+      explain: 'The web reaches these from inside this screen rather than from '
+          'the menu, so they are here rather than in the drawer.',
+      body: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        for (final (key, label) in related)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Btn(label,
+                emphasis: Emphasis.outline,
+                icon: Icons.chevron_right_rounded,
+                height: 50,
+                expand: true,
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  widget.onOpenRelated(key);
+                }),
+          ),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final spec = widget.spec;
@@ -128,13 +181,20 @@ class ModuleScreenState extends State<ModuleScreen> {
             ),
       body: Column(children: [
         Bar(
-          title: spec.title,
+          title: _screen?.title ?? spec.title,
           subtitle: _loading
               ? 'Loading…'
-              : '${rows.length} ${rows.length == 1 ? "record" : "records"} · '
+              // "12 indents", in the web's own noun — not "12 records".
+              : '${rows.length} ${_noun(rows.length)} · '
                   '${widget.session.project?.code ?? "All projects"}',
           onBack: widget.onBack,
           actions: [
+            if (relatedScreens[spec.key] != null)
+              BarButton(
+                icon: Icons.more_vert_rounded,
+                label: 'Related screens',
+                onTap: _openRelated,
+              ),
             BarButton(
               icon: _searching ? Icons.close_rounded : Icons.search_rounded,
               label: _searching ? 'Close search' : 'Search',
@@ -162,7 +222,8 @@ class ModuleScreenState extends State<ModuleScreen> {
               fieldKey: const Key('search'),
               label: 'Search',
               controller: _search,
-              hint: spec.searchHint,
+              // The web's own placeholder, which names the fields it searches.
+              hint: _screen?.searchPlaceholder ?? spec.searchHint,
               onSubmit: () => _set('q', _search.text),
               suffix: IconButton(
                 tooltip: 'Search',
@@ -184,12 +245,22 @@ class ModuleScreenState extends State<ModuleScreen> {
     );
   }
 
+  /// An applied filter reads as the web names it — "Invoice pending", not
+  /// "invoice: PENDING".
   String _chipLabel(String key, String value) {
     if (key == 'q') return '“$value”';
-    final f = widget.spec.filters.where((f) => f.key == key).firstOrNull;
-    if (f == null) return '$key: $value';
-    final option = f.options.where((o) => o.$1 == value).firstOrNull;
-    return option == null ? '${f.label}: $value' : option.$2;
+    if (key == 'from') return 'From $value';
+    if (key == 'to') return 'To $value';
+
+    final f = _screen?.filters.where((f) => f.name == key).firstOrNull;
+    if (f != null) {
+      final o = f.options.where((o) => o.value == value).firstOrNull;
+      return o?.label ?? '${f.label}: $value';
+    }
+    final fallback = widget.spec.filters.where((f) => f.key == key).firstOrNull;
+    if (fallback == null) return '$key: $value';
+    final o = fallback.options.where((o) => o.$1 == value).firstOrNull;
+    return o == null ? '${fallback.label}: $value' : o.$2;
   }
 
   Widget _body(List<Map<String, dynamic>> rows, int now) {
@@ -260,6 +331,7 @@ class ModuleScreenState extends State<ModuleScreen> {
       explain: 'The same filters the web toolbar has. The server says in words '
           'what it applied, and that line is at the foot of the list.',
       body: (ctx) => _FilterSheet(
+        screen: _screen,
         spec: widget.spec,
         query: Map.of(_query),
         onApply: (q) {
@@ -508,11 +580,16 @@ class SpecDetail extends StatelessWidget {
 
 class _FilterSheet extends StatefulWidget {
   const _FilterSheet({
+    required this.screen,
     required this.spec,
     required this.query,
     required this.onApply,
     required this.onClear,
   });
+
+  /// The web's own filters. Null only if the descriptor could not be read, in
+  /// which case the module's own fallback is used.
+  final ScreenDef? screen;
 
   final ModuleSpec spec;
   final Map<String, String> query;
@@ -527,14 +604,32 @@ class _FilterSheetState extends State<_FilterSheet> {
   late Map<String, String> _q;
   final _dates = <String, TextEditingController>{};
 
+  /// The web's filters where the descriptor came through, the module's own
+  /// fallback where it did not.
+  List<ScreenFilter> get _filters =>
+      widget.screen?.filters ??
+      widget.spec.filters
+          .where((f) => f.kind == FilterKind.choice)
+          .map((f) => ScreenFilter(
+                name: f.key,
+                label: f.label,
+                allLabel: 'All',
+                options: f.options.map((o) => (value: o.$1, label: o.$2)).toList(),
+              ))
+          .toList();
+
+  /// "From"/"To", captioned with whatever the web calls the range — "Raised",
+  /// "Received", "PO date".
+  String? get _rangeLabel =>
+      widget.screen?.dateRangeLabel ??
+      (widget.spec.filters.any((f) => f.kind == FilterKind.date) ? 'Date' : null);
+
   @override
   void initState() {
     super.initState();
     _q = Map.of(widget.query)..removeWhere((k, _) => k == 'q');
-    for (final f in widget.spec.filters) {
-      if (f.kind == FilterKind.date) {
-        _dates[f.key] = TextEditingController(text: _q[f.key] ?? '');
-      }
+    for (final key in ['from', 'to']) {
+      _dates[key] = TextEditingController(text: _q[key] ?? '');
     }
   }
 
@@ -546,11 +641,11 @@ class _FilterSheetState extends State<_FilterSheet> {
     super.dispose();
   }
 
-  Future<void> _pick(FilterSpec f) async {
+  Future<void> _pick(String key) async {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.tryParse(_dates[f.key]!.text) ?? now,
+      initialDate: DateTime.tryParse(_dates[key]!.text) ?? now,
       firstDate: DateTime(now.year - 3),
       lastDate: DateTime(now.year + 3),
     );
@@ -558,52 +653,75 @@ class _FilterSheetState extends State<_FilterSheet> {
     final v = '${picked.year}-${picked.month.toString().padLeft(2, "0")}'
         '-${picked.day.toString().padLeft(2, "0")}';
     setState(() {
-      _dates[f.key]!.text = v;
-      _q[f.key] = v;
+      _dates[key]!.text = v;
+      _q[key] = v;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final range = _rangeLabel;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      for (final f in widget.spec.filters) ...[
+      for (final f in _filters) ...[
         Overline(f.label),
         const SizedBox(height: 8),
-        if (f.kind == FilterKind.date)
-          Btn(
-            _dates[f.key]!.text.isEmpty ? 'Any date' : _dates[f.key]!.text,
-            emphasis: Emphasis.outline,
-            icon: Icons.event_rounded,
-            expand: true,
-            onPressed: () => _pick(f),
-          )
-        else
-          Wrap(spacing: 7, runSpacing: 7, children: [
-            for (final o in f.options)
-              FilterChip2(
-                label: o.$2,
-                selected: _q[f.key] == o.$1,
-                onTap: () => setState(() {
-                  if (_q[f.key] == o.$1) {
-                    _q.remove(f.key);
-                  } else {
-                    _q[f.key] = o.$1;
-                  }
-                }),
-              ),
-          ]),
+        Wrap(spacing: 7, runSpacing: 7, children: [
+          // The everything-option, in the web's own words.
+          FilterChip2(
+            label: f.allLabel,
+            selected: !_q.containsKey(f.name),
+            onTap: () => setState(() => _q.remove(f.name)),
+          ),
+          for (final o in f.options)
+            FilterChip2(
+              label: o.label,
+              selected: _q[f.name] == o.value,
+              onTap: () => setState(() {
+                if (_q[f.name] == o.value) {
+                  _q.remove(f.name);
+                } else {
+                  _q[f.name] = o.value;
+                }
+              }),
+            ),
+        ]),
+        const SizedBox(height: 16),
+      ],
+      if (range != null) ...[
+        Overline(range),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(
+            child: Btn(_dates['from']!.text.isEmpty ? 'From' : _dates['from']!.text,
+                emphasis: Emphasis.outline,
+                icon: Icons.event_rounded,
+                expand: true,
+                onPressed: () => _pick('from')),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Btn(_dates['to']!.text.isEmpty ? 'To' : _dates['to']!.text,
+                emphasis: Emphasis.outline,
+                icon: Icons.event_rounded,
+                expand: true,
+                onPressed: () => _pick('to')),
+          ),
+        ]),
         const SizedBox(height: 16),
       ],
       Row(children: [
         Expanded(
-          child: Btn('Clear all',
+          child: Btn('Clear',
               emphasis: Emphasis.outline, height: 50, expand: true, onPressed: widget.onClear),
         ),
         const SizedBox(width: 9),
         Expanded(
           flex: 2,
           child: Btn('Show results',
-              height: 50, expand: true, onPressed: () => widget.onApply(_q)),
+              key: const Key('apply-filters'),
+              height: 50,
+              expand: true,
+              onPressed: () => widget.onApply(_q)),
         ),
       ]),
     ]);

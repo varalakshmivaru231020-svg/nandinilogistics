@@ -6,11 +6,11 @@ import '../modules/approvals.dart';
 import '../modules/calendar.dart';
 import '../modules/dashboard.dart';
 import '../modules/module_screen.dart';
-import '../modules/spec.dart';
 import 'api.dart';
-import 'modules.dart';
+import 'nav.dart';
 import 'session.dart';
 import 'shell.dart';
+import '../modules/spec.dart';
 
 /// The shell: one module at a time, with the drawer and the bottom bar around
 /// it. Each module draws its own navy bar, because the bar carries that
@@ -36,7 +36,16 @@ class Home extends StatefulWidget {
 class HomeState extends State<Home> {
   final _drawer = GlobalKey<ScaffoldState>();
   late Session _session;
-  String _current = 'dashboard';
+
+  /// The web route of whatever is open — the same identity the server's
+  /// navigation uses.
+  String _current = '/dashboard';
+
+  /// Set when a screen the web reaches from inside another is opened, since
+  /// those are not menu entries and so have no route of their own here.
+  String? _related;
+
+  List<NavSection> _nav = const [];
   final Map<String, int> _badges = {};
 
   @override
@@ -44,47 +53,62 @@ class HomeState extends State<Home> {
     super.initState();
     _session = widget.session;
     widget.api.projectId = _session.projectId;
+    _loadNav();
   }
 
-  void _open(String key) {
-    final known = navigation.expand((g) => g.mods).where((m) => m.key == key && m.built);
-    if (known.isEmpty) {
-      notify(context, 'That module is not on the phone yet.');
-      return;
-    }
-    setState(() => _current = key);
+  Future<void> _loadNav() async {
+    final nav = await loadNavigation(widget.api);
+    if (!mounted) return;
+    setState(() => _nav = nav);
   }
 
-  Mod? get _mod =>
-      navigation.expand((g) => g.mods).where((m) => m.key == _current).firstOrNull;
+  /// The list key of whatever is open.
+  String? get _moduleKey => _related ?? hrefToModule[_current];
+
+  /// Opens a web route, by the href the server's navigation uses.
+  void _open(String href) {
+    setState(() {
+      _current = href;
+      _related = null;
+    });
+  }
+
+  NavItem? get _item => _nav
+      .expand((g) => g.items)
+      .where((i) => i.href == _current)
+      .firstOrNull;
 
   /// The third tab takes the name of wherever you are, as the design shows on
   /// the indent list — it is "where you are", not a fixed destination.
   (String, IconData) get _third {
-    final m = _mod;
-    if (m == null || m.key == 'dashboard' || m.key == 'approvals') {
+    if (_related != null) {
+      final spec = moduleSpecs[_related];
+      return (spec?.title ?? 'Open', Icons.chevron_right_rounded);
+    }
+    final i = _item;
+    if (i == null || i.href == '/dashboard' || i.href == '/approvals') {
       return ('Tasks', Icons.check_box_outlined);
     }
-    return (m.label, m.icon);
+    return (i.label, i.icon);
   }
 
   Widget get _bottom {
     final (label, icon) = _third;
     return BottomBar(
-      current: _current == 'dashboard'
+      current: _related == null && _current == '/dashboard'
           ? 'dashboard'
-          : _current == 'approvals'
+          : _related == null && _current == '/approvals'
               ? 'approvals'
               : 'third',
       thirdLabel: label,
       thirdIcon: icon,
-      approvalsBadge: _badges['approvals'],
-      onHome: () => setState(() => _current = 'dashboard'),
+      approvalsBadge: _badges['/approvals'],
+      onHome: () => _open('/dashboard'),
       onApprovals: () => _session.can('approvals.queue.view')
-          ? setState(() => _current = 'approvals')
+          ? _open('/approvals')
           : notify(context, 'You do not have the approvals queue.'),
-      onThird: _current == 'dashboard' || _current == 'approvals'
-          ? () => notify(context, 'Tasks is the next module being built.')
+      onThird: _related == null && (_current == '/dashboard' || _current == '/approvals')
+          ? () => _open('/tasks')
           : null,
       onMore: () => _drawer.currentState?.openDrawer(),
     );
@@ -99,10 +123,15 @@ class HomeState extends State<Home> {
       drawer: NavDrawer(
         session: _session,
         current: _current,
+        sections: _nav,
         badges: _badges,
         onPick: (m) {
           Navigator.pop(context);
-          setState(() => _current = m.key);
+          if (m.href == '/masters') {
+            notify(context, 'Masters & Users is managed on the web.');
+            return;
+          }
+          _open(m.href);
         },
         onProject: _pickProject,
         onSignOut: () async {
@@ -116,36 +145,37 @@ class HomeState extends State<Home> {
   }
 
   Widget _module() {
-    switch (_current) {
-      case 'approvals':
+    switch (_related == null ? _current : '') {
+      case '/approvals':
         return ApprovalsScreen(
           api: widget.api,
           session: _session,
           bottom: _bottom,
-          onBack: () => setState(() => _current = 'dashboard'),
+          onBack: () => _open('/dashboard'),
           onCount: (n) {
-            if (_badges['approvals'] != n) setState(() => _badges['approvals'] = n);
+            if (_badges['/approvals'] != n) setState(() => _badges['/approvals'] = n);
           },
         );
-      case 'calendar':
+      case '/calendar':
         return CalendarScreen(
           api: widget.api,
           session: _session,
           bottom: _bottom,
-          onBack: () => setState(() => _current = 'dashboard'),
+          onBack: () => _open('/dashboard'),
         );
       default:
         // Every list module is the same pattern with its own spec — the band,
         // the filters, the row and the actions all come from `spec.dart`.
-        final spec = moduleSpecs[_current];
+        final spec = moduleSpecs[_moduleKey];
         if (spec != null) {
           return ModuleScreen(
             api: widget.api,
             session: _session,
             spec: spec,
             bottom: _bottom,
-            onBack: () => setState(() => _current = 'dashboard'),
+            onBack: () => _related != null ? _open(_current) : _open('/dashboard'),
             onPickProject: _pickProjectFromModule,
+            onOpenRelated: (key) => setState(() => _related = key),
           );
         }
         return DashboardScreen(
@@ -153,9 +183,19 @@ class HomeState extends State<Home> {
           session: _session,
           bottom: _bottom,
           onMenu: () => _drawer.currentState?.openDrawer(),
-          onOpen: _open,
+          onOpen: (moduleKey) {
+            final href = hrefToModule.entries
+                .where((e) => e.value == moduleKey)
+                .map((e) => e.key)
+                .firstOrNull;
+            if (href != null) {
+              _open(href);
+            } else {
+              setState(() => _related = moduleKey);
+            }
+          },
           onApprovalCount: (n) {
-            if (_badges['approvals'] != n) setState(() => _badges['approvals'] = n);
+            if (_badges['/approvals'] != n) setState(() => _badges['/approvals'] = n);
           },
         );
     }
@@ -189,8 +229,8 @@ class HomeState extends State<Home> {
       widget.api.projectId = id;
       // Re-enter the module so it re-reads under the new scope.
       final was = _current;
-      _current = 'dashboard';
-      if (was != 'dashboard') _current = was;
+      _current = '/dashboard';
+      if (was != '/dashboard') _current = was;
     });
   }
 

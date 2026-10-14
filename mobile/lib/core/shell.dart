@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../design/components.dart';
 import '../design/tokens.dart';
-import 'modules.dart';
+import 'nav.dart';
 import 'session.dart';
 
 /// The four tabs, as the design draws them: Home, Approvals, Tasks, More.
@@ -104,6 +104,7 @@ class NavDrawer extends StatelessWidget {
     super.key,
     required this.session,
     required this.current,
+    required this.sections,
     required this.onPick,
     required this.onProject,
     required this.onSignOut,
@@ -111,16 +112,21 @@ class NavDrawer extends StatelessWidget {
   });
 
   final Session session;
+
+  /// The web route of whatever is open.
   final String current;
-  final void Function(Mod) onPick;
+
+  /// The web's own navigation, as the server sent it.
+  final List<NavSection> sections;
+
+  final void Function(NavItem) onPick;
   final VoidCallback onProject;
   final VoidCallback onSignOut;
   final Map<String, int> badges;
 
   @override
   Widget build(BuildContext context) {
-    final groups = visible(session.can);
-    final pending = pendingFor(session.can);
+    final groups = sections;
 
     return Drawer(
       backgroundColor: T.navy950,
@@ -210,7 +216,7 @@ class NavDrawer extends StatelessWidget {
                         letterSpacing: 1.2,
                         color: T.muted)),
               ),
-              for (final m in g.mods) _item(m),
+              for (final m in g.items) _item(m),
             ],
             if (groups.isEmpty)
               Padding(
@@ -223,31 +229,6 @@ class NavDrawer extends StatelessWidget {
               ),
           ]),
         ),
-
-        // what is not here yet, said plainly rather than listed and broken
-        if (pending > 0)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Icon(Icons.lock_outline_rounded, size: 17, color: T.brand300),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '$pending more module${pending == 1 ? "" : "s"} you may open are '
-                    'still being built. They are left out rather than listed and broken.',
-                    style: T.caption(color: const Color(0xFFB9BFD6))
-                        .copyWith(fontWeight: FontWeight.w500, height: 1.5),
-                  ),
-                ),
-              ]),
-            ),
-          ),
 
         // sign out
         Container(
@@ -286,9 +267,9 @@ class NavDrawer extends StatelessWidget {
     );
   }
 
-  Widget _item(Mod m) {
-    final active = m.key == current;
-    final count = m.badge == null ? null : badges[m.badge];
+  Widget _item(NavItem m) {
+    final active = m.href == current;
+    final count = badges[m.href];
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Material(

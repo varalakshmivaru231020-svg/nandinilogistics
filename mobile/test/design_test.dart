@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nninfra/core/modules.dart';
+import 'package:nninfra/core/nav.dart';
 import 'package:nninfra/core/shell.dart';
 import 'package:nninfra/design/components.dart';
 import 'package:nninfra/design/tokens.dart';
@@ -216,11 +216,17 @@ void main() {
         home: Scaffold(
           drawer: NavDrawer(
             session: sessionWith(const ['approvals.queue.view', 'material.indent.view']),
-            current: 'approvals',
+            current: '/approvals',
+            sections: const [
+              NavSection('Overview', [
+                NavItem(href: '/dashboard', label: 'Dashboard'),
+                NavItem(href: '/approvals', label: 'Approvals'),
+              ]),
+            ],
             onPick: (_) {},
             onProject: () {},
             onSignOut: () {},
-            badges: const {'approvals': 6},
+            badges: const {'/approvals': 6},
           ),
           body: const SizedBox(),
         ),
@@ -233,36 +239,38 @@ void main() {
       expect(find.text('WORKSPACE'), findsOneWidget);
       expect(find.text('All projects'), findsOneWidget);
       expect(find.text('Sign out'), findsOneWidget);
+      // The count the server sent, on the entry it belongs to.
+      expect(find.text('6'), findsOneWidget);
 
       final drawer = tester.widget<Drawer>(find.byType(Drawer));
       expect(drawer.backgroundColor, T.navy950);
     });
 
     /*
-     * A module listed but unfinished is what made the first attempt feel
-     * broken — a drawer full of entries that led nowhere. Only built modules
-     * are offered, which is a property of `visible()` rather than of the
-     * pixels: the drawer is a lazy list, so an off-screen row is not in the
-     * tree and asserting on text would be asserting on scroll position.
+     * The menu is the server's — the web's own NAVIGATION, in its own order
+     * with its own labels. The app keeps no list of its own, which is what
+     * stopped the two from matching: a dozen screens the web reaches from
+     * inside other screens had been promoted to top level here.
      */
-    test('offers only finished modules', () {
-      final offered = visible(sessionWith(const [], superAdmin: true).can)
-          .expand((g) => g.mods)
-          .toList();
-      expect(offered.every((m) => m.built), isTrue);
-
-      final unfinished = navigation.expand((g) => g.mods).where((m) => !m.built);
-      for (final m in unfinished) {
-        expect(offered.any((o) => o.key == m.key), isFalse, reason: m.label);
+    test('every menu entry the web can send maps to a screen or is web-only', () {
+      // `hrefToModule` is the only thing the app says about a route: which
+      // list it reads. A route with no entry must be one with a screen of its
+      // own, or Masters, which is web-only by design.
+      const ownScreen = {'/dashboard', '/calendar', '/approvals', '/dashboard/performance'};
+      const webOnly = {'/masters'};
+      for (final href in hrefToModule.keys) {
+        expect(ownScreen.contains(href), isFalse, reason: href);
       }
+      expect(hrefToModule.containsKey('/masters'), isFalse);
+      expect(webOnly.isNotEmpty, isTrue);
     });
 
-    /// And the count at the foot is the truth about what is left.
-    test('counts what is still to build', () {
-      final can = sessionWith(const [], superAdmin: true).can;
-      final pending = pendingFor(can);
-      final unfinished = navigation.expand((g) => g.mods).where((m) => !m.built).length;
-      expect(pending, unfinished);
+    /// The screens the web reaches contextually are offered from their parent,
+    /// not from the menu — so every one of them names a real parent.
+    test('related screens hang off a route the menu has', () {
+      for (final parent in relatedScreens.keys) {
+        expect(hrefToModule.values, contains(parent), reason: parent);
+      }
     });
 
     testWidgets('draws the groups and the first rows of the menu', (tester) async {
@@ -272,7 +280,13 @@ void main() {
         home: Scaffold(
           drawer: NavDrawer(
             session: sessionWith(const [], superAdmin: true),
-            current: 'dashboard',
+            current: '/dashboard',
+            sections: const [
+              NavSection('Overview', [
+                NavItem(href: '/dashboard', label: 'Dashboard'),
+                NavItem(href: '/approvals', label: 'Approvals'),
+              ]),
+            ],
             onPick: (_) {},
             onProject: () {},
             onSignOut: () {},

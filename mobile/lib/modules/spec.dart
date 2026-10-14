@@ -677,7 +677,7 @@ final moduleSpecs = <String, ModuleSpec>{
     title: 'Leads · CRM',
     searchHint: 'Name, phone, requirement…',
     filters: const [
-      FilterSpec(key: 'stage', label: 'Stage', options: [
+      FilterSpec(key: 'state', label: 'Stage', options: [
         ('NEW', 'New'), ('CONTACTED', 'Contacted'),
         ('SITE_VISIT_SCHEDULED', 'Visit scheduled'), ('VISIT_DONE', 'Visit done'),
         ('NEGOTIATION', 'Negotiation'), ('BOOKED', 'Booked'), ('LOST', 'Lost'),

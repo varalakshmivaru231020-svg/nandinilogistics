@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/api.dart';
-import '../core/modules.dart';
+import '../core/nav.dart';
 import '../core/session.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
@@ -209,9 +209,8 @@ class DashboardScreenState extends State<DashboardScreen> {
                         for (final h in _health) ...[
                           _HealthRow(
                             health: h,
-                            onTap: navigation
-                                    .expand((g) => g.mods)
-                                    .any((m) => m.key == h.key && m.built)
+                            // Only where the module is one the menu can reach.
+                            onTap: hrefToModule.containsValue(h.key)
                                 ? () => widget.onOpen(h.key)
                                 : null,
                           ),
