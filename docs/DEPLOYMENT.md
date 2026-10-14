@@ -10,6 +10,28 @@ advisory.
 
 ## Last release
 
+`5b506b2` · 14 Oct 2026. Every item below was run.
+
+| | |
+|---|---|
+| Rolled forward from | `1901da4` |
+| Backup taken first | `nninfra-20261014-055913.dump` — 420K, 107 tables |
+| Permission catalogue | 564 codes, 0 created |
+| Role grants | 1524 → 1524 (nothing new this release) |
+| Health | `==> Healthy (HTTP 200)` |
+| Modules on the phone | **31 of 31**, verified on production as three users: Owner 31 answered, Vikas 30 with 1 refused, Supervisor 13 with 18 refused — **0 broken** |
+
+**What it put live:** the Android client's whole surface. The leads list route,
+which was the one still writing its own files and so could not answer JSON at
+all; the schedule list, which now takes its project from the `X-Project` header
+and answers a `project-required` code rather than a plain-text 400; and the
+`decide` instruction on approvals and indents, which is how the app knows which
+action settles a record without reading a status string and guessing.
+
+---
+
+## Release before that
+
 `1901da4` · 13 Oct 2026 · 14 commits, from `bf19db7`. Every item below was run.
 
 | | |
