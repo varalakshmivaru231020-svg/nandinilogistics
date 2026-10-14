@@ -48,6 +48,7 @@ export async function GET(request: Request) {
     result: {
       columns: unitExportColumns(showAreas),
       rows: rowsIn.map((u) => ({
+        id: u.id,
         project: u.project.code,
         block: u.block?.name ?? "",
         unitNumber: u.unitNumber,

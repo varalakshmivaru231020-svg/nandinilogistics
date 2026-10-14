@@ -72,6 +72,7 @@ export async function GET(request: Request) {
       { key: "createdAt", header: "Captured on", format: "date" },
     ],
     rows: rowsIn.map((l) => ({
+        id: l.id,
       leadNo: l.leadNo,
       name: l.name,
       phone: contact(l.phone),

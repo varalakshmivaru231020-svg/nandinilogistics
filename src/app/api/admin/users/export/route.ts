@@ -51,6 +51,7 @@ export async function GET(request: Request) {
         { key: "createdAt", header: "Created on", format: "date" },
       ],
       rows: rows.map((u) => ({
+        id: u.id,
         employeeCode: u.employeeCode,
         name: u.name,
         email: u.email,

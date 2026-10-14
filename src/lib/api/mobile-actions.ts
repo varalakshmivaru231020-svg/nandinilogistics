@@ -55,6 +55,11 @@ export interface MobileArg {
   /** For `enum`: the only values the boundary will pass through. */
   values?: string[];
   optional?: boolean;
+  /**
+   * The action takes `| null` here, so nothing is an answer: a missing value
+   * and an empty box both arrive as null rather than as "".
+   */
+  nullable?: boolean;
 }
 
 /** Positional arguments in, an ActionResult out. */
@@ -116,11 +121,11 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
   },
   "checklists/saveCategory": {
     fn: a1.saveCategoryAction as MobileAction,
-    args: [{ name: "id", kind: "text" }, { name: "formData", kind: "form" }],
+    args: [{ name: "id", kind: "text", nullable: true }, { name: "formData", kind: "form" }],
   },
   "checklists/saveChecklist": {
     fn: a1.saveChecklistAction as MobileAction,
-    args: [{ name: "id", kind: "text" }, { name: "categoryId", kind: "text" }, { name: "formData", kind: "form" }],
+    args: [{ name: "id", kind: "text", nullable: true }, { name: "categoryId", kind: "text" }, { name: "formData", kind: "form" }],
   },
   "checklists/setChecklistActive": {
     fn: a1.setChecklistActiveAction as MobileAction,
@@ -408,7 +413,7 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
   },
   "sales/bookings/createBooking": {
     fn: a17.createBookingAction as MobileAction,
-    args: [{ name: "costSheetId", kind: "text" }, { name: "customerId", kind: "text" }, { name: "leadId", kind: "text" }, { name: "remarks", kind: "text", optional: true }],
+    args: [{ name: "costSheetId", kind: "text" }, { name: "customerId", kind: "text" }, { name: "leadId", kind: "text", nullable: true }, { name: "remarks", kind: "text", optional: true, nullable: true }],
   },
   "sales/bookings/createCustomer": {
     fn: a17.createCustomerAction as MobileAction,
@@ -416,7 +421,7 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
   },
   "sales/bookings/createReceipt": {
     fn: a17.createReceiptAction as MobileAction,
-    args: [{ name: "bookingId", kind: "text" }, { name: "demandId", kind: "text" }, { name: "amount", kind: "num" }, { name: "mode", kind: "text" }, { name: "referenceNo", kind: "text" }, { name: "bankId", kind: "text" }],
+    args: [{ name: "bookingId", kind: "text" }, { name: "demandId", kind: "text", nullable: true }, { name: "amount", kind: "num" }, { name: "mode", kind: "text" }, { name: "referenceNo", kind: "text" }, { name: "bankId", kind: "text", nullable: true }],
   },
   "sales/bookings/raiseDemand": {
     fn: a17.raiseDemandAction as MobileAction,
@@ -432,11 +437,11 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
   },
   "sales/cost-sheets/createCostSheet": {
     fn: a18.createCostSheetAction as MobileAction,
-    args: [{ name: "unitId", kind: "text" }, { name: "leadId", kind: "text" }, { name: "includeOptional", kind: "ids" }, { name: "discountAmount", kind: "num" }],
+    args: [{ name: "unitId", kind: "text" }, { name: "leadId", kind: "text", nullable: true }, { name: "includeOptional", kind: "ids" }, { name: "discountAmount", kind: "num" }],
   },
   "sales/cost-sheets/holdUnit": {
     fn: a18.holdUnitAction as MobileAction,
-    args: [{ name: "unitId", kind: "text" }, { name: "leadId", kind: "text" }, { name: "customerId", kind: "text", optional: true }, { name: "remarks", kind: "text", optional: true }, { name: "days", kind: "num", optional: true }],
+    args: [{ name: "unitId", kind: "text" }, { name: "leadId", kind: "text", nullable: true }, { name: "customerId", kind: "text", optional: true, nullable: true }, { name: "remarks", kind: "text", optional: true, nullable: true }, { name: "days", kind: "num", optional: true }],
   },
   "sales/cost-sheets/releaseHold": {
     fn: a18.releaseHoldAction as MobileAction,
@@ -500,7 +505,7 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
   },
   "sales/site-visits/scheduleSiteVisit": {
     fn: a21.scheduleSiteVisitAction as MobileAction,
-    args: [{ name: "leadId", kind: "text" }, { name: "scheduledAt", kind: "text" }, { name: "projectId", kind: "text" }],
+    args: [{ name: "leadId", kind: "text" }, { name: "scheduledAt", kind: "text" }, { name: "projectId", kind: "text", nullable: true }],
   },
   "schedule/addDependency": {
     fn: a22.addDependencyAction as MobileAction,
@@ -564,7 +569,7 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
   },
   "schedule/updateActivityProgress": {
     fn: a22.updateActivityProgressAction as MobileAction,
-    args: [{ name: "id", kind: "text" }, { name: "progressPct", kind: "num" }, { name: "actualStart", kind: "text" }, { name: "actualEnd", kind: "text" }, { name: "delayReasonId", kind: "text" }, { name: "delayNotes", kind: "text" }],
+    args: [{ name: "id", kind: "text" }, { name: "progressPct", kind: "num" }, { name: "actualStart", kind: "text", nullable: true }, { name: "actualEnd", kind: "text", nullable: true }, { name: "delayReasonId", kind: "text", nullable: true }, { name: "delayNotes", kind: "text" }],
   },
   "tasks/acceptTask": {
     fn: a25.acceptTaskAction as MobileAction,
@@ -672,7 +677,7 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
   },
   "workspace/setWorkspace": {
     fn: a29.setWorkspaceAction as MobileAction,
-    args: [{ name: "projectId", kind: "text" }],
+    args: [{ name: "projectId", kind: "text", nullable: true }],
   },
 };
 

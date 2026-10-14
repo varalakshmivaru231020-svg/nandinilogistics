@@ -77,6 +77,7 @@ export async function GET(request: Request) {
     result: {
       columns,
       rows: rows.map((i) => ({
+        id: i.id,
         issueNo: i.issueNo,
         issueDate: i.issueDate,
         project: i.project.code,

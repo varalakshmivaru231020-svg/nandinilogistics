@@ -66,6 +66,7 @@ export async function GET(request: Request) {
         { key: "loggedBy", header: "Logged by" },
       ],
       rows: rows.map((l) => ({
+        id: l.id,
         logDate: l.logDate,
         projectCode: l.project.code,
         project: l.project.name,

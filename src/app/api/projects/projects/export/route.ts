@@ -63,6 +63,7 @@ export async function GET(request: Request) {
     result: {
       columns,
       rows: rows.map((p) => ({
+        id: p.id,
         code: p.code,
         name: p.name,
         type: p.projectType?.name ?? "",

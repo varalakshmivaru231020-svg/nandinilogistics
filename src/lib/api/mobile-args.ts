@@ -29,9 +29,18 @@ export function toFormData(value: unknown, name: string): FormData {
 
 export function coerce(arg: MobileArg, value: unknown, attached: FormData | null): unknown {
   if (value === undefined || value === null) {
+    // The action takes `| null` here, so nothing is a legitimate answer.
+    if (arg.nullable) return null;
     if (arg.optional) return undefined;
     throw new Error(`\`${arg.name}\` is required.`);
   }
+
+  /*
+   * An empty box on a form is nothing, not "". It matters where the action
+   * falls back on it — `projectId ?? lead.projectId` with an empty string is
+   * an id that does not exist.
+   */
+  if (arg.nullable && value === "") return null;
 
   switch (arg.kind) {
     case "text":

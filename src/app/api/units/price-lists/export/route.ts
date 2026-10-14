@@ -45,6 +45,7 @@ export async function GET(request: Request) {
         { key: "plcAmount", header: "PLC amount", align: "right", format: "money" },
       ],
       rows: rowsIn.map((l) => ({
+        id: l.id,
         projectCode: l.project.code,
         projectName: l.project.name,
         version: l.version,

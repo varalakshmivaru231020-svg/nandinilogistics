@@ -59,6 +59,7 @@ export async function GET(request: Request) {
         { key: "amount", header: "Amount", align: "right", format: "money" },
       ],
       rows: rows.map((p) => ({
+        id: p.id,
         paymentNo: p.paymentNo,
         invoiceNo: p.invoice.invoiceNo,
         poNo: p.invoice.purchaseOrder.poNo,

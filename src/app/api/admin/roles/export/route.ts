@@ -38,6 +38,7 @@ export async function GET(request: Request) {
         { key: "status", header: "Status" },
       ],
       rows: rows.map((r) => ({
+        id: r.id,
         name: r.name,
         code: r.code,
         description: r.description ?? "",

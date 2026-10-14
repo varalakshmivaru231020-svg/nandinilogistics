@@ -29,6 +29,7 @@ const SOURCE: Record<string, string> = {
   "calendar:create": "calendar/calendar-screen.tsx",
   "tasks:create": "tasks/new/new-task-form.tsx",
   "sales/customers:create": "sales/customers/customers-screen.tsx",
+  "sales/leads:create": "sales/leads/leads-screen.tsx",
   "material/indents:create": "material/indents/new/indent-form.tsx",
 };
 
@@ -102,6 +103,37 @@ describe("every form points at something real", () => {
         }
       }
     }
+  });
+});
+
+/**
+ * The capture-lead form is the one that cannot be written down: the web drawer
+ * reads Masters → Lead Settings, so the registry reads the same rows. What can
+ * still drift is the mapping — the name each system field posts under and the
+ * placeholder each kind carries — so that is read back out of the drawer.
+ */
+describe("the lead form's mapping, against the drawer that does the same", () => {
+  const src = source("sales/leads:create");
+
+  it("posts under the names the drawer posts under", () => {
+    for (const name of [
+      "name", "phone", "email", "sourceId", "projectId", "unitTypeId",
+      "budgetMax", "requirement", "siteVisitPlanned",
+    ]) {
+      expect(src.includes(`name="${name}"`), `lead field ${name}`).toBe(true);
+    }
+    // A field the master owns rather than the lead record posts under its id.
+    expect(src.includes("`custom:${f.id}`")).toBe(true);
+  });
+
+  it("uses the design's own placeholders", () => {
+    for (const p of ["98765 43210 (without country code)", "e.g. 85,00,000", "dd-mm-yyyy", "Type here"]) {
+      expect(src.includes(p), `lead placeholder ${p}`).toBe(true);
+    }
+  });
+
+  it("calls the nothing-chosen option what the drawer calls it", () => {
+    expect(src.includes("Select…")).toBe(true);
   });
 });
 

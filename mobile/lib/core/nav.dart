@@ -169,6 +169,7 @@ class ScreenDef {
     required this.filters,
     required this.dateRangeLabel,
     this.forms = const [],
+    this.record = false,
   });
 
   final String key;
@@ -183,6 +184,11 @@ class ScreenDef {
   /// button is drawn.
   final List<FormRef> forms;
 
+  /// Whether a row on this list opens a record. False where that module's
+  /// record screen is not built yet, and then the row is not tappable rather
+  /// than opening something that has to apologise.
+  final bool record;
+
   static ScreenDef from(Map<String, dynamic> d) => ScreenDef(
         key: d['key'] as String,
         title: d['title'] as String,
@@ -195,6 +201,7 @@ class ScreenDef {
         forms: ((d['forms'] as List?) ?? const [])
             .map((f) => FormRef.from(f as Map<String, dynamic>))
             .toList(),
+        record: d['record'] == true,
       );
 }
 

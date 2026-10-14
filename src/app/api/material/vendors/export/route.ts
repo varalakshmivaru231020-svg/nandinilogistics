@@ -78,6 +78,7 @@ export async function GET(request: Request) {
             )
           : null;
         return {
+          id: v.id,
           code: v.code,
           name: v.name,
           contactPerson: v.contactPerson ?? "",

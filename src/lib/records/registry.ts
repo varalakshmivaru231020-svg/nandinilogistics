@@ -6,6 +6,7 @@ import type { RecordView } from "./shared";
 import { taskRecord } from "./task";
 import { indentRecord } from "./indent";
 import { calendarRecord } from "./calendar";
+import { leadRecord } from "./lead";
 
 /**
  * Which modules can hand over a whole record, and the permission to ask.
@@ -33,6 +34,11 @@ export const RECORDS: Record<string, RecordDef> = {
     key: "material/indents",
     permission: PERM.material.indent.view,
     load: indentRecord,
+  },
+  "sales/leads": {
+    key: "sales/leads",
+    permission: PERM.sales.lead.view,
+    load: leadRecord,
   },
   calendar: {
     key: "calendar",

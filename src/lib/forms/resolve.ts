@@ -3,6 +3,7 @@ import "server-only";
 import type { AuthContext } from "@/lib/rbac/context";
 import { loadOptions } from "@/lib/screens/resolve";
 
+import { leadFormFields } from "./lead-form";
 import { FORMS } from "./registry";
 import type { FormDef, FormFieldDef, ResolvedField, ResolvedForm } from "./types";
 
@@ -33,7 +34,7 @@ export async function resolveForm(
   if (!def) return "unknown-form";
   if (!ctx.has(def.permission)) return "forbidden";
 
-  const { permission: _permission, when, fields, ...rest } = def;
+  const { permission: _permission, when, dynamic, fields, ...rest } = def;
 
   // The fuller form, for somebody who may do the fuller thing.
   const upgrade = when && ctx.has(when.permission)
@@ -47,7 +48,9 @@ export async function resolveForm(
   return {
     ...rest,
     ...upgrade,
-    fields: await Promise.all(fields.map((f) => resolveField(f, ctx))),
+    fields: dynamic === "leadFields"
+      ? await leadFormFields(ctx)
+      : await Promise.all(fields.map((f) => resolveField(f, ctx))),
     serverTime: new Date().toISOString(),
   };
 }

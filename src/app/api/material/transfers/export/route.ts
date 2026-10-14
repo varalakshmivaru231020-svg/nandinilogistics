@@ -56,6 +56,7 @@ export async function GET(request: Request) {
         { key: "remarks", header: "Remarks" },
       ],
       rows: rows.map((t) => ({
+        id: t.id,
         transferNo: t.transferNo,
         transferDate: t.transferDate,
         fromStore: t.fromStore.name,

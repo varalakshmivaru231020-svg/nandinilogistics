@@ -69,6 +69,7 @@ export async function GET(request: Request) {
     result: {
       columns: activityExportColumns({ baseline: showBaseline, criticalPath: showCritical }),
       rows: rowsIn.map((a) => ({
+        id: a.id,
         code: a.code,
         name: a.name,
         sequence: a.sequence,

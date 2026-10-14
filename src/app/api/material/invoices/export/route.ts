@@ -57,6 +57,7 @@ export async function GET(request: Request) {
         const amount = Number(i.totalAmount);
         const paid = Number(i.paidAmount);
         return {
+          id: i.id,
           invoiceNo: i.invoiceNo,
           poNo: i.purchaseOrder.poNo,
           project: i.purchaseOrder.project.code,

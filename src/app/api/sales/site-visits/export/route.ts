@@ -60,6 +60,7 @@ export async function GET(request: Request) {
       { key: "feedback", header: "Feedback" },
     ],
     rows: rows.map((v) => ({
+        id: v.id,
       leadNo: v.lead.leadNo,
       lead: v.lead.name,
       phone: canSeeContact ? v.lead.phone : "(hidden)",

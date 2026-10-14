@@ -59,7 +59,13 @@ export const FORMS: Record<string, FormDef> = {
         required: true,
         variant: { whenField: "allDay", label: "Last day", kind: "date" },
       },
-      { name: "projectId", label: "Project", kind: "select", source: "projects" },
+      {
+        name: "projectId",
+        label: "Project",
+        kind: "select",
+        source: "projects",
+        emptyLabel: "None",
+      },
       { name: "location", label: "Where", kind: "text", placeholder: "Tower B · 6th floor" },
       {
         name: "description",
@@ -137,7 +143,13 @@ export const FORMS: Record<string, FormDef> = {
         required: true,
         hint: "Must be in the future.",
       },
-      { name: "projectId", label: "Project", kind: "select", source: "projects" },
+      {
+        name: "projectId",
+        label: "Project",
+        kind: "select",
+        source: "projects",
+        emptyLabel: "None",
+      },
       { name: "location", label: "Location", kind: "text", placeholder: "Tower B · Fl 8", wide: true },
       {
         name: "checklistIds",
@@ -191,6 +203,24 @@ export const FORMS: Record<string, FormDef> = {
       { name: "aadhaarNumber", label: "Aadhaar", kind: "text" },
       { name: "addressLine", label: "Address", kind: "textarea", wide: true },
     ],
+  },
+
+  /* ----------------------------------------------------------------- leads */
+
+  // src/app/(app)/sales/leads/leads-screen.tsx → CaptureLead. Its fields are
+  // the rows of Masters → Lead Settings, read when the form is served.
+  "sales/leads:create": {
+    key: "sales/leads:create",
+    module: "sales/leads",
+    title: "Capture lead",
+    description: "Form is built from Masters → Lead Settings",
+    submitLabel: "Save lead",
+    permission: PERM.sales.lead.create,
+    action: "sales/leads/createLead",
+    shape: { kind: "formData" },
+    done: "Lead captured.",
+    dynamic: "leadFields",
+    fields: [],
   },
 
   /* -------------------------------------------------------------- indents */

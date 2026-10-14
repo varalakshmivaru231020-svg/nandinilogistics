@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { projectScopeFilter, type AuthContext } from "@/lib/rbac/context";
 import { formRefsFor } from "@/lib/forms/registry";
 import type { FormRef } from "@/lib/forms/types";
+import { RECORDS } from "@/lib/records/registry";
 
 import { SCREENS, type OptionSource, type ScreenDef } from "./registry";
 
@@ -32,6 +33,12 @@ export interface ResolvedScreen {
   dateRange: { label: string } | null;
   /** What this viewer may create from here — the screen's "New …" button. */
   forms: FormRef[];
+  /**
+   * Whether a row on this list opens a record. False where that module's
+   * record screen is not built yet, so the client leaves the row untappable
+   * rather than opening something that has to apologise.
+   */
+  record: boolean;
 }
 
 /** An option, with the second line the web's searchable dropdowns show. */
@@ -217,5 +224,6 @@ export async function resolveScreen(
     filters,
     dateRange: def.dateRange ?? null,
     forms: formRefsFor(ctx, def.key),
+    record: Boolean(RECORDS[def.key]),
   };
 }

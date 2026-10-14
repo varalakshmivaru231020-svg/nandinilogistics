@@ -68,6 +68,7 @@ export async function GET(request: Request) {
         const rejected = g.items.reduce((n, i) => n + Number(i.rejectedQty), 0);
         const short = g.items.reduce((n, i) => n + Number(i.shortQty), 0);
         return {
+          id: g.id,
           grnNo: g.grnNo,
           poNo: g.purchaseOrder.poNo,
           project: g.purchaseOrder.project.code,

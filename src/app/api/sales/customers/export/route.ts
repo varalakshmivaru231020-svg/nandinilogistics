@@ -60,6 +60,7 @@ export async function GET(request: Request) {
       rows: rows.map((c) => {
         const live = c.bookings.filter((b) => b.status !== "CANCELLED");
         return {
+          id: c.id,
           customerNo: c.customerNo,
           name: c.name,
           phone: canSeeKyc ? c.phone : "(hidden)",

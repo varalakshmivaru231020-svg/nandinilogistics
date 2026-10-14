@@ -328,6 +328,7 @@ class ModuleScreenState extends State<ModuleScreen> {
           nowMs: now,
           api: widget.api,
           onChanged: _load,
+          hasRecord: _screen?.record ?? false,
         );
       },
     );
@@ -403,6 +404,7 @@ class SpecRow extends StatelessWidget {
     required this.nowMs,
     required this.api,
     required this.onChanged,
+    this.hasRecord = false,
   });
 
   final ModuleSpec spec;
@@ -410,6 +412,9 @@ class SpecRow extends StatelessWidget {
   final int nowMs;
   final Api api;
   final Future<void> Function() onChanged;
+
+  /// Whether this module's record screen is built. The server says.
+  final bool hasRecord;
 
   @override
   Widget build(BuildContext context) {
@@ -426,19 +431,21 @@ class SpecRow extends StatelessWidget {
         // no context crosses it.
         final navigator = Navigator.of(context);
         /*
-         * The record, from the server — with its children and its actions.
-         * The spec's own detail is the fallback for a module whose record
-         * screen is not built yet, and it says so rather than looking empty.
+         * The record, from the server — with its children and its actions —
+         * wherever that module has one. Where it does not, the row still
+         * opens what the list row itself holds, which is better than a tap
+         * that does nothing.
          */
+        final open = hasRecord && row['id'] != null;
         final changed = await navigator.push<bool>(MaterialPageRoute(
-          builder: (_) => row['id'] == null
-              ? SpecDetail(spec: spec, row: row, api: api)
-              : RecordScreen(
+          builder: (_) => open
+              ? RecordScreen(
                   api: api,
                   module: spec.key,
                   id: '${row["id"]}',
                   fallbackTitle: spec.row.title(row),
-                ),
+                )
+              : SpecDetail(spec: spec, row: row, api: api),
         ));
         if (changed == true) await onChanged();
       },

@@ -230,6 +230,99 @@ void main() {
     });
   });
 
+  group('an action that needs more than a remark', () {
+    /*
+     * Extending a calendar task needs a new finish as well as a reason, and
+     * the web asks for both in one dialog. The server sends the field to ask
+     * for and a `$newEndAt` in the arguments; the sheet collects it and puts
+     * it where the placeholder was. Before this, Extend on the phone said the
+     * date picker for it was "next".
+     */
+    testWidgets('collects the field the server asked for and sends it',
+        (tester) async {
+      final b = await pumpRecord(tester, {
+        ...taskRecord(points: const [], actions: [
+          {
+            'key': 'extend', 'label': 'Extend', 'emphasis': 'outline',
+            'action': 'calendar/extendCalendarTask',
+            'args': ['t1', r'$newEndAt'],
+            'remark': 'required', 'remarkLabel': 'Why',
+            'fields': [
+              {
+                'name': 'newEndAt', 'label': 'New finish', 'kind': 'date',
+                'required': true, 'hint': 'It has to be later than it ends now.',
+              },
+            ],
+            'confirm': 'The first move keeps the original finish.',
+          },
+        ]),
+        '/do/calendar/extendCalendarTask': const {'extendedCount': 1},
+      });
+
+      await tester.tap(find.text('Extend'));
+      await tester.pumpAndSettle();
+      expect(find.text('New finish *'), findsOneWidget);
+      expect(find.text('It has to be later than it ends now.'), findsOneWidget);
+
+      // The field is required, so the sheet will not send without it.
+      await tester.tap(find.byKey(const Key('confirm')));
+      await tester.pumpAndSettle();
+      expect(find.text('New finish is required.'), findsOneWidget);
+      expect(b.actions, isEmpty);
+
+      await tester.tap(find.text('Pick a date'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('remark')), 'Consultant comes later.');
+      await tester.tap(find.byKey(const Key('confirm')));
+      await tester.pumpAndSettle();
+
+      final args = b.actions.single.args;
+      expect(args.first, 't1');
+      // The placeholder is gone, replaced by the day that was picked.
+      expect(args[1], matches(RegExp(r'^\d{4}-\d{2}-\d{2}$')));
+      expect(args[2], 'Consultant comes later.');
+    });
+
+    /// A box left empty goes as an empty string, which is what a form sends —
+    /// the boundary turns it into nothing where the action takes nothing.
+    testWidgets('sends an empty box as an empty string', (tester) async {
+      final b = await pumpRecord(tester, {
+        ...taskRecord(points: const [], actions: [
+          {
+            'key': 'logFollowUp', 'label': 'Log follow-up', 'emphasis': 'primary',
+            'action': 'sales/leads/logFollowUp',
+            'args': ['t1', r'$channel', r'$notes', r'$outcome', r'$nextActionAt'],
+            'remark': 'none',
+            'fields': [
+              {
+                'name': 'channel', 'label': 'Channel', 'kind': 'select', 'required': true,
+                'initial': 'CALL',
+                'options': [
+                  {'value': 'CALL', 'label': 'Call'},
+                  {'value': 'EMAIL', 'label': 'Email'},
+                ],
+              },
+              {'name': 'notes', 'label': 'What happened', 'kind': 'textarea', 'required': true},
+              {'name': 'outcome', 'label': 'Outcome', 'kind': 'text'},
+              {'name': 'nextActionAt', 'label': 'Next action on', 'kind': 'date'},
+            ],
+          },
+        ]),
+        '/do/sales/leads/logFollowUp': const {'ok': true},
+      });
+
+      await tester.tap(find.text('Log follow-up'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('field-notes')), 'Rang twice, no answer.');
+      await tester.tap(find.byKey(const Key('confirm')));
+      await tester.pumpAndSettle();
+
+      expect(b.actions.single.args, ['t1', 'CALL', 'Rang twice, no answer.', '', '']);
+    });
+  });
+
   group('a module whose record screen is not built', () {
     /// Said plainly, rather than an empty screen or a raw error.
     testWidgets('says the list works and the record is coming', (tester) async {

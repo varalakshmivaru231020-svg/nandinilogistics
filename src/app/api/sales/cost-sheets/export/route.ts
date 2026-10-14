@@ -53,6 +53,7 @@ export async function GET(request: Request) {
       const discount = Number(s.discountAmount);
       const booked = s.bookings.length > 0;
       return {
+          id: s.id,
         costSheetNo: s.costSheetNo,
         project: s.unit.project.code,
         unit: s.unit.unitNumber,

@@ -56,6 +56,7 @@ export async function GET(request: Request) {
         .filter((d) => ["RAISED", "PARTIALLY_PAID"].includes(d.status) && d.dueDate < now)
         .reduce((s, d) => s + (Number(d.totalAmount) - Number(d.receivedAmount)), 0);
       return {
+          id: b.id,
         bookingNo: b.bookingNo,
         project: b.project.code,
         unit: b.unit.unitNumber,

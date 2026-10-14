@@ -59,6 +59,13 @@ export interface FormFieldDef {
   source?: OptionSource;
   /** Upper-cases as it is typed, as the web's PAN field does. */
   caps?: boolean;
+  /**
+   * What the nothing-chosen option is called. The web writes it differently in
+   * different places — "None" over the calendar's project, "Select…" on the
+   * lead drawer, "— From the lead —" where the lead's own project stands in —
+   * and that wording is the instruction, so it travels.
+   */
+  emptyLabel?: string;
   /** A line of its own, rather than half a row. */
   wide?: boolean;
   /** Where the web pre-fills it with something other than empty. */
@@ -120,6 +127,12 @@ export interface FormDef {
   done?: string;
   /** Opened on an existing record rather than from a list's "New" button. */
   onRecord?: boolean;
+  /**
+   * A form whose fields are not fixed. "Capture lead" is whatever Masters →
+   * Lead Settings says it is, so its fields are read from the same table the
+   * web drawer reads rather than written down here.
+   */
+  dynamic?: "leadFields";
   /**
    * What the form becomes for somebody holding a further permission. The
    * indent's own button reads "Raise indent & send for approval" for whoever

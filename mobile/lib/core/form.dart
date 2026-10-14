@@ -38,6 +38,7 @@ class FieldDef {
     this.placeholder,
     this.options = const [],
     this.caps = false,
+    this.emptyLabel,
     this.wide = false,
     this.initial,
     this.variantWhen,
@@ -62,6 +63,10 @@ class FieldDef {
   final String? placeholder;
   final List<Opt> options;
   final bool caps;
+
+  /// What the web calls the nothing-chosen option — "None", "Select…".
+  final String? emptyLabel;
+
   final bool wide;
   final Object? initial;
 
@@ -92,6 +97,7 @@ class FieldDef {
       placeholder: j['placeholder'] as String?,
       options: Opt.list(j['options']),
       caps: j['caps'] == true,
+      emptyLabel: j['emptyLabel'] as String?,
       wide: j['wide'] == true,
       initial: j['initial'],
       variantWhen: v?['whenField'] as String?,
@@ -562,7 +568,7 @@ class _PickOne extends StatelessWidget {
         Wrap(spacing: 7, runSpacing: 7, children: [
           if (!field.required)
             FilterChip2(
-              label: 'None',
+              label: field.emptyLabel ?? 'None',
               selected: value == null,
               onTap: enabled ? () => onChanged(null) : null,
             ),
@@ -575,14 +581,23 @@ class _PickOne extends StatelessWidget {
         ])
       else
         Btn(
-          chosen?.label ?? field.placeholder ?? 'Choose',
+          chosen?.label ?? field.emptyLabel ?? field.placeholder ?? 'Choose',
           emphasis: Emphasis.outline,
           icon: Icons.search_rounded,
           expand: true,
           onPressed: enabled
               ? () async {
-                  final picked = await _search(context, field, field.options);
-                  if (picked != null) onChanged(picked == '' ? null : picked);
+                  final picked = await _search(
+                    context,
+                    field,
+                    field.options,
+                    // Something already chosen can be unchosen, where the
+                    // field is not required.
+                    clear: !field.required && value != null
+                        ? (field.emptyLabel ?? 'None')
+                        : null,
+                  );
+                  if (picked != null) onChanged(picked.isEmpty ? null : picked);
                 }
               : null,
         ),
@@ -715,17 +730,26 @@ class _Lines extends StatelessWidget {
 }
 
 /// The searchable dropdown, as a sheet: a search box and the matches.
-Future<String?> _search(BuildContext context, FieldDef field, List<Opt> options) =>
+Future<String?> _search(
+  BuildContext context,
+  FieldDef field,
+  List<Opt> options, {
+  String? clear,
+}) =>
     sheet<String>(
       context,
       title: field.label,
-      body: (ctx) => _SearchList(options: options, placeholder: field.placeholder),
+      body: (ctx) =>
+          _SearchList(options: options, placeholder: field.placeholder, clear: clear),
     );
 
 class _SearchList extends StatefulWidget {
-  const _SearchList({required this.options, this.placeholder});
+  const _SearchList({required this.options, this.placeholder, this.clear});
   final List<Opt> options;
   final String? placeholder;
+
+  /// Offered as the first row where what is chosen can be unchosen.
+  final String? clear;
 
   @override
   State<_SearchList> createState() => _SearchListState();
@@ -760,6 +784,16 @@ class _SearchListState extends State<_SearchList> {
         onChanged: (_) => setState(() {}),
       ),
       const SizedBox(height: 10),
+      if (widget.clear != null)
+        InkWell(
+          key: const Key('option-none'),
+          onTap: () => Navigator.of(context).pop(''),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: T.target),
+            alignment: Alignment.centerLeft,
+            child: Text(widget.clear!, style: T.body(weight: FontWeight.w600, color: T.secondary)),
+          ),
+        ),
       if (shown.isEmpty)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 18),

@@ -44,8 +44,10 @@ describe("user list filters", () => {
     }
     // Every top-level read is on the allow-list; nothing is included wholesale.
     expect(keys.sort()).toEqual([
+      // The id is read so a row on a phone can open the record it stands for.
+      // It is not a column, so no file carries it.
       "_count", "createdAt", "department", "designation", "email", "employeeCode",
-      "isSuperAdmin", "lastLoginAt", "name", "phone", "roles", "status",
+      "id", "isSuperAdmin", "lastLoginAt", "name", "phone", "roles", "status",
     ]);
     expect(JSON.stringify(USER_EXPORT_SELECT)).not.toMatch(/password|token|hash/i);
   });

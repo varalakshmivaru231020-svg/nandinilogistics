@@ -64,6 +64,7 @@ export async function GET(request: Request) {
         { key: "documents", header: "Documents", align: "right", format: "number" },
       ],
       rows: rows.map((e) => ({
+        id: e.id,
         code: e.employeeCode,
         name: e.name,
         mobile: e.mobile,

@@ -67,6 +67,8 @@ export function userListWhere(p: UserListParams): Prisma.UserWhereInput {
  * added to User later (a hash, a token, an MFA seed) never reaches a file.
  */
 export const USER_EXPORT_SELECT = {
+  // Carried so a list row can open the record it stands for.
+  id: true,
   employeeCode: true,
   name: true,
   email: true,

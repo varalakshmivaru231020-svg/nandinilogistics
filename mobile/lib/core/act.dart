@@ -137,12 +137,18 @@ class _ConfirmState extends State<_Confirm> {
       _errorDetail = null;
     });
 
-    // `$name` stands for one of the fields the sheet just collected.
+    /*
+     * `$name` stands for one of the fields the sheet just collected. A box
+     * left empty is sent as an empty string, which is what a form sends — the
+     * boundary turns it into nothing for an argument whose action takes
+     * nothing, and the actions read "" as "not given" elsewhere.
+     */
     final args = widget.act.args.map((a) {
       if (a is! String || !a.startsWith(r'$')) return a;
       final name = a.substring(1);
       final f = _extra.fields.where((x) => x.name == name).firstOrNull;
-      return f == null ? a : _extra.read(f);
+      if (f == null) return a;
+      return _extra.read(f) ?? (f.isText || f.kind == 'date' || f.kind == 'datetime' || f.kind == 'select' ? '' : null);
     }).toList();
     if (widget.act.remark != RemarkMode.none) args.add(_remark.text.trim());
 

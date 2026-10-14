@@ -34,6 +34,7 @@ interface Arg {
   name: string;
   kind: "text" | "ids" | "form" | "bool" | "num" | "enum" | "json";
   optional: boolean;
+  nullable: boolean;
   /** For `enum`: the literals the type allows, checked at the boundary. */
   values?: string[];
 }
@@ -172,6 +173,12 @@ for (const file of walk(APP)) {
         kind: resolved.kind,
         values: resolved.values,
         optional: /\?\s*:/.test(p) || p.includes("="),
+        /*
+         * The action's own signature says whether nothing is an answer. A
+         * `projectId: string | null` means "that project, or none"; a form
+         * leaves such a box empty, and an empty string is not an id.
+         */
+        nullable: /\|\s*(null|undefined)\b/.test(annotated),
       });
     }
     if (!usable) { skipped.push(`${key}  (${params.join(", ")})`); continue; }
@@ -203,7 +210,7 @@ const entries = found
     const args = f.args
       .map((a) => {
         const values = a.values ? `, values: [${a.values.map((v) => `"${v}"`).join(", ")}]` : "";
-        return `{ name: "${a.name}", kind: "${a.kind}"${values}${a.optional ? ", optional: true" : ""} }`;
+        return `{ name: "${a.name}", kind: "${a.kind}"${values}${a.optional ? ", optional: true" : ""}${a.nullable ? ", nullable: true" : ""} }`;
       })
       .join(", ");
     return `  "${f.module}/${f.action}": {\n    fn: ${byFile.get(f.file)}.${f.fnName} as MobileAction,\n    args: [${args}],\n  },`;
@@ -238,6 +245,11 @@ export interface MobileArg {
   /** For \`enum\`: the only values the boundary will pass through. */
   values?: string[];
   optional?: boolean;
+  /**
+   * The action takes \`| null\` here, so nothing is an answer: a missing value
+   * and an empty box both arrive as null rather than as "".
+   */
+  nullable?: boolean;
 }
 
 /** Positional arguments in, an ActionResult out. */

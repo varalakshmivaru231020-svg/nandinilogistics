@@ -61,6 +61,7 @@ export async function GET(request: Request) {
       { key: "remarks", header: "Remarks" },
     ],
     rows: rows.map((r) => ({
+        id: r.id,
       receiptNo: r.receiptNo,
       receiptDate: r.receiptDate,
       project: r.booking.project.code,

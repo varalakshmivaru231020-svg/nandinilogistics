@@ -73,6 +73,7 @@ export async function GET(request: Request) {
         const ordered = p.items.reduce((s, i) => s + Number(i.orderedQty), 0);
         const received = p.items.reduce((s, i) => s + Number(i.receivedQty), 0);
         return {
+          id: p.id,
           poNo: p.poNo,
           revision: p.revision,
           project: p.project.code,
