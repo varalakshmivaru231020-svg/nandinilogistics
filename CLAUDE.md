@@ -103,6 +103,30 @@ permission that exists because the phone exists. `readSessionToken()` accepts a
 bearer token where there is no cookie, which is what lets the actions work
 unchanged; a cookie still wins.
 
+There are three shapes, and the client renders all three from what it is sent
+rather than from anything it holds:
+
+| what                | endpoint                    | where it is defined          |
+| ------------------- | --------------------------- | ---------------------------- |
+| a list and filters  | `/screen/<key>`, `/list/…`  | `src/lib/screens/registry.ts`|
+| one record          | `/record/<module>/<id>`     | `src/lib/records/*`          |
+| a form              | `/form/<module>/<name>`     | `src/lib/forms/registry.ts`  |
+
+- **A record decides its own actions**, using the same helpers the web screen
+  asks — `canDo`, `waitingLevel`, `ctx.approvalLimitFor`. The client never maps
+  a status to a button; it is told, and `authorize()` checks again anyway. An
+  action may carry `fields` and a `$name` in its `args` where it needs more
+  than a remark.
+- **A form is the web modal's own words** — label, hint, placeholder, the
+  `name` the action reads, the submit button. `tests/unit/form-registry.test.ts`
+  reads those screens back and fails when one drifts. A form whose fields are
+  configuration (Capture lead) is loaded from that configuration instead.
+- **A list row carries `id`** so it can open its record. It is not a column, so
+  no exported file changes.
+- Adding a record or a form to a module means adding it there, not in the app.
+  `/record` and `/form` answer a plain 404 for what is not built yet, and the
+  app says so rather than showing an empty screen.
+
 ## Verifying a change
 
 ```bash
