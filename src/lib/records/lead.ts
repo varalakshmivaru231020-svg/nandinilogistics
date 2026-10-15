@@ -37,6 +37,50 @@ function stageIndex(state: string): number {
   return i === -1 ? 0 : i;
 }
 
+/**
+ * Logging a follow-up — the one thing a phone is for, and the dialog the web's
+ * follow-up row opens when it is tapped. Shared, so the row and the record ask
+ * for the same five things.
+ */
+export function logFollowUpDecision(
+  leadId: string,
+  can: { create: boolean },
+): RecordAction[] {
+  if (!can.create) return [];
+  return [{
+    key: "logFollowUp",
+    label: "Log follow-up",
+    emphasis: "primary",
+    action: "sales/leads/logFollowUp",
+    args: [leadId, "$channel", "$notes", "$outcome", "$nextActionAt"],
+    remark: "none",
+    fields: [
+      {
+        name: "channel",
+        label: "Channel",
+        kind: "select",
+        required: true,
+        initial: "CALL",
+        options: Object.entries(CHANNEL_LABEL).map(([value, label]) => ({ value, label })),
+      },
+      { name: "notes", label: "What happened", kind: "textarea", required: true, wide: true },
+      {
+        name: "outcome",
+        label: "Outcome",
+        kind: "text",
+        placeholder: "Interested / Call back / Not reachable",
+      },
+      {
+        name: "nextActionAt",
+        label: "Next action on",
+        kind: "date",
+        hint: "Leaving this blank drops the lead off the follow-up list.",
+      },
+    ],
+    confirm: "It goes on the lead's timeline, and the next action moves with it.",
+  }];
+}
+
 /** The channels a follow-up is logged against, in the web's own words. */
 const CHANNEL_LABEL: Record<string, string> = {
   CALL: "Call",
@@ -97,41 +141,9 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
 
   const actions: RecordAction[] = [];
 
-  // Logging the call you have just made. The one thing a phone is for.
-  if (ctx.has(PERM.sales.followUp.create)) {
-    actions.push({
-      key: "logFollowUp",
-      label: "Log follow-up",
-      emphasis: "primary",
-      action: "sales/leads/logFollowUp",
-      args: [id, "$channel", "$notes", "$outcome", "$nextActionAt"],
-      remark: "none",
-      fields: [
-        {
-          name: "channel",
-          label: "Channel",
-          kind: "select",
-          required: true,
-          initial: "CALL",
-          options: Object.entries(CHANNEL_LABEL).map(([value, label]) => ({ value, label })),
-        },
-        { name: "notes", label: "What happened", kind: "textarea", required: true, wide: true },
-        {
-          name: "outcome",
-          label: "Outcome",
-          kind: "text",
-          placeholder: "Interested / Call back / Not reachable",
-        },
-        {
-          name: "nextActionAt",
-          label: "Next action on",
-          kind: "date",
-          hint: "Leaving this blank drops the lead off the follow-up list.",
-        },
-      ],
-      confirm: "It goes on the lead's timeline, and the next action moves with it.",
-    });
-  }
+  actions.push(
+    ...logFollowUpDecision(id, { create: ctx.has(PERM.sales.followUp.create) }),
+  );
 
   if (!closed && ctx.has(PERM.sales.lead.changeStage)) {
     // Forward, one stage at a time, as the rail moves it.

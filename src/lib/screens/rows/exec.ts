@@ -1,6 +1,8 @@
 import "server-only";
 
+import type { ApprovalDecision } from "@/lib/approvals/queue";
 import { webTone } from "@/lib/records/shared";
+import type { RecordAction } from "@/lib/records/types";
 import type { ScreenRow } from "@/lib/screens/rows";
 import { ACTIVITY_STATE_TONE, activityState, SCHEDULE_EMPTY } from "@/lib/projects/schedule-display";
 import { formatDate, moneyShort } from "@/lib/utils";
@@ -92,7 +94,27 @@ export interface ProgressRowInput {
   photoCount: number;
 }
 
-export function progressScreenRow(l: ProgressRowInput): ScreenRow {
+/** The one thing the web's diary card offers: the trash button. */
+export function progressRowActions(
+  l: { id: string },
+  can: { remove: boolean },
+): RecordAction[] {
+  if (!can.remove) return [];
+  return [{
+    key: "delete",
+    label: "Delete",
+    emphasis: "reject",
+    action: "projects/progress/deleteProgressLog",
+    args: [l.id],
+    remark: "none",
+    confirm: "The log and its photographs come off the diary.",
+  }];
+}
+
+export function progressScreenRow(
+  l: ProgressRowInput,
+  can: { remove: boolean } = { remove: false },
+): ScreenRow {
   const facts = [
     `by ${l.loggedByName}`,
     l.manpowerCount > 0 ? `${l.manpowerCount} on site` : null,
@@ -107,6 +129,7 @@ export function progressScreenRow(l: ProgressRowInput): ScreenRow {
     chips: [{ text: l.projectCode, tone: "draft" }],
     meta: formatDate(l.logDate),
     lines: [...(l.notes ? [{ value: l.notes }] : []), { value: facts }],
+    actions: progressRowActions(l, can),
   };
 }
 
@@ -149,13 +172,49 @@ export interface ArticleRowInput {
   category: string | null;
 }
 
-export function articleScreenRow(a: ArticleRowInput): ScreenRow {
+/** What the web's article card offers beside View: Edit and Delete. */
+export function articleRowActions(
+  a: { id: string },
+  can: { update: boolean; remove: boolean },
+): RecordAction[] {
+  const actions: RecordAction[] = [];
+  if (can.update) {
+    actions.push({
+      key: "edit",
+      label: "Edit",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "kb:edit",
+      confirm: "The article is rewritten; its attachments are changed on the web.",
+    });
+  }
+  if (can.remove) {
+    actions.push({
+      key: "delete",
+      label: "Delete",
+      emphasis: "reject",
+      action: "kb/deleteArticle",
+      args: [a.id],
+      remark: "none",
+      confirm: "The article and its attachments go.",
+    });
+  }
+  return actions;
+}
+
+export function articleScreenRow(
+  a: ArticleRowInput,
+  can: { update: boolean; remove: boolean } = { update: false, remove: false },
+): ScreenRow {
   return {
     id: a.id,
     title: a.title,
     ...(a.category ? { chips: [{ text: a.category, tone: "draft" as const }] } : {}),
     meta: `${a.attachments} attachment${a.attachments === 1 ? "" : "s"} · ${a.author} · ${formatDate(a.updatedAt)}`,
     lines: [{ value: a.summary }],
+    actions: articleRowActions(a, can),
   };
 }
 
@@ -210,6 +269,8 @@ export function activityScreenRow(a: ActivityRowInput): ScreenRow {
 
 export interface ApprovalRowInput {
   id: string;
+  /** How to settle it, where this viewer may — the queue's own instruction. */
+  decide: ApprovalDecision | null;
   kind: string;
   kindLabel: string;
   reference: string;
@@ -219,6 +280,38 @@ export interface ApprovalRowInput {
   value: number | null;
   waitingOn: string;
   waitingFor: string;
+}
+
+/**
+ * The queue row's own two buttons. Which action settles it is the queue's own
+ * instruction — the app never maps a kind to an action itself.
+ */
+export function approvalRowActions(r: { decide: ApprovalDecision | null }): RecordAction[] {
+  if (!r.decide) return [];
+  const decide = r.decide;
+  return [
+    {
+      key: "approve",
+      label: "Approve",
+      emphasis: "approve",
+      action: decide.approve,
+      args: decide.approveArgs,
+      remark: decide.remarkRequired ? "required" : "optional",
+      remarkLabel: "Remark",
+    },
+    // Not every step has a refusal — a closure is not rejected.
+    ...(decide.reject
+      ? [{
+          key: "reject",
+          label: "Reject",
+          emphasis: "reject" as const,
+          action: decide.reject,
+          args: decide.rejectArgs,
+          remark: "required" as const,
+          remarkLabel: "Why",
+        }]
+      : []),
+  ];
 }
 
 export function approvalScreenRow(r: ApprovalRowInput): ScreenRow {
@@ -232,6 +325,7 @@ export function approvalScreenRow(r: ApprovalRowInput): ScreenRow {
       { value: `${r.waitingOn} · waiting ${r.waitingFor}` },
     ],
     ...(r.value === null ? {} : { trailing: { value: moneyShort(r.value) } }),
+    actions: approvalRowActions(r),
   };
 }
 

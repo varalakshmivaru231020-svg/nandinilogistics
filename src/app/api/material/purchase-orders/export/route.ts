@@ -100,6 +100,10 @@ export async function GET(request: Request) {
           },
           nowMs,
           showRate,
+          {
+            approvePm: ctx.has(PERM.material.purchaseOrder.approve),
+            approveAdmin: ctx.has(PERM.material.purchaseOrder.approveAdmin),
+          },
         );
       }),
       band: bandOf(purchaseOrderFigures(statRows, nowMs)),

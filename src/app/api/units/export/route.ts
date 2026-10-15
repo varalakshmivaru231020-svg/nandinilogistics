@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
 import { unitFigures } from "@/lib/metrics/figures";
 import { bandOf, type ScreenShell } from "@/lib/screens/rows";
+import { unitDecisions } from "@/lib/records/unit";
 import { UNIT_EMPTY, unitScreenRow } from "@/lib/screens/rows/unit";
 import { PERM } from "@/lib/permissions/codes";
 import { describeUnitFilters, readUnitListParams, unitExportColumns, unitListWhere } from "@/lib/units/unit-list";
@@ -39,12 +40,27 @@ export async function GET(request: Request) {
   let screen: ScreenShell | undefined;
   if (gate.format === "json") {
     const { from, to } = listWindow(gate.params, rowsIn.length);
-    const statRows = await prisma.unit.findMany({
-      where: unitListWhere(ctx, { ...p, q: "", status: "all", block: "all", type: "all" }),
-      select: { status: true, superBuiltUpArea: true },
-    });
+    const window = rowsIn.slice(from, to);
+    const [statRows, locks] = await Promise.all([
+      prisma.unit.findMany({
+        where: unitListWhere(ctx, { ...p, q: "", status: "all", block: "all", type: "all" }),
+        select: { status: true, superBuiltUpArea: true },
+      }),
+      // What the row's Delete depends on — a flat with a hold or a booking on
+      // it cannot go, and the record decides that the same way.
+      prisma.unit.findMany({
+        where: { id: { in: window.map((u) => u.id) } },
+        select: { id: true, _count: { select: { holds: true, bookings: true } } },
+      }),
+    ]);
+    const counts = new Map(locks.map((u) => [u.id, u._count]));
+    const canUnit = {
+      update: ctx.has(PERM.unit.unit.update),
+      remove: ctx.has(PERM.unit.unit.delete),
+      changeStatus: ctx.has(PERM.unit.unit.changeStatus),
+    };
     screen = {
-      rows: rowsIn.slice(from, to).map((u) =>
+      rows: window.map((u) =>
         unitScreenRow(
           {
             id: u.id,
@@ -61,6 +77,15 @@ export async function GET(request: Request) {
             status: u.status,
           },
           showAreas,
+          unitDecisions(
+            {
+              id: u.id,
+              status: u.status,
+              holds: counts.get(u.id)?.holds ?? 0,
+              bookings: counts.get(u.id)?.bookings ?? 0,
+            },
+            canUnit,
+          ),
         ),
       ),
       band: bandOf(unitFigures(statRows)),

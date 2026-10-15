@@ -1,6 +1,8 @@
 import "server-only";
 
+import type { RecordAction } from "@/lib/records/types";
 import type { ScreenRow } from "@/lib/screens/rows";
+import { asRowActions } from "@/lib/screens/rows/row-actions";
 import { formatDate, money } from "@/lib/utils";
 
 /**
@@ -29,7 +31,15 @@ export interface IssueRowInput {
   cancelledAt: Date | string | null;
 }
 
-export function issueScreenRow(i: IssueRowInput, canViewValue: boolean): ScreenRow {
+export function issueScreenRow(
+  i: IssueRowInput,
+  canViewValue: boolean,
+  /**
+   * The slip's own decisions — the web row carries all three, and in the same
+   * words the record uses, so nothing is renamed here.
+   */
+  actions: RecordAction[] = [],
+): ScreenRow {
   const cancelled = Boolean(i.cancelledAt);
   return {
     id: i.id,
@@ -54,6 +64,11 @@ export function issueScreenRow(i: IssueRowInput, canViewValue: boolean): ScreenR
       value: canViewValue ? money(i.totalValue) : `${i.lineCount} line(s)`,
       label: `issued by ${i.issuedByName}`,
     },
+    actions: asRowActions(actions, {
+      acknowledge: "Acknowledge receipt",
+      raiseReturn: "Raise return",
+      cancel: "Cancel issue",
+    }),
   };
 }
 

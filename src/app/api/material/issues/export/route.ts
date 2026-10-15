@@ -1,12 +1,14 @@
 import { prisma } from "@/lib/db";
 import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
 import { type ScreenShell } from "@/lib/screens/rows";
+import { issueDecisions } from "@/lib/records/issue";
 import { issueEmpty, issueScreenRow } from "@/lib/screens/rows/issue";
 import {
   describeParts, issueListWhere, issueStateWords, rangeWords, readIssueListParams, searchWords,
 } from "@/lib/material/list-filters";
 import { projectLabel } from "@/lib/material/list-options";
 import { PERM } from "@/lib/permissions/codes";
+import { qty } from "@/lib/utils";
 import type { ReportColumn } from "@/lib/reports/types";
 
 export const dynamic = "force-dynamic";
@@ -51,12 +53,22 @@ export async function GET(request: Request) {
   if (gate.format === "json") {
     const { from, to } = listWindow(gate.params, rows.length);
     const window = rows.slice(from, to);
+    /*
+     * What the row's own buttons need: the value, what has come back, and what
+     * is still returnable per line — the same figures the record reads, so the
+     * row cannot offer a return the record would refuse.
+     */
     const extra = await prisma.materialIssue.findMany({
       where: { id: { in: window.map((i) => i.id) } },
       select: {
         id: true, totalValue: true,
-        items: { select: { returnedQty: true } },
         _count: { select: { returns: true } },
+        items: {
+          select: {
+            id: true, issuedQty: true, returnedQty: true,
+            item: { select: { name: true, uom: { select: { name: true } } } },
+          },
+        },
       },
     });
     const byId = new Map(extra.map((i) => [i.id, i]));
@@ -82,6 +94,32 @@ export async function GET(request: Request) {
             cancelledAt: i.cancelledAt,
           },
           showValue,
+          issueDecisions(
+            {
+              id: i.id,
+              storeName: i.store.name,
+              issuedToName: nameById.get(i.issuedToId) ?? "—",
+              cancelled: Boolean(i.cancelledAt),
+              acknowledged: Boolean(i.acknowledgedAt),
+              mine: i.issuedToId === ctx.id,
+              returnable: (e?.items ?? []).flatMap((l) => {
+                const left = Number(l.issuedQty) - Number(l.returnedQty);
+                return left > 0
+                  ? [{
+                      id: l.id,
+                      label: `${l.item.name} · ${qty(left, 3)} ${l.item.uom.name} returnable`,
+                      quantity: left,
+                    }]
+                  : [];
+              }),
+            },
+            {
+              acknowledge: ctx.has(PERM.material.issue.acknowledge),
+              raiseReturn: ctx.has(PERM.material.return.create),
+              cancel: ctx.has(PERM.material.issue.cancel),
+              isSuperAdmin: ctx.isSuperAdmin,
+            },
+          ),
         );
       }),
       empty: issueEmpty(

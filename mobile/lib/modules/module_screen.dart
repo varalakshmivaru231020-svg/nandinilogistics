@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/api.dart';
+import '../core/act.dart';
 import '../core/nav.dart';
 import '../core/row.dart';
 import '../core/session.dart';
@@ -731,7 +732,46 @@ class ServerRowCard extends StatelessWidget {
           const SizedBox(height: 10),
           Chain(drawn.chain, size: 22),
         ],
+        /*
+         * The buttons the web's own row carries. Which ones appear is the
+         * server's decision — the same `…Decisions` the record screen asks —
+         * and `authorize()` checks again inside the action regardless.
+         */
+        if (drawn.actions.isNotEmpty) ...[
+          const SizedBox(height: 11),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              for (final a in drawn.actions)
+                Btn(
+                  '${a["label"]}',
+                  key: Key('row-action:${drawn.id}:${a["key"]}'),
+                  emphasis: emphasisOf('${a["emphasis"]}'),
+                  height: 38,
+                  onPressed: () => _run(context, a),
+                ),
+            ],
+          ),
+        ],
       ]),
     );
+  }
+
+  Future<void> _run(BuildContext context, Map<String, dynamic> a) async {
+    final navigator = Navigator.of(context);
+    final ok = await runServerAction(
+      context,
+      api,
+      a,
+      recordId: drawn.id,
+      openForm: (formKey) async {
+        final made = await navigator.push<bool>(MaterialPageRoute(
+          builder: (_) => FormScreen(api: api, formKey: formKey, recordId: drawn.id),
+        ));
+        return made == true;
+      },
+    );
+    if (ok) await onChanged();
   }
 }

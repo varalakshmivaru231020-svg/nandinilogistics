@@ -7,6 +7,61 @@ import type { AuthContext } from "@/lib/rbac/context";
 import { type RecordAction, type RecordView } from "./shared";
 
 /**
+ * What may be done to a site visit, decided once — the record screen and the
+ * **list row** both offer them, as the web's own Scheduled row does.
+ */
+export function siteVisitDecisions(
+  v: { id: string; visitedAt: Date | string | null },
+  can: { complete: boolean; cancel: boolean },
+): RecordAction[] {
+  const done = Boolean(v.visitedAt);
+  const actions: RecordAction[] = [];
+
+  if (!done && can.complete) {
+    actions.push({
+      key: "complete",
+      label: "Save outcome",
+      emphasis: "approve",
+      action: "sales/site-visits/completeSiteVisit",
+      args: [v.id, "$feedback", "$rating"],
+      remark: "none",
+      fields: [
+        {
+          name: "feedback",
+          label: "Feedback",
+          kind: "textarea",
+          placeholder: "What did they think of the unit, the location, the price?",
+          wide: true,
+        },
+        {
+          name: "rating",
+          label: "Interest rating",
+          kind: "select",
+          required: true,
+          initial: "4",
+          options: [5, 4, 3, 2, 1].map((r) => ({ value: String(r), label: `${r} / 5` })),
+        },
+      ],
+      confirm: "The lead moves to Visit Done.",
+    });
+  }
+
+  if (!done && can.cancel) {
+    actions.push({
+      key: "cancel",
+      label: "Cancel visit",
+      emphasis: "reject",
+      action: "sales/site-visits/cancelSiteVisit",
+      args: [v.id],
+      remark: "none",
+      confirm: "It comes off the list. The lead keeps its stage.",
+    });
+  }
+
+  return actions;
+}
+
+/**
  * One site visit: when it is, who is taking it, and how it went.
  *
  * Recording the outcome is the point of having it on a phone — it is done
@@ -35,48 +90,13 @@ export async function siteVisitRecord(ctx: AuthContext, id: string): Promise<Rec
   const done = Boolean(visit.visitedAt);
   const canContact = ctx.has(PERM.sales.lead.viewContact);
 
-  const actions: RecordAction[] = [];
-
-  if (!done && ctx.has(PERM.sales.siteVisit.complete)) {
-    actions.push({
-      key: "complete",
-      label: "Save outcome",
-      emphasis: "approve",
-      action: "sales/site-visits/completeSiteVisit",
-      args: [id, "$feedback", "$rating"],
-      remark: "none",
-      fields: [
-        {
-          name: "feedback",
-          label: "Feedback",
-          kind: "textarea",
-          placeholder: "What did they think of the unit, the location, the price?",
-          wide: true,
-        },
-        {
-          name: "rating",
-          label: "Interest rating",
-          kind: "select",
-          required: true,
-          initial: "4",
-          options: [5, 4, 3, 2, 1].map((r) => ({ value: String(r), label: `${r} / 5` })),
-        },
-      ],
-      confirm: "The lead moves to Visit Done.",
-    });
-  }
-
-  if (!done && ctx.has(PERM.sales.siteVisit.cancel)) {
-    actions.push({
-      key: "cancel",
-      label: "Cancel visit",
-      emphasis: "reject",
-      action: "sales/site-visits/cancelSiteVisit",
-      args: [id],
-      remark: "none",
-      confirm: "It comes off the list. The lead keeps its stage.",
-    });
-  }
+  const actions = siteVisitDecisions(
+    { id, visitedAt: visit.visitedAt },
+    {
+      complete: ctx.has(PERM.sales.siteVisit.complete),
+      cancel: ctx.has(PERM.sales.siteVisit.cancel),
+    },
+  );
 
   return {
     key: "sales/site-visits",

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../core/act.dart';
 import '../core/api.dart';
-import '../core/form.dart';
 import 'form_screen.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
@@ -136,12 +135,7 @@ class RecordScreenState extends State<RecordScreen> {
     );
   }
 
-  Emphasis _emphasis(String raw) => switch (raw) {
-        'approve' => Emphasis.approve,
-        'reject' => Emphasis.reject,
-        'outline' => Emphasis.outline,
-        _ => Emphasis.primary,
-      };
+  Emphasis _emphasis(String raw) => emphasisOf(raw);
 
   Widget _body() {
     if (_loading) return const Center(child: CircularProgressIndicator());
@@ -223,43 +217,18 @@ class RecordScreenState extends State<RecordScreen> {
   }
 
   Future<void> _run(Map<String, dynamic> a) async {
-    // An action that opens a form has nothing to call until it is filled in.
-    final form = a['form'] as String?;
-    if (form != null && form.isNotEmpty) {
-      final navigator = Navigator.of(context);
-      final made = await navigator.push<bool>(MaterialPageRoute(
-        builder: (_) => FormScreen(api: widget.api, formKey: form, recordId: widget.id),
-      ));
-      if (made != true) return;
-      _changed = true;
-      await _load();
-      return;
-    }
-
-    final ok = await confirmAndRun(
+    final navigator = Navigator.of(context);
+    final ok = await runServerAction(
       context,
       widget.api,
-      Act(
-        action: '${a["action"]}',
-        args: ((a['args'] as List?) ?? const []).cast<Object?>(),
-        label: '${a["label"]}',
-        title: '${a["label"]}',
-        explain: a['confirm'] as String?,
-        emphasis: _emphasis('${a["emphasis"]}'),
-        remark: switch (a['remark']) {
-          'required' => RemarkMode.required,
-          'optional' => RemarkMode.optional,
-          _ => RemarkMode.none,
-        },
-        remarkLabel: (a['remarkLabel'] as String?) ?? 'Remark',
-        // Where the action needs more than a remark — a new finish date — the
-        // server sends the fields to ask for, and the sheet collects them.
-        fields: ((a['fields'] as List?) ?? const [])
-            .cast<Map<String, dynamic>>()
-            .map(FieldDef.from)
-            .toList(),
-        done: '${a["label"]} — done.',
-      ),
+      a,
+      recordId: widget.id,
+      openForm: (formKey) async {
+        final made = await navigator.push<bool>(MaterialPageRoute(
+          builder: (_) => FormScreen(api: widget.api, formKey: formKey, recordId: widget.id),
+        ));
+        return made == true;
+      },
     );
     if (!ok) return;
     _changed = true;

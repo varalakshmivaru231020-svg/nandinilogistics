@@ -4,7 +4,9 @@ import { webTone } from "@/lib/records/shared";
 import {
   RECEIPT_STATUS_LABEL, receiptStatus, type ReceiptStatus,
 } from "@/lib/sales/receipt-status";
+import type { RecordAction } from "@/lib/records/types";
 import type { ScreenRow } from "@/lib/screens/rows";
+import { asRowActions } from "@/lib/screens/rows/row-actions";
 import { formatDate, money } from "@/lib/utils";
 
 /**
@@ -39,7 +41,11 @@ export interface ReceiptRowInput {
   bounceReason: string | null;
 }
 
-export function receiptScreenRow(r: ReceiptRowInput): ScreenRow {
+export function receiptScreenRow(
+  r: ReceiptRowInput,
+  /** The receipt's own decisions — the web row names them "Clear" and "Bounce". */
+  actions: RecordAction[] = [],
+): ScreenRow {
   const status = receiptStatus({
     mode: r.mode,
     clearedAt: r.clearedAt === null ? null : new Date(r.clearedAt),
@@ -63,6 +69,7 @@ export function receiptScreenRow(r: ReceiptRowInput): ScreenRow {
     ],
     trailing: { value: money(r.amount), label: "Amount" },
     status: { label: RECEIPT_STATUS_LABEL[status], tone: webTone(RECEIPT_STATUS_TONE[status]) },
+    actions: asRowActions(actions, { clear: "Clear", bounce: "Bounce" }),
   };
 }
 

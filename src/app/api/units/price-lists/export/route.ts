@@ -46,7 +46,7 @@ export async function GET(request: Request) {
           baseRate: l.items[0] ? Number(l.items[0].baseRate) : 0,
           floorRise: l.items[0] ? Number(l.items[0].floorRise) : 0,
           plcAmount: l.items[0] ? Number(l.items[0].plcAmount) : 0,
-        }),
+        }, { activate: ctx.has(PERM.unit.priceList.activate) }),
       ),
       empty: priceListEmpty(),
     };

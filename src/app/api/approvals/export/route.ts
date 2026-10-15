@@ -44,6 +44,7 @@ export async function GET(request: Request) {
           value: r.value,
           waitingOn: r.waitingOn,
           waitingFor: waitingFor(r.raisedAt, nowMs),
+          decide: r.canDecide ? r.decide : null,
         }),
       ),
       empty: approvalEmpty(false),

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { TaskStatus } from "@prisma/client";
 
+import type { RecordAction } from "@/lib/records/types";
 import { isOverdue, STATUS_LABEL } from "@/lib/tasks/lifecycle";
 import { TASK_PRIORITY_TONE, TASK_STATUS_TONE } from "@/lib/tasks/list-display";
 import type { ScreenRow } from "@/lib/screens/rows";
@@ -30,7 +31,45 @@ export interface TaskRowInput {
   extensionWaiting: boolean;
 }
 
-export function taskScreenRow(t: TaskRowInput, nowMs: number): ScreenRow {
+/**
+ * The one button the web's task row carries.
+ *
+ * `RowAction` in `tasks-screen.tsx` reads two facts and nothing else: the task
+ * is yours, and it is Pending (Accept) or Accepted/on hold (Start). It does not
+ * ask `canDo` — and it does not have to, because `acceptTaskAction` and
+ * `startTaskAction` ask it again inside the action.
+ */
+export function taskRowActions(t: {
+  id: string;
+  status: TaskStatus;
+  mine: boolean;
+}): RecordAction[] {
+  if (t.mine && t.status === "PENDING") {
+    return [{
+      key: "accept",
+      label: "Accept",
+      emphasis: "approve",
+      action: "tasks/acceptTask",
+      args: [t.id],
+      remark: "none",
+      confirm: "It becomes yours, and whoever raised it is told.",
+    }];
+  }
+  if (t.mine && (t.status === "ACCEPTED" || t.status === "HOLD")) {
+    return [{
+      key: "start",
+      label: "Start",
+      emphasis: "primary",
+      action: "tasks/startTask",
+      args: [t.id],
+      remark: "none",
+      confirm: "The clock on it starts from now.",
+    }];
+  }
+  return [];
+}
+
+export function taskScreenRow(t: TaskRowInput, nowMs: number, mine = false): ScreenRow {
   const over = isOverdue({ status: t.status, dueAt: new Date(t.dueAt) }, nowMs);
 
   return {
@@ -53,5 +92,6 @@ export function taskScreenRow(t: TaskRowInput, nowMs: number): ScreenRow {
       label: t.stage ?? STATUS_LABEL[t.status] ?? t.status,
       tone: TASK_STATUS_TONE[t.status] ?? "draft",
     },
+    actions: taskRowActions({ id: t.id, status: t.status, mine }),
   };
 }

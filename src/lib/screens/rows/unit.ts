@@ -1,6 +1,8 @@
 import "server-only";
 
 import { webTone } from "@/lib/records/shared";
+import type { RecordAction } from "@/lib/records/types";
+import { asRowActions } from "@/lib/screens/rows/row-actions";
 import type { ScreenRow } from "@/lib/screens/rows";
 import { formatDate, money, qty } from "@/lib/utils";
 
@@ -30,7 +32,12 @@ export interface UnitRowInput {
   status: string;
 }
 
-export function unitScreenRow(u: UnitRowInput, showPrice: boolean): ScreenRow {
+export function unitScreenRow(
+  u: UnitRowInput,
+  showPrice: boolean,
+  /** The flat's own decisions — the web row carries Edit, Block and Delete. */
+  actions: RecordAction[] = [],
+): ScreenRow {
   return {
     id: u.id,
     title: u.unitNumber,
@@ -45,6 +52,13 @@ export function unitScreenRow(u: UnitRowInput, showPrice: boolean): ScreenRow {
       { label: "Parking", value: String(u.parkingSlots) },
     ],
     status: { label: u.status, tone: webTone(UNIT_STATUS_TONE[u.status] ?? "slate") },
+    // The row's icons have these as their accessible names.
+    actions: asRowActions(actions, {
+      edit: "Edit",
+      block: "Block",
+      unblock: "Unblock",
+      delete: "Delete",
+    }),
   };
 }
 
@@ -66,7 +80,27 @@ export interface PriceListRowInput {
   plcAmount: number;
 }
 
-export function priceListScreenRow(l: PriceListRowInput): ScreenRow {
+/** The button the web's price-list row carries while a version is superseded. */
+export function priceListRowActions(
+  l: { id: string; isActive: boolean },
+  can: { activate: boolean },
+): RecordAction[] {
+  if (l.isActive || !can.activate) return [];
+  return [{
+    key: "activate",
+    label: "Make active",
+    emphasis: "primary",
+    action: "units/price-lists/activatePriceList",
+    args: [l.id],
+    remark: "none",
+    confirm: "Cost sheets generated from today use this version. Existing bookings keep their rate.",
+  }];
+}
+
+export function priceListScreenRow(
+  l: PriceListRowInput,
+  can: { activate: boolean } = { activate: false },
+): ScreenRow {
   return {
     id: l.id,
     title: `v${l.version} · ${l.name}`,
@@ -81,6 +115,7 @@ export function priceListScreenRow(l: PriceListRowInput): ScreenRow {
     status: l.isActive
       ? { label: "Active", tone: "good" }
       : { label: "Superseded", tone: "draft" },
+    actions: priceListRowActions(l, can),
   };
 }
 

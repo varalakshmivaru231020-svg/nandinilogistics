@@ -10,6 +10,111 @@ import { qty } from "@/lib/utils";
 import { money, type RecordAction, type RecordView } from "./shared";
 
 /**
+ * What may be done to an issue slip, decided once.
+ *
+ * The web puts all three on its own list row — Acknowledge receipt, Raise
+ * return, Cancel issue — so the row asks this rather than deciding for itself.
+ * Only the lines behind a return have to be read first, which is why they are
+ * passed in.
+ */
+export function issueDecisions(
+  i: {
+    id: string;
+    storeName: string;
+    issuedToName: string;
+    cancelled: boolean;
+    acknowledged: boolean;
+    mine: boolean;
+    /** What can still come back, per line, with the line's own label. */
+    returnable: Array<{ id: string; label: string; quantity: number }>;
+  },
+  can: { acknowledge: boolean; raiseReturn: boolean; cancel: boolean; isSuperAdmin: boolean },
+): RecordAction[] {
+  const actions: RecordAction[] = [];
+  const outstanding = i.returnable.reduce((n, l) => n + l.quantity, 0);
+
+  if (!i.cancelled && !i.acknowledged && (i.mine || can.isSuperAdmin) && can.acknowledge) {
+    actions.push({
+      key: "acknowledge",
+      label: "Acknowledge receipt",
+      emphasis: "approve",
+      action: "material/issues/acknowledgeIssue",
+      args: [i.id],
+      remark: "none",
+      confirm: i.mine
+        ? "You are confirming this material reached you. It is recorded against your name."
+        : `Confirming receipt on behalf of ${i.issuedToName}. It is recorded against your name.`,
+    });
+  }
+
+  if (!i.cancelled && outstanding > 0 && can.raiseReturn) {
+    actions.push({
+      key: "raiseReturn",
+      label: "Raise return",
+      emphasis: "outline",
+      action: "material/returns/raiseReturn",
+      // One parsed object, with the reason and the lines filled in from below.
+      args: [{ issueId: i.id, reason: "$reason", lines: "$lines" }],
+      remark: "none",
+      fields: [
+        {
+          name: "reason",
+          label: "Reason for the return",
+          kind: "textarea",
+          required: true,
+          placeholder: "Slab poured — surplus cement",
+          wide: true,
+        },
+        {
+          name: "lines",
+          label: "Lines",
+          kind: "rows",
+          // The lines are the issue's own; the unit is in each line's name
+          // because one label cannot carry a different unit per line.
+          fixedRows: true,
+          wide: true,
+          initialRows: i.returnable.map((l) => ({
+            _label: l.label,
+            issueItemId: l.id,
+            quantity: l.quantity,
+            condition: "Good",
+          })),
+          row: [
+            { name: "issueItemId", label: "Line", kind: "text", hidden: true },
+            { name: "quantity", label: "Quantity", kind: "number", required: true },
+            {
+              name: "condition",
+              label: "Condition",
+              kind: "select",
+              required: true,
+              options: RETURN_CONDITIONS.map((c) => ({ value: c, label: c })),
+            },
+            { name: "remarks", label: "Remarks", kind: "text" },
+          ],
+        },
+      ],
+      confirm:
+        "The store approves it before anything moves. Damaged material still returns to stock when approved; its condition is recorded.",
+    });
+  }
+
+  if (!i.cancelled && can.cancel) {
+    actions.push({
+      key: "cancel",
+      label: "Cancel issue",
+      emphasis: "reject",
+      action: "material/issues/cancelIssue",
+      args: [i.id, "$reason"],
+      remark: "none",
+      fields: [{ name: "reason", label: "Why", kind: "textarea", required: true, wide: true }],
+      confirm: `What has not been returned goes back into ${i.storeName} at the issue rate.`,
+    });
+  }
+
+  return actions;
+}
+
+/**
  * One issue slip: what left the store, who took it, and whether they have said
  * so.
  *
@@ -83,8 +188,6 @@ export async function issueRecord(ctx: AuthContext, id: string): Promise<RecordV
     return { line: l, pending, returnable };
   });
 
-  const outstanding = lines.reduce((s, l) => s + l.returnable, 0);
-
   /* ------------------------------------------------------------- actions */
 
   const actions: RecordAction[] = [];
@@ -95,88 +198,31 @@ export async function issueRecord(ctx: AuthContext, id: string): Promise<RecordV
    * so, for the slip whose recipient has left or cannot — and the sheet says
    * whose receipt is being confirmed, because that is the difference.
    */
-  if (
-    !cancelled && !issue.acknowledgedAt &&
-    (mine || ctx.isSuperAdmin) && ctx.has(PERM.material.issue.acknowledge)
-  ) {
-    actions.push({
-      key: "acknowledge",
-      label: "Acknowledge receipt",
-      emphasis: "approve",
-      action: "material/issues/acknowledgeIssue",
-      args: [id],
-      remark: "none",
-      confirm: mine
-        ? "You are confirming this material reached you. It is recorded against your name."
-        : `Confirming receipt on behalf of ${issuedToName}. It is recorded against your name.`,
-    });
-  }
-
-  if (!cancelled && outstanding > 0 && ctx.has(PERM.material.return.create)) {
-    actions.push({
-      key: "raiseReturn",
-      label: "Raise return",
-      emphasis: "outline",
-      action: "material/returns/raiseReturn",
-      // One parsed object, with the reason and the lines filled in from below.
-      args: [{ issueId: id, reason: "$reason", lines: "$lines" }],
-      remark: "none",
-      fields: [
-        {
-          name: "reason",
-          label: "Reason for the return",
-          kind: "textarea",
-          required: true,
-          placeholder: "Slab poured — surplus cement",
-          wide: true,
-        },
-        {
-          name: "lines",
-          label: "Lines",
-          kind: "rows",
-          // The lines are the issue's own; the unit is in each line's name
-          // because one label cannot carry a different unit per line.
-          fixedRows: true,
-          wide: true,
-          initialRows: lines
-            .filter((l) => l.returnable > 0)
-            .map((l) => ({
-              _label: `${l.line.item.name} · ${qty(l.returnable, 3)} ${l.line.item.uom.name} returnable`,
-              issueItemId: l.line.id,
-              quantity: l.returnable,
-              condition: "Good",
-            })),
-          row: [
-            { name: "issueItemId", label: "Line", kind: "text", hidden: true },
-            { name: "quantity", label: "Quantity", kind: "number", required: true },
-            {
-              name: "condition",
-              label: "Condition",
-              kind: "select",
-              required: true,
-              options: RETURN_CONDITIONS.map((c) => ({ value: c, label: c })),
-            },
-            { name: "remarks", label: "Remarks", kind: "text" },
-          ],
-        },
-      ],
-      confirm:
-        "The store approves it before anything moves. Damaged material still returns to stock when approved; its condition is recorded.",
-    });
-  }
-
-  if (!cancelled && ctx.has(PERM.material.issue.cancel)) {
-    actions.push({
-      key: "cancel",
-      label: "Cancel issue",
-      emphasis: "reject",
-      action: "material/issues/cancelIssue",
-      args: [id, "$reason"],
-      remark: "none",
-      fields: [{ name: "reason", label: "Why", kind: "textarea", required: true, wide: true }],
-      confirm: `What has not been returned goes back into ${issue.store.name} at the issue rate.`,
-    });
-  }
+  actions.push(
+    ...issueDecisions(
+      {
+        id,
+        storeName: issue.store.name,
+        issuedToName,
+        cancelled,
+        acknowledged: Boolean(issue.acknowledgedAt),
+        mine,
+        returnable: lines
+          .filter((l) => l.returnable > 0)
+          .map((l) => ({
+            id: l.line.id,
+            label: `${l.line.item.name} · ${qty(l.returnable, 3)} ${l.line.item.uom.name} returnable`,
+            quantity: l.returnable,
+          })),
+      },
+      {
+        acknowledge: ctx.has(PERM.material.issue.acknowledge),
+        raiseReturn: ctx.has(PERM.material.return.create),
+        cancel: ctx.has(PERM.material.issue.cancel),
+        isSuperAdmin: ctx.isSuperAdmin,
+      },
+    ),
+  );
 
   /* ----------------------------------------------------------- the record */
 

@@ -2,6 +2,8 @@ import "server-only";
 
 import { TRANSFER_STATUS_TONE } from "@/lib/material/transfer-display";
 import { webTone } from "@/lib/records/shared";
+import type { RecordAction } from "@/lib/records/types";
+import { asRowActions } from "@/lib/screens/rows/row-actions";
 import type { ScreenRow } from "@/lib/screens/rows";
 import { formatDate, money, qty } from "@/lib/utils";
 
@@ -14,15 +16,19 @@ import { formatDate, money, qty } from "@/lib/utils";
 
 /* -------------------------------------------------------------- transfers */
 
-export function transferScreenRow(t: {
-  id: string;
-  transferNo: string;
-  status: string;
-  fromStoreName: string;
-  toStoreName: string;
-  transferDate: Date | string;
-  lineCount: number;
-}): ScreenRow {
+export function transferScreenRow(
+  t: {
+    id: string;
+    transferNo: string;
+    status: string;
+    fromStoreName: string;
+    toStoreName: string;
+    transferDate: Date | string;
+    lineCount: number;
+  },
+  /** The transfer's own decisions — the web row calls approving "despatch". */
+  actions: RecordAction[] = [],
+): ScreenRow {
   return {
     id: t.id,
     title: t.transferNo,
@@ -31,6 +37,10 @@ export function transferScreenRow(t: {
       tone: webTone(TRANSFER_STATUS_TONE[t.status] ?? "slate"),
     },
     meta: `${t.fromStoreName} → ${t.toStoreName} · ${formatDate(t.transferDate)} · ${t.lineCount} line(s)`,
+    actions: asRowActions(actions, {
+      approve: "Approve & despatch",
+      receive: "Receive",
+    }),
   };
 }
 

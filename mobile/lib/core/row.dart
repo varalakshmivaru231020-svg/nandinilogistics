@@ -23,6 +23,7 @@ class ServerRow {
     this.pill,
     this.status,
     this.trailing,
+    this.actions = const [],
   });
 
   final String id;
@@ -34,6 +35,12 @@ class ServerRow {
   final RowPill? pill;
   final RowChip? status;
   final RowTrailing? trailing;
+
+  /// The buttons the web's own row carries, decided by the server and sent in
+  /// the same shape a record's actions arrive in — so the row runs them through
+  /// the same confirmation sheet, collects the same fields, and shows the same
+  /// refusal. The app never decides which of these a row gets.
+  final List<Map<String, dynamic>> actions;
 
   /// A row the list did not compose — a report's row, read off its columns the
   /// way the web's own report table reads it: the first column is the heading,
@@ -93,6 +100,7 @@ class ServerRow {
                 value: '${(d["trailing"] as Map)["value"] ?? ""}',
                 label: (d['trailing'] as Map)['label'] as String?,
               ),
+        actions: ((d['actions'] as List?) ?? const []).cast<Map<String, dynamic>>(),
       );
 }
 

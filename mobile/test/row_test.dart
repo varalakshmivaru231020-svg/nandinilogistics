@@ -163,4 +163,120 @@ void main() {
       expect(find.text('Payable days: 24'), findsOneWidget);
     });
   });
+
+  rowActions();
+}
+
+/// The buttons the web's own row carries, on the phone's row.
+///
+/// Which buttons appear is the server's decision — the row card holds no rule
+/// about status or permission — and running one calls exactly the action and
+/// arguments the server named.
+void rowActions() {
+  group('a row that carries the web row\'s buttons', () {
+    Map<String, Object> listWith(List<Map<String, Object>> actions) => {
+          '/screen/material/indents': _indentScreen,
+          '/list/material/indents?page=1&pageSize=50': {
+            'title': 'Indents',
+            'filters': '',
+            'columns': const [
+              {'key': 'indentNo', 'header': 'Indent No'},
+            ],
+            'rows': const [
+              {'id': 'i1', 'indentNo': 'IND-1'},
+            ],
+            'total': 1,
+            'page': 1,
+            'pageSize': 50,
+            'hasMore': false,
+            'serverTime': '2026-10-15T06:00:00.000Z',
+            'screen': {
+              'rows': [
+                {
+                  'id': 'i1',
+                  'title': 'Shuttering Plywood 12mm',
+                  'status': {'label': 'Pending approval', 'tone': 'warn'},
+                  'actions': actions,
+                },
+              ],
+            },
+          },
+          '/do/material/indents/approveIndent': {'ok': true},
+        };
+
+    testWidgets('draws them, and only the ones it was sent', (tester) async {
+      await _pump(tester, listWith([
+        const {
+          'key': 'approve',
+          'label': '✓ PM approve',
+          'emphasis': 'approve',
+          'action': 'material/indents/approveIndent',
+          'args': ['i1', 'PM'],
+          'remark': 'none',
+          'confirm': 'It goes to the Admin for the second approval.',
+        },
+      ]));
+
+      expect(find.text('✓ PM approve'), findsOneWidget);
+      expect(find.text('Reject'), findsNothing);
+    });
+
+    testWidgets('runs the server\'s own action and arguments', (tester) async {
+      final b = await _pump(tester, listWith([
+        const {
+          'key': 'approve',
+          'label': '✓ PM approve',
+          'emphasis': 'approve',
+          'action': 'material/indents/approveIndent',
+          'args': ['i1', 'PM'],
+          'remark': 'none',
+          'confirm': 'It goes to the Admin for the second approval.',
+        },
+      ]));
+
+      await tester.tap(find.byKey(const Key('row-action:i1:approve')));
+      await tester.pumpAndSettle();
+
+      // The sheet says what will happen, in the server's words.
+      expect(find.text('It goes to the Admin for the second approval.'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(Btn, '✓ PM approve').last);
+      await tester.pumpAndSettle();
+
+      expect(b.actions.last.action, 'material/indents/approveIndent');
+      expect(b.actions.last.args, ['i1', 'PM']);
+    });
+
+    testWidgets('a button whose action is a form opens the form', (tester) async {
+      final routes = listWith([
+        const {
+          'key': 'edit',
+          'label': 'Edit',
+          'emphasis': 'outline',
+          'action': '',
+          'args': [],
+          'remark': 'none',
+          'form': 'material/indents:edit',
+        },
+      ]);
+      routes['/form/material/indents/edit?id=i1'] = const {
+        'key': 'material/indents:edit',
+        'module': 'material/indents',
+        'title': 'Edit indent',
+        'submit': 'Save',
+        'action': 'material/indents/updateIndent',
+        'shape': {'kind': 'formData'},
+        'fields': [
+          {'name': 'purpose', 'label': 'Purpose', 'kind': 'text'},
+        ],
+      };
+      await _pump(tester, routes);
+
+      await tester.tap(find.byKey(const Key('row-action:i1:edit')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit indent'), findsOneWidget);
+      expect(find.text('Purpose'), findsOneWidget);
+    });
+  });
 }

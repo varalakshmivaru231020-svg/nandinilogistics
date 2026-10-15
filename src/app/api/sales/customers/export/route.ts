@@ -63,6 +63,7 @@ export async function GET(request: Request) {
             })),
           },
           canSeeKyc,
+          { verifyKyc: ctx.has(PERM.sales.customer.verifyKyc) },
         ),
       ),
       band: bandOf(

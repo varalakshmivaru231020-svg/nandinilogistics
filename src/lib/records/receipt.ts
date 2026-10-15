@@ -9,6 +9,69 @@ import { isClearableMode, receiptStatus, RECEIPT_STATUS_LABEL } from "@/lib/sale
 import { money, toneOf, type RecordAction, type RecordView } from "./shared";
 
 /**
+ * What may be done to a receipt, decided once.
+ *
+ * The record screen and the **list row** both offer Clear and Bounce — the web
+ * puts them on its receipt row as well — so the decision, the arguments and the
+ * fields live here and both callers read them. Only the wording differs: the
+ * row says "Clear", the record says "Mark cleared".
+ */
+export function receiptDecisions(
+  r: { id: string; mode: string; receiptDate: Date | string; amount: number; clearedAt: Date | null; bouncedAt: Date | null },
+  can: { clear: boolean },
+): RecordAction[] {
+  const state = receiptStatus({
+    mode: r.mode,
+    clearedAt: r.clearedAt,
+    bouncedAt: r.bouncedAt,
+  });
+  // Only an instrument the bank still has to realise, and only while it has
+  // done neither.
+  if (state !== "PENDING_CLEARANCE" || !isClearableMode(r.mode) || !can.clear) return [];
+
+  const day = new Date(r.receiptDate).toISOString().slice(0, 10);
+  return [
+    {
+      key: "clear",
+      label: "Mark cleared",
+      emphasis: "approve",
+      action: "sales/receipts/clearReceipt",
+      args: [r.id, "$clearedOn"],
+      remark: "none",
+      fields: [
+        {
+          name: "clearedOn",
+          label: "Cleared on",
+          kind: "date",
+          required: true,
+          hint: `Not before ${day}, and not in the future.`,
+        },
+      ],
+      confirm: `${money(r.amount)} counts towards the booking from the day it cleared.`,
+    },
+    {
+      key: "bounce",
+      label: "Record bounce",
+      emphasis: "reject",
+      action: "sales/receipts/bounceReceipt",
+      args: [r.id, "$reason"],
+      remark: "none",
+      fields: [
+        {
+          name: "reason",
+          label: "Reason",
+          kind: "textarea",
+          required: true,
+          placeholder: "e.g. Insufficient funds",
+          wide: true,
+        },
+      ],
+      confirm: `${money(r.amount)} comes off the booking's collected amount and its demand. The receipt stays on record, marked bounced. This cannot be undone.`,
+    },
+  ];
+}
+
+/**
  * One receipt, and whether the money is really in.
  *
  * A receipt has no status column: `receiptStatus()` derives it from the mode
@@ -42,54 +105,17 @@ export async function receiptRecord(ctx: AuthContext, id: string): Promise<Recor
   const state = receiptStatus(receipt);
   const amount = Number(receipt.amount);
 
-  const actions: RecordAction[] = [];
-
-  // Only an instrument the bank still has to realise, and only while it has
-  // done neither.
-  if (
-    state === "PENDING_CLEARANCE" &&
-    isClearableMode(receipt.mode) &&
-    ctx.has(PERM.sales.receipt.clear)
-  ) {
-    const day = receipt.receiptDate.toISOString().slice(0, 10);
-    actions.push({
-      key: "clear",
-      label: "Mark cleared",
-      emphasis: "approve",
-      action: "sales/receipts/clearReceipt",
-      args: [id, "$clearedOn"],
-      remark: "none",
-      fields: [
-        {
-          name: "clearedOn",
-          label: "Cleared on",
-          kind: "date",
-          required: true,
-          hint: `Not before ${day}, and not in the future.`,
-        },
-      ],
-      confirm: `${money(amount)} counts towards the booking from the day it cleared.`,
-    });
-    actions.push({
-      key: "bounce",
-      label: "Record bounce",
-      emphasis: "reject",
-      action: "sales/receipts/bounceReceipt",
-      args: [id, "$reason"],
-      remark: "none",
-      fields: [
-        {
-          name: "reason",
-          label: "Reason",
-          kind: "textarea",
-          required: true,
-          placeholder: "e.g. Insufficient funds",
-          wide: true,
-        },
-      ],
-      confirm: `${money(amount)} comes off the booking's collected amount and its demand. The receipt stays on record, marked bounced. This cannot be undone.`,
-    });
-  }
+  const actions = receiptDecisions(
+    {
+      id,
+      mode: receipt.mode,
+      receiptDate: receipt.receiptDate,
+      amount,
+      clearedAt: receipt.clearedAt,
+      bouncedAt: receipt.bouncedAt,
+    },
+    { clear: ctx.has(PERM.sales.receipt.clear) },
+  );
 
   return {
     key: "sales/receipts",

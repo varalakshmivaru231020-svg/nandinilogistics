@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
 import { employeeFigures } from "@/lib/metrics/figures";
 import { bandOf, type ScreenShell } from "@/lib/screens/rows";
+import { employeeDecisions } from "@/lib/records/employee";
 import { EMPLOYEE_EMPTY, employeeScreenRow } from "@/lib/screens/rows/hr";
 import { describeEmployeeFilters, employeeListWhere, maskId, readEmployeeListParams } from "@/lib/hr/list-filters";
 import { PERM } from "@/lib/permissions/codes";
@@ -73,7 +74,14 @@ export async function GET(request: Request) {
           pan: canIdentity ? e.pan : maskId(e.pan),
           address: e.address,
           status: e.status,
-        }),
+        },
+        employeeDecisions(
+          { id: e.id, status: e.status },
+          {
+            update: ctx.has(PERM.hr.employee.update),
+            remove: ctx.has(PERM.hr.employee.delete),
+          },
+        )),
       ),
       band: bandOf(employeeFigures(statRows)),
       empty: EMPLOYEE_EMPTY,

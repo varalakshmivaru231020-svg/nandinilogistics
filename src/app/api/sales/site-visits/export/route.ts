@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
 import { siteVisitEmpty } from "@/lib/sales/site-visit-display";
 import { type ScreenShell } from "@/lib/screens/rows";
+import { siteVisitDecisions } from "@/lib/records/site-visit";
 import { siteVisitScreenRow } from "@/lib/screens/rows/site-visit";
 import { PERM } from "@/lib/permissions/codes";
 import type { ReportResult } from "@/lib/reports/types";
@@ -62,6 +63,13 @@ export async function GET(request: Request) {
           },
           now.getTime(),
           canSeeContact,
+          siteVisitDecisions(
+            { id: v.id, visitedAt: v.visitedAt },
+            {
+              complete: ctx.has(PERM.sales.siteVisit.complete),
+              cancel: ctx.has(PERM.sales.siteVisit.cancel),
+            },
+          ),
         ),
       ),
       empty: siteVisitEmpty(Boolean(params.q || params.status || params.from || params.to)),

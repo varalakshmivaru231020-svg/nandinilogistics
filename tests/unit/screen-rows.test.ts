@@ -46,6 +46,13 @@ const KEY_TO_ALIAS: Record<string, string> = Object.fromEntries(
  */
 const REPORTS = new Set(["tasks/reports"]);
 
+/** Every row builder, read once — the rows and their buttons are asserted against it. */
+const ALL_ROWS = [
+  "indent", "purchase-order", "grn", "vendor", "issue", "return", "material-rest",
+  "lead", "follow-up", "site-visit", "customer", "booking", "sales-rest", "unit",
+  "hr", "task", "exec", "stock",
+].map((m) => readFileSync(`src/lib/screens/rows/${m}.ts`, "utf-8")).join("\n");
+
 describe("every list sends the screen's own row", () => {
   for (const key of MOBILE_LIST_KEYS) {
     it(key, () => {
@@ -69,6 +76,54 @@ describe("every list sends the screen's own row", () => {
       ).toBe(true);
     });
   }
+});
+
+describe("the row's buttons are the web row's buttons", () => {
+  /**
+   * The label a row button carries, against the screen whose row carries it.
+   *
+   * The decision behind each one is the module's own `…Decisions` function,
+   * which the record screen asks too — what is asserted here is the wording,
+   * because the web's row says "Clear" where its record says "Mark cleared",
+   * and a row that renamed a button would be a different product wearing the
+   * same name.
+   */
+  const BUTTONS: Array<[string, string, string[]]> = [
+    ["purchase order", "src/app/(app)/material/purchase-orders/approve-button.tsx", ["✓ Admin approve", "✓ PM approve"]],
+    ["issue", "src/app/(app)/material/issues/issues-screen.tsx", ["Acknowledge receipt", "Raise return", "Cancel issue"]],
+    ["transfer", "src/app/(app)/material/transfers/transfers-screen.tsx", ["Approve &amp; despatch", "Receive"]],
+    ["customer", "src/app/(app)/sales/customers/customers-screen.tsx", ["Verify KYC"]],
+    ["price list", "src/app/(app)/units/price-lists/price-lists-screen.tsx", ["Make active"]],
+    ["receipt", "src/app/(app)/sales/receipts/receipt-clearance-controls.tsx", ["Clear", "Bounce"]],
+    ["site visit", "src/app/(app)/sales/site-visits/site-visits-screen.tsx", ["Record outcome"]],
+    ["task", "src/app/(app)/tasks/tasks-screen.tsx", ["Accept", "Start"]],
+    ["employee", "src/app/(app)/hr/hr-screen.tsx", ["Activate", "Edit", "Delete"]],
+    ["unit", "src/app/(app)/units/unit-manager.tsx", ["Edit", "Block", "Unblock", "Delete"]],
+    ["approval", "src/app/(app)/approvals/approvals-screen.tsx", ["Approve", "Reject"]],
+  ];
+
+  for (const [what, file, labels] of BUTTONS) {
+    it(`${what}: ${labels.join(", ")}`, () => {
+      const screen = read(file);
+      for (const label of labels) {
+        expect(screen.includes(label), `the ${what} row no longer says “${label}”`).toBe(true);
+        expect(
+          ALL_ROWS.includes(label.replace("&amp;", "&")),
+          `no ${what} row button is labelled “${label}”`,
+        ).toBe(true);
+      }
+    });
+  }
+
+  it("every row button names an action the boundary has", async () => {
+    const { MOBILE_ACTIONS } = await import("@/lib/api/mobile-actions");
+    const keys = new Set(Object.keys(MOBILE_ACTIONS));
+    const named = [...ALL_ROWS.matchAll(/action: "([a-z][^"]*)"/g)].map((m) => m[1]);
+    expect(named.length, "no row builder names an action").toBeGreaterThan(5);
+    for (const key of named) {
+      expect(keys.has(key), `${key} is not an action the boundary dispatches`).toBe(true);
+    }
+  });
 });
 
 describe("the words are the screen's words", () => {
@@ -172,31 +227,12 @@ describe("the words are the screen's words", () => {
     ],
   ];
 
-  const ROWS = read("src/lib/screens/rows/indent.ts") +
-    read("src/lib/screens/rows/purchase-order.ts") +
-    read("src/lib/screens/rows/grn.ts") +
-    read("src/lib/screens/rows/vendor.ts") +
-    read("src/lib/screens/rows/issue.ts") +
-    read("src/lib/screens/rows/return.ts") +
-    read("src/lib/screens/rows/material-rest.ts") +
-    read("src/lib/screens/rows/lead.ts") +
-    read("src/lib/screens/rows/follow-up.ts") +
-    read("src/lib/screens/rows/site-visit.ts") +
-    read("src/lib/screens/rows/customer.ts") +
-    read("src/lib/screens/rows/booking.ts") +
-    read("src/lib/screens/rows/sales-rest.ts") +
-    read("src/lib/screens/rows/unit.ts") +
-    read("src/lib/screens/rows/hr.ts") +
-    read("src/lib/screens/rows/task.ts") +
-    read("src/lib/screens/rows/exec.ts") +
-    read("src/lib/screens/rows/stock.ts");
-
   for (const [what, file, phrases] of SAID) {
     it(`${what} says what its screen says`, () => {
       const screen = read(file);
       for (const phrase of phrases) {
         expect(screen.includes(phrase), `the ${what} screen no longer says “${phrase}”`).toBe(true);
-        expect(ROWS.includes(phrase), `no ${what} row writes “${phrase}”`).toBe(true);
+        expect(ALL_ROWS.includes(phrase), `no ${what} row writes “${phrase}”`).toBe(true);
       }
     });
   }

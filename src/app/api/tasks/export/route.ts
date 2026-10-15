@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     orderBy: { createdAt: "desc" },
     select: {
       id: true, taskNo: true, title: true, location: true, dueAt: true, kind: true,
-      priority: true, status: true, round: true, createdAt: true,
+      priority: true, status: true, round: true, createdAt: true, assigneeId: true,
       project: { select: { code: true } },
       assignee: { select: { name: true } },
       createdBy: { select: { name: true } },
@@ -136,6 +136,7 @@ export async function GET(request: Request) {
             extensionWaiting: (e?.extensions.length ?? 0) > 0,
           },
           nowMs,
+          t.assigneeId === ctx.id,
         );
       }),
       band: bandOf(taskBandFigures(overdueCount, summary, myScore)),

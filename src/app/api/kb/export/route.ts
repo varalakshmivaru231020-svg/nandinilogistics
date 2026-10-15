@@ -70,6 +70,9 @@ export async function GET(request: Request) {
           updatedAt: a.updatedAt,
           attachments: a._count.attachments,
           category: a.category,
+        }, {
+          update: ctx.has(PERM.kb.article.update),
+          remove: ctx.has(PERM.kb.article.delete),
         }),
       ),
       empty: articleEmpty(Boolean(gate.params.get("q"))),

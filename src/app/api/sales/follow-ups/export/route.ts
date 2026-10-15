@@ -3,6 +3,7 @@ import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/r
 import { followUpFigures } from "@/lib/metrics/figures";
 import { FOLLOW_UP_EMPTY } from "@/lib/sales/follow-up-display";
 import { bandOf, type ScreenShell } from "@/lib/screens/rows";
+import { logFollowUpDecision } from "@/lib/records/lead";
 import { followUpScreenRow } from "@/lib/screens/rows/follow-up";
 import { PERM } from "@/lib/permissions/codes";
 import type { ReportColumn } from "@/lib/reports/types";
@@ -143,6 +144,7 @@ export async function GET(request: Request) {
             dueAt: l.nextActionAt as Date,
           },
           nowMs,
+          logFollowUpDecision(l.id, { create: ctx.has(PERM.sales.followUp.create) }),
         );
       }),
       band: bandOf(

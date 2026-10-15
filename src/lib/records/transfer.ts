@@ -8,6 +8,70 @@ import { qty } from "@/lib/utils";
 import { money, toneOf, words, type RecordAction, type RecordView } from "./shared";
 
 /**
+ * What may be done to a store transfer, decided once — the web's own row
+ * carries both, as "Approve & despatch" and "Receive".
+ */
+export function transferDecisions(
+  t: {
+    id: string;
+    status: string;
+    fromStore: string;
+    toStore: string;
+    /** The transfer's lines, each labelled with what was sent. */
+    lines: Array<{ id: string; label: string; sent: number }>;
+  },
+  can: { approve: boolean; receive: boolean },
+): RecordAction[] {
+  const actions: RecordAction[] = [];
+
+  if (t.status === "DRAFT" && can.approve) {
+    actions.push({
+      key: "approve",
+      label: "Approve & send",
+      emphasis: "approve",
+      action: "material/transfers/approveTransfer",
+      args: [t.id],
+      remark: "none",
+      confirm: `Stock leaves ${t.fromStore} now and is in transit until it is received.`,
+    });
+  }
+
+  if (t.status === "IN_TRANSIT" && can.receive) {
+    actions.push({
+      key: "receive",
+      label: "Receive",
+      emphasis: "approve",
+      action: "material/transfers/receiveTransfer",
+      args: [t.id, "$received"],
+      remark: "none",
+      fields: [
+        {
+          name: "received",
+          label: "What arrived",
+          kind: "rows",
+          // The transfer's own lines, each starting at what was sent. Reduce
+          // one and the shortfall goes on the audit trail.
+          fixedRows: true,
+          wide: true,
+          initialRows: t.lines.map((l) => ({
+            _label: l.label,
+            lineId: l.id,
+            receivedQty: l.sent,
+          })),
+          row: [
+            { name: "lineId", label: "Line", kind: "text", hidden: true },
+            { name: "receivedQty", label: "Received", kind: "number", required: true },
+          ],
+        },
+      ],
+      confirm: `It goes into ${t.toStore}. A line short of what was sent is recorded as a shortfall.`,
+    });
+  }
+
+  return actions;
+}
+
+/**
  * One stock transfer between stores: what was sent, and what arrived.
  *
  * Receiving is the part worth having on a phone, because it happens at the
@@ -34,51 +98,23 @@ export async function transferRecord(ctx: AuthContext, id: string): Promise<Reco
   const received = transfer.items.reduce((s, l) => s + Number(l.receivedQty), 0);
   const value = transfer.items.reduce((s, l) => s + Number(l.quantity) * Number(l.rate), 0);
 
-  const actions: RecordAction[] = [];
-
-  if (transfer.status === "DRAFT" && ctx.has(PERM.material.transfer.approve)) {
-    actions.push({
-      key: "approve",
-      label: "Approve & send",
-      emphasis: "approve",
-      action: "material/transfers/approveTransfer",
-      args: [id],
-      remark: "none",
-      confirm: `Stock leaves ${transfer.fromStore.name} now and is in transit until it is received.`,
-    });
-  }
-
-  if (transfer.status === "IN_TRANSIT" && ctx.has(PERM.material.transfer.receive)) {
-    actions.push({
-      key: "receive",
-      label: "Receive",
-      emphasis: "approve",
-      action: "material/transfers/receiveTransfer",
-      args: [id, "$received"],
-      remark: "none",
-      fields: [
-        {
-          name: "received",
-          label: "What arrived",
-          kind: "rows",
-          // The transfer's own lines, each starting at what was sent. Reduce
-          // one and the shortfall goes on the audit trail.
-          fixedRows: true,
-          wide: true,
-          initialRows: transfer.items.map((l) => ({
-            _label: `${l.item.name} · ${qty(Number(l.quantity), 3)} ${l.item.uom.name} sent`,
-            lineId: l.id,
-            receivedQty: Number(l.quantity),
-          })),
-          row: [
-            { name: "lineId", label: "Line", kind: "text", hidden: true },
-            { name: "receivedQty", label: "Received", kind: "number", required: true },
-          ],
-        },
-      ],
-      confirm: `It goes into ${transfer.toStore.name}. A line short of what was sent is recorded as a shortfall.`,
-    });
-  }
+  const actions = transferDecisions(
+    {
+      id,
+      status: transfer.status,
+      fromStore: transfer.fromStore.name,
+      toStore: transfer.toStore.name,
+      lines: transfer.items.map((l) => ({
+        id: l.id,
+        label: `${l.item.name} · ${qty(Number(l.quantity), 3)} ${l.item.uom.name} sent`,
+        sent: Number(l.quantity),
+      })),
+    },
+    {
+      approve: ctx.has(PERM.material.transfer.approve),
+      receive: ctx.has(PERM.material.transfer.receive),
+    },
+  );
 
   return {
     key: "material/transfers",

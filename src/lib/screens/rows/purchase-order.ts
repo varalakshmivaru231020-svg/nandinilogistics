@@ -2,6 +2,7 @@ import "server-only";
 
 import { deliveryLabel, PO_STATUS_LABEL, PO_STATUS_TONE } from "@/lib/material/po-display";
 import { webTone } from "@/lib/records/shared";
+import type { RecordAction } from "@/lib/records/types";
 import type { ScreenRow } from "@/lib/screens/rows";
 import { formatDate, moneyShort, qty } from "@/lib/utils";
 
@@ -38,7 +39,45 @@ export function poCredit(p: PoRowInput): string {
   return `raised ${p.raisedBy}${p.raisedByDesignation ? ` · ${p.raisedByDesignation}` : ""}`;
 }
 
-export function poScreenRow(p: PoRowInput, nowMs: number, showRate: boolean): ScreenRow {
+/**
+ * The two buttons the web's PO row carries, in its own words — "✓ PM approve"
+ * and "✓ Admin approve" — each with the remark the row sends with it.
+ */
+export function poRowActions(
+  p: { id: string; status: string },
+  can: { approvePm: boolean; approveAdmin: boolean },
+): RecordAction[] {
+  if (p.status === "PENDING_PM" && can.approvePm) {
+    return [{
+      key: "approvePm",
+      label: "✓ PM approve",
+      emphasis: "approve",
+      action: "material/purchase-orders/approvePoPm",
+      args: [p.id, "Approved from the purchase order list"],
+      remark: "none",
+      confirm: "It goes to the Admin for the second approval.",
+    }];
+  }
+  if (p.status === "PENDING_ADMIN" && can.approveAdmin) {
+    return [{
+      key: "approveAdmin",
+      label: "✓ Admin approve",
+      emphasis: "approve",
+      action: "material/purchase-orders/approvePoAdmin",
+      args: [p.id, "Approved from the purchase order list"],
+      remark: "none",
+      confirm: "The order is placed with the vendor and goods can be received against it.",
+    }];
+  }
+  return [];
+}
+
+export function poScreenRow(
+  p: PoRowInput,
+  nowMs: number,
+  showRate: boolean,
+  can: { approvePm: boolean; approveAdmin: boolean },
+): ScreenRow {
   const delivery = deliveryLabel(p.expectedDate, p.status, nowMs);
   const more = p.lineCount - 1;
 
@@ -62,6 +101,7 @@ export function poScreenRow(p: PoRowInput, nowMs: number, showRate: boolean): Sc
       label: PO_STATUS_LABEL[p.status] ?? p.status,
       tone: webTone(PO_STATUS_TONE[p.status] ?? "slate"),
     },
+    actions: poRowActions(p, can),
   };
 }
 

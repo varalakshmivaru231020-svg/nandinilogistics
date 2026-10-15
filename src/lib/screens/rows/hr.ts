@@ -1,6 +1,8 @@
 import "server-only";
 
+import type { RecordAction } from "@/lib/records/types";
 import type { ScreenRow } from "@/lib/screens/rows";
+import { asRowActions } from "@/lib/screens/rows/row-actions";
 
 export { ATTENDANCE_EMPTY, EMPLOYEE_EMPTY } from "@/lib/hr/list-display";
 
@@ -27,7 +29,11 @@ export interface EmployeeRowInput {
   status: string;
 }
 
-export function employeeScreenRow(e: EmployeeRowInput): ScreenRow {
+export function employeeScreenRow(
+  e: EmployeeRowInput,
+  /** The employee's own decisions — the web row shows them in short words. */
+  actions: RecordAction[] = [],
+): ScreenRow {
   const inactive = e.status !== "ACTIVE";
   return {
     id: e.id,
@@ -42,6 +48,15 @@ export function employeeScreenRow(e: EmployeeRowInput): ScreenRow {
       { label: "Aadhaar · PAN", value: `${e.aadhaar ?? "—"} · ${e.pan ?? "—"}` },
       { label: "Address", value: e.address ?? "—" },
     ],
+    /*
+     * The web row offers Activate only on somebody who is inactive — an active
+     * employee gets View instead — then Edit and Delete.
+     */
+    actions: asRowActions(actions, {
+      ...(inactive ? { status: "Activate" } : {}),
+      edit: "Edit",
+      delete: "Delete",
+    }),
   };
 }
 

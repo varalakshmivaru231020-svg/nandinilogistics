@@ -8,6 +8,61 @@ import type { AuthContext } from "@/lib/rbac/context";
 import { toneOf, words, type RecordAction, type RecordView } from "./shared";
 
 /**
+ * What may be done to an employee, decided once. The web's HR row carries the
+ * same three — Activate, Edit, Delete — so the row reads them from here.
+ */
+export function employeeDecisions(
+  e: { id: string; status: string },
+  can: { update: boolean; remove: boolean },
+): RecordAction[] {
+  const actions: RecordAction[] = [];
+
+  if (can.update) {
+    // Standing somebody down, or taking them back on. The web's own two
+    // states, with the reason it keeps on the record.
+    const toInactive = e.status === "ACTIVE";
+    actions.push({
+      key: "status",
+      label: toInactive ? "Mark inactive" : "Mark active",
+      emphasis: toInactive ? "reject" : "approve",
+      action: "hr/setEmployeeStatus",
+      args: [e.id, toInactive ? "INACTIVE" : "ACTIVE", "$reason"],
+      remark: "none",
+      fields: [
+        { name: "reason", label: "Reason", kind: "textarea", required: true, wide: true },
+      ],
+      confirm: toInactive
+        ? "They stop appearing on the attendance sheet."
+        : "They appear on the attendance sheet again.",
+    });
+    actions.push({
+      key: "edit",
+      label: "Edit employee",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "hr/employees:edit",
+      confirm: "The photograph and the identity copies are changed on the web.",
+    });
+  }
+
+  if (can.remove) {
+    actions.push({
+      key: "delete",
+      label: "Remove employee",
+      emphasis: "reject",
+      action: "hr/deleteEmployee",
+      args: [e.id],
+      remark: "none",
+      confirm: "Attendance already recorded against them stays on the report.",
+    });
+  }
+
+  return actions;
+}
+
+/**
  * One worker: who they are, and the last month of their attendance.
  *
  * Aadhaar and PAN are masked without `hr.employee.viewIdentity`, exactly as
@@ -35,51 +90,10 @@ export async function employeeRecord(ctx: AuthContext, id: string): Promise<Reco
   const canIdentity = ctx.has(PERM.hr.employee.viewIdentity);
   const canAttendance = ctx.has(PERM.hr.attendance.view);
 
-  const actions: RecordAction[] = [];
-  if (ctx.has(PERM.hr.employee.update)) {
-    // Standing somebody down, or taking them back on. The web's own two
-    // states, with the reason it keeps on the record.
-    const toInactive = employee.status === "ACTIVE";
-    actions.push({
-      key: "status",
-      label: toInactive ? "Mark inactive" : "Mark active",
-      emphasis: toInactive ? "reject" : "approve",
-      action: "hr/setEmployeeStatus",
-      args: [id, toInactive ? "INACTIVE" : "ACTIVE", "$reason"],
-      remark: "none",
-      fields: [
-        { name: "reason", label: "Reason", kind: "textarea", required: true, wide: true },
-      ],
-      confirm: toInactive
-        ? "They stop appearing on the attendance sheet."
-        : "They appear on the attendance sheet again.",
-    });
-  }
-
-  if (ctx.has(PERM.hr.employee.update)) {
-    actions.push({
-      key: "edit",
-      label: "Edit employee",
-      emphasis: "outline",
-      action: "",
-      args: [],
-      remark: "none",
-      form: "hr/employees:edit",
-      confirm: "The photograph and the identity copies are changed on the web.",
-    });
-  }
-
-  if (ctx.has(PERM.hr.employee.delete)) {
-    actions.push({
-      key: "delete",
-      label: "Remove employee",
-      emphasis: "reject",
-      action: "hr/deleteEmployee",
-      args: [id],
-      remark: "none",
-      confirm: "Attendance already recorded against them stays on the report.",
-    });
-  }
+  const actions = employeeDecisions(
+    { id, status: employee.status },
+    { update: ctx.has(PERM.hr.employee.update), remove: ctx.has(PERM.hr.employee.delete) },
+  );
 
   const present = employee.attendance.filter((a) => a.status === "PRESENT").length;
   const absent = employee.attendance.filter((a) => a.status === "ABSENT").length;

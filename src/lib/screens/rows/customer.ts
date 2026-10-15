@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { RecordAction } from "@/lib/records/types";
 import type { ScreenRow } from "@/lib/screens/rows";
 import { money } from "@/lib/utils";
 
@@ -23,7 +24,28 @@ export interface CustomerRowInput {
   bookings: Array<{ unitNumber: string; status: string; totalAmount: number }>;
 }
 
-export function customerScreenRow(c: CustomerRowInput, canViewKyc: boolean): ScreenRow {
+/** The one button the web's customer row carries, in its own words. */
+export function customerRowActions(
+  c: { id: string; kycVerified: boolean },
+  can: { verifyKyc: boolean },
+): RecordAction[] {
+  if (c.kycVerified || !can.verifyKyc) return [];
+  return [{
+    key: "verifyKyc",
+    label: "Verify KYC",
+    emphasis: "approve",
+    action: "sales/bookings/verifyKyc",
+    args: [c.id],
+    remark: "none",
+    confirm: "The identity documents have been seen and match. It is recorded against your name.",
+  }];
+}
+
+export function customerScreenRow(
+  c: CustomerRowInput,
+  canViewKyc: boolean,
+  can: { verifyKyc: boolean } = { verifyKyc: false },
+): ScreenRow {
   const booked = c.bookings
     .filter((b) => b.status !== "CANCELLED")
     .reduce((s, b) => s + b.totalAmount, 0);
@@ -46,5 +68,6 @@ export function customerScreenRow(c: CustomerRowInput, canViewKyc: boolean): Scr
     status: c.kycVerified
       ? { label: "Verified", tone: "good" }
       : { label: "Pending", tone: "warn" },
+    actions: customerRowActions(c, can),
   };
 }

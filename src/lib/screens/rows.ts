@@ -2,7 +2,7 @@ import "server-only";
 
 import type { StatFigure } from "@/lib/metrics/figures";
 import { webTone } from "@/lib/records/shared";
-import type { Tone } from "@/lib/records/types";
+import type { RecordAction, Tone } from "@/lib/records/types";
 
 /**
  * One row of a list, composed as the **web screen** composes it.
@@ -63,6 +63,17 @@ export interface ScreenRow {
   status?: { label: string; tone: Tone };
   /** The figure the web puts at the right-hand end. */
   trailing?: { value: string; label?: string };
+  /**
+   * The buttons the **web's own row** carries — approving a PO, acknowledging
+   * an issue, verifying KYC — in the row's own words.
+   *
+   * The same shape a record's actions have, so the app runs them through the
+   * same confirmation, collects the same fields and shows the same refusal.
+   * Each one is decided by the module's own `…Decisions` function, which the
+   * record screen asks as well, and `authorize()` checks again inside the
+   * action regardless.
+   */
+  actions?: RecordAction[];
 }
 
 /** A figure in the band, as `ModuleStats` draws one. */

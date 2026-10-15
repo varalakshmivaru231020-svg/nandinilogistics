@@ -414,7 +414,13 @@ suite("the mobile boundary", () => {
         if (!res.body.ok) continue; // a refusal, or a project it needs first
         const data = res.body.data as unknown as {
           rows: Array<Record<string, unknown>>;
-          screen?: { rows: Array<{ id?: string; title?: string }> };
+          screen?: {
+            rows: Array<{
+              id?: string;
+              title?: string;
+              actions?: Array<{ label?: string; action?: string; form?: string }>;
+            }>;
+          };
         };
         if (REPORTS.has(key)) continue;
         if (!data.screen) {
@@ -427,6 +433,17 @@ suite("the mobile boundary", () => {
         for (const [i, row] of data.screen.rows.entries()) {
           if (!row.id) flat.push(`${key}: row ${i} has no id, so it cannot open its record`);
           if (!row.title) flat.push(`${key}: row ${i} has no title`);
+          /*
+           * A button on a row has to be runnable: something to call, or a form
+           * to open. The web's row buttons are carried over this way, and one
+           * that arrived with neither would do nothing when pressed.
+           */
+          for (const a of row.actions ?? []) {
+            if (!a.label) flat.push(`${key}: row ${i} has a button with no label`);
+            if (!a.action && !a.form) {
+              flat.push(`${key}: row ${i} button “${a.label}” has neither an action nor a form`);
+            }
+          }
         }
       }
       expect(flat, flat.join("\n")).toEqual([]);

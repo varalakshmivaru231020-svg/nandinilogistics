@@ -59,6 +59,66 @@ class Act {
 
 enum RemarkMode { none, optional, required }
 
+/// The emphasis the server asked for, in the design's own words.
+Emphasis emphasisOf(String raw) => switch (raw) {
+      'approve' => Emphasis.approve,
+      'reject' => Emphasis.reject,
+      'outline' => Emphasis.outline,
+      _ => Emphasis.primary,
+    };
+
+/// Runs an action **exactly as the server described it**, whether it came from
+/// a record or from a list row.
+///
+/// One path for both, because the web's row buttons and its detail buttons call
+/// the same actions: an action carrying a `form` opens that form, anything else
+/// goes through the confirmation sheet, which collects the remark and whatever
+/// fields the action needs. Returns true when the server said it worked, so the
+/// caller can refresh.
+Future<bool> runServerAction(
+  BuildContext context,
+  Api api,
+  Map<String, dynamic> a, {
+  /// The record the action is about, for a form that wants its id.
+  String? recordId,
+  /// Pushes the form, where the action opens one. Left out, a form action is
+  /// refused rather than silently doing nothing.
+  Future<bool> Function(String formKey)? openForm,
+}) async {
+  final form = a['form'] as String?;
+  if (form != null && form.isNotEmpty) {
+    if (openForm == null) return false;
+    return openForm(form);
+  }
+
+  return confirmAndRun(
+    context,
+    api,
+    Act(
+      action: '${a["action"]}',
+      args: ((a['args'] as List?) ?? const []).cast<Object?>(),
+      label: '${a["label"]}',
+      title: '${a["label"]}',
+      explain: a['confirm'] as String?,
+      emphasis: emphasisOf('${a["emphasis"]}'),
+      remark: switch (a['remark']) {
+        'required' => RemarkMode.required,
+        'optional' => RemarkMode.optional,
+        _ => RemarkMode.none,
+      },
+      remarkLabel: (a['remarkLabel'] as String?) ?? 'Remark',
+      // Where the action needs more than a remark — a new finish date, the
+      // lines that arrived — the server sends the fields and the sheet
+      // collects them.
+      fields: ((a['fields'] as List?) ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map(FieldDef.from)
+          .toList(),
+      done: '${a["label"]} — done.',
+    ),
+  );
+}
+
 /// Puts the confirmation up, runs the action, and reports.
 ///
 /// Returns true only if the server said it worked, so a caller can refresh.

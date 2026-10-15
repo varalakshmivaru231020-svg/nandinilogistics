@@ -52,7 +52,7 @@ export async function GET(request: Request) {
           latitude: l.latitude === null ? null : Number(l.latitude),
           longitude: l.longitude === null ? null : Number(l.longitude),
           photoCount: Array.isArray(l.photoUrls) ? l.photoUrls.length : 0,
-        }),
+        }, { remove: ctx.has(PERM.project.progressLog.delete) }),
       ),
       empty: progressEmpty(Boolean(listParams.q || listParams.filters.projectId)),
     };

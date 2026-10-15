@@ -1,6 +1,8 @@
 import "server-only";
 
+import type { RecordAction } from "@/lib/records/types";
 import type { ScreenRow } from "@/lib/screens/rows";
+import { asRowActions } from "@/lib/screens/rows/row-actions";
 import { formatDateTime } from "@/lib/utils";
 
 export { siteVisitEmpty } from "@/lib/sales/site-visit-display";
@@ -30,6 +32,8 @@ export function siteVisitScreenRow(
   v: SiteVisitRowInput,
   nowMs: number,
   canViewContact: boolean,
+  /** The visit's own decisions — the web row says "Record outcome". */
+  actions: RecordAction[] = [],
 ): ScreenRow {
   const done = Boolean(v.visitedAt);
   const overdue = !done && new Date(v.scheduledAt).getTime() < nowMs;
@@ -57,5 +61,9 @@ export function siteVisitScreenRow(
       : overdue
         ? { status: { label: "Due", tone: "warn" as const } }
         : { status: { label: done ? "Completed" : "Scheduled", tone: done ? ("good" as const) : ("info" as const) } }),
+    actions: asRowActions(actions, {
+      complete: "Record outcome",
+      cancel: "Cancel visit",
+    }),
   };
 }

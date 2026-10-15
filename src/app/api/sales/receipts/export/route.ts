@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
 import { type ScreenShell } from "@/lib/screens/rows";
+import { receiptDecisions } from "@/lib/records/receipt";
 import { receiptEmpty, receiptScreenRow } from "@/lib/screens/rows/sales-rest";
 import { PERM } from "@/lib/permissions/codes";
 import { projectScopeFilter } from "@/lib/rbac/context";
@@ -64,7 +65,18 @@ export async function GET(request: Request) {
           clearedAt: r.clearedAt,
           bouncedAt: r.bouncedAt,
           bounceReason: r.bounceReason,
-        }),
+        },
+        receiptDecisions(
+          {
+            id: r.id,
+            mode: r.mode,
+            receiptDate: r.receiptDate,
+            amount: Number(r.amount),
+            clearedAt: r.clearedAt,
+            bouncedAt: r.bouncedAt,
+          },
+          { clear: ctx.has(PERM.sales.receipt.clear) },
+        )),
       ),
       empty: receiptEmpty(
         Boolean(params.q || params.mode || params.status || params.project || params.from || params.to),

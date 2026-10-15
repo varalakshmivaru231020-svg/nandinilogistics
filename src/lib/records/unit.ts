@@ -9,6 +9,86 @@ import { qty } from "@/lib/utils";
 import { money, toneOf, words, type RecordAction, type RecordView } from "./shared";
 
 /**
+ * The three things the web's unit row offers — Edit, Block or Unblock, and
+ * Delete — decided once, so the row and the record agree about which of them a
+ * flat with a hold or a booking on it still allows.
+ */
+export function unitDecisions(
+  u: { id: string; status: string; holds: number; bookings: number },
+  can: { update: boolean; remove: boolean; changeStatus: boolean },
+): RecordAction[] {
+  const blocked = u.status === "BLOCKED";
+  const actions: RecordAction[] = [];
+
+  if (can.update) {
+    actions.push({
+      key: "edit",
+      label: "Edit unit",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "units:edit",
+      confirm: "A unit cannot move to another project or block.",
+    });
+  }
+
+  // Only a flat nothing has happened to.
+  if (u.status === "AVAILABLE" && u.bookings === 0 && u.holds === 0 && can.remove) {
+    actions.push({
+      key: "delete",
+      label: "Delete unit",
+      emphasis: "reject",
+      action: "units/deleteUnit",
+      args: [u.id],
+      remark: "none",
+      confirm: "Only a flat with no hold, booking or cost sheet on it can go.",
+    });
+  }
+
+  if (can.changeStatus && (u.status === "AVAILABLE" || blocked)) {
+    // The web's own two words, and the reason it insists on when blocking.
+    actions.push(
+      blocked
+        ? {
+            key: "unblock",
+            label: "Unblock unit",
+            emphasis: "primary",
+            action: "units/changeUnitStatus",
+            args: [u.id, u.status, "AVAILABLE", "$reason"],
+            remark: "none",
+            fields: [
+              { name: "reason", label: "Note", kind: "textarea", placeholder: "Optional", wide: true },
+            ],
+            confirm: "The unit goes back on sale as Available.",
+          }
+        : {
+            key: "block",
+            label: "Block unit",
+            emphasis: "reject",
+            action: "units/changeUnitStatus",
+            args: [u.id, u.status, "BLOCKED", "$reason"],
+            remark: "none",
+            fields: [
+              {
+                name: "reason",
+                label: "Reason",
+                kind: "textarea",
+                required: true,
+                placeholder: "e.g. Reserved for the landowner's share",
+                wide: true,
+              },
+            ],
+            confirm:
+              "A blocked unit is held back from sale: it cannot be held or booked until it is unblocked.",
+          },
+    );
+  }
+
+  return actions;
+}
+
+/**
  * One flat: where it is, what it is, and whether it can be sold.
  *
  * Blocking is the action that belongs on a phone — a unit held back from sale
@@ -49,80 +129,21 @@ export async function unitRecord(ctx: AuthContext, id: string): Promise<RecordVi
 
   // The areas and the price sit behind the same permission the board uses.
   const canArea = ctx.has(PERM.unit.unit.viewPrice);
-  const blocked = unit.status === "BLOCKED";
   const activeHold = unit.holds.find((h) => h.isActive);
 
-  const actions: RecordAction[] = [];
-
-  if (ctx.has(PERM.unit.unit.update)) {
-    actions.push({
-      key: "edit",
-      label: "Edit unit",
-      emphasis: "outline",
-      action: "",
-      args: [],
-      remark: "none",
-      form: "units:edit",
-      confirm: "A unit cannot move to another project or block.",
-    });
-  }
-
-  // Only a flat nothing has happened to.
-  if (
-    unit.status === "AVAILABLE" &&
-    unit.bookings.length === 0 &&
-    unit.holds.length === 0 &&
-    ctx.has(PERM.unit.unit.delete)
-  ) {
-    actions.push({
-      key: "delete",
-      label: "Delete unit",
-      emphasis: "reject",
-      action: "units/deleteUnit",
-      args: [id],
-      remark: "none",
-      confirm: "Only a flat with no hold, booking or cost sheet on it can go.",
-    });
-  }
-
-  if (ctx.has(PERM.unit.unit.changeStatus) && (unit.status === "AVAILABLE" || blocked)) {
-    // The web's own two words, and the reason it insists on when blocking.
-    actions.push(
-      blocked
-        ? {
-            key: "unblock",
-            label: "Unblock unit",
-            emphasis: "primary",
-            action: "units/changeUnitStatus",
-            args: [id, unit.status, "AVAILABLE", "$reason"],
-            remark: "none",
-            fields: [
-              { name: "reason", label: "Note", kind: "textarea", placeholder: "Optional", wide: true },
-            ],
-            confirm: "The unit goes back on sale as Available.",
-          }
-        : {
-            key: "block",
-            label: "Block unit",
-            emphasis: "reject",
-            action: "units/changeUnitStatus",
-            args: [id, unit.status, "BLOCKED", "$reason"],
-            remark: "none",
-            fields: [
-              {
-                name: "reason",
-                label: "Reason",
-                kind: "textarea",
-                required: true,
-                placeholder: "e.g. Reserved for the landowner's share",
-                wide: true,
-              },
-            ],
-            confirm:
-              "A blocked unit is held back from sale: it cannot be held or booked until it is unblocked.",
-          },
-    );
-  }
+  const actions = unitDecisions(
+    {
+      id,
+      status: unit.status,
+      holds: unit.holds.length,
+      bookings: unit.bookings.length,
+    },
+    {
+      update: ctx.has(PERM.unit.unit.update),
+      remove: ctx.has(PERM.unit.unit.delete),
+      changeStatus: ctx.has(PERM.unit.unit.changeStatus),
+    },
+  );
 
   /*
    * Quoting the flat. Every line comes from a charge head in the master and a
