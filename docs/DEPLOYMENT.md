@@ -10,6 +10,54 @@ advisory.
 
 ## Last release
 
+`c89a39d` · 15 Oct 2026 · 2 commits, from `df28f1b`. Every item below was run.
+
+| | |
+|---|---|
+| Rolled forward from | `df28f1b` |
+| Backup taken first | `nninfra-20261015-093705.dump` — 424K, 107 tables, `pg_restore --list` readable |
+| Migrations | no pending |
+| Permission catalogue | 564 codes, 0 created |
+| Role grants | 1524 → 1524 (nothing new this release) |
+| Code gate | 1522 unit tests, 405 over HTTP, 84 on the phone, `flutter analyze` clean, `pnpm build` clean |
+| Health | `==> Healthy (HTTP 200)` |
+| Lists on the phone | **28 of 30 send the web's own composed row as the Owner; 0 flat, 0 broken** — and across six roles, every refusal a permission. The two are `tasks/reports`, which is a report, and the schedule, which wants a project first |
+| Android client | `app-release.apk`, 50.2 MB, **built from clean**. `http://168.231.103.114:3021` and `ServerRowCard` found inside `lib/arm64-v8a/libapp.so`; `moduleSpecs` — deleted this release — absent, which is how a stale build is caught |
+
+**What it put live:** the list screens. Records and forms were already the
+web's; every **list** was still the app's own — its title, its subtitle, its
+status word, its filters, its three figures and a detail sheet of its own, all
+hand-written in `mobile/lib/modules/spec.dart`, 1,213 lines of a second guess
+at thirty screens. That file is deleted. `src/lib/screens/rows/` now composes
+each row the way its own web screen composes it, from the web's own label maps,
+tone maps and arithmetic, and the pages import those back.
+
+Four drifts fell out of reading the screens rather than trusting the app:
+
+- the lead list writes **"Site Visit"** where the export file writes "Site
+  visit planned";
+- the project list writes **"Planned"** and **"Ongoing"** where
+  `PROJECT_STATUS_LABEL` says "Planning" and "Active";
+- a vendor on hold reads **"On hold"**, and read "INACTIVE" on the phone;
+- **Item Master is not the stock export** — the screen is one row per item
+  across every store the filter allows, narrowed by a stock state no column
+  carries, and the file is one row per store balance.
+
+The band is now the web's own figures, read over every row in scope rather than
+the fifty on screen, and the empty state and the `ListNote` are the screen's own
+sentences.
+
+**Found while verifying this release:** `flutter build apk --release` **reused a
+cached build** — 13 seconds against the 47 a real one takes — and the APK still
+contained `moduleSpecs`, a symbol from the file deleted in this very commit. So
+part of what had been handed out was the old app with a new version number.
+`flutter clean` is now F0, and F4's note says to grep for something removed as
+well as something added.
+
+---
+
+## Release before this one
+
 `419d635` · 15 Oct 2026 · 8 commits, from `2b5b14c`. Every item below was run.
 
 | | |
@@ -60,7 +108,7 @@ screen does not exist either.
 
 ---
 
-## Release before this one
+## Release before that
 
 `2b5b14c` · 15 Oct 2026 · 8 commits, from `4de280e`. Every item below was run.
 
@@ -97,28 +145,6 @@ Manager holds `project.view` and none of the five project-tab permissions, so
 the project record came back as a header with nothing under it. Fixed in
 `2b5b14c` and redeployed — it now says which door is shut. The Owner could
 never have seen it, which is what E5 is for.
-
----
-
-## Release before that
-
-`5b506b2` · 14 Oct 2026. Every item below was run.
-
-| | |
-|---|---|
-| Rolled forward from | `1901da4` |
-| Backup taken first | `nninfra-20261014-055913.dump` — 420K, 107 tables |
-| Permission catalogue | 564 codes, 0 created |
-| Role grants | 1524 → 1524 (nothing new this release) |
-| Health | `==> Healthy (HTTP 200)` |
-| Modules on the phone | **31 of 31**, verified on production as three users: Owner 31 answered, Vikas 30 with 1 refused, Supervisor 13 with 18 refused — **0 broken** |
-
-**What it put live:** the Android client's whole surface. The leads list route,
-which was the one still writing its own files and so could not answer JSON at
-all; the schedule list, which now takes its project from the `X-Project` header
-and answers a `project-required` code rather than a plain-text 400; and the
-`decide` instruction on approvals and indents, which is how the app knows which
-action settles a record without reading a status string and guessing.
 
 ---
 
@@ -286,6 +312,7 @@ from here.
 
 | # | Check | Command |
 |---|---|---|
+| F0 | **Built from clean** | `cd mobile && flutter clean && flutter pub get` |
 | F1 | Analyzer clean | `cd mobile && flutter analyze` |
 | F2 | Tests pass, including the usability suite | `cd mobile && flutter test` |
 | F3 | Built against the **real** host, not an emulator's loopback | `flutter build apk --release --split-per-abi --dart-define=NN_BASE_URL=https://<host>` |
@@ -295,6 +322,22 @@ from here.
 **F4 is the one that bites.** The server address is baked in at build time.
 There is no setting to correct it afterwards and no error that explains it — the
 app simply cannot reach anything, and looks broken rather than misconfigured.
+
+**F0 is the one that lies.** A release build reuses what Gradle and the Dart
+snapshot already have, and an incremental release took 13 seconds where a real
+one takes 47. The APK built that way still carried `moduleSpecs` — a symbol from
+a file that had been **deleted** — so it was partly the old app wearing the new
+version number, and the only way to see that is to look inside:
+
+```bash
+unzip -p app-release.apk lib/arm64-v8a/libapp.so > /tmp/libapp.so
+strings /tmp/libapp.so | grep -c "<something you added>"   # must be ≥ 1
+strings /tmp/libapp.so | grep -c "<something you deleted>" # must be 0
+```
+
+Grep for something **removed** as well as something added. A stale build passes
+the first check and fails the second, which is exactly the case that looks like
+"nothing I changed shows up".
 
 ---
 
