@@ -6,6 +6,7 @@ import '../modules/approvals.dart';
 import '../modules/calendar.dart';
 import '../modules/dashboard.dart';
 import '../modules/module_screen.dart';
+import '../modules/notifications.dart';
 import 'api.dart';
 import 'nav.dart';
 import 'session.dart';
@@ -54,6 +55,18 @@ class HomeState extends State<Home> {
     _session = widget.session;
     widget.api.projectId = _session.projectId;
     _loadNav();
+    _countUnread();
+  }
+
+  /// The bell's count, read once when home opens — the web's shell counts it
+  /// on every page, so it cannot wait until somebody visits the screen.
+  Future<void> _countUnread() async {
+    final res = await widget.api.get('/notifications');
+    if (!mounted || !res.ok) return;
+    final n = (res.data!['unread'] as num?)?.toInt() ?? 0;
+    if (_badges['/notifications'] != n) {
+      setState(() => _badges['/notifications'] = n);
+    }
   }
 
   Future<void> _loadNav() async {
@@ -156,6 +169,17 @@ class HomeState extends State<Home> {
             if (_badges['/approvals'] != n) setState(() => _badges['/approvals'] = n);
           },
         );
+      case '/notifications':
+        return NotificationsScreen(
+          api: widget.api,
+          bottom: _bottom,
+          onBack: () => _open('/dashboard'),
+          onCount: (n) {
+            if (_badges['/notifications'] != n) {
+              setState(() => _badges['/notifications'] = n);
+            }
+          },
+        );
       case '/calendar':
         return CalendarScreen(
           api: widget.api,
@@ -183,6 +207,8 @@ class HomeState extends State<Home> {
           session: _session,
           bottom: _bottom,
           onMenu: () => _drawer.currentState?.openDrawer(),
+          onNotifications: () => _open('/notifications'),
+          unread: _badges['/notifications'],
           onOpen: (moduleKey) {
             final href = hrefToModule.entries
                 .where((e) => e.value == moduleKey)

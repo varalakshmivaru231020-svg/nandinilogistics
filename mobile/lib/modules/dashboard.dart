@@ -17,6 +17,8 @@ class DashboardScreen extends StatefulWidget {
     required this.api,
     required this.session,
     required this.onMenu,
+    required this.onNotifications,
+    this.unread,
     required this.onOpen,
     required this.bottom,
     this.onApprovalCount,
@@ -25,6 +27,12 @@ class DashboardScreen extends StatefulWidget {
   final Api api;
   final Session session;
   final VoidCallback onMenu;
+
+  /// The bell, as the web carries one in its top bar.
+  final VoidCallback onNotifications;
+
+  /// How many are unread, for the dot on it.
+  final int? unread;
   final void Function(String moduleKey) onOpen;
   final Widget bottom;
   final void Function(int)? onApprovalCount;
@@ -160,6 +168,14 @@ class DashboardScreenState extends State<DashboardScreen> {
           subtitle: s.project?.label ?? 'All projects',
           onMenu: widget.onMenu,
           actions: [
+            // The web carries a bell in its top bar, on every screen, with the
+            // unread count on it. Home is where it goes here.
+            BarButton(
+              icon: Icons.notifications_none_rounded,
+              label: 'Notifications',
+              dot: (widget.unread ?? 0) > 0,
+              onTap: widget.onNotifications,
+            ),
             BarButton(icon: Icons.refresh_rounded, label: 'Reload', onTap: _load),
           ],
         ),

@@ -146,8 +146,6 @@ export const PARITY: Record<string, ParityExemption> = {
 
 
 
-  "notifications/markNotificationRead": { reason: "todo", note: "The app has no notifications screen, and the boundary has no endpoint for them." },
-  "notifications/markAllNotificationsRead": { reason: "todo", note: "The same screen." },
 
   "schedule/addMainCategory": { reason: "todo", note: "Building the programme." },
   "schedule/addSubActivity": { reason: "todo", note: "Building the programme." },
