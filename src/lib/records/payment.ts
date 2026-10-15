@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { assertProjectAccess } from "@/lib/rbac/guard";
 import type { AuthContext } from "@/lib/rbac/context";
 
-import { money, toneOf, words, type RecordView } from "./shared";
+import { toneOf, words, type RecordView } from "./shared";
 
 /**
  * One payment to a vendor, and the invoice it settled.

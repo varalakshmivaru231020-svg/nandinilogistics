@@ -34,7 +34,11 @@ export async function resolveForm(
   if (!def) return "unknown-form";
   if (!ctx.has(def.permission)) return "forbidden";
 
-  const { permission: _permission, when, dynamic, fields, ...rest } = def;
+  // The permission, the viewer-dependent half and the raw fields all stay on
+  // the server; what is left is what the client is sent.
+  const { when, dynamic, fields, ...withPermission } = def;
+  const { permission, ...rest } = withPermission;
+  void permission;
 
   // The fuller form, for somebody who may do the fuller thing.
   const upgrade = when && ctx.has(when.permission)

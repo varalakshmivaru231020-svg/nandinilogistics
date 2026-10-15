@@ -98,6 +98,20 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
     }
   }
 
+  /*
+   * The five tabs the web draws, each behind its own permission. Somebody may
+   * hold `project.view` and none of them — the Store Manager does — and the
+   * web then draws the header with no tab under it. A phone screen with
+   * nothing under the header reads as broken, so it says which door is shut.
+   */
+  const noTabs = ![
+    PERM.project.project.tabOverview,
+    PERM.project.project.tabWbs,
+    PERM.project.project.tabTeam,
+    PERM.project.project.tabDocuments,
+    PERM.project.project.tabProgress,
+  ].some((code) => ctx.has(code));
+
   const packages = project.phases.flatMap((p) => p.workPackages);
   const progressPct = packages.length
     ? Math.round(packages.reduce((s, w) => s + w.progressPct, 0) / packages.length)
@@ -114,7 +128,21 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
       { label: STATUS_LABEL[project.status] ?? project.status, tone: toneOf(project.status) },
       ...(packages.length ? [{ label: `${progressPct}% done`, tone: "info" as const }] : []),
     ],
-    sections: ctx.has(PERM.project.project.tabOverview)
+    sections: noTabs
+      ? [
+          {
+            label: "This project",
+            fields: [
+              {
+                label: "What you can see",
+                value:
+                  "You may see that this project exists, but none of its tabs — overview, tasks, team mapping, documents or site progress — are open to you.",
+                wide: true,
+              },
+            ],
+          },
+        ]
+      : ctx.has(PERM.project.project.tabOverview)
       ? [
           {
             label: "Overview",
