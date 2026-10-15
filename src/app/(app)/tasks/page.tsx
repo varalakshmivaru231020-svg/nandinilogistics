@@ -1,6 +1,7 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { stageOf } from "@/lib/tasks/list-display";
 import { scoreTasks } from "@/lib/tasks/performance";
 import { readTaskListParams, taskListWhere } from "@/lib/tasks/list-filters";
 import { TasksScreen } from "./tasks-screen";
@@ -21,26 +22,6 @@ export const metadata = { title: "Task Management" };
  * the status a person means when they ask for one, so it is what the status
  * column shows. The name of whoever is holding it goes beside the task.
  */
-function stageOf(t: {
-  status: string;
-  round: number;
-  levels: Array<{ kind: string; level: number; user: { name: string }; actions: Array<{ round: number }> }>;
-}): { label: string; who: string } | null {
-  const kind = t.status === "UNDER_REVIEW" ? "REVIEW" : t.status === "UNDER_APPROVAL" ? "APPROVAL" : null;
-  if (!kind) return null;
-  const done = new Set(
-    t.levels.filter((l) => l.kind === kind && l.actions.some((a) => a.round === t.round)).map((l) => l.level),
-  );
-  const next = t.levels
-    .filter((l) => l.kind === kind && !done.has(l.level))
-    .sort((a, b) => a.level - b.level)[0];
-  if (!next) return null;
-  return {
-    label: `Under ${kind === "REVIEW" ? "review" : "approval"} L${next.level}`,
-    who: next.user.name,
-  };
-}
-
 export default async function TasksPage({
   searchParams,
 }: {

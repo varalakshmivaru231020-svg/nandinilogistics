@@ -35,6 +35,29 @@ class ServerRow {
   final RowChip? status;
   final RowTrailing? trailing;
 
+  /// A row the list did not compose — a report's row, read off its columns the
+  /// way the web's own report table reads it: the first column is the heading,
+  /// the rest are labelled lines.
+  static ServerRow fromColumns(
+    List<Map<String, dynamic>> columns,
+    Map<String, dynamic> row,
+  ) {
+    final cells = [
+      for (final c in columns)
+        (
+          label: '${c["header"] ?? c["key"] ?? ""}',
+          value: row['${c["key"]}'] == null ? '' : '${row["${c["key"]}"]}',
+        ),
+    ].where((c) => c.value.isNotEmpty).toList();
+    return ServerRow(
+      id: '${row["id"] ?? ""}',
+      title: cells.isEmpty ? '—' : cells.first.value,
+      lines: [
+        for (final c in cells.skip(1)) RowLine(label: c.label, value: c.value),
+      ],
+    );
+  }
+
   static ServerRow from(Map<String, dynamic> d) => ServerRow(
         id: '${d["id"] ?? ""}',
         title: (d['title'] as String?) ?? '',

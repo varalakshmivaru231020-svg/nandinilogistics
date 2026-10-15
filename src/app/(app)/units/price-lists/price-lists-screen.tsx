@@ -8,6 +8,7 @@ import { ExportMenu } from "@/components/export/export-menu";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, Field, Input, Select } from "@/components/ui/primitives";
+import { priceListEmpty } from "@/lib/units/price-list-display";
 import { formatDate, money } from "@/lib/utils";
 import { activatePriceListAction, createPriceListAction } from "./actions";
 
@@ -69,8 +70,8 @@ export function PriceListsScreen({
         <Card>
           <EmptyState
             icon={<Tags className="h-8 w-8" />}
-            title="No price lists yet"
-            description="A cost sheet cannot be generated until a project has an active price list."
+            title={priceListEmpty().title}
+            description={priceListEmpty().description}
           />
         </Card>
       ) : (

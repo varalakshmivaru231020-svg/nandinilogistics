@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
-import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { priceListScreenRow } from "@/lib/screens/rows/unit";
+import { priceListEmpty } from "@/lib/units/price-list-display";
 import { PERM } from "@/lib/permissions/codes";
 import { projectScopeFilter } from "@/lib/rbac/context";
 
@@ -26,8 +29,32 @@ export async function GET(request: Request) {
   });
   const { rows: rowsIn, note } = capRows(lists);
 
+  /* The screen, for the app: the version row the web draws, with its rates. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rowsIn.length);
+    screen = {
+      rows: rowsIn.slice(from, to).map((l) =>
+        priceListScreenRow({
+          id: l.id,
+          name: l.name,
+          version: l.version,
+          isActive: l.isActive,
+          projectCode: l.project.code,
+          effectiveFrom: l.effectiveFrom,
+          effectiveTo: l.effectiveTo,
+          baseRate: l.items[0] ? Number(l.items[0].baseRate) : 0,
+          floorRise: l.items[0] ? Number(l.items[0].floorRise) : 0,
+          plcAmount: l.items[0] ? Number(l.items[0].plcAmount) : 0,
+        }),
+      ),
+      empty: priceListEmpty(),
+    };
+  }
+
   return exportResponse({
     ...gate,
+    screen,
     title: "Price Lists",
     entity: "PriceList",
     filters: ctx.canAccessAllProjects ? "All projects" : "Projects mapped to you",

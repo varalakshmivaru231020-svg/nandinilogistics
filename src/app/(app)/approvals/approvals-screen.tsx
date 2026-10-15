@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Alert, Card, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { approvalEmpty } from "@/lib/approvals/list-display";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
@@ -129,13 +130,13 @@ export function ApprovalsScreen({ rows, nowMs }: { rows: ApprovalRow[]; nowMs: n
       {rows.length === 0 ? (
         <Card>
           <EmptyState
-            title="Nothing is waiting on you"
-            description="Indents, purchase orders, extensions, invoices, returns and transfers appear here the moment they need a decision."
+            title={approvalEmpty(false).title}
+            description={approvalEmpty(false).description}
           />
         </Card>
       ) : shown.length === 0 ? (
         <Card>
-          <EmptyState title="Nothing matches" description="No approval matches that filter or search." />
+          <EmptyState title={approvalEmpty(true).title} description={approvalEmpty(true).description} />
         </Card>
       ) : (
         <div className="overflow-hidden rounded-[13px] border border-line-400 bg-white">

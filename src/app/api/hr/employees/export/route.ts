@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
-import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { employeeFigures } from "@/lib/metrics/figures";
+import { bandOf, type ScreenShell } from "@/lib/screens/rows";
+import { EMPLOYEE_EMPTY, employeeScreenRow } from "@/lib/screens/rows/hr";
 import { describeEmployeeFilters, employeeListWhere, maskId, readEmployeeListParams } from "@/lib/hr/list-filters";
 import { PERM } from "@/lib/permissions/codes";
 
@@ -38,6 +41,45 @@ export async function GET(request: Request) {
   ]);
   const { rows, note } = capRows(employees);
 
+  /* The screen, for the app: the Employees tab's row, with identity numbers
+   * masked exactly as the file masks them, and the band the web opens with. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    /*
+     * The band the web opens with — including who has not been marked today,
+     * which is the figure a supervisor acts on. Today, because the Employees
+     * tab has no date of its own.
+     */
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const statRows = await prisma.employee.findMany({
+      select: {
+        status: true,
+        attendance: { where: { attendanceOn: today }, select: { status: true, overtimeHours: true } },
+      },
+    });
+    screen = {
+      rows: rows.slice(from, to).map((e) =>
+        employeeScreenRow({
+          id: e.id,
+          name: e.name,
+          code: e.employeeCode,
+          mobile: e.mobile,
+          altContact: e.altContact,
+          designation: e.designation?.name ?? null,
+          employmentType: e.employmentType.name,
+          aadhaar: canIdentity ? e.aadhaar : maskId(e.aadhaar),
+          pan: canIdentity ? e.pan : maskId(e.pan),
+          address: e.address,
+          status: e.status,
+        }),
+      ),
+      band: bandOf(employeeFigures(statRows)),
+      empty: EMPLOYEE_EMPTY,
+    };
+  }
+
   const filters = describeEmployeeFilters(listParams, {
     type: type?.name ?? null,
     designation: designation?.name ?? null,
@@ -45,6 +87,7 @@ export async function GET(request: Request) {
 
   return exportResponse({
     ...gate,
+    screen,
     title: "Employees",
     entity: "Employee",
     filters,

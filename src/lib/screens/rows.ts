@@ -10,9 +10,9 @@ import type { Tone } from "@/lib/records/types";
  * A list endpoint is its export route, and an export is a flat table of text:
  * fifteen columns for a lead, none of which is the stage badge the screen
  * draws, the source chip beside the name, or the "3 days overdue" marker. The
- * Android client was left to guess, and `mobile/lib/modules/spec.dart` is what
+ * Android client was left to guess, and `mobile/lib/modules/spec.dart` was what
  * that guess looked like — its own titles, its own subtitles, its own status
- * words and its own idea of which figures belong in the band.
+ * words and its own idea of which figures belong in the band. It is deleted.
  *
  * So the row travels composed. Every builder in `src/lib/screens/rows/` reads
  * the web's own card or table cell and uses the web's own label maps, tone maps

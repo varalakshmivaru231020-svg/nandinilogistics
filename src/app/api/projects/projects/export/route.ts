@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
-import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { projectFigures } from "@/lib/metrics/figures";
+import { bandOf, type ScreenShell } from "@/lib/screens/rows";
+import { projectEmpty, projectScreenRow } from "@/lib/screens/rows/exec";
 import { PERM } from "@/lib/permissions/codes";
 import {
   describeProjectFilters, PROJECT_STATUS_LABEL, projectListWhere, readProjectListParams,
@@ -36,6 +39,73 @@ export async function GET(request: Request) {
   });
   const { rows, note } = capRows(projects);
 
+  /*
+   * The screen, for the app: the table's own row, whose progress is the share
+   * of its activities that are complete — the screen's reading, not the
+   * activity percentages the file averages — and the band the web opens with.
+   */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const nowMs = new Date().getTime();
+    const { from, to } = listWindow(gate.params, rows.length);
+    const window = rows.slice(from, to);
+    const [states, statRows] = await Promise.all([
+      prisma.project.findMany({
+        where: { id: { in: window.map((p) => p.id) } },
+        select: { id: true, activities: { select: { status: true } } },
+      }),
+      prisma.project.findMany({
+        where: projectListWhere(ctx, {
+          ...listParams, q: "", status: "", type: "", city: "", manager: "",
+        }),
+        select: {
+          status: true, targetDate: true, actualEndDate: true,
+          _count: { select: { units: true } },
+          activities: { select: { status: true } },
+        },
+      }),
+    ]);
+    const byId = new Map(states.map((p) => [p.id, p.activities]));
+    screen = {
+      rows: window.map((p) => {
+        const acts = byId.get(p.id) ?? [];
+        return projectScreenRow({
+          id: p.id,
+          name: p.name,
+          code: p.code,
+          city: p.city?.name ?? null,
+          projectType: p.projectType?.name ?? null,
+          reraNumber: p.reraNumber,
+          totalTowers: p.totalTowers,
+          totalFloors: p.totalFloors,
+          units: p._count.units,
+          projectManager: p.projectManager?.name ?? null,
+          status: p.status,
+          activitiesDone: acts.filter((a) => a.status === "COMPLETED").length,
+          activitiesTotal: acts.length,
+        });
+      }),
+      band: bandOf(
+        projectFigures(
+          statRows.map((p) => ({
+            status: p.status,
+            targetDate: p.targetDate,
+            actualEndDate: p.actualEndDate,
+            units: p._count.units,
+            activities: p.activities,
+          })),
+          nowMs,
+        ),
+      ),
+      empty: projectEmpty(
+        Boolean(
+          listParams.q || listParams.status || listParams.type || listParams.city ||
+            listParams.manager,
+        ),
+      ),
+    };
+  }
+
   const columns: ReportColumn[] = [
     { key: "code", header: "Project code" },
     { key: "name", header: "Project" },
@@ -57,6 +127,7 @@ export async function GET(request: Request) {
 
   return exportResponse({
     ...gate,
+    screen,
     title: "Projects",
     entity: "Project",
     filters: describeProjectFilters(listParams, ctx),

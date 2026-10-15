@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../core/act.dart';
 import '../core/api.dart';
 import '../core/nav.dart';
 import '../core/row.dart';
@@ -9,20 +8,22 @@ import '../design/components.dart';
 import '../design/tokens.dart';
 import 'form_screen.dart';
 import 'record_screen.dart';
-import 'spec.dart';
 
 /// A module's list, drawn to the pattern the canvas sets for one.
 ///
 /// The canvas draws this list once — on Indents — and reuses it, with the band,
-/// the chips, the row and the actions changing per module. So the pattern is
-/// here and the specifics are in `spec.dart`, written out module by module to
-/// match the web panel's own filters and figures.
+/// the chips, the row and the actions changing per module. The pattern is here;
+/// **the specifics are the web's**, sent by `/screen/<key>` and `/list/<key>`.
+///
+/// It used to be the other way round: `spec.dart` held a hand-written idea of
+/// every list — its title, its row, its figures, its filters — and the two
+/// drifted the moment the web changed a word.
 class ModuleScreen extends StatefulWidget {
   const ModuleScreen({
     super.key,
     required this.api,
     required this.session,
-    required this.spec,
+    required this.moduleKey,
     required this.onBack,
     required this.bottom,
     required this.onPickProject,
@@ -31,7 +32,11 @@ class ModuleScreen extends StatefulWidget {
 
   final Api api;
   final Session session;
-  final ModuleSpec spec;
+
+  /// The list's key, which is also the module key. Everything else about the
+  /// screen — its title, its placeholder, its filters, its rows, its band —
+  /// comes from the server.
+  final String moduleKey;
   final VoidCallback onBack;
   final Widget bottom;
 
@@ -71,7 +76,7 @@ class ModuleScreenState extends State<ModuleScreen> {
   @override
   void didUpdateWidget(ModuleScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.spec.key != widget.spec.key) {
+    if (oldWidget.moduleKey != widget.moduleKey) {
       _query.clear();
       _search.clear();
       _searching = false;
@@ -101,13 +106,13 @@ class ModuleScreenState extends State<ModuleScreen> {
     });
 
     // The descriptor once per screen; the rows on every refresh.
-    if (_screen == null || _screen!.key != widget.spec.key) {
-      final d = await widget.api.get('/screen/${widget.spec.key}');
+    if (_screen == null || _screen!.key != widget.moduleKey) {
+      final d = await widget.api.get('/screen/${widget.moduleKey}');
       if (!mounted) return;
       if (d.ok) _screen = ScreenDef.from(d.data!);
     }
 
-    final res = await widget.api.get('/list/${widget.spec.key}', query: {
+    final res = await widget.api.get('/list/${widget.moduleKey}', query: {
       ..._query,
       'page': '1',
       'pageSize': '$_pageSize',
@@ -135,7 +140,7 @@ class ModuleScreenState extends State<ModuleScreen> {
     setState(() => _loadingMore = true);
 
     final next = (_page!.page ?? 1) + 1;
-    final res = await widget.api.get('/list/${widget.spec.key}', query: {
+    final res = await widget.api.get('/list/${widget.moduleKey}', query: {
       ..._query,
       'page': '$next',
       'pageSize': '$_pageSize',
@@ -189,10 +194,10 @@ class ModuleScreenState extends State<ModuleScreen> {
   }
 
   void _openRelated() {
-    final related = relatedScreens[widget.spec.key] ?? const [];
+    final related = relatedScreens[widget.moduleKey] ?? const [];
     sheet<void>(
       context,
-      title: 'More in ${_screen?.title ?? widget.spec.title}',
+      title: 'More in ${_screen?.title ?? widget.moduleKey}',
       explain: 'The web reaches these from inside this screen rather than from '
           'the menu, so they are here rather than in the drawer.',
       body: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -215,29 +220,14 @@ class ModuleScreenState extends State<ModuleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final spec = widget.spec;
     final rows = _rows;
     final now = _page?.serverTime ?? DateTime.now().millisecondsSinceEpoch;
 
     return Scaffold(
       backgroundColor: T.page,
-      floatingActionButton: spec.createLabel == null
-          ? null
-          : Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: FloatingActionButton(
-                onPressed: () => notify(context,
-                    '${spec.createLabel} needs its form, which is built per module after the lists.'),
-                backgroundColor: T.brand500,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                tooltip: spec.createLabel,
-                child: const Icon(Icons.add_rounded, size: 26, color: Colors.white),
-              ),
-            ),
       body: Column(children: [
         Bar(
-          title: _screen?.title ?? spec.title,
+          title: _screen?.title ?? '',
           subtitle: _loading
               ? 'Loading…'
               // "12 indents", in the web's own noun — not "12 records".
@@ -253,7 +243,7 @@ class ModuleScreenState extends State<ModuleScreen> {
                 label: _screen!.forms.length == 1 ? _screen!.forms.first.title : 'New',
                 onTap: _create,
               ),
-            if (relatedScreens[spec.key] != null)
+            if (relatedScreens[widget.moduleKey] != null)
               BarButton(
                 icon: Icons.more_vert_rounded,
                 label: 'Related screens',
@@ -270,7 +260,7 @@ class ModuleScreenState extends State<ModuleScreen> {
                 }
               },
             ),
-            if (spec.filters.isNotEmpty)
+            if ((_screen?.filters ?? const []).isNotEmpty)
               BarButton(
                 icon: Icons.filter_list_rounded,
                 label: 'Filter',
@@ -287,7 +277,7 @@ class ModuleScreenState extends State<ModuleScreen> {
               label: 'Search',
               controller: _search,
               // The web's own placeholder, which names the fields it searches.
-              hint: _screen?.searchPlaceholder ?? spec.searchHint,
+              hint: _screen?.searchPlaceholder ?? 'Search',
               onSubmit: () => _set('q', _search.text),
               suffix: IconButton(
                 tooltip: 'Search',
@@ -296,13 +286,10 @@ class ModuleScreenState extends State<ModuleScreen> {
               ),
             ),
           ),
-        if (!_loading && _error == null)
-          if ((_page?.screen?.band ?? const []).isNotEmpty)
-            // The web's own band, read over every row in scope rather than the
-            // page on screen — which is what the web's second query is for.
-            Band(_page!.screen!.band)
-          else if (spec.figures != null)
-            Band(spec.figures!(rows, now)),
+        // The web's own band, read over every row in scope rather than the page
+        // on screen — which is what the web's second query is for.
+        if (!_loading && _error == null && (_page?.screen?.band ?? const []).isNotEmpty)
+          Band(_page!.screen!.band),
         if (_query.isNotEmpty)
           Chips([
             for (final e in _query.entries)
@@ -326,10 +313,7 @@ class ModuleScreenState extends State<ModuleScreen> {
       final o = f.options.where((o) => o.value == value).firstOrNull;
       return o?.label ?? '${f.label}: $value';
     }
-    final fallback = widget.spec.filters.where((f) => f.key == key).firstOrNull;
-    if (fallback == null) return '$key: $value';
-    final o = fallback.options.where((o) => o.$1 == value).firstOrNull;
-    return o == null ? '${fallback.label}: $value' : o.$2;
+    return '$key: $value';
   }
 
   Widget _body(List<Map<String, dynamic>> rows, int now) {
@@ -364,7 +348,7 @@ class ModuleScreenState extends State<ModuleScreen> {
       return ListView(children: [
         const SizedBox(height: 16),
         Empty(
-          empty?.emptyTitle ?? 'No ${widget.spec.title.toLowerCase()} match',
+          empty?.emptyTitle ?? 'Nothing matches',
           detail: empty?.emptyDetail ??
               (_page!.filters.isNotEmpty ? 'Applied: ${_page!.filters}' : null),
         ),
@@ -372,8 +356,7 @@ class ModuleScreenState extends State<ModuleScreen> {
     }
 
     return ListView.separated(
-      padding: EdgeInsets.fromLTRB(
-          T.gutter, 11, T.gutter, widget.spec.createLabel == null ? 20 : 90),
+      padding: const EdgeInsets.fromLTRB(T.gutter, 11, T.gutter, 20),
       itemCount: rows.length + 1,
       separatorBuilder: (_, __) => const SizedBox(height: 9),
       itemBuilder: (_, i) {
@@ -412,22 +395,15 @@ class ModuleScreenState extends State<ModuleScreen> {
               ),
           ]);
         }
-        // Composed by the server where the module composes it; the module's
-        // own row only where it does not.
-        if (i < _drawn.length) {
-          return ServerRowCard(
-            drawn: _drawn[i],
-            row: rows[i],
-            spec: widget.spec,
-            api: widget.api,
-            onChanged: _load,
-            hasRecord: _screen?.record ?? false,
-          );
-        }
-        return SpecRow(
-          spec: widget.spec,
+        // Composed by the server where the list composes a row, and read off
+        // the columns where it is a report — which is all the web shows there
+        // too.
+        return ServerRowCard(
+          drawn: i < _drawn.length
+              ? _drawn[i]
+              : ServerRow.fromColumns(_page?.columns ?? const [], rows[i]),
           row: rows[i],
-          nowMs: now,
+          moduleKey: widget.moduleKey,
           api: widget.api,
           onChanged: _load,
           hasRecord: _screen?.record ?? false,
@@ -471,12 +447,11 @@ class ModuleScreenState extends State<ModuleScreen> {
   void _openFilters() {
     sheet<void>(
       context,
-      title: 'Filter ${widget.spec.title.toLowerCase()}',
+      title: 'Filter ${(_screen?.title ?? "").toLowerCase()}',
       explain: 'The same filters the web toolbar has. The server says in words '
           'what it applied, and that line is at the foot of the list.',
       body: (ctx) => _FilterSheet(
         screen: _screen,
-        spec: widget.spec,
         query: Map.of(_query),
         onApply: (q) {
           Navigator.pop(ctx);
@@ -497,267 +472,19 @@ class ModuleScreenState extends State<ModuleScreen> {
   }
 }
 
-/// One record, as its module's spec reads it.
-class SpecRow extends StatelessWidget {
-  const SpecRow({
-    super.key,
-    required this.spec,
-    required this.row,
-    required this.nowMs,
-    required this.api,
-    required this.onChanged,
-    this.hasRecord = false,
-  });
 
-  final ModuleSpec spec;
-  final Map<String, dynamic> row;
-  final int nowMs;
-  final Api api;
-  final Future<void> Function() onChanged;
-
-  /// Whether this module's record screen is built. The server says.
-  final bool hasRecord;
-
-  @override
-  Widget build(BuildContext context) {
-    final status = spec.row.status?.call(row) ?? '';
-    final trailing = spec.row.trailing?.call(row) ?? '';
-    final meta = spec.row.meta?.call(row, nowMs) ?? '';
-    final decide = row['decide'] as Map<String, dynamic>?;
-
-    return Panel(
-      padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
-      border: decide != null ? T.warnLineStrong : T.line,
-      onTap: () async {
-        // Taken before the await, so the lint and the reader can both see that
-        // no context crosses it.
-        final navigator = Navigator.of(context);
-        /*
-         * The record, from the server — with its children and its actions —
-         * wherever that module has one. Where it does not, the row still
-         * opens what the list row itself holds, which is better than a tap
-         * that does nothing.
-         */
-        final open = hasRecord && row['id'] != null;
-        final changed = await navigator.push<bool>(MaterialPageRoute(
-          builder: (_) => open
-              ? RecordScreen(
-                  api: api,
-                  module: spec.key,
-                  id: '${row["id"]}',
-                  fallbackTitle: spec.row.title(row),
-                )
-              : SpecDetail(spec: spec, row: row, api: api),
-        ));
-        if (changed == true) await onChanged();
-      },
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(spec.row.title(row),
-                  style: T.rowTitle().copyWith(fontSize: 15),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 3),
-              Text(spec.row.subtitle(row),
-                  style: T.num(12, color: T.muted, weight: FontWeight.w500),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-            ]),
-          ),
-          if (trailing.isNotEmpty) ...[
-            const SizedBox(width: 10),
-            Text(trailing, style: T.metric(14)),
-          ],
-        ]),
-        if (status.isNotEmpty || meta.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Row(children: [
-            if (status.isNotEmpty) ...[
-              Pill(status, tone: spec.row.statusTone?.call(row) ?? Tone.draft, compact: true),
-              const SizedBox(width: 7),
-            ],
-            if (meta.isNotEmpty)
-              Expanded(
-                child: Text(meta,
-                    style: T.num(11.5, color: T.disabledInk, weight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ),
-          ]),
-        ],
-        if (spec.chain != null) ...[
-          const SizedBox(height: 10),
-          Chain(spec.chain!(row), size: 22),
-        ],
-      ]),
-    );
-  }
-}
-
-/// One record in full, with whatever can be done to it at the foot.
-class SpecDetail extends StatelessWidget {
-  const SpecDetail({
-    super.key,
-    required this.spec,
-    required this.row,
-    required this.api,
-  });
-
-  final ModuleSpec spec;
-  final Map<String, dynamic> row;
-  final Api api;
-
-  @override
-  Widget build(BuildContext context) {
-    final decide = row['decide'] as Map<String, dynamic>?;
-    final status = spec.row.status?.call(row) ?? '';
-    final wide = spec.detail.where((f) => f.wide).toList();
-    final narrow = spec.detail.where((f) => !f.wide).toList();
-
-    return Scaffold(
-      backgroundColor: T.page,
-      body: Column(children: [
-        Bar(
-          title: spec.row.title(row),
-          subtitle: spec.row.subtitle(row),
-          onBack: () => Navigator.of(context).pop(),
-          titleStyle: T.barTitle().copyWith(fontSize: 17),
-          pills: [
-            if (status.isNotEmpty) Pill(status, solid: (bg: T.warn, ink: T.navy950)),
-          ],
-        ),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(T.gutter, 13, T.gutter, 20),
-            children: [
-              if (spec.chain != null) ...[
-                Panel(child: Chain(spec.chain!(row))),
-                const SizedBox(height: 11),
-              ],
-              Panel(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  for (final f in narrow) _line(f),
-                ]),
-              ),
-              for (final f in wide)
-                if (_value(f).isNotEmpty) ...[
-                  const SizedBox(height: 11),
-                  Panel(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Overline(f.label),
-                      const SizedBox(height: 5),
-                      Text(_value(f), style: T.body()),
-                    ]),
-                  ),
-                ],
-            ],
-          ),
-        ),
-        if (decide != null)
-          ActionBar(children: [
-            if (decide['reject'] != null) ...[
-              Expanded(
-                child: Btn('Reject',
-                    emphasis: Emphasis.reject,
-                    height: 52,
-                    expand: true,
-                    onPressed: () => _settle(context, decide, reject: true)),
-              ),
-              const SizedBox(width: 9),
-            ],
-            Expanded(
-              flex: 2,
-              child: Btn('Approve',
-                  emphasis: Emphasis.approve,
-                  height: 52,
-                  expand: true,
-                  onPressed: () => _settle(context, decide, reject: false)),
-            ),
-          ]),
-      ]),
-    );
-  }
-
-  String _value(DetailField f) {
-    final v = f.read(row);
-    if (v == null || '$v'.isEmpty) return '';
-    if (f.money) return money(v as num?);
-    if (v is bool) return v ? 'Yes' : 'No';
-    final s = '$v';
-    // An ISO date reads as a date, not as a timestamp.
-    if (RegExp(r'^\d{4}-\d{2}-\d{2}T').hasMatch(s)) return shortDate(s);
-    return s.replaceAll('_', ' ');
-  }
-
-  Widget _line(DetailField f) {
-    final v = _value(f);
-    if (v.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(
-          width: 118,
-          child: Text(f.label, style: T.caption()),
-        ),
-        Expanded(
-          child: Text(v,
-              style: f.money || RegExp(r'^[\d,.₹ /-]+$').hasMatch(v)
-                  ? T.num(14, weight: FontWeight.w600)
-                  : T.body(weight: FontWeight.w600)),
-        ),
-      ]),
-    );
-  }
-
-  Future<void> _settle(
-    BuildContext context,
-    Map<String, dynamic> decide, {
-    required bool reject,
-  }) async {
-    final navigator = Navigator.of(context);
-    final action = (reject ? decide['reject'] : decide['approve']) as String;
-    final args = ((reject ? decide['rejectArgs'] : decide['approveArgs']) as List?) ?? const [];
-    final required = decide['remarkRequired'] == true;
-    final name = spec.row.subtitle(row);
-
-    final ok = await confirmAndRun(
-      context,
-      api,
-      Act(
-        action: action,
-        args: args.cast<Object?>(),
-        label: reject ? 'Reject' : 'Approve',
-        title: reject ? 'Reject $name' : 'Approve $name',
-        explain: reject
-            ? 'Whoever raised it is told, and it stops here. Say why.'
-            : 'This clears the step it is waiting at.',
-        emphasis: reject ? Emphasis.reject : Emphasis.approve,
-        remark: reject || required ? RemarkMode.required : RemarkMode.optional,
-        remarkLabel: reject ? 'Reason' : 'Remark',
-        done: '$name ${reject ? "rejected" : "approved"}.',
-      ),
-    );
-    if (ok) navigator.pop(true);
-  }
-}
-
+/// The filter sheet — the web toolbar's own filters, as the server sends them.
 class _FilterSheet extends StatefulWidget {
   const _FilterSheet({
     required this.screen,
-    required this.spec,
     required this.query,
     required this.onApply,
     required this.onClear,
   });
 
-  /// The web's own filters. Null only if the descriptor could not be read, in
-  /// which case the module's own fallback is used.
+  /// The web's own filters. Null only while the descriptor has not been read.
   final ScreenDef? screen;
 
-  final ModuleSpec spec;
   final Map<String, String> query;
   final void Function(Map<String, String>) onApply;
   final VoidCallback onClear;
@@ -770,25 +497,12 @@ class _FilterSheetState extends State<_FilterSheet> {
   late Map<String, String> _q;
   final _dates = <String, TextEditingController>{};
 
-  /// The web's filters where the descriptor came through, the module's own
-  /// fallback where it did not.
-  List<ScreenFilter> get _filters =>
-      widget.screen?.filters ??
-      widget.spec.filters
-          .where((f) => f.kind == FilterKind.choice)
-          .map((f) => ScreenFilter(
-                name: f.key,
-                label: f.label,
-                allLabel: 'All',
-                options: f.options.map((o) => (value: o.$1, label: o.$2)).toList(),
-              ))
-          .toList();
+  /// The web's filters, as the server describes them.
+  List<ScreenFilter> get _filters => widget.screen?.filters ?? const [];
 
   /// "From"/"To", captioned with whatever the web calls the range — "Raised",
   /// "Received", "PO date".
-  String? get _rangeLabel =>
-      widget.screen?.dateRangeLabel ??
-      (widget.spec.filters.any((f) => f.kind == FilterKind.date) ? 'Date' : null);
+  String? get _rangeLabel => widget.screen?.dateRangeLabel;
 
   @override
   void initState() {
@@ -827,7 +541,10 @@ class _FilterSheetState extends State<_FilterSheet> {
   @override
   Widget build(BuildContext context) {
     final range = _rangeLabel;
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    return Column(
+      key: const Key('filter-sheet'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
       for (final f in _filters) ...[
         Overline(f.label),
         const SizedBox(height: 8),
@@ -905,7 +622,7 @@ class ServerRowCard extends StatelessWidget {
     super.key,
     required this.drawn,
     required this.row,
-    required this.spec,
+    required this.moduleKey,
     required this.api,
     required this.onChanged,
     this.hasRecord = false,
@@ -913,10 +630,9 @@ class ServerRowCard extends StatelessWidget {
 
   final ServerRow drawn;
 
-  /// The plain row behind it, which still carries `decide` and is what the
-  /// fallback detail sheet reads where a module has no record screen yet.
+  /// The plain row behind it, which still carries `decide`.
   final Map<String, dynamic> row;
-  final ModuleSpec spec;
+  final String moduleKey;
   final Api api;
   final Future<void> Function() onChanged;
   final bool hasRecord;
@@ -930,16 +646,18 @@ class ServerRowCard extends StatelessWidget {
       border: decide != null ? T.warnLineStrong : T.line,
       onTap: () async {
         final navigator = Navigator.of(context);
-        final open = hasRecord && drawn.id.isNotEmpty;
+        if (!hasRecord || drawn.id.isEmpty) {
+          // A report has no record behind its rows, and neither does the web's.
+          notify(context, 'This screen is a report — its rows do not open.');
+          return;
+        }
         final changed = await navigator.push<bool>(MaterialPageRoute(
-          builder: (_) => open
-              ? RecordScreen(
-                  api: api,
-                  module: spec.key,
-                  id: drawn.id,
-                  fallbackTitle: drawn.title,
-                )
-              : SpecDetail(spec: spec, row: row, api: api),
+          builder: (_) => RecordScreen(
+            api: api,
+            module: moduleKey,
+            id: drawn.id,
+            fallbackTitle: drawn.title,
+          ),
         ));
         if (changed == true) await onChanged();
       },

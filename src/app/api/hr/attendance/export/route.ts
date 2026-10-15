@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { ATTENDANCE_EMPTY, attendanceScreenRow } from "@/lib/screens/rows/hr";
 import { attendanceTotals, parseAttendanceRange } from "@/lib/hr/attendance-report";
 import { loadAttendanceReport } from "@/lib/hr/attendance-report-data";
 import { statusLabel } from "@/lib/hr/employee-status";
@@ -48,6 +50,30 @@ export async function GET(request: Request) {
   const { rows, note } = capRows(report);
   const totals = attendanceTotals(rows);
 
+  /* The screen, for the app: the attendance report row the web's second table
+   * draws — the days behind the totals live on the worker's own record. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    screen = {
+      rows: rows.slice(from, to).map((r) =>
+        attendanceScreenRow({
+          id: r.id,
+          name: r.name,
+          code: r.code,
+          employmentType: r.employmentType,
+          status: r.status,
+          present: r.present,
+          half: r.half,
+          absent: r.absent,
+          payable: r.payable,
+          overtime: r.overtime,
+        }),
+      ),
+      empty: ATTENDANCE_EMPTY,
+    };
+  }
+
   const filters = [
     `${range.from} to ${range.to} (${range.days} day${range.days === 1 ? "" : "s"})`,
     describeEmployeeFilters(listParams, { type: type?.name ?? null, designation: designation?.name ?? null }),
@@ -55,6 +81,7 @@ export async function GET(request: Request) {
 
   return exportResponse({
     ...gate,
+    screen,
     title: "Attendance",
     entity: "AttendanceEntry",
     filters,

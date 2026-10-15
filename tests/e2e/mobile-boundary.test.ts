@@ -395,6 +395,44 @@ suite("the mobile boundary", () => {
     });
   });
 
+  /*
+   * Every list, composed. A list that answers rows but no `screen` block sends
+   * the phone the export's flat columns — which is the state the composed row
+   * replaced, and is invisible from the app unless somebody looks.
+   */
+  describe("every list sends the row the web draws", () => {
+    /** A report is a table of figures; the web shows those columns too. */
+    const REPORTS = new Set(["tasks/reports"]);
+
+    it("and every row carries the id and the title it opens with", async () => {
+      const { body } = await get("/lists");
+      const lists = body.data!.lists as unknown as string[];
+
+      const flat: string[] = [];
+      for (const key of lists) {
+        const res = await get(`/list/${key}?page=1&pageSize=5`);
+        if (!res.body.ok) continue; // a refusal, or a project it needs first
+        const data = res.body.data as unknown as {
+          rows: Array<Record<string, unknown>>;
+          screen?: { rows: Array<{ id?: string; title?: string }> };
+        };
+        if (REPORTS.has(key)) continue;
+        if (!data.screen) {
+          flat.push(`${key}: no composed row — the phone would read the file's columns`);
+          continue;
+        }
+        if (data.screen.rows.length !== data.rows.length) {
+          flat.push(`${key}: ${data.screen.rows.length} composed rows for ${data.rows.length} rows`);
+        }
+        for (const [i, row] of data.screen.rows.entries()) {
+          if (!row.id) flat.push(`${key}: row ${i} has no id, so it cannot open its record`);
+          if (!row.title) flat.push(`${key}: row ${i} has no title`);
+        }
+      }
+      expect(flat, flat.join("\n")).toEqual([]);
+    });
+  });
+
   describe("every endpoint still needs a session", () => {
     it("refuses the lot without a token", async () => {
       for (const path of ["/me", "/actions", "/lists", "/reports", "/list/material/indents"]) {

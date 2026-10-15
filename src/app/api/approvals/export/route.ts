@@ -1,4 +1,6 @@
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { approvalEmpty, approvalScreenRow } from "@/lib/screens/rows/exec";
 import { loadApprovalQueue } from "@/lib/approvals/service";
 import { KIND_LABEL, waitingFor } from "@/lib/approvals/queue";
 import { PERM } from "@/lib/permissions/codes";
@@ -24,6 +26,30 @@ export async function GET(request: Request) {
   const { rows, note } = capRows(queue);
   const nowMs = Date.now();
 
+  /* The screen, for the app: the queue row the web draws — what it is, which
+   * document, who raised it, what it is worth and how long it has waited. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    screen = {
+      rows: rows.slice(from, to).map((r) =>
+        approvalScreenRow({
+          id: r.id,
+          kind: r.kind,
+          kindLabel: KIND_LABEL[r.kind],
+          reference: r.reference,
+          title: r.title,
+          raisedBy: r.raisedBy,
+          projectName: r.projectName,
+          value: r.value,
+          waitingOn: r.waitingOn,
+          waitingFor: waitingFor(r.raisedAt, nowMs),
+        }),
+      ),
+      empty: approvalEmpty(false),
+    };
+  }
+
   const columns: ReportColumn[] = [
     { key: "reference", header: "Reference" },
     { key: "kind", header: "Kind" },
@@ -41,6 +67,7 @@ export async function GET(request: Request) {
     ctx,
     params: gate.params,
     format: gate.format,
+    screen,
     title: "Approvals",
     entity: "Approval",
     filters: "Everything waiting on a decision, oldest first",

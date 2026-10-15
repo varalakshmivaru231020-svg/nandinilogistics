@@ -9,6 +9,7 @@ import { ListToolbar } from "@/components/list/list-toolbar";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, CardBody, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { progressEmpty } from "@/lib/projects/progress-display";
 import { formatDate } from "@/lib/utils";
 import { createProgressLogAction, deleteProgressLogAction } from "./actions";
 
@@ -93,7 +94,7 @@ export function ProgressScreen({
         <Card>
           <EmptyState
             icon={<Camera className="h-8 w-8" />}
-            title={filtered ? "No site logs match" : "No site logs yet"}
+            title={progressEmpty(filtered).title}
             description={
               filtered
                 ? "Nothing matches this project, date range and search."

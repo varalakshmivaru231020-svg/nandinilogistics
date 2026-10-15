@@ -4,6 +4,7 @@ import { PERM } from "@/lib/permissions/codes";
 import { Badge, Card, CardBody, PageHeader } from "@/components/ui/primitives";
 import { ModuleStats } from "@/components/list/module-stats";
 import { unitFigures } from "@/lib/metrics/figures";
+import { UNIT_EMPTY, UNIT_STATUS_TONE } from "@/lib/screens/rows/unit";
 import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
 import { qty } from "@/lib/utils";
 import { readUnitListParams, unitListWhere } from "@/lib/units/unit-list";
@@ -16,10 +17,7 @@ export const metadata = { title: "Units" };
 
 const PAGE_SIZE = 50;
 
-const STATUS_TONE: Record<string, "good" | "warn" | "brand" | "navy" | "slate" | "bad"> = {
-  AVAILABLE: "good", HELD: "warn", BOOKED: "brand",
-  AGREEMENT: "navy", REGISTERED: "slate", BLOCKED: "bad",
-};
+const STATUS_TONE = UNIT_STATUS_TONE;
 
 type UnitRow = {
   id: string;
@@ -215,7 +213,7 @@ export default async function UnitsPage({
           />
 
           {rows.length === 0 ? (
-            <Card><CardBody><p className="py-8 text-center text-sm text-muted-500">No units match these filters.</p></CardBody></Card>
+            <Card><CardBody><p className="py-8 text-center text-sm text-muted-500">{UNIT_EMPTY.title}</p></CardBody></Card>
           ) : (
             <>
               <DataTable columns={columns} rows={rows} rowKey={(u) => u.id} dense />

@@ -7,6 +7,7 @@ import { AlertTriangle, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Card, EmptyState, Field, Select, Textarea } from "@/components/ui/primitives";
+import { activityState, SCHEDULE_EMPTY } from "@/lib/projects/schedule-display";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
 import { groupSchedule, type ScheduleCategory } from "@/lib/schedule/groups";
 import { ModuleStats, type StatFigure } from "@/components/list/module-stats";
@@ -68,14 +69,7 @@ const PILL = "inline-block whitespace-nowrap rounded-full px-2.5 py-[5px] text-[
  */
 const PILL_WRAP = "inline-block rounded-full px-2.5 py-[5px] text-[10.5px] font-bold [overflow-wrap:anywhere]";
 
-/**
- * The design reads an activity's state off the facts — started, finished — and
- * leaves lateness to the flag and the verdicts beside it.
- */
-function activityState(a: Activity) {
-  if (a.status === "COMPLETED") return "Completed";
-  return a.actualStart ? "In progress" : "Not started";
-}
+
 
 const STATE_PILL: Record<string, string> = {
   Completed: "bg-good-050 text-good-700",
@@ -1233,7 +1227,7 @@ function ScheduleReports({
                   {rows.length === 0 ? (
                     <tr>
                       <td colSpan={13} className="px-4 py-12 text-center text-[12px] font-medium text-muted-500">
-                        No activities on this schedule yet.
+                        {SCHEDULE_EMPTY.title}
                       </td>
                     </tr>
                   ) : reportGroups.flatMap((g) => [

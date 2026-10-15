@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ModuleStats } from "@/components/list/module-stats";
 import { projectFigures } from "@/lib/metrics/figures";
+import { projectEmpty, PROJECT_ROW_LABEL, PROJECT_ROW_TONE } from "@/lib/screens/rows/exec";
 import {
   PROJECT_STATUSES, projectFiltersApplied, projectListWhere,
   readProjectListParams,
@@ -18,15 +19,9 @@ import { NewProjectButton } from "./new-project-button";
 export const metadata = { title: "Project Management" };
 
 /** The design writes Ongoing · Planned · On Hold · Completed. */
-const STATUS_LABEL = {
-  PLANNING: "Planned", ACTIVE: "Ongoing", ON_HOLD: "On Hold",
-  COMPLETED: "Completed", CANCELLED: "Cancelled",
-} as const;
-
-const STATUS_TONE = {
-  PLANNING: "violet", ACTIVE: "brand", ON_HOLD: "warn",
-  COMPLETED: "good", CANCELLED: "bad",
-} as const;
+// The same words and tones the phone's row is given.
+const STATUS_LABEL = PROJECT_ROW_LABEL;
+const STATUS_TONE = PROJECT_ROW_TONE;
 
 /** The design tints each manager's initials from a four-colour palette. */
 const AVATAR_COLOURS = ["#0089C9", "#2F308C", "#1F9D66", "#E8A13A"];
@@ -156,7 +151,7 @@ export default async function ProjectsPage({
         <Card>
           <EmptyState
             icon={<Building2 className="h-8 w-8" />}
-            title={filtered ? "No projects match" : "No projects yet"}
+            title={projectEmpty(filtered).title}
           />
         </Card>
       ) : (

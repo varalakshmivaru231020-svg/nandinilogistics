@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nninfra/design/tokens.dart';
 import 'package:nninfra/modules/module_screen.dart';
-import 'package:nninfra/modules/spec.dart';
 
 import 'support.dart';
 
@@ -63,6 +62,22 @@ Map<String, Object> listOf(int total, {int pageSize = 50}) {
         {'key': 'taskNo', 'header': 'Task'},
       ],
       'rows': rows,
+      // The row as the web's own table composes it, which is what the screen
+      // draws. The columns behind it are the file's, and are not read.
+      'screen': {
+        'rows': [
+          for (final r in rows)
+            {
+              'id': r['id'],
+              'title': r['title'],
+              'meta': r['taskNo'],
+              'lines': [
+                {'label': 'Assignee', 'value': r['assignee']},
+              ],
+              'status': {'label': 'Pending', 'tone': 'draft'},
+            },
+        ],
+      },
       'summary': const [],
       'total': total,
       'page': page,
@@ -93,7 +108,7 @@ Future<Boundary> pumpList(WidgetTester tester, Map<String, Object> routes) async
     home: ModuleScreen(
       api: b.api,
       session: sessionWith(const ['task.task.view']),
-      spec: moduleSpecs['tasks']!,
+      moduleKey: 'tasks',
       onBack: () {},
       bottom: const SizedBox.shrink(),
       onPickProject: () {},
@@ -132,8 +147,8 @@ void main() {
       await _toFoot(tester, find.text('100 of 120 loaded'));
       expect(find.text('100 of 120 loaded'), findsOneWidget);
       // The first page is still there — the second was added, not swapped in.
-      await _toFoot(tester, find.text('T-9001 · NNS'), step: -400);
-      expect(find.text('T-9001 · NNS'), findsOneWidget);
+      await _toFoot(tester, find.text('T-9001'), step: -400);
+      expect(find.text('T-9001'), findsOneWidget);
     });
 
     testWidgets('no more to load, no button', (tester) async {
@@ -168,7 +183,11 @@ void main() {
       // …then filter, which must carry the search with it.
       await tester.tap(find.byTooltip('Filter'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Pending'));
+      // The option inside the sheet, not a row's status pill behind it.
+      await tester.tap(find.descendant(
+        of: find.byKey(const Key('filter-sheet')),
+        matching: find.text('Pending'),
+      ));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('apply-filters')));
       await tester.pumpAndSettle();

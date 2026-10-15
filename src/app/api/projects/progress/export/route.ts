@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
-import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { progressEmpty, progressScreenRow } from "@/lib/screens/rows/exec";
 import { PERM } from "@/lib/permissions/codes";
 import { progressLogWhere, readProgressListParams } from "@/lib/projects/list-filters";
 import { describeFilters } from "@/lib/reports/filters";
@@ -31,6 +33,31 @@ export async function GET(request: Request) {
   });
   const { rows, note } = capRows(logs);
 
+  /* The screen, for the app: the diary card the web draws, with who logged it,
+   * the manpower, the weather, where it was taken and how many photographs. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    screen = {
+      rows: rows.slice(from, to).map((l) =>
+        progressScreenRow({
+          id: l.id,
+          title: l.title,
+          projectCode: l.project.code,
+          logDate: l.logDate,
+          notes: l.notes,
+          loggedByName: l.loggedBy?.name ?? "",
+          manpowerCount: l.manpowerCount,
+          weather: l.weather,
+          latitude: l.latitude === null ? null : Number(l.latitude),
+          longitude: l.longitude === null ? null : Number(l.longitude),
+          photoCount: Array.isArray(l.photoUrls) ? l.photoUrls.length : 0,
+        }),
+      ),
+      empty: progressEmpty(Boolean(listParams.q || listParams.filters.projectId)),
+    };
+  }
+
   let projectLabel: string | null = null;
   if (listParams.filters.projectId) {
     const p = await prisma.project.findUnique({
@@ -47,6 +74,7 @@ export async function GET(request: Request) {
 
   return exportResponse({
     ...gate,
+    screen,
     title: "Site progress",
     entity: "SiteProgressLog",
     filters,

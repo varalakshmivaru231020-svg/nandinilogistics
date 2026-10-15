@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+
+import { ATTENDANCE_EMPTY, ATTENDANCE_MARK_EMPTY, EMPLOYEE_EMPTY } from "@/lib/hr/list-display";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
@@ -322,7 +324,7 @@ function StaffTab({
             {employees.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
-                  Nobody on record yet.
+                  {EMPLOYEE_EMPTY.title}
                 </td>
               </tr>
             ) : employees.map((e) => (
@@ -513,7 +515,7 @@ function MarkTab({
           <tbody>
             {employees.length === 0 ? (
               <tr><td colSpan={4} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
-                No active employees to mark. Inactive employees are not listed.
+                {ATTENDANCE_MARK_EMPTY.title}
               </td></tr>
             ) : employees.map((e) => {
               const d = draft[e.id];
@@ -629,7 +631,7 @@ function ReportTab({
           <tbody>
             {rows.length === 0 ? (
               <tr><td colSpan={7} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
-                Nothing recorded in this range.
+                {ATTENDANCE_EMPTY.title}
               </td></tr>
             ) : rows.map((r) => (
               <tr key={r.id} className="border-b border-line-200 last:border-0">

@@ -11,7 +11,6 @@ import 'api.dart';
 import 'nav.dart';
 import 'session.dart';
 import 'shell.dart';
-import '../modules/spec.dart';
 
 /// The shell: one module at a time, with the drawer and the bottom bar around
 /// it. Each module draws its own navy bar, because the bar carries that
@@ -95,8 +94,13 @@ class HomeState extends State<Home> {
   /// the indent list — it is "where you are", not a fixed destination.
   (String, IconData) get _third {
     if (_related != null) {
-      final spec = moduleSpecs[_related];
-      return (spec?.title ?? 'Open', Icons.chevron_right_rounded);
+      // The label the web's own link carries, which is how you got here.
+      final label = relatedScreens.values
+          .expand((l) => l)
+          .where((e) => e.$1 == _related)
+          .map((e) => e.$2)
+          .firstOrNull;
+      return (label ?? 'Open', Icons.chevron_right_rounded);
     }
     final i = _item;
     if (i == null || i.href == '/dashboard' || i.href == '/approvals') {
@@ -188,14 +192,14 @@ class HomeState extends State<Home> {
           onBack: () => _open('/dashboard'),
         );
       default:
-        // Every list module is the same pattern with its own spec — the band,
-        // the filters, the row and the actions all come from `spec.dart`.
-        final spec = moduleSpecs[_moduleKey];
-        if (spec != null) {
+        // Every list module is the same pattern, and the server describes it:
+        // the title, the placeholder, the filters, the band and every row.
+        final moduleKey = _moduleKey;
+        if (moduleKey != null) {
           return ModuleScreen(
             api: widget.api,
             session: _session,
-            spec: spec,
+            moduleKey: moduleKey,
             bottom: _bottom,
             onBack: () => _related != null ? _open(_current) : _open('/dashboard'),
             onPickProject: _pickProjectFromModule,

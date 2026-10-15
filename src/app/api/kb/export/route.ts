@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { articleEmpty, articleScreenRow } from "@/lib/screens/rows/exec";
 import { PERM } from "@/lib/permissions/codes";
 import type { ReportColumn } from "@/lib/reports/types";
 
@@ -53,6 +55,27 @@ export async function GET(request: Request) {
 
   const { rows, note } = capRows(articles);
 
+  /* The screen, for the app: the article card, credited to the role that wrote
+   * it as the design credits it. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    screen = {
+      rows: rows.slice(from, to).map((a) =>
+        articleScreenRow({
+          id: a.id,
+          title: a.title,
+          summary: a.summary ?? "",
+          author: a.author?.roles[0]?.role.name ?? a.author?.name ?? "System",
+          updatedAt: a.updatedAt,
+          attachments: a._count.attachments,
+          category: a.category,
+        }),
+      ),
+      empty: articleEmpty(Boolean(gate.params.get("q"))),
+    };
+  }
+
   const columns: ReportColumn[] = [
     { key: "title", header: "Title" },
     { key: "category", header: "Category" },
@@ -65,6 +88,7 @@ export async function GET(request: Request) {
 
   return exportResponse({
     ctx,
+    screen,
     params: gate.params,
     format: gate.format,
     title: "Knowledge Base",

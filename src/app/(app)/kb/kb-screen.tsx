@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 import { Card, Field, Input } from "@/components/ui/primitives";
+import { articleEmpty } from "@/lib/kb/list-display";
 import { richTextToPlain } from "@/lib/rich-text";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -271,7 +272,7 @@ export function KbScreen({
       {articles.length === 0 ? (
         <Card className="px-4 py-16 text-center">
           <p className="font-display text-[15px] font-bold text-navy-950">
-            {query ? "Nothing matches that search." : "The knowledge base is empty."}
+            {articleEmpty(Boolean(query)).title}
           </p>
         </Card>
       ) : (

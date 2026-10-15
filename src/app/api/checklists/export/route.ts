@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { checklistScreenRow } from "@/lib/screens/rows/exec";
 import { PERM } from "@/lib/permissions/codes";
 import type { ReportColumn } from "@/lib/reports/types";
 
@@ -52,6 +54,26 @@ export async function GET(request: Request) {
 
   const { rows, note } = capRows(checklists);
 
+  /* The screen, for the app: the checklist card — its category, how many
+   * checkpoints it carries, and "Retired" where it is no longer offered. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    screen = {
+      rows: rows.slice(from, to).map((c) =>
+        checklistScreenRow({
+          id: c.id,
+          name: c.name,
+          category: c.category.name,
+          version: String(c.version),
+          checkpointCount: c._count.checkpoints,
+          runs: c._count.runs,
+          isActive: c.isActive,
+        }),
+      ),
+    };
+  }
+
   const columns: ReportColumn[] = [
     { key: "name", header: "Checklist" },
     { key: "category", header: "Category" },
@@ -64,6 +86,7 @@ export async function GET(request: Request) {
 
   return exportResponse({
     ctx,
+    screen,
     params: gate.params,
     format: gate.format,
     title: "Checklists",

@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { cn, formatDateTime } from "@/lib/utils";
 import { ModuleStats } from "@/components/list/module-stats";
 import { STATUS_LABEL, isOverdue } from "@/lib/tasks/lifecycle";
+import { TASK_EMPTY_FILTERED, TASK_EMPTY_NONE, taskBandFigures } from "@/lib/tasks/list-display";
 import {
   acceptTaskAction, deleteTasksAction, reassignTasksAction, setPriorityAction, startTaskAction,
 } from "./actions";
@@ -149,27 +150,7 @@ export function TasksScreen({
       />
 
       {/* The scope's §4.1 widgets, on the strip every module uses. */}
-      <ModuleStats
-        figures={[
-          { value: String(countFor("Overdue")), label: "Overdue", tone: countFor("Overdue") > 0 ? "bad" as const : undefined },
-          { value: String(summary.dueToday), label: "Due today" },
-          { value: String(summary.dueThisWeek), label: "Due this week" },
-          {
-            value: String(summary.pendingApprovals),
-            label: "Waiting on you",
-            tone: summary.pendingApprovals > 0 ? "warn" as const : undefined,
-          },
-          { value: `${summary.high}/${summary.medium}/${summary.low}`, label: "High / Med / Low" },
-          ...(myScore
-            ? [{
-                value: myScore.score === null ? "—" : `${myScore.score}%`,
-                label: "Your score",
-                hint: `${myScore.onTime} on time · ${myScore.late} late`,
-                tone: (myScore.score !== null && myScore.score < 70 ? "bad" : "good") as "bad" | "good",
-              }]
-            : []),
-        ]}
-      />
+      <ModuleStats figures={taskBandFigures(countFor("Overdue"), summary, myScore)} />
 
       <div className="mb-3.5 flex flex-wrap items-center gap-[7px] rounded-[12px] border border-line-400 bg-white px-3.5 py-[11px]">
         {FILTERS.filter((f) => f === "All" || countFor(f) > 0).map((f) => (
@@ -415,9 +396,7 @@ export function TasksScreen({
             {shown.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-5 py-[38px] text-center text-[12.5px] font-medium text-muted-400">
-                  {tasks.length === 0
-                    ? "No tasks yet — raise one against a person, with a due date and a priority."
-                    : "No task matches that filter."}
+                  {tasks.length === 0 ? TASK_EMPTY_NONE.title : TASK_EMPTY_FILTERED.title}
                 </td>
               </tr>
             )}

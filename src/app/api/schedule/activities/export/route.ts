@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
-import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { SCHEDULE_EMPTY } from "@/lib/projects/schedule-display";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { activityScreenRow } from "@/lib/screens/rows/exec";
 import { PERM } from "@/lib/permissions/codes";
 import { activityExportColumns, formatPredecessors } from "@/lib/schedule/activity-import";
 import { DAY_MS } from "@/lib/schedule/engine";
@@ -60,8 +63,34 @@ export async function GET(request: Request) {
   });
   const { rows: rowsIn, note } = capRows(activities);
 
+  /* The screen, for the app: the activity row with the state the design reads
+   * off its facts, and its milestone and critical-path markers. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rowsIn.length);
+    screen = {
+      rows: rowsIn.slice(from, to).map((a) =>
+        activityScreenRow({
+          id: a.id,
+          code: a.code,
+          name: a.name,
+          status: a.status,
+          plannedStart: a.plannedStart,
+          plannedEnd: a.plannedEnd,
+          actualStart: a.actualStart,
+          actualEnd: a.actualEnd,
+          progressPct: a.progressPct,
+          isMilestone: a.isMilestone,
+          isCriticalPath: a.isCriticalPath,
+        }),
+      ),
+      empty: SCHEDULE_EMPTY,
+    };
+  }
+
   return exportResponse({
     ...gate,
+    screen,
     title: "Schedule",
     entity: "ScheduleActivity",
     filters: `Project ${project.code} — ${project.name}`,

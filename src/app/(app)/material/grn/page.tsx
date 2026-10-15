@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { qty } from "@/lib/utils";
 import { PackageCheck } from "lucide-react";
 
 import { requirePermission } from "@/lib/rbac/guard";
