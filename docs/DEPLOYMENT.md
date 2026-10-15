@@ -10,6 +10,46 @@ advisory.
 
 ## Last release
 
+`2b5b14c` · 15 Oct 2026 · 8 commits, from `4de280e`. Every item below was run.
+
+| | |
+|---|---|
+| Rolled forward from | `4de280e` |
+| Backup taken first | `nninfra-20261015-043956.dump` — 420K, 107 tables, `pg_restore --list` readable |
+| Migrations | 37, no pending |
+| Permission catalogue | 564 codes, 0 created |
+| Role grants | 1524 → 1524 (nothing new this release) |
+| Health | `==> Healthy (HTTP 200)` |
+| Records on the phone | **24 of 28 modules opened as the Owner, 0 broken**; as a PM 13 opened / 14 refused, a Supervisor 9 / 17, a Store Manager 13 / 13 — every refusal a permission, none an error |
+| Forms on the phone | 12 as the Owner, 0 broken; 5–6 for the others, the rest refused |
+
+**What it put live:** the two shapes the app did not have. `/record/<module>/<id>`
+returns a whole record — its children and what this viewer may do to it right
+now — for 29 modules, and `/form/<module>/<name>` returns a form's fields in
+the web modal's own words. Before this a detail screen was built from the list
+row that opened it, so a task had no checklist and an indent had no lines, and
+nothing could be created from the phone at all.
+
+Two defects in the web came out with it, both found by making a second client
+do what the browser was doing for itself:
+
+- the indent form worked out the work package and the line rates **in the
+  browser**, so an indent raised any other way was attributed to nothing and
+  valued at zero — the figure the approval ceilings are read against. Both now
+  live in `procurement.ts` and are settled by the action.
+- only 7 of 30 list routes carried a row's id, so 23 lists had nothing to open.
+  Ids are not columns, so no exported file changed.
+
+**Found on production, during this release's own verification:** the Store
+Manager holds `project.view` and none of the five project-tab permissions, so
+the project record came back as a header with nothing under it. Fixed in
+`2b5b14c` and redeployed — it now says which door is shut. The Owner could
+never have seen it, which is what E5 is for.
+
+---
+
+## Release before this one
+
 `5b506b2` · 14 Oct 2026. Every item below was run.
 
 | | |
