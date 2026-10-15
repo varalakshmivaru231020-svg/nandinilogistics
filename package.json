@@ -9,6 +9,7 @@
     "lint": "eslint",
     "perms:codegen": "tsx scripts/generate-permission-codes.ts",
     "perms:sync": "tsx scripts/generate-permission-codes.ts && tsx scripts/sync-permissions.ts",
+    "parity:matrix": "tsx scripts/parity-matrix.ts",
     "mobile:sync": "tsx scripts/generate-mobile-actions.ts",
     "perms:grants": "tsx scripts/sync-role-grants.ts",
     "perms:prune": "tsx scripts/prune-permissions.ts",

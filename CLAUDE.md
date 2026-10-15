@@ -135,6 +135,18 @@ rather than from anything it holds:
   `fixedRows`), which is how the lines of a receipt, a return, a transfer and
   the attendance sheet are sent: the lines are the document's own, so none can
   be invented or dropped. `hidden` carries a line's id without drawing it.
+- An **edit** form (`edits: true`) starts as the record stands:
+  `prefillFor()` loads its values, and a field the record will not let go of
+  comes back `locked` — drawn read-only and not submitted, as the web's
+  disabled inputs are. A `FormData` action clears what it is not sent, so an
+  edit form that started blank would quietly empty everything left alone.
+- **Parity is a test, not a claim.** `src/lib/api/mobile-actions.ts` is
+  generated from every `…Action` the web exports, so
+  `tests/unit/mobile-parity.test.ts` can work out which of them the app can
+  reach and fails if one is unreachable and unexplained. Anything that cannot
+  be reached is listed in `src/lib/api/parity.ts` with a reason — `todo` among
+  them. `pnpm parity:matrix` writes `docs/MOBILE_PARITY.md` from the
+  registries; do not hand-edit that file.
 
 ## Verifying a change
 
