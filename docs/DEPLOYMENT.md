@@ -10,6 +10,45 @@ advisory.
 
 ## Last release
 
+`63ea2cf` · 15 Oct 2026 · 1 commit, from `adebcb0`. Every item below was run.
+
+| | |
+|---|---|
+| Rolled forward from | `adebcb0` |
+| Backup taken first | `nninfra-20261015-102135.dump` — 424K, 107 tables, `pg_restore --list` readable |
+| Migrations | no pending |
+| Permission catalogue | 564 codes, 0 created |
+| Role grants | 1524 → 1524 (nothing new this release) |
+| Code gate | 1534 unit tests, 406 over HTTP, 87 on the phone, `flutter analyze` clean, `pnpm build` clean |
+| Health | `==> Healthy (HTTP 200)` |
+| Row buttons on the phone | **Read on production as six roles, and permission-shaped in every one**: a Store Manager is offered `cancelIssue` and `raiseReturn`; a Sales Head `verifyKyc`, `logFollowUp`, `units:edit` and `changeUnitStatus`; a Supervisor `raiseReturn`, `acceptTask` and the HR edit its role really holds; the Owner all sixteen. No button arrived without something to call |
+| Android client | `app-release.apk`, 50.2 MB, built from clean. `runServerAction` and `row-action:` present inside `lib/arm64-v8a/libapp.so`; `moduleSpecs` absent |
+
+**What it put live:** the buttons the web puts **on a list row**. The web does
+not only open a record from its list — a PO is approved from the PO row, an
+issue acknowledged from the issue row, KYC verified from the customer row, a
+price list activated, a receipt cleared or bounced, a visit's outcome recorded,
+a task accepted or started, an employee activated, a flat blocked, a site log
+deleted, an approval settled. The phone sent you to the record for all of it.
+
+The decision behind each button is now **one function, asked twice**:
+`receiptDecisions`, `siteVisitDecisions`, `employeeDecisions`,
+`issueDecisions`, `transferDecisions`, `unitDecisions` and
+`logFollowUpDecision` were lifted out of the record files, so the record screen
+and the row read the same rules. A row therefore cannot offer what the record
+would refuse — a return on a cancelled slip, a delete on a flat with a booking
+— and `authorize()` checks again inside the action regardless.
+
+Only the **wording** is the row's own: the web's row says "Clear" where its
+record says "Mark cleared", and "Approve & despatch" where the record says
+"Approve & send". `screen-rows.test.ts` reads each label out of the web row
+that carries it, and fails if a row names an action the boundary cannot
+dispatch.
+
+---
+
+## Release before this one
+
 `c89a39d` · 15 Oct 2026 · 2 commits, from `df28f1b`. Every item below was run.
 
 | | |
@@ -56,7 +95,7 @@ well as something added.
 
 ---
 
-## Release before this one
+## Release before that
 
 `419d635` · 15 Oct 2026 · 8 commits, from `2b5b14c`. Every item below was run.
 
@@ -105,46 +144,6 @@ be deleted.
 actions that move a file (no upload or download path at the boundary yet),
 Masters and Users (web-only by the brief, 8 actions), and 6 actions whose web
 screen does not exist either.
-
----
-
-## Release before that
-
-`2b5b14c` · 15 Oct 2026 · 8 commits, from `4de280e`. Every item below was run.
-
-| | |
-|---|---|
-| Rolled forward from | `4de280e` |
-| Backup taken first | `nninfra-20261015-043956.dump` — 420K, 107 tables, `pg_restore --list` readable |
-| Migrations | 37, no pending |
-| Permission catalogue | 564 codes, 0 created |
-| Role grants | 1524 → 1524 (nothing new this release) |
-| Health | `==> Healthy (HTTP 200)` |
-| Records on the phone | **24 of 28 modules opened as the Owner, 0 broken**; as a PM 13 opened / 14 refused, a Supervisor 9 / 17, a Store Manager 13 / 13 — every refusal a permission, none an error |
-| Forms on the phone | 12 as the Owner, 0 broken; 5–6 for the others, the rest refused |
-
-**What it put live:** the two shapes the app did not have. `/record/<module>/<id>`
-returns a whole record — its children and what this viewer may do to it right
-now — for 29 modules, and `/form/<module>/<name>` returns a form's fields in
-the web modal's own words. Before this a detail screen was built from the list
-row that opened it, so a task had no checklist and an indent had no lines, and
-nothing could be created from the phone at all.
-
-Two defects in the web came out with it, both found by making a second client
-do what the browser was doing for itself:
-
-- the indent form worked out the work package and the line rates **in the
-  browser**, so an indent raised any other way was attributed to nothing and
-  valued at zero — the figure the approval ceilings are read against. Both now
-  live in `procurement.ts` and are settled by the action.
-- only 7 of 30 list routes carried a row's id, so 23 lists had nothing to open.
-  Ids are not columns, so no exported file changed.
-
-**Found on production, during this release's own verification:** the Store
-Manager holds `project.view` and none of the five project-tab permissions, so
-the project record came back as a header with nothing under it. Fixed in
-`2b5b14c` and redeployed — it now says which door is shut. The Owner could
-never have seen it, which is what E5 is for.
 
 ---
 
