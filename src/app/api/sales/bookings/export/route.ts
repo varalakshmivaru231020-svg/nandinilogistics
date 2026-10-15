@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
-import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { bookingEmpty, bookingScreenRow } from "@/lib/screens/rows/booking";
 import { PERM } from "@/lib/permissions/codes";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import type { ReportResult } from "@/lib/reports/types";
@@ -32,6 +34,36 @@ export async function GET(request: Request) {
     },
   });
   const { rows, note } = capRows(found);
+
+  /* The screen, for the app: the booking row the table draws, overdue read
+   * from its own demands as the screen reads them. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    screen = {
+      rows: rows.slice(from, to).map((b) =>
+        bookingScreenRow({
+          id: b.id,
+          bookingNo: b.bookingNo,
+          status: b.status,
+          bookingDate: b.bookingDate,
+          projectCode: b.project.code,
+          unitNumber: b.unit.unitNumber,
+          customerName: b.customer.name,
+          customerPhone: b.customer.phone,
+          soldBy: b.soldBy?.name ?? null,
+          totalAmount: Number(b.totalAmount),
+          receivedAmount: Number(b.receivedAmount),
+          overdueAmount: b.demands
+            .filter((d) => ["RAISED", "PARTIALLY_PAID"].includes(d.status) && d.dueDate < now)
+            .reduce((s, d) => s + (Number(d.totalAmount) - Number(d.receivedAmount)), 0),
+        }),
+      ),
+      empty: bookingEmpty(
+        Boolean(params.q || params.status || params.project || params.from || params.to),
+      ),
+    };
+  }
 
   const result: ReportResult = {
     columns: [
@@ -91,6 +123,7 @@ export async function GET(request: Request) {
     entity: "Booking",
     filters: describeBookingFilters(params, projectLabel ? `Project ${projectLabel}` : null),
     result,
+    screen,
     projectId: projectLabel ? params.project : null,
   });
 }

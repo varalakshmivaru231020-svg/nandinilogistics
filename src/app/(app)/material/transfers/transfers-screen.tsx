@@ -7,7 +7,7 @@ import { Check, PackageCheck, Plus, Trash2, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, CardBody, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
-import { transferEmpty, TRANSFER_STATUS_TONE } from "@/lib/screens/rows/material-rest";
+import { transferEmpty, TRANSFER_STATUS_TONE } from "@/lib/material/transfer-display";
 import { formatDate, qty } from "@/lib/utils";
 import { approveTransferAction, createTransferAction, receiveTransferAction } from "./actions";
 

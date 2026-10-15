@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
-import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { siteVisitEmpty } from "@/lib/sales/site-visit-display";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { siteVisitScreenRow } from "@/lib/screens/rows/site-visit";
 import { PERM } from "@/lib/permissions/codes";
 import type { ReportResult } from "@/lib/reports/types";
 import { describeSiteVisitFilters, readSiteVisitListParams, siteVisitListWhere } from "@/lib/sales/site-visit-list";
@@ -37,6 +40,33 @@ export async function GET(request: Request) {
     },
   });
   const { rows, note } = capRows(found);
+
+  /* The screen, for the app: the scheduled visit with "due" once its moment has
+   * passed, and the completed one with its rating and feedback. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    screen = {
+      rows: rows.slice(from, to).map((v) =>
+        siteVisitScreenRow(
+          {
+            id: v.id,
+            leadName: v.lead.name,
+            leadNo: v.lead.leadNo,
+            leadPhone: v.lead.phone ?? "",
+            conductedByName: v.conductedBy.name,
+            scheduledAt: v.scheduledAt,
+            visitedAt: v.visitedAt,
+            rating: v.rating,
+            feedback: v.feedback,
+          },
+          now.getTime(),
+          canSeeContact,
+        ),
+      ),
+      empty: siteVisitEmpty(Boolean(params.q || params.status || params.from || params.to)),
+    };
+  }
 
   // SiteVisit.projectId has no relation; name the projects it points at.
   const projectIds = [...new Set(rows.map((v) => v.projectId).filter((id): id is string => Boolean(id)))];
@@ -89,5 +119,6 @@ export async function GET(request: Request) {
     entity: "SiteVisit",
     filters,
     result,
+    screen,
   });
 }

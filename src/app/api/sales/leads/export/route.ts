@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { leadFigures } from "@/lib/metrics/figures";
+import { LEAD_EMPTY, LEAD_NOTE } from "@/lib/sales/lead-display";
+import { bandOf, type ScreenShell } from "@/lib/screens/rows";
+import { leadScreenRow } from "@/lib/screens/rows/lead";
 import { PERM } from "@/lib/permissions/codes";
 import type { ReportResult } from "@/lib/reports/types";
 import { describeLeadFilters, leadListWhere, readLeadListParams } from "@/lib/sales/lead-list";
@@ -53,6 +57,59 @@ export async function GET(request: Request) {
 
   const contact = (phone: string | null) => (phone ? (showContact ? phone : maskPhone(phone)) : "");
 
+  /*
+   * The screen, for the app: the list view's own row — the source chip, the
+   * stage badge in the screen's words, the budget range and how late the next
+   * follow-up is. The duplicate marker is read for the window being sent, and
+   * the band reads every lead in scope as the web's own query does.
+   */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const nowMs = now.getTime();
+    const { from, to } = listWindow(gate.params, rowsIn.length);
+    const window = rowsIn.slice(from, to);
+    const [dupes, statRows] = await Promise.all([
+      prisma.lead.findMany({
+        where: { id: { in: window.map((l) => l.id) } },
+        select: { id: true, duplicateOfId: true },
+      }),
+      prisma.lead.findMany({
+        where: leadListWhere(ownership, { ...params, q: "", state: "all", source: "all", fu: "all" }, now),
+        select: { state: true, createdAt: true, budgetMax: true },
+      }),
+    ]);
+    const dupe = new Map(dupes.map((d) => [d.id, Boolean(d.duplicateOfId)]));
+    screen = {
+      rows: window.map((l) =>
+        leadScreenRow(
+          {
+            id: l.id,
+            name: l.name,
+            phone: contact(l.phone),
+            source: l.source.name,
+            state: l.state,
+            requirement: l.requirement,
+            budgetMin: l.budgetMin === null ? null : Number(l.budgetMin),
+            budgetMax: l.budgetMax === null ? null : Number(l.budgetMax),
+            lostReason: l.lostReason?.name ?? null,
+            nextActionAt: l.nextActionAt,
+            isDuplicate: dupe.get(l.id) ?? false,
+          },
+          nowMs,
+        ),
+      ),
+      band: bandOf(
+        leadFigures(
+          statRows.map((l) => ({ stage: l.state, createdAt: l.createdAt, budgetMax: l.budgetMax })),
+          nowMs,
+        ),
+      ),
+      empty: LEAD_EMPTY,
+      note: LEAD_NOTE,
+    };
+  }
+
+
   const result: ReportResult = {
     columns: [
       { key: "leadNo", header: "Lead No" },
@@ -102,6 +159,7 @@ export async function GET(request: Request) {
     ctx,
     params: gate.params,
     format: gate.format,
+    screen,
     title: "Leads",
     entity: "Lead",
     filters:

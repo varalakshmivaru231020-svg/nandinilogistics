@@ -14,17 +14,14 @@ import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { Can } from "@/components/rbac/can";
 import { Badge, Card, EmptyState, PageHeader, type BadgeTone } from "@/components/ui/primitives";
+import { RECEIPT_STATUS_TONE, receiptEmpty } from "@/lib/screens/rows/sales-rest";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatDate, money, moneyShort } from "@/lib/utils";
 import { ReceiptClearanceControls } from "./receipt-clearance-controls";
 
 export const metadata = { title: "Collection Receipts" };
 
-const STATUS_TONE: Record<ReceiptStatus, BadgeTone> = {
-  CLEARED: "good",
-  PENDING_CLEARANCE: "warn",
-  BOUNCED: "bad",
-};
+const STATUS_TONE: Record<ReceiptStatus, BadgeTone> = RECEIPT_STATUS_TONE;
 
 type Row = {
   id: string; receiptNo: string; receiptDate: Date; amount: unknown;
@@ -225,14 +222,14 @@ export default async function ReceiptsPage({
           {filtered ? (
             <EmptyState
               icon={<IndianRupee className="h-8 w-8" />}
-              title="No receipts match"
-              description="Try a different search, mode, status, project or date range."
+              title={receiptEmpty(true).title}
+              description={receiptEmpty(true).description}
             />
           ) : (
             <EmptyState
               icon={<IndianRupee className="h-8 w-8" />}
-              title="Nothing collected yet"
-              description="Receipts are recorded from a booking, against a raised milestone demand."
+              title={receiptEmpty(false).title}
+              description={receiptEmpty(false).description}
             />
           )}
         </Card>

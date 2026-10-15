@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
-import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { receiptEmpty, receiptScreenRow } from "@/lib/screens/rows/sales-rest";
 import { PERM } from "@/lib/permissions/codes";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import type { ReportResult } from "@/lib/reports/types";
@@ -38,6 +40,37 @@ export async function GET(request: Request) {
     },
   });
   const { rows, note } = capRows(found);
+
+  /* The screen, for the app: the receipt row, its status worked out by the same
+   * `receiptStatus` the table calls. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    screen = {
+      rows: rows.slice(from, to).map((r) =>
+        receiptScreenRow({
+          id: r.id,
+          receiptNo: r.receiptNo,
+          projectCode: r.booking.project.code,
+          unitNumber: r.booking.unit.unitNumber,
+          customerName: r.booking.customer.name,
+          bookingNo: r.booking.bookingNo,
+          milestone: r.demand?.milestone ?? null,
+          receiptDate: r.receiptDate,
+          mode: r.mode,
+          referenceNo: r.referenceNo,
+          bankName: r.bank?.name ?? null,
+          amount: Number(r.amount),
+          clearedAt: r.clearedAt,
+          bouncedAt: r.bouncedAt,
+          bounceReason: r.bounceReason,
+        }),
+      ),
+      empty: receiptEmpty(
+        Boolean(params.q || params.mode || params.status || params.project || params.from || params.to),
+      ),
+    };
+  }
   // A bounced instrument brought nothing in, as on screen.
   const total = rows.reduce((s, r) => (r.bouncedAt ? s : s + Number(r.amount)), 0);
 
@@ -101,6 +134,7 @@ export async function GET(request: Request) {
     entity: "Receipt",
     filters: describeReceiptFilters(params, projectLabel ? `Project ${projectLabel}` : null),
     result,
+    screen,
     projectId: projectLabel ? params.project : null,
   });
 }

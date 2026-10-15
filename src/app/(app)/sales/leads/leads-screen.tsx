@@ -7,6 +7,9 @@ import { Copy } from "lucide-react";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { ImportDialog } from "@/components/import/import-dialog";
 import { ListNote } from "@/components/list/list-note";
+import {
+  LEAD_EMPTY, LEAD_NOTE, LEAD_STAGE_LABEL, LEAD_STAGE_TONE, leadFollowUp,
+} from "@/lib/sales/lead-display";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Modal } from "@/components/ui/modal";
@@ -37,15 +40,10 @@ const BOARD_COLUMNS: Array<{ key: string; label: string; stages: Stage[]; drop: 
   { key: "lost", label: "Lost", stages: ["LOST"], drop: "LOST" },
 ];
 
-const STAGE_LABEL: Record<string, string> = {
-  NEW: "New", CONTACTED: "Contacted", SITE_VISIT_SCHEDULED: "Site Visit",
-  VISIT_DONE: "Site Visit", NEGOTIATION: "Negotiation", BOOKED: "Booked", LOST: "Lost",
-};
-
-const STAGE_TONE: Record<string, "muted" | "brand" | "warn" | "navy" | "good" | "bad"> = {
-  NEW: "muted", CONTACTED: "brand", SITE_VISIT_SCHEDULED: "warn",
-  VISIT_DONE: "navy", NEGOTIATION: "warn", BOOKED: "good", LOST: "bad",
-};
+// The stage words, the source tones and the follow-up line are shared with the
+// row the phone is sent, so the two screens cannot drift apart.
+const STAGE_LABEL = LEAD_STAGE_LABEL;
+const STAGE_TONE = LEAD_STAGE_TONE;
 
 interface Lead {
   id: string; leadNo: string; name: string; phone: string; email: string | null;
@@ -107,20 +105,7 @@ const SOURCE_TONE: Record<string, string> = {
 
 const sourceTone = (name: string) => SOURCE_TONE[name.trim().toLowerCase()] ?? "bg-slate-050 text-slate-600";
 
-function followUp(nextActionAt: string | null, nowMs: number, state?: string) {
-  if (!nextActionAt) return null;
-  const due = new Date(nextActionAt);
-  const days = Math.round((due.getTime() - nowMs) / 86_400_000);
-  // The design writes the date in figures: 08/09/2026 · 11:00.
-  const dd = String(due.getDate()).padStart(2, "0");
-  const mm = String(due.getMonth() + 1).padStart(2, "0");
-  const when = `${dd}/${mm}/${due.getFullYear()} · ${due.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
-  const visit = state === "SITE_VISIT_SCHEDULED";
-  const base = { text: when, icon: visit ? "🏠" : "📞", kind: visit ? "SITE VISIT" : "CALL" };
-  if (days < 0) return { ...base, badge: "overdue", tone: "bad" as const };
-  if (days === 0) return { ...base, badge: "today", tone: "warn" as const };
-  return { ...base, badge: "upcoming", tone: "brand" as const };
-}
+const followUp = leadFollowUp;
 
 /** Someone a lead became. Kept for the customers module, which owns them now. */
 export interface CustomerRow {
@@ -470,7 +455,7 @@ export function LeadsScreen({
               {leads.length === 0 && (
                 <tr>
                   <td colSpan={4} className="px-4 py-12 text-center text-[12.5px] font-medium text-muted-400">
-                    No leads match these filters.
+                    {LEAD_EMPTY.title}
                   </td>
                 </tr>
               )}
@@ -479,10 +464,7 @@ export function LeadsScreen({
         </Card>
       )}
 
-      <ListNote>
-        Form fields, stages and lost reasons are configured in Masters → Lead Settings. Dropping a
-        card on Lost asks for a reason and remarks.
-      </ListNote>
+      <ListNote>{LEAD_NOTE}</ListNote>
 
       {creating && (
         <NewLeadModal

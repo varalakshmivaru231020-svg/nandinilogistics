@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { followUpFigures } from "@/lib/metrics/figures";
+import { FOLLOW_UP_EMPTY } from "@/lib/sales/follow-up-display";
+import { bandOf, type ScreenShell } from "@/lib/screens/rows";
+import { followUpScreenRow } from "@/lib/screens/rows/follow-up";
 import { PERM } from "@/lib/permissions/codes";
 import type { ReportColumn } from "@/lib/reports/types";
 
@@ -60,7 +64,8 @@ export async function GET(request: Request) {
     },
     orderBy: { nextActionAt: "asc" },
     select: {
-      id: true, name: true, phone: true, requirement: true, state: true, nextActionAt: true,
+      id: true, leadNo: true, name: true, phone: true, requirement: true, state: true,
+      nextActionAt: true,
       source: { select: { name: true } },
       project: { select: { code: true } },
       owner: { select: { name: true } },
@@ -89,6 +94,68 @@ export async function GET(request: Request) {
   ];
 
   const overdue = rows.filter((l) => l.nextActionAt && l.nextActionAt.getTime() < nowMs).length;
+
+  /*
+   * The screen, for the app: the follow-up row the web draws — a pending site
+   * visit shown as a visit rather than a call, the lead's interest read as
+   * "Skyline · 2 BHK", and the bucket the design puts it in. The band is the
+   * web's own, counting what has been logged today.
+   */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from: lo, to: hi } = listWindow(gate.params, rows.length);
+    const window = rows.slice(lo, hi);
+    const endOfToday = new Date(now);
+    endOfToday.setHours(23, 59, 59, 999);
+    const [visits, notes, loggedCount] = await Promise.all([
+      prisma.siteVisit.findMany({
+        where: { leadId: { in: window.map((l) => l.id) }, visitedAt: null },
+        select: { leadId: true },
+      }),
+      prisma.lead.findMany({
+        where: { id: { in: window.map((l) => l.id) } },
+        select: {
+          id: true,
+          project: { select: { name: true } },
+          followUps: { orderBy: { completedAt: "desc" }, take: 1, select: { notes: true } },
+        },
+      }),
+      prisma.leadFollowUp.count({
+        where: { completedAt: { gte: now, lte: endOfToday } },
+      }),
+    ]);
+    const pendingVisit = new Set(visits.map((v) => v.leadId));
+    const byId = new Map(notes.map((l) => [l.id, l]));
+    screen = {
+      rows: window.map((l) => {
+        const e = byId.get(l.id);
+        const isVisit = pendingVisit.has(l.id);
+        return followUpScreenRow(
+          {
+            id: l.id,
+            name: l.name,
+            phone: showContact ? (l.phone ?? "") : "",
+            leadNo: l.leadNo,
+            requirement:
+              [e?.project?.name, l.requirement].filter(Boolean).join(" · ") || null,
+            channel: isVisit ? "SITE_VISIT" : (l.followUps[0]?.channel ?? "CALL"),
+            remarks: e?.followUps[0]?.notes ?? l.requirement ?? "No remarks recorded",
+            dueAt: l.nextActionAt as Date,
+          },
+          nowMs,
+        );
+      }),
+      band: bandOf(
+        followUpFigures(
+          rows.flatMap((l) => (l.nextActionAt ? [{ dueAt: l.nextActionAt }] : [])),
+          loggedCount,
+          nowMs,
+          endOfToday.getTime(),
+        ),
+      ),
+      empty: FOLLOW_UP_EMPTY,
+    };
+  }
 
   return exportResponse({
     ctx,
@@ -128,5 +195,6 @@ export async function GET(request: Request) {
       ],
       emptyMessage: "Nothing is scheduled.",
     },
+    screen,
   });
 }

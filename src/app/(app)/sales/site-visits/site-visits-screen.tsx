@@ -9,6 +9,7 @@ import { ListToolbar } from "@/components/list/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { siteVisitEmpty } from "@/lib/sales/site-visit-display";
 import { formatDateTime } from "@/lib/utils";
 import { cancelSiteVisitAction, completeSiteVisitAction, scheduleSiteVisitAction } from "./actions";
 
@@ -89,14 +90,14 @@ export function SiteVisitsScreen({
           {filtered ? (
             <EmptyState
               icon={<MapPin className="h-8 w-8" />}
-              title="No site visits match"
-              description="Try a different search, status or date range."
+              title={siteVisitEmpty(true).title}
+              description={siteVisitEmpty(true).description}
             />
           ) : (
             <EmptyState
               icon={<MapPin className="h-8 w-8" />}
-              title="No site visits"
-              description="Schedule a visit against a lead and it appears here until the outcome is recorded."
+              title={siteVisitEmpty(false).title}
+              description={siteVisitEmpty(false).description}
             />
           )}
         </Card>

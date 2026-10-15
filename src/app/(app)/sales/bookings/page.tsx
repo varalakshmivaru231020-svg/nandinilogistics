@@ -10,14 +10,13 @@ import { toSearchParams } from "@/lib/sales/list-common";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { BOOKING_STATUS_TONE, bookingEmpty } from "@/lib/screens/rows/booking";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatDate, money, moneyShort } from "@/lib/utils";
 
 export const metadata = { title: "Bookings" };
 
-const STATUS_TONE: Record<string, "slate" | "good" | "navy" | "brand" | "bad"> = {
-  DRAFT: "slate", CONFIRMED: "good", AGREEMENT: "brand", REGISTERED: "navy", CANCELLED: "bad",
-};
+const STATUS_TONE = BOOKING_STATUS_TONE;
 
 type Row = {
   id: string; bookingNo: string; status: string; bookingDate: Date;
@@ -173,14 +172,14 @@ export default async function BookingsPage({
           {filtered ? (
             <EmptyState
               icon={<BookCheck className="h-8 w-8" />}
-              title="No bookings match"
-              description="Try a different search, status, project or date range."
+              title={bookingEmpty(true).title}
+              description={bookingEmpty(true).description}
             />
           ) : (
             <EmptyState
               icon={<BookCheck className="h-8 w-8" />}
-              title="No bookings yet"
-              description="A booking starts from an approved cost sheet — it moves the unit off the board and raises the payment schedule."
+              title={bookingEmpty(false).title}
+              description={bookingEmpty(false).description}
             />
           )}
         </Card>

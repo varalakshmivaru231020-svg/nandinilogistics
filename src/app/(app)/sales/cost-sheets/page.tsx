@@ -12,6 +12,7 @@ import { NewCostSheetDrawer } from "./new-cost-sheet-drawer";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { costSheetEmpty } from "@/lib/screens/rows/sales-rest";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatDate, money } from "@/lib/utils";
 
@@ -175,14 +176,14 @@ export default async function CostSheetsPage({
           {filtered ? (
             <EmptyState
               icon={<Calculator className="h-8 w-8" />}
-              title="No cost sheets match"
-              description="Try a different search, status or project."
+              title={costSheetEmpty(true).title}
+              description={costSheetEmpty(true).description}
             />
           ) : (
             <EmptyState
               icon={<Calculator className="h-8 w-8" />}
-              title="No cost sheets yet"
-              description="Pick an available unit and the cost sheet is generated from the price list active on that date."
+              title={costSheetEmpty(false).title}
+              description={costSheetEmpty(false).description}
             />
           )}
         </Card>

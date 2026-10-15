@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
-import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { costSheetEmpty, costSheetScreenRow } from "@/lib/screens/rows/sales-rest";
 import { PERM } from "@/lib/permissions/codes";
 import { projectScopeFilter } from "@/lib/rbac/context";
 import type { ReportResult } from "@/lib/reports/types";
@@ -30,6 +32,35 @@ export async function GET(request: Request) {
     },
   });
   const { rows, note } = capRows(found);
+
+  /* The screen, for the app: the cost-sheet row, with "expired" beside a date
+   * that has passed and whether a discount is approved. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const nowMs = new Date().getTime();
+    const { from, to } = listWindow(gate.params, rows.length);
+    screen = {
+      rows: rows.slice(from, to).map((s) =>
+        costSheetScreenRow(
+          {
+            id: s.id,
+            costSheetNo: s.costSheetNo,
+            projectCode: s.unit.project.code,
+            unitNumber: s.unit.unitNumber,
+            leadName: s.lead?.name ?? null,
+            createdAt: s.createdAt,
+            validUntil: s.validUntil,
+            discountAmount: Number(s.discountAmount),
+            discountApproved: Boolean(s.discountApprovedAt),
+            totalAmount: Number(s.totalAmount),
+            bookings: s.bookings.length,
+          },
+          nowMs,
+        ),
+      ),
+      empty: costSheetEmpty(Boolean(params.q || params.status || params.project)),
+    };
+  }
 
   const result: ReportResult = {
     columns: [
@@ -90,6 +121,7 @@ export async function GET(request: Request) {
     entity: "CostSheet",
     filters: describeCostSheetFilters(params, projectLabel ? `Project ${projectLabel}` : null),
     result,
+    screen,
     projectId: projectLabel ? params.project : null,
   });
 }

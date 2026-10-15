@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
 import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
 import { type ScreenShell } from "@/lib/screens/rows";
-import { transferEmpty, transferScreenRow } from "@/lib/screens/rows/material-rest";
+import { transferEmpty } from "@/lib/material/transfer-display";
+import { transferScreenRow } from "@/lib/screens/rows/material-rest";
 import {
   describeParts, enumWords, rangeWords, readTransferListParams, searchWords, transferListWhere,
 } from "@/lib/material/list-filters";

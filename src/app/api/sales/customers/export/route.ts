@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
-import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { customerFigures } from "@/lib/metrics/figures";
+import { customerEmpty } from "@/lib/sales/customer-display";
+import { bandOf, type ScreenShell } from "@/lib/screens/rows";
+import { customerScreenRow } from "@/lib/screens/rows/customer";
 import { PERM } from "@/lib/permissions/codes";
 import type { ReportColumn } from "@/lib/reports/types";
 import { customerListWhere, describeCustomerFilters, readCustomerListParams } from "@/lib/sales/customer-list";
@@ -30,6 +34,51 @@ export async function GET(request: Request) {
   });
   const { rows, note } = capRows(found);
 
+  /* The screen, for the app: the customer row with its unit chips and KYC
+   * badge, and the band the web opens with. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    const statRows = await prisma.customer.findMany({
+      select: {
+        kycVerifiedAt: true,
+        bookings: { select: { status: true, totalAmount: true, receivedAmount: true } },
+      },
+    });
+    screen = {
+      rows: rows.slice(from, to).map((c) =>
+        customerScreenRow(
+          {
+            id: c.id,
+            name: c.name,
+            customerNo: c.customerNo,
+            phone: c.phone,
+            email: c.email,
+            panNumber: c.panNumber,
+            kycVerified: Boolean(c.kycVerifiedAt),
+            bookings: c.bookings.map((b) => ({
+              unitNumber: b.unit.unitNumber,
+              status: b.status,
+              totalAmount: Number(b.totalAmount),
+            })),
+          },
+          canSeeKyc,
+        ),
+      ),
+      band: bandOf(
+        customerFigures(
+          statRows.map((c) => ({
+            bookings: c.bookings.map((b) => ({
+              totalAmount: b.totalAmount,
+              receivedAmount: b.receivedAmount,
+            })),
+          })),
+        ),
+      ),
+      empty: customerEmpty(Boolean(params.q || params.kyc || params.booking)),
+    };
+  }
+
   const columns: ReportColumn[] = [
     { key: "customerNo", header: "Customer No" },
     { key: "name", header: "Name" },
@@ -56,6 +105,7 @@ export async function GET(request: Request) {
     title: "Customers",
     entity: "Customer",
     filters,
+    screen,
     result: {
       columns,
       rows: rows.map((c) => {

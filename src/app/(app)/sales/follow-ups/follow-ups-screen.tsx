@@ -8,6 +8,9 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import {
+  BUCKETS, type BucketKey, bucketOf, CHANNEL_ICON, CHANNEL_LABEL, FOLLOW_UP_EMPTY, whenLabel,
+} from "@/lib/sales/follow-up-display";
 import { cn, formatDate, phone } from "@/lib/utils";
 import { logFollowUpAction } from "../leads/actions";
 
@@ -18,47 +21,7 @@ export interface FollowUpRow {
   dueAt: string;
 }
 
-const CHANNEL_ICON: Record<string, string> = {
-  CALL: "📞", WHATSAPP: "💬", EMAIL: "✉️", MEETING: "🤝", SITE_VISIT: "📍",
-};
-const CHANNEL_LABEL: Record<string, string> = {
-  CALL: "Call", WHATSAPP: "WhatsApp", EMAIL: "Email", MEETING: "Meeting", SITE_VISIT: "Site visit",
-};
 
-const DAY = 86_400_000;
-
-/** The design's buckets, oldest pressure first. */
-type BucketKey = "overdue" | "today" | "tomorrow" | "week" | "later";
-
-const BUCKETS: Array<{ key: BucketKey; name: string; tone: string }> = [
-  { key: "overdue", name: "Overdue", tone: "text-bad-700" },
-  { key: "today", name: "Today", tone: "text-warn-700" },
-  { key: "tomorrow", name: "Tomorrow", tone: "text-brand-700" },
-  { key: "week", name: "This Week", tone: "text-plum-700" },
-  { key: "later", name: "Later", tone: "text-slate-600" },
-];
-
-function bucketOf(dueAt: string, nowMs: number): BucketKey {
-  const now = new Date(nowMs);
-  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const due = new Date(dueAt).getTime();
-  if (due < startToday) return "overdue";
-  if (due < startToday + DAY) return "today";
-  if (due < startToday + 2 * DAY) return "tomorrow";
-  if (due < startToday + 7 * DAY) return "week";
-  return "later";
-}
-
-/** The design writes "01/09/2026, 16:30" and one word beside it. */
-function whenLabel(dueAt: string, nowMs: number) {
-  const bucket = bucketOf(dueAt, nowMs);
-  const text = new Date(dueAt).toLocaleString("en-GB", {
-    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
-  });
-  if (bucket === "overdue") return { text, badge: "OVERDUE", pill: "bg-bad-700", tone: "text-bad-700" };
-  if (bucket === "today") return { text, badge: "TODAY", pill: "bg-warn-700", tone: "text-warn-700" };
-  return { text, badge: "UPCOMING", pill: "bg-brand-700", tone: "text-brand-700" };
-}
 
 /** The design's solid type chip: blue for a call, violet for a site visit. */
 const CHANNEL_PILL: Record<string, string> = {
@@ -286,7 +249,7 @@ export function FollowUpsScreen({
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-12 text-center text-[12.5px] font-medium text-muted-400">
-                    Nothing scheduled.
+                    {FOLLOW_UP_EMPTY.title}
                   </td>
                 </tr>
               )}

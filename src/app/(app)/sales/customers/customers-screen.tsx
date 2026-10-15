@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, EmptyState, Field, Input, Textarea } from "@/components/ui/primitives";
+import { customerEmpty } from "@/lib/sales/customer-display";
 import { formatDate, money } from "@/lib/utils";
 import { createCustomerAction, verifyKycAction } from "../bookings/actions";
 
@@ -168,14 +169,14 @@ export function CustomersScreen({
           {filtered ? (
             <EmptyState
               icon={<Users className="h-8 w-8" />}
-              title="No customers match"
-              description="Try a different search or clear the filters."
+              title={customerEmpty(true).title}
+              description={customerEmpty(true).description}
             />
           ) : (
             <EmptyState
               icon={<Users className="h-8 w-8" />}
-              title="No customers yet"
-              description="A customer record is created at booking, from the lead that produced it."
+              title={customerEmpty(false).title}
+              description={customerEmpty(false).description}
             />
           )}
         </Card>
