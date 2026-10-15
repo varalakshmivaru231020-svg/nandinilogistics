@@ -10,6 +10,58 @@ advisory.
 
 ## Last release
 
+`419d635` · 15 Oct 2026 · 8 commits, from `2b5b14c`. Every item below was run.
+
+| | |
+|---|---|
+| Rolled forward from | `2b5b14c` |
+| Backup taken first | `nninfra-20261015-081032.dump` — 421K, 107 tables, `pg_restore --list` readable |
+| Migrations | no pending |
+| Permission catalogue | 564 codes, 0 created |
+| Role grants | 1524 → 1524 (nothing new this release) |
+| Code gate | 1506 unit tests, 405 over HTTP, 81 on the phone, `flutter analyze` clean, `pnpm build` clean |
+| Health | `==> Healthy (HTTP 200)` |
+| Records on the phone | **six roles read on production, 0 broken**: Owner 24 of 28 modules opened, a PM 13 / 14 refused, a Supervisor 9 / 17, a Store Manager 13 / 13, a Sales Head 12 / 15, a Sales executive 11 / 16 — every refusal a permission, none an error |
+| Forms on the phone | 13 as the Owner, 0 broken, 0 missing; 4–6 for the others, the rest refused |
+| Android client | `app-release.apk`, 49.6 MB, built after the server. `http://168.231.103.114:3021` found inside `lib/arm64-v8a/libapp.so`; the cleartext policy naming that host ships as `res/8G.xml` |
+
+**What it put live:** parity with the web, made a test rather than a claim.
+`tests/unit/mobile-parity.test.ts` reads the records, the forms and the Dart,
+and fails when a web action is unreachable from the app and unexplained;
+`pnpm parity:matrix` writes `docs/MOBILE_PARITY.md` from the same registries.
+**125 of the 152 actions on the boundary are now reachable**, and each of the
+other 27 carries a reason. With it: notifications (the web screen the phone
+never had), lists a page at a time with every parameter travelling in the same
+request, the edits and deletes, and creating a tower's flats from the phone.
+
+Two defects came out of walking the flows as five roles rather than as the
+Owner:
+
+- `sales/site-visits` and `units/price-lists` **took `page` and ignored it**,
+  so the second page of either was the first page again. Both were calls my
+  bulk edit had missed, which is why `tests/e2e/mobile-boundary.test.ts` now
+  walks every list and asks for a page it can check.
+- the web drew a tower's flat numbering **inside its own setup screen**, so
+  there was nothing for a form to call. It now lives in
+  `src/lib/units/tower-plan.ts`, and the web previews what the action will do
+  rather than its own copy of it.
+
+**Open, and not a deploy problem:** production is served over **plain HTTP on
+a bare IP** (`http://168.231.103.114:3021`), so everything the phone sends,
+including the password, crosses the internet readable. The Android client has
+to name that host in its cleartext allow-list to work at all, which is the
+signal that something is wrong. A domain and a certificate would let that line
+be deleted.
+
+**Deliberately not mirrored, and listed in `src/lib/api/parity.ts`:** the 12
+actions that move a file (no upload or download path at the boundary yet),
+Masters and Users (web-only by the brief, 8 actions), and 6 actions whose web
+screen does not exist either.
+
+---
+
+## Release before this one
+
 `2b5b14c` · 15 Oct 2026 · 8 commits, from `4de280e`. Every item below was run.
 
 | | |
@@ -48,7 +100,7 @@ never have seen it, which is what E5 is for.
 
 ---
 
-## Release before this one
+## Release before that
 
 `5b506b2` · 14 Oct 2026. Every item below was run.
 
@@ -67,36 +119,6 @@ all; the schedule list, which now takes its project from the `X-Project` header
 and answers a `project-required` code rather than a plain-text 400; and the
 `decide` instruction on approvals and indents, which is how the app knows which
 action settles a record without reading a status string and guessing.
-
----
-
-## Release before that
-
-`1901da4` · 13 Oct 2026 · 14 commits, from `bf19db7`. Every item below was run.
-
-| | |
-|---|---|
-| Rolled forward from | `fc26745` |
-| Backup taken first | `nninfra-20261013-111819.dump` — 420K, 107 tables |
-| Migrations | 37, schema up to date |
-| Permission catalogue | 564 codes, 0 created on the server |
-| Role grants | **1494 → 1524** — D6 was needed, as it always is |
-| Health | `==> Healthy (HTTP 200)` |
-| E5 route sweep | 24 routes × 2 non-super-admin roles, 0 errors |
-| E6 the feature | mobile boundary answering on production: `/me` 200 (75 permissions for a Supervisor), 30 lists, 152 actions, calendar 42-square grid, `/list/tasks` 10 rows marked "Yours only" |
-
-**What this release put live:** the mobile boundary at `/api/mobile/v1` — which
-had never been deployed, and answered 404 until now — the Calendar's complete,
-extend and cancel, and list endpoints for the six modules the phone could not
-reach.
-
-**Open, and not a deploy problem:** production is served over **plain HTTP on a
-bare IP** (`http://168.231.103.114:3021`). That was tolerable while the only
-client was a browser on a laptop; it is worse now that a phone app sends a
-password to it across the internet, readable by anything on the path. The
-Android client has to name that host in its cleartext allow-list to work at all,
-which is the signal that something is wrong. A domain and a certificate would
-let that line be deleted.
 
 ---
 

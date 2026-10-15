@@ -641,7 +641,7 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
   },
   "units/board/generateUnits": {
     fn: a26.generateUnitsAction as MobileAction,
-    args: [{ name: "projectId", kind: "text" }, { name: "towerName", kind: "text" }, { name: "units", kind: "json" }],
+    args: [{ name: "projectId", kind: "text" }, { name: "towerName", kind: "text" }, { name: "plan", kind: "json" }],
   },
   "units/changeUnitStatus": {
     fn: a27.changeUnitStatusAction as MobileAction,
