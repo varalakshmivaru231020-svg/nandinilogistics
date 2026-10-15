@@ -11,13 +11,12 @@ import { projectOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { Badge, Card, CardBody, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { returnEmpty, RETURN_STATUS_TONE } from "@/lib/screens/rows/return";
 import { formatDate, money } from "@/lib/utils";
 
 export const metadata = { title: "Material Returns" };
 
-const RETURN_STATUS_TONE: Record<string, "warn" | "good" | "bad"> = {
-  PENDING: "warn", APPROVED: "good", REJECTED: "bad",
-};
+
 
 export default async function ReturnsPage({
   searchParams,
@@ -89,8 +88,8 @@ export default async function ReturnsPage({
         <Card>
           <EmptyState
             icon={<Undo2 className="h-8 w-8" />}
-            title={filtered ? "No returns match these filters" : "No material returns yet"}
-            description="When a site has material left over, raise a return against the issue slip it came on. The store approves it back into stock."
+            title={returnEmpty(filtered).title}
+            description={returnEmpty(filtered).description}
           />
         </Card>
       ) : (

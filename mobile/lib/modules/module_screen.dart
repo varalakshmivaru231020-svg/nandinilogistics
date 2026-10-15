@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/act.dart';
 import '../core/api.dart';
 import '../core/nav.dart';
+import '../core/row.dart';
 import '../core/session.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
@@ -95,6 +96,7 @@ class ModuleScreenState extends State<ModuleScreen> {
       _loading = true;
       _error = null;
       _rows = const [];
+      _drawn = const [];
       _more = false;
     });
 
@@ -117,6 +119,7 @@ class ModuleScreenState extends State<ModuleScreen> {
       if (res.ok) {
         _page = ListPage.from(res.data!);
         _rows = _page!.rows;
+        _drawn = _page!.screen?.rows ?? const [];
         _more = _page!.hasMore;
       } else {
         _error = _needsProject ? null : res.error;
@@ -149,11 +152,16 @@ class ModuleScreenState extends State<ModuleScreen> {
       final page = ListPage.from(res.data!);
       _page = page;
       _rows = [..._rows, ...page.rows];
+      _drawn = [..._drawn, ...(page.screen?.rows ?? const [])];
       _more = page.hasMore;
     });
   }
 
   List<Map<String, dynamic>> _rows = const [];
+
+  /// The same rows, composed by the server. Empty for a module whose list does
+  /// not compose them yet.
+  List<ServerRow> _drawn = const [];
   bool _more = false;
   bool _loadingMore = false;
   String? _moreError;
@@ -288,8 +296,13 @@ class ModuleScreenState extends State<ModuleScreen> {
               ),
             ),
           ),
-        if (!_loading && _error == null && spec.figures != null)
-          Band(spec.figures!(rows, now)),
+        if (!_loading && _error == null)
+          if ((_page?.screen?.band ?? const []).isNotEmpty)
+            // The web's own band, read over every row in scope rather than the
+            // page on screen — which is what the web's second query is for.
+            Band(_page!.screen!.band)
+          else if (spec.figures != null)
+            Band(spec.figures!(rows, now)),
         if (_query.isNotEmpty)
           Chips([
             for (final e in _query.entries)
@@ -347,10 +360,14 @@ class ModuleScreenState extends State<ModuleScreen> {
     }
 
     if (rows.isEmpty) {
+      final empty = _page?.screen;
       return ListView(children: [
         const SizedBox(height: 16),
-        Empty('No ${widget.spec.title.toLowerCase()} match',
-            detail: _page!.filters.isNotEmpty ? 'Applied: ${_page!.filters}' : null),
+        Empty(
+          empty?.emptyTitle ?? 'No ${widget.spec.title.toLowerCase()} match',
+          detail: empty?.emptyDetail ??
+              (_page!.filters.isNotEmpty ? 'Applied: ${_page!.filters}' : null),
+        ),
       ]);
     }
 
@@ -387,7 +404,25 @@ class ModuleScreenState extends State<ModuleScreen> {
                 child: Text(_page!.filters,
                     style: T.caption().copyWith(fontWeight: FontWeight.w500)),
               ),
+            if ((_page?.screen?.note ?? '').isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text(_page!.screen!.note!,
+                    style: T.caption().copyWith(fontWeight: FontWeight.w500)),
+              ),
           ]);
+        }
+        // Composed by the server where the module composes it; the module's
+        // own row only where it does not.
+        if (i < _drawn.length) {
+          return ServerRowCard(
+            drawn: _drawn[i],
+            row: rows[i],
+            spec: widget.spec,
+            api: widget.api,
+            onChanged: _load,
+            hasRecord: _screen?.record ?? false,
+          );
         }
         return SpecRow(
           spec: widget.spec,
@@ -856,5 +891,129 @@ class _FilterSheetState extends State<_FilterSheet> {
         ),
       ]),
     ]);
+  }
+}
+
+/// A row the server composed, drawn as the web card draws it.
+///
+/// Nothing here decides anything: the title, the line under it, the labelled
+/// columns, the chain, the fulfilment pill and the status all arrive worded
+/// and toned. The card only lays them out to the pattern the canvas sets for
+/// a list row, and opens the record behind it.
+class ServerRowCard extends StatelessWidget {
+  const ServerRowCard({
+    super.key,
+    required this.drawn,
+    required this.row,
+    required this.spec,
+    required this.api,
+    required this.onChanged,
+    this.hasRecord = false,
+  });
+
+  final ServerRow drawn;
+
+  /// The plain row behind it, which still carries `decide` and is what the
+  /// fallback detail sheet reads where a module has no record screen yet.
+  final Map<String, dynamic> row;
+  final ModuleSpec spec;
+  final Api api;
+  final Future<void> Function() onChanged;
+  final bool hasRecord;
+
+  @override
+  Widget build(BuildContext context) {
+    final decide = row['decide'] as Map<String, dynamic>?;
+
+    return Panel(
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+      border: decide != null ? T.warnLineStrong : T.line,
+      onTap: () async {
+        final navigator = Navigator.of(context);
+        final open = hasRecord && drawn.id.isNotEmpty;
+        final changed = await navigator.push<bool>(MaterialPageRoute(
+          builder: (_) => open
+              ? RecordScreen(
+                  api: api,
+                  module: spec.key,
+                  id: drawn.id,
+                  fallbackTitle: drawn.title,
+                )
+              : SpecDetail(spec: spec, row: row, api: api),
+        ));
+        if (changed == true) await onChanged();
+      },
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Flexible(
+                  child: Text(drawn.title,
+                      style: T.rowTitle().copyWith(fontSize: 15),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                ),
+                for (final c in drawn.chips) ...[
+                  const SizedBox(width: 6),
+                  KindTag(c.text, tone: c.tone),
+                ],
+              ]),
+              if ((drawn.meta ?? '').isNotEmpty) ...[
+                const SizedBox(height: 3),
+                Text(drawn.meta!,
+                    style: T.num(12, color: T.muted, weight: FontWeight.w500),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+              ],
+            ]),
+          ),
+          if (drawn.trailing != null) ...[
+            const SizedBox(width: 10),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(drawn.trailing!.value, style: T.metric(14)),
+              if ((drawn.trailing!.label ?? '').isNotEmpty)
+                Text(drawn.trailing!.label!, style: T.caption()),
+            ]),
+          ],
+        ]),
+        for (final l in drawn.lines)
+          if (l.value.isNotEmpty && l.value != '—') ...[
+            const SizedBox(height: 7),
+            Text(
+              l.label == null ? l.value : '${l.label}: ${l.value}',
+              style: T.num(11.5, color: T.secondary, weight: FontWeight.w500),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        if (drawn.status != null || drawn.pill != null) ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            if (drawn.status != null) ...[
+              Pill(drawn.status!.text, tone: drawn.status!.tone, compact: true),
+              const SizedBox(width: 7),
+            ],
+            if (drawn.pill != null)
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Pill(drawn.pill!.label, tone: drawn.pill!.tone, compact: true),
+                ),
+              ),
+          ]),
+          if ((drawn.pill?.text ?? '').isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(drawn.pill!.text!,
+                style: T.num(11.5, color: T.muted, weight: FontWeight.w500),
+                maxLines: 3),
+          ],
+        ],
+        if (drawn.chain.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Chain(drawn.chain, size: 22),
+        ],
+      ]),
+    );
   }
 }

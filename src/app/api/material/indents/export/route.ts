@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { indentFigures } from "@/lib/metrics/figures";
+import { fulfilLines } from "@/lib/material/indent-lines";
+import { bandOf, type ScreenShell } from "@/lib/screens/rows";
+import { indentEmpty, INDENT_NOTE, indentScreenRow } from "@/lib/screens/rows/indent";
 import {
   describeParts, enumWords, indentListWhere, rangeWords, readIndentListParams, searchWords,
 } from "@/lib/material/list-filters";
@@ -28,14 +32,79 @@ export async function GET(request: Request) {
     where: indentListWhere(ctx, ownership, params),
     orderBy: { raisedAt: "desc" },
     include: {
-      project: { select: { code: true } },
-      raisedBy: { select: { name: true } },
+      project: { select: { code: true, name: true } },
+      raisedBy: { select: { name: true, designation: { select: { name: true } } } },
       workPackage: { select: { name: true } },
       _count: { select: { items: true } },
     },
   });
   const { rows, note } = capRows(indents);
   const asOfMs = new Date().getTime();
+
+  /*
+   * The screen, for the app: the same rows the web card draws, the band the web
+   * opens with, and its empty state. Only the window travels, so the live stock
+   * and issue figures behind a row's fulfilment are read for the fifty rows
+   * being sent rather than for every indent that matched.
+   */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    const window = rows.slice(from, to);
+    const [items, statRows] = await Promise.all([
+      prisma.indent.findMany({
+        where: { id: { in: window.map((i) => i.id) } },
+        select: {
+          id: true,
+          items: {
+            select: {
+              itemId: true, requestedQty: true, approvedQty: true,
+              item: { select: { name: true, uom: { select: { name: true } } } },
+            },
+          },
+        },
+      }),
+      // The band reads every indent in scope, whatever the filters say — as the
+      // web screen's own second query does.
+      prisma.indent.findMany({
+        where: indentListWhere(ctx, ownership, {
+          ...params, q: "", status: null, project: null, from: undefined, to: undefined,
+        }),
+        select: {
+          status: true, estimatedValue: true, raisedAt: true,
+          approvals: { select: { approvedAt: true }, orderBy: { approvedAt: "asc" }, take: 1 },
+        },
+      }),
+    ]);
+    const byId = new Map(items.map((i) => [i.id, i.items]));
+    const lines = await fulfilLines(items);
+    screen = {
+      rows: window.map((i) => {
+        const own = byId.get(i.id) ?? [];
+        return indentScreenRow({
+          id: i.id,
+          indentNo: i.indentNo,
+          project: i.project.name,
+          raisedBy: i.raisedBy.designation
+            ? `${i.raisedBy.name} · ${i.raisedBy.designation.name}`
+            : i.raisedBy.name,
+          raisedAt: i.raisedAt,
+          requiredByDate: i.requiredByDate,
+          activity: i.workPackage?.name ?? null,
+          status: i.status,
+          items: own,
+          lineCount: i._count.items,
+          lines: lines.get(i.id) ?? [],
+        });
+      }),
+      band: bandOf(indentFigures(statRows)),
+      empty: indentEmpty(
+        Boolean(params.q || params.status || params.project || params.from || params.to),
+        ctx.has(PERM.material.indent.create),
+      ),
+      note: INDENT_NOTE,
+    };
+  }
 
   const filters = describeParts(
     [
@@ -119,5 +188,6 @@ export async function GET(request: Request) {
       summary: [{ label: "Indents", value: note }],
       emptyMessage: "No indents match these filters.",
     },
+    screen,
   });
 }

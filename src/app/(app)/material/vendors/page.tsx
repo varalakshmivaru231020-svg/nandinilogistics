@@ -9,6 +9,7 @@ import { vendorFigures } from "@/lib/metrics/figures";
 import { ListNote } from "@/components/list/list-note";
 import Link from "next/link";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { vendorEmpty, VENDOR_NOTE } from "@/lib/screens/rows/vendor";
 import { cn, moneyShort, phone } from "@/lib/utils";
 
 export const metadata = { title: "Vendors" };
@@ -108,7 +109,7 @@ export default async function VendorsPage({
       {rows.length === 0 ? (
         <Card>
           <EmptyState
-            title={filtered ? "No vendors match these filters" : "No vendors yet"}
+            title={vendorEmpty(filtered).title}
           />
         </Card>
       ) : (
@@ -202,9 +203,7 @@ export default async function VendorsPage({
         </div>
       )}
 
-      <ListNote>
-        A PO can only be raised against an active vendor. Vendors on hold stay visible for history but cannot receive new orders.
-      </ListNote>
+      <ListNote>{VENDOR_NOTE}</ListNote>
     </div>
   );
 }

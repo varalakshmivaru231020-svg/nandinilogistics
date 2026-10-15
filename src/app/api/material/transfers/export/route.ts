@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { transferEmpty, transferScreenRow } from "@/lib/screens/rows/material-rest";
 import {
   describeParts, enumWords, rangeWords, readTransferListParams, searchWords, transferListWhere,
 } from "@/lib/material/list-filters";
@@ -25,6 +27,28 @@ export async function GET(request: Request) {
     },
   });
   const { rows, note } = capRows(transfers);
+
+  /* The screen, for the app: the transfer row the web draws. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    screen = {
+      rows: rows.slice(from, to).map((t) =>
+        transferScreenRow({
+          id: t.id,
+          transferNo: t.transferNo,
+          status: t.status,
+          fromStoreName: t.fromStore.name,
+          toStoreName: t.toStore.name,
+          transferDate: t.transferDate,
+          lineCount: t.items.length,
+        }),
+      ),
+      empty: transferEmpty(
+        Boolean(params.q || params.status || params.fromStore || params.toStore || params.from || params.to),
+      ),
+    };
+  }
 
   const filters = describeParts(
     [
@@ -72,5 +96,6 @@ export async function GET(request: Request) {
       summary: [{ label: "Transfers", value: note }],
       emptyMessage: "No store transfers match these filters.",
     },
+    screen,
   });
 }

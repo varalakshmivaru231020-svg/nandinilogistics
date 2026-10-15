@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { grnFigures } from "@/lib/metrics/figures";
+import { bandOf, type ScreenShell } from "@/lib/screens/rows";
+import { grnEmpty, GRN_NOTE, grnScreenRow } from "@/lib/screens/rows/grn";
 import {
   describeParts, enumWords, grnListWhere, grnMatch, rangeWords, readGrnListParams, searchWords,
 } from "@/lib/material/list-filters";
@@ -29,6 +32,70 @@ export async function GET(request: Request) {
     },
   });
   const { rows, note } = capRows(grns);
+
+  /*
+   * The screen, for the app: the design's own receipt card. The item names and
+   * the ordered quantity behind "6.2 of 12 Ton" are read for the window being
+   * sent, and the band reads every receipt in scope as the web's does.
+   */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const nowMs = new Date().getTime();
+    const { from, to } = listWindow(gate.params, rows.length);
+    const window = rows.slice(from, to);
+    const [lines, statRows] = await Promise.all([
+      prisma.grn.findMany({
+        where: { id: { in: window.map((g) => g.id) } },
+        select: {
+          id: true, challanPhotoUrl: true,
+          items: {
+            select: {
+              receivedQty: true, acceptedQty: true, rejectedQty: true, shortQty: true,
+              poItem: { select: { orderedQty: true } },
+              item: { select: { name: true, uom: { select: { name: true } } } },
+            },
+          },
+        },
+      }),
+      prisma.grn.findMany({
+        where: grnListWhere(ctx, {
+          ...params, q: "", status: null, project: null, from: undefined, to: undefined,
+        }),
+        select: {
+          status: true, grnDate: true,
+          items: { select: { acceptedQty: true, rejectedQty: true } },
+        },
+      }),
+    ]);
+    const byId = new Map(lines.map((g) => [g.id, g]));
+    screen = {
+      rows: window.map((g) => {
+        const own = byId.get(g.id);
+        return grnScreenRow({
+          id: g.id,
+          grnNo: g.grnNo,
+          poNo: g.purchaseOrder.poNo,
+          vendor: g.vendor.name,
+          grnDate: g.grnDate,
+          status: g.status,
+          hasChallanPhoto: Boolean(own?.challanPhotoUrl),
+          inspectedBy: g.inspectedBy?.name ?? null,
+          invoices: g.purchaseOrder._count.invoices,
+          items: own?.items ?? [],
+        });
+      }),
+      band: bandOf(
+        grnFigures(
+          statRows.map((g) => ({ status: g.status, receivedAt: g.grnDate, items: g.items })),
+          nowMs,
+        ),
+      ),
+      empty: grnEmpty(
+        Boolean(params.q || params.status || params.project || params.from || params.to),
+      ),
+      note: GRN_NOTE,
+    };
+  }
 
   const filters = describeParts(
     [
@@ -87,5 +154,6 @@ export async function GET(request: Request) {
       summary: [{ label: "Goods receipts", value: note }],
       emptyMessage: "No goods receipts match these filters.",
     },
+    screen,
   });
 }

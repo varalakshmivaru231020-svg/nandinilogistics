@@ -9,6 +9,7 @@ import { projectOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { issueEmpty } from "@/lib/screens/rows/issue";
 import { IssuesScreen } from "./issues-screen";
 
 export const metadata = { title: "Material Issues" };
@@ -111,8 +112,8 @@ export default async function IssuesPage({
         <Card>
           <EmptyState
             icon={<ArrowLeftRight className="h-8 w-8" />}
-            title={filtered ? "No issue slips match these filters" : "Nothing issued yet"}
-            description="Issuing material moves it out of the store ledger and onto a work package, so consumption can be compared with what was indented."
+            title={issueEmpty(filtered).title}
+            description={issueEmpty(filtered).description}
           />
         </Card>
       ) : (

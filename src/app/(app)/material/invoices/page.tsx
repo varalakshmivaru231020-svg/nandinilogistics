@@ -13,15 +13,13 @@ import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { invoiceLookups } from "./lookups";
 import { NewInvoiceDrawer } from "./new-invoice-drawer";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { invoiceEmpty, INVOICE_STATUS_TONE } from "@/lib/screens/rows/material-rest";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatDate, money } from "@/lib/utils";
 
 export const metadata = { title: "Vendor Invoices" };
 
-const STATUS_TONE: Record<string, "slate" | "good" | "bad" | "warn" | "brand" | "navy"> = {
-  DRAFT: "slate", MATCHED: "brand", MISMATCH: "bad", APPROVED: "good",
-  PARTIALLY_PAID: "warn", PAID: "navy", CANCELLED: "slate",
-};
+
 
 type Row = {
   id: string; invoiceNo: string; status: string; invoiceDate: Date;
@@ -102,7 +100,7 @@ export default async function InvoicesPage({
     },
     {
       key: "status", header: "Status", align: "center",
-      render: (i) => <Badge tone={STATUS_TONE[i.status] ?? "slate"}>{i.status.replace(/_/g, " ")}</Badge>,
+      render: (i) => <Badge tone={INVOICE_STATUS_TONE[i.status] ?? "slate"}>{i.status.replace(/_/g, " ")}</Badge>,
     },
   ];
 
@@ -143,8 +141,8 @@ export default async function InvoicesPage({
         <Card>
           <EmptyState
             icon={<ReceiptText className="h-8 w-8" />}
-            title={filtered ? "No invoices match these filters" : "No invoices recorded"}
-            description="An invoice is captured against its purchase order and matched to what was actually received."
+            title={invoiceEmpty(filtered).title}
+            description={invoiceEmpty(filtered).description}
           />
         </Card>
       ) : (

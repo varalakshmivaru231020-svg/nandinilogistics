@@ -16,6 +16,7 @@ import { ListNote } from "@/components/list/list-note";
 import { PoApproveButton } from "./approve-button";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
+import { poCredit, poEmpty, PO_NOTE } from "@/lib/screens/rows/purchase-order";
 import { cn, formatDate, moneyShort, qty } from "@/lib/utils";
 
 export const metadata = { title: "Purchase Orders" };
@@ -105,11 +106,12 @@ export default async function PurchaseOrdersPage({
           </p>
           {/* Who raised it, and how far the two approvals have got. */}
           <p className="text-[11px] font-medium text-muted-400">
-            {p.adminApprovedBy
-              ? `approved ${p.adminApprovedBy.name}`
-              : p.pmApprovedBy
-                ? `PM ✓ ${p.pmApprovedBy.name}`
-                : `raised ${p.createdBy.name}${p.createdBy.designation ? ` · ${p.createdBy.designation.name}` : ""}`}
+            {poCredit({
+              raisedBy: p.createdBy.name,
+              raisedByDesignation: p.createdBy.designation?.name ?? null,
+              pmApprovedBy: p.pmApprovedBy?.name ?? null,
+              adminApprovedBy: p.adminApprovedBy?.name ?? null,
+            } as Parameters<typeof poCredit>[0])}
           </p>
         </div>
       ),
@@ -229,8 +231,8 @@ export default async function PurchaseOrdersPage({
           <Card>
             <EmptyState
               icon={<FileText className="h-8 w-8" />}
-              title={filtered ? "No purchase orders match" : "No purchase orders yet"}
-              description="A PO is raised from an approved indent, carrying only the shortfall left after the stock check."
+              title={poEmpty(filtered).title}
+              description={poEmpty(filtered).description}
             />
           </Card>
         ) : (
@@ -246,9 +248,7 @@ export default async function PurchaseOrdersPage({
         )}
       </div>
 
-      <ListNote>
-        Every PO records who raised it and both approvals (Project Manager → Admin). Editing an approved PO creates a new revision and restarts approval.
-      </ListNote>
+      <ListNote>{PO_NOTE}</ListNote>
     </div>
   );
 }

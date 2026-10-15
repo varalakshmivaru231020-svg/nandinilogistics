@@ -11,6 +11,7 @@ import { ListToolbar } from "@/components/list/list-toolbar";
 import { ModuleStats } from "@/components/list/module-stats";
 import { grnFigures } from "@/lib/metrics/figures";
 import { ListNote } from "@/components/list/list-note";
+import { grnEmpty, grnLineSummary, GRN_NOTE } from "@/lib/screens/rows/grn";
 import { GrnCard } from "./grn-card";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 
@@ -109,26 +110,13 @@ export default async function GrnListPage({
         <Card>
           <EmptyState
             icon={<PackageCheck className="h-8 w-8" />}
-            title={filtered ? "No goods receipts match these filters" : "Nothing received yet"}
+            title={grnEmpty(filtered).title}
           />
         </Card>
       ) : (
         <div className="overflow-hidden rounded-[13px] border border-line-400 bg-white">
           {grns.map((g) => {
-            const accepted = g.items.reduce((n, i) => n + Number(i.acceptedQty), 0);
-            const rejected = g.items.reduce((n, i) => n + Number(i.rejectedQty), 0);
-            const short = g.items.reduce((n, i) => n + Number(i.shortQty), 0);
-            // The design names the unit beside each figure; a receipt mixing
-            // units has no single one to name.
-            const units = new Set(g.items.map((i) => i.item.uom.name));
-            const unit = units.size === 1 ? [...units][0] : null;
-            // The design names the first line and what it delivered of its order.
-            const first = g.items[0];
-            const ordered = first ? Number(first.poItem?.orderedQty ?? 0) : 0;
-            const item = first
-              ? `${first.item.name} · ${qty(first.receivedQty, 3)}${ordered ? ` of ${qty(ordered, 3)}` : ""} ${first.item.uom.name}` +
-                (g.items.length > 1 ? ` +${g.items.length - 1}` : "")
-              : "—";
+            const { accepted, rejected, short, unit, item } = grnLineSummary(g.items);
 
             return (
               <GrnCard
@@ -158,9 +146,7 @@ export default async function GrnListPage({
         </div>
       )}
 
-      <ListNote>
-        Three-way match: PO ↔ GRN ↔ Invoice. A mismatch is blocked or flagged — never quietly paid. Only accepted stock enters the ledger.
-      </ListNote>
+      <ListNote>{GRN_NOTE}</ListNote>
     </div>
   );
 }

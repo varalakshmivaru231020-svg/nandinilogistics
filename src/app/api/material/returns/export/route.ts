@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { returnEmpty, returnScreenRow } from "@/lib/screens/rows/return";
 import {
   describeParts, enumWords, rangeWords, readReturnListParams, returnListWhere, searchWords,
 } from "@/lib/material/list-filters";
@@ -34,6 +36,41 @@ export async function GET(request: Request) {
     },
   });
   const { rows, note } = capRows(returns);
+
+  /* The screen, for the app: the return card, with its value read for the
+   * window being sent. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    const window = rows.slice(from, to);
+    const extra = await prisma.materialReturn.findMany({
+      where: { id: { in: window.map((r) => r.id) } },
+      select: { id: true, totalValue: true, _count: { select: { items: true } } },
+    });
+    const byId = new Map(extra.map((r) => [r.id, r]));
+    screen = {
+      rows: window.map((r) =>
+        returnScreenRow(
+          {
+            id: r.id,
+            returnNo: r.returnNo,
+            projectCode: r.project.code,
+            status: r.status,
+            issueNo: r.issue.issueNo,
+            storeName: r.store.name,
+            returnDate: r.returnDate,
+            reason: r.reason,
+            raisedByName: r.raisedBy.name,
+            totalValue: Number(byId.get(r.id)?.totalValue ?? 0),
+            lineCount: byId.get(r.id)?._count.items ?? r.items.length,
+            damagedLines: r.items.filter((i) => i.condition === "Damaged").length,
+          },
+          showValue,
+        ),
+      ),
+      empty: returnEmpty(Boolean(params.q || params.status || params.project || params.from || params.to)),
+    };
+  }
 
   const filters = describeParts(
     [
@@ -91,5 +128,6 @@ export async function GET(request: Request) {
       summary: [{ label: "Returns", value: note }],
       emptyMessage: "No material returns match these filters.",
     },
+    screen,
   });
 }

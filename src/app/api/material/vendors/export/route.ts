@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { vendorFigures } from "@/lib/metrics/figures";
+import { bandOf, type ScreenShell } from "@/lib/screens/rows";
+import { vendorEmpty, VENDOR_NOTE, vendorScreenRow } from "@/lib/screens/rows/vendor";
 import {
   describeParts, enumWords, onTimeStats, readVendorListParams, searchWords, vendorListWhere,
 } from "@/lib/material/list-filters";
@@ -35,6 +38,67 @@ export async function GET(request: Request) {
     },
   });
   const { rows, note } = capRows(vendors);
+
+  /*
+   * The screen, for the app: the directory card. The payment term and what has
+   * been spent with the vendor are read for the window being sent, and the band
+   * reads every vendor as the web's does.
+   */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    const window = rows.slice(from, to);
+    const [extra, statRows] = await Promise.all([
+      prisma.vendor.findMany({
+        where: { id: { in: window.map((v) => v.id) } },
+        select: {
+          id: true,
+          paymentTerm: { select: { name: true } },
+          purchaseOrders: { select: { totalAmount: true } },
+        },
+      }),
+      prisma.vendor.findMany({
+        select: { status: true, rating: true, purchaseOrders: { select: { totalAmount: true } } },
+      }),
+    ]);
+    const byId = new Map(extra.map((v) => [v.id, v]));
+    screen = {
+      rows: window.map((v) => {
+        const e = byId.get(v.id);
+        const perf = showPerformance
+          ? onTimeStats(
+              v.purchaseOrders.map((p) => ({
+                expectedDate: p.expectedDate,
+                firstPostedGrnDate: p.grns[0]?.grnDate ?? null,
+              })),
+            )
+          : null;
+        return vendorScreenRow(
+          {
+            id: v.id,
+            code: v.code,
+            name: v.name,
+            status: v.status,
+            contactPerson: v.contactPerson,
+            phone: v.phone,
+            email: v.email,
+            gstin: v.gstin,
+            pan: v.pan,
+            categories: v.categories.map((c) => c.category.name),
+            paymentTerm: e?.paymentTerm?.name ?? null,
+            poCount: v.purchaseOrders.length,
+            rating: v.rating === null ? null : Number(v.rating),
+            onTimePct: perf?.onTimePct ?? null,
+            spend: (e?.purchaseOrders ?? []).reduce((n, p) => n + Number(p.totalAmount), 0),
+          },
+          showPerformance,
+        );
+      }),
+      band: bandOf(vendorFigures(statRows)),
+      empty: vendorEmpty(Boolean(params.q || params.status || params.category)),
+      note: VENDOR_NOTE,
+    };
+  }
 
   const filters = describeParts(
     [searchWords(params.q), enumWords("Status", params.status), await categoryLabel(params.category)],
@@ -95,5 +159,6 @@ export async function GET(request: Request) {
       summary: [{ label: "Vendors", value: note }],
       emptyMessage: "No vendors match these filters.",
     },
+    screen,
   });
 }

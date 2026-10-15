@@ -10,6 +10,7 @@ import {
   type ExportFormat,
 } from "@/lib/reports/export";
 import type { ReportResult } from "@/lib/reports/types";
+import type { ScreenShell } from "@/lib/screens/rows";
 
 /**
  * The shared half of every list export route: who may export, in what format,
@@ -46,6 +47,32 @@ export const LIST_PAGE_MAX = 200;
  * it there would put a fourth item in a menu nobody asked for.
  */
 export type ListFormat = ExportFormat | "json";
+
+/**
+ * Which rows will actually travel, so a route can compose **only those**.
+ *
+ * A list answers every matching row and the page is taken at the end, which is
+ * fine for a flat table and not fine for a composed one: an indent's row needs
+ * live stock and what has been issued against it, and reading that for twenty
+ * thousand indents to send fifty of them would be absurd. So a route asks for
+ * the window first, builds the screen for it, and `exportResponse` sends it
+ * beside the same slice of plain rows.
+ */
+export function listWindow(
+  params: URLSearchParams | undefined,
+  total: number,
+): { page: number | null; pageSize: number; from: number; to: number } {
+  const asked = Number(params?.get("page") ?? 0);
+  const page = Number.isFinite(asked) && asked >= 1 ? Math.floor(asked) : null;
+  const sizeAsked = Number(params?.get("pageSize") ?? 0);
+  const pageSize = Math.min(
+    LIST_PAGE_MAX,
+    Number.isFinite(sizeAsked) && sizeAsked >= 1 ? Math.floor(sizeAsked) : LIST_PAGE_SIZE,
+  );
+  const from = page === null ? 0 : Math.min(total, (page - 1) * pageSize);
+  const to = page === null ? total : Math.min(total, page * pageSize);
+  return { page, pageSize, from, to };
+}
 
 export type ExportGate =
   | { ok: true; ctx: AuthContext; format: ListFormat; params: URLSearchParams }
@@ -124,6 +151,12 @@ export async function exportResponse(opts: {
   projectId?: string | null;
   /** The request's own query, for the page the client asked for. */
   params?: URLSearchParams;
+  /**
+   * The screen, composed as the web composes it — its rows, its band, its
+   * empty state and its note. Read by the app and by nothing else: a file is a
+   * table of columns, and none of this is a column.
+   */
+  screen?: ScreenShell;
 }): Promise<NextResponse> {
   const { ctx, format, title, entity, filters, result } = opts;
   const now = new Date();
@@ -141,15 +174,23 @@ export async function exportResponse(opts: {
      * them travel at once — so a page cannot show something the whole list
      * would not have.
      */
-    const asked = Number(opts.params?.get("page") ?? 0);
-    const page = Number.isFinite(asked) && asked >= 1 ? Math.floor(asked) : null;
-    const sizeAsked = Number(opts.params?.get("pageSize") ?? 0);
-    const pageSize = Math.min(
-      LIST_PAGE_MAX,
-      Number.isFinite(sizeAsked) && sizeAsked >= 1 ? Math.floor(sizeAsked) : LIST_PAGE_SIZE,
-    );
     const total = result.rows.length;
-    const rows = page === null ? result.rows : result.rows.slice((page - 1) * pageSize, page * pageSize);
+    const { page, pageSize, from, to } = listWindow(opts.params, total);
+    const rows = result.rows.slice(from, to);
+
+    /*
+     * The composed rows are the window's own, built by the route for exactly
+     * these records. If they ever stop lining up, the row would wear another
+     * row's badge — so the block is dropped rather than sent wrong, and the
+     * client falls back to the columns.
+     */
+    let screen = opts.screen ?? null;
+    if (screen && screen.rows.length !== rows.length) {
+      console.error(
+        `[list] ${title}: ${screen.rows.length} composed rows for ${rows.length} rows — dropping the screen block`,
+      );
+      screen = null;
+    }
 
     return NextResponse.json(
       {
@@ -167,6 +208,7 @@ export async function exportResponse(opts: {
             ? {}
             : { page, pageSize, hasMore: page * pageSize < total }),
           emptyMessage: result.emptyMessage ?? null,
+          ...(screen ? { screen } : {}),
           serverTime: now.toISOString(),
         },
       },

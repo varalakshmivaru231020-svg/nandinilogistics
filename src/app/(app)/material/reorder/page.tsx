@@ -7,6 +7,7 @@ import { categoryOptions, loadReorderRows, type ReorderRow } from "@/lib/materia
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { reorderEmpty } from "@/lib/screens/rows/material-rest";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { money, qty } from "@/lib/utils";
 
@@ -99,8 +100,8 @@ export default async function ReorderPage({
         <Card>
           <EmptyState
             icon={<TriangleAlert className="h-8 w-8" />}
-            title={filtered && all.length > 0 ? "No reorder alerts match these filters" : "Nothing needs reordering"}
-            description="Every item with a reorder level is currently above it."
+            title={reorderEmpty(filtered, all.length > 0).title}
+            description={reorderEmpty(filtered, all.length > 0).description}
           />
         </Card>
       ) : (

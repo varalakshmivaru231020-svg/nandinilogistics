@@ -11,6 +11,7 @@ import { projectOptions } from "@/lib/material/list-options";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { paymentEmpty } from "@/lib/screens/rows/material-rest";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { formatDate, money } from "@/lib/utils";
 
@@ -119,8 +120,8 @@ export default async function PaymentsPage({
         <Card>
           <EmptyState
             icon={<Banknote className="h-8 w-8" />}
-            title={filtered ? "No payments match these filters" : "No payments yet"}
-            description="Payments are recorded from the invoice, once it is approved."
+            title={paymentEmpty(filtered).title}
+            description={paymentEmpty(filtered).description}
           />
         </Card>
       ) : (

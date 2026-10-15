@@ -7,6 +7,7 @@ import { Check, PackageCheck, Plus, Trash2, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, CardBody, EmptyState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { transferEmpty, TRANSFER_STATUS_TONE } from "@/lib/screens/rows/material-rest";
 import { formatDate, qty } from "@/lib/utils";
 import { approveTransferAction, createTransferAction, receiveTransferAction } from "./actions";
 
@@ -23,9 +24,7 @@ interface StockRow {
   itemId: string; storeId: string; code: string; name: string; uom: string; available: number;
 }
 
-const STATUS_TONE: Record<string, "slate" | "warn" | "good" | "bad"> = {
-  DRAFT: "slate", IN_TRANSIT: "warn", RECEIVED: "good", CANCELLED: "bad",
-};
+
 
 export function TransfersScreen({
   transfers, stores, stock, can, filtered = false,
@@ -71,8 +70,8 @@ export function TransfersScreen({
         <Card>
           <EmptyState
             icon={<Truck className="h-8 w-8" />}
-            title={filtered ? "No transfers match these filters" : "No transfers yet"}
-            description="Move stock between a site store and the central store, with approval at one end and confirmation at the other."
+            title={transferEmpty(filtered).title}
+            description={transferEmpty(filtered).description}
           />
         </Card>
       ) : (
@@ -84,7 +83,7 @@ export function TransfersScreen({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-navy-950">{t.transferNo}</span>
-                      <Badge tone={STATUS_TONE[t.status] ?? "slate"}>{t.status.replace(/_/g, " ")}</Badge>
+                      <Badge tone={TRANSFER_STATUS_TONE[t.status] ?? "slate"}>{t.status.replace(/_/g, " ")}</Badge>
                     </div>
                     <p className="text-xs text-muted-500">
                       {t.fromStoreName} → {t.toStoreName} · {formatDate(t.transferDate)} · {t.items.length} line(s)

@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import 'row.dart';
+
 /// Every answer the boundary gives is one of two shapes, so this is too.
 class Res<T> {
   const Res.ok(this.data) : error = null, code = null, status = 200;
@@ -149,6 +151,7 @@ class ListPage {
     this.total = 0,
     this.page,
     this.hasMore = false,
+    this.screen,
   });
 
   final String title;
@@ -171,6 +174,11 @@ class ListPage {
   /// Whether there is another page behind this one.
   final bool hasMore;
 
+  /// The screen as the web draws it — one composed row per row above, the
+  /// band, the empty state and the note. Absent for a module whose list route
+  /// does not compose one yet, and then the columns are all there is.
+  final ScreenShell? screen;
+
   static ListPage from(Map<String, dynamic> d) => ListPage(
         title: (d['title'] as String?) ?? '',
         filters: (d['filters'] as String?) ?? '',
@@ -180,6 +188,7 @@ class ListPage {
         total: (d['total'] as num?)?.toInt() ?? ((d['rows'] as List?) ?? const []).length,
         page: (d['page'] as num?)?.toInt(),
         hasMore: d['hasMore'] == true,
+        screen: ScreenShell.from(d['screen']),
         serverTime:
             DateTime.tryParse((d['serverTime'] as String?) ?? '')?.millisecondsSinceEpoch ??
                 DateTime.now().millisecondsSinceEpoch,

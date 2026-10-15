@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { invoiceEmpty, invoiceScreenRow } from "@/lib/screens/rows/material-rest";
 import {
   describeParts, enumWords, invoiceListWhere, rangeWords, readInvoiceListParams, searchWords,
 } from "@/lib/material/list-filters";
@@ -24,6 +26,28 @@ export async function GET(request: Request) {
     },
   });
   const { rows, note } = capRows(invoices);
+
+  /* The screen, for the app: the invoice row, with what is paid and what is
+   * still outstanding as the table shows them. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    screen = {
+      rows: rows.slice(from, to).map((i) =>
+        invoiceScreenRow({
+          id: i.id,
+          invoiceNo: i.invoiceNo,
+          poNo: i.purchaseOrder.poNo,
+          vendor: i.vendor.name,
+          invoiceDate: i.invoiceDate,
+          totalAmount: Number(i.totalAmount),
+          paidAmount: Number(i.paidAmount),
+          status: i.status,
+        }),
+      ),
+      empty: invoiceEmpty(Boolean(params.q || params.status || params.project || params.from || params.to)),
+    };
+  }
 
   const filters = describeParts(
     [
@@ -73,5 +97,6 @@ export async function GET(request: Request) {
       summary: [{ label: "Invoices", value: note }],
       emptyMessage: "No vendor invoices match these filters.",
     },
+    screen,
   });
 }

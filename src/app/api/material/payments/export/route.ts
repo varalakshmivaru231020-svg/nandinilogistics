@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { paymentEmpty, paymentScreenRow } from "@/lib/screens/rows/material-rest";
 import {
   describeParts, paymentListWhere, rangeWords, readPaymentListParams, searchWords,
 } from "@/lib/material/list-filters";
@@ -29,6 +31,27 @@ export async function GET(request: Request) {
     },
   });
   const { rows, note } = capRows(payments);
+
+  /* The screen, for the app: the payment row the web draws. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    screen = {
+      rows: rows.slice(from, to).map((p) =>
+        paymentScreenRow({
+          id: p.id,
+          paymentNo: p.paymentNo,
+          invoiceNo: p.invoice.invoiceNo,
+          vendor: p.invoice.vendor.name,
+          paymentDate: p.paymentDate,
+          mode: p.mode,
+          referenceNo: p.referenceNo,
+          amount: Number(p.amount),
+        }),
+      ),
+      empty: paymentEmpty(Boolean(params.q || params.mode || params.project || params.from || params.to)),
+    };
+  }
 
   const filters = describeParts(
     [
@@ -76,5 +99,6 @@ export async function GET(request: Request) {
       ],
       emptyMessage: "No vendor payments match these filters.",
     },
+    screen,
   });
 }

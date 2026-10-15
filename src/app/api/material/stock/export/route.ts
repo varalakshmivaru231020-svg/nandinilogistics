@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { itemFigures } from "@/lib/metrics/figures";
+import { bandOf, type ScreenShell } from "@/lib/screens/rows";
+import {
+  stockEmpty, stockFilter, stockItemRows, STOCK_NOTE, stockScreenRow,
+} from "@/lib/screens/rows/stock";
 import {
   describeParts, readStockListParams, searchWords, stockColumns, stockListWhere, stockRow,
 } from "@/lib/material/list-filters";
@@ -42,6 +47,65 @@ export async function GET(request: Request) {
   );
 
   const totalValue = rows.reduce((s, b) => s + Number(b.value), 0);
+
+  /*
+   * The app is sent the **screen**, which is a different list from the file:
+   * one row per item holding the stock it has across every store the filter
+   * allows, narrowed by the screen's own stock state — "Restock now", "Order
+   * soon", "Healthy" — which no column carries. So the JSON mode answers those
+   * rows, with the screen's own headers behind them.
+   */
+  if (gate.format === "json") {
+    const items = stockFilter(stockItemRows(balances), params.stock);
+    const { from, to } = listWindow(gate.params, items.length);
+    const statRows = await prisma.item.findMany({
+      where: { status: "ACTIVE" },
+      select: { reorderLevel: true, stockBalances: { select: { quantity: true, avgRate: true } } },
+    });
+    const screen: ScreenShell = {
+      rows: items.slice(from, to).map(stockScreenRow),
+      band: bandOf(
+        itemFigures(
+          statRows.map((i) => ({
+            reorderLevel: i.reorderLevel,
+            balances: i.stockBalances.map((b) => ({ quantity: b.quantity, valuationRate: b.avgRate })),
+          })),
+        ),
+      ),
+      empty: stockEmpty(Boolean(params.q || params.store || params.category || params.stock)),
+      note: STOCK_NOTE,
+    };
+    return exportResponse({
+      ctx,
+      params: gate.params,
+      format: gate.format,
+      title: "Stock",
+      entity: "StockBalance",
+      filters: filters + (showValuation ? "" : " · Without valuation"),
+      result: {
+        columns: [
+          { key: "name", header: "Item" },
+          { key: "code", header: "Item code" },
+          { key: "uom", header: "Unit" },
+          { key: "quantity", header: "Available stock", align: "right", format: "qty" },
+          { key: "reorderLevel", header: "Reorder", align: "right", format: "qty" },
+          { key: "status", header: "Stock status" },
+        ],
+        rows: items.map((i) => ({
+          id: i.id,
+          name: i.name,
+          code: i.code,
+          uom: i.uom,
+          quantity: i.quantity,
+          reorderLevel: i.reorderLevel,
+          status: stockScreenRow(i).status?.label ?? "",
+        })),
+        summary: [{ label: "Items", value: `${items.length}` }],
+        emptyMessage: "No stock matches these filters.",
+      },
+      screen,
+    });
+  }
 
   return exportResponse({
     ctx,

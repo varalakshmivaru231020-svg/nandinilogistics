@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { issueEmpty, issueScreenRow } from "@/lib/screens/rows/issue";
 import {
   describeParts, issueListWhere, issueStateWords, rangeWords, readIssueListParams, searchWords,
 } from "@/lib/material/list-filters";
@@ -39,6 +41,54 @@ export async function GET(request: Request) {
     select: { id: true, name: true },
   });
   const nameById = new Map(recipients.map((r) => [r.id, r.name]));
+
+  /*
+   * The screen, for the app: the slip card with its badges. What has come back
+   * and how many returns are pending are read for the window being sent. The
+   * screen has no band — the web counts the slips in its toolbar instead.
+   */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    const window = rows.slice(from, to);
+    const extra = await prisma.materialIssue.findMany({
+      where: { id: { in: window.map((i) => i.id) } },
+      select: {
+        id: true, totalValue: true,
+        items: { select: { returnedQty: true } },
+        _count: { select: { returns: true } },
+      },
+    });
+    const byId = new Map(extra.map((i) => [i.id, i]));
+    screen = {
+      rows: window.map((i) => {
+        const e = byId.get(i.id);
+        return issueScreenRow(
+          {
+            id: i.id,
+            issueNo: i.issueNo,
+            projectCode: i.project.code,
+            storeName: i.store.name,
+            issuedToName: nameById.get(i.issuedToId) ?? "—",
+            issuedByName: i.issuedBy.name,
+            issueDate: i.issueDate,
+            workPackage: i.workPackage ? `${i.workPackage.code} — ${i.workPackage.name}` : null,
+            purpose: i.purpose,
+            totalValue: Number(e?.totalValue ?? 0),
+            lineCount: i._count.items,
+            returnedQty: (e?.items ?? []).reduce((n, l) => n + Number(l.returnedQty), 0),
+            pendingReturns: e?._count.returns ?? 0,
+            acknowledgedAt: i.acknowledgedAt,
+            cancelledAt: i.cancelledAt,
+          },
+          showValue,
+        );
+      }),
+      empty: issueEmpty(
+        Boolean(params.q || params.project || params.ack || params.status || params.from || params.to),
+      ),
+    };
+  }
 
   const filters = describeParts(
     [
@@ -97,5 +147,6 @@ export async function GET(request: Request) {
       summary: [{ label: "Issue slips", value: note }],
       emptyMessage: "No issue slips match these filters.",
     },
+    screen,
   });
 }

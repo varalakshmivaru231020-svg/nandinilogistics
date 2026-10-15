@@ -1,4 +1,6 @@
-import { capRows, exportGate, exportResponse } from "@/lib/exports/respond";
+import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
+import { type ScreenShell } from "@/lib/screens/rows";
+import { reorderEmpty, reorderScreenRow } from "@/lib/screens/rows/material-rest";
 import {
   describeParts, filterReorderRows, readReorderListParams, reorderColumns, reorderRow, searchWords,
 } from "@/lib/material/list-filters";
@@ -20,6 +22,17 @@ export async function GET(request: Request) {
 
   const { rows, note } = capRows(filterReorderRows(await loadReorderRows(), params));
 
+  /* The screen, for the app: the alert row, most urgent first as the table
+   * orders them. */
+  let screen: ScreenShell | undefined;
+  if (gate.format === "json") {
+    const { from, to } = listWindow(gate.params, rows.length);
+    screen = {
+      rows: rows.slice(from, to).map((r) => reorderScreenRow(r, showValuation)),
+      empty: reorderEmpty(Boolean(params.q || params.category), rows.length > 0),
+    };
+  }
+
   const filters = describeParts(
     [searchWords(params.q), await categoryLabel(params.category)],
     "Every item at or below its reorder level",
@@ -38,5 +51,6 @@ export async function GET(request: Request) {
       summary: [{ label: "Items", value: note }],
       emptyMessage: "Nothing needs reordering.",
     },
+    screen,
   });
 }

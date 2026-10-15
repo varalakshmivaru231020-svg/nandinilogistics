@@ -9,6 +9,7 @@ import { ModuleStats } from "@/components/list/module-stats";
 import { itemFigures } from "@/lib/metrics/figures";
 import { ListNote } from "@/components/list/list-note";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { stockEmpty, stockFilter, stockItemRows, STOCK_NOTE } from "@/lib/screens/rows/stock";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { cn, qty } from "@/lib/utils";
 
@@ -64,32 +65,10 @@ export default async function StockPage({
   ]);
 
   // The design lists the item master, one row per item, with the stock it holds
-  // across every store the filter allows.
-  const byItem = new Map<string, StockRow>();
-  for (const b of balances) {
-    const row = byItem.get(b.itemId) ?? {
-      id: b.itemId,
-      code: b.item.code,
-      name: b.item.name,
-      uom: b.item.uom.name,
-      quantity: 0,
-      reorderLevel: Number(b.item.reorderLevel),
-    };
-    row.quantity += Number(b.quantity);
-    byItem.set(b.itemId, row);
-  }
-  const items = [...byItem.values()].sort((a, b) => a.name.localeCompare(b.name));
-
-  const rows = params.stock
-    ? items.filter((i) => {
-        const state = stockState(i.quantity, i.reorderLevel);
-        return (
-          (params.stock === "RESTOCK" && state.label === "Restock now") ||
-          (params.stock === "SOON" && state.label === "Order soon") ||
-          (params.stock === "HEALTHY" && state.label === "Healthy")
-        );
-      })
-    : items;
+  // across every store the filter allows. Shared with the app, which is sent
+  // this screen rather than the file's one-row-per-store-balance.
+  const items = stockItemRows(balances);
+  const rows = stockFilter(items, params.stock);
 
   // Strictly below the level, matching the design's "Restock now" band.
   const lowRows = items.filter((i) => i.reorderLevel > 0 && i.quantity < i.reorderLevel);
@@ -264,16 +243,14 @@ export default async function StockPage({
       {rows.length === 0 ? (
         <Card>
           <EmptyState
-            title={filtered ? "No stock matches these filters" : "No stock recorded yet"}
+            title={stockEmpty(filtered).title}
           />
         </Card>
       ) : (
         <DataTable columns={columns} rows={rows} rowKey={(b) => b.id} dense />
       )}
 
-      <ListNote>
-        Available stock updates from GRN receipts and site issues — items below their reorder level are flagged for a refill PO. The same records appear under Masters → Item Master.
-      </ListNote>
+      <ListNote>{STOCK_NOTE}</ListNote>
     </div>
   );
 }

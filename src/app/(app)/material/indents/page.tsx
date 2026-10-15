@@ -13,23 +13,12 @@ import { ModuleStats } from "@/components/list/module-stats";
 import { indentFigures } from "@/lib/metrics/figures";
 import { ListNote } from "@/components/list/list-note";
 import { fulfilLines } from "@/lib/material/indent-lines";
-import { qty } from "@/lib/utils";
+import { indentEmpty, indentItemSummary, INDENT_NOTE } from "@/lib/screens/rows/indent";
 import { IndentCard } from "./indent-card";
 import { Pagination } from "@/components/ui/data-table";
 import { Card, EmptyState, PageHeader } from "@/components/ui/primitives";
 
 export const metadata = { title: "Requirement Indents" };
-
-/** The design names an indent by what it asks for: the item and how much. */
-function itemSummary(
-  items: Array<{ requestedQty: unknown; approvedQty: unknown; item: { name: string; uom: { name: string } } }>,
-  count: number,
-): string {
-  const first = items[0];
-  if (!first) return "No lines";
-  const amount = qty(Number(first.approvedQty ?? first.requestedQty), 3);
-  return `${first.item.name} · ${amount} ${first.item.uom.name}${count > 1 ? ` +${count - 1} more` : ""}`;
-}
 
 const PAGE_SIZE = 30;
 
@@ -131,12 +120,8 @@ export default async function IndentsPage({
           <Card>
             <EmptyState
               icon={<ClipboardList className="h-8 w-8" />}
-              title={filtered ? "No indents match these filters" : "No indents yet"}
-              description={
-                ctx.has(PERM.material.indent.create)
-                  ? "Raise one from site with the item, quantity and the activity it is for."
-                  : "Indents raised on your projects will appear here."
-              }
+              title={indentEmpty(filtered, ctx.has(PERM.material.indent.create)).title}
+              description={indentEmpty(filtered, ctx.has(PERM.material.indent.create)).description}
             />
           </Card>
         ) : (
@@ -148,7 +133,7 @@ export default async function IndentsPage({
                   indent={{
                     id: i.id,
                     indentNo: i.indentNo,
-                    title: itemSummary(i.items, i._count.items),
+                    title: indentItemSummary(i.items, i._count.items),
                     project: i.project.name,
                     raisedBy: i.raisedBy.designation
                       ? `${i.raisedBy.name} · ${i.raisedBy.designation.name}`
@@ -168,12 +153,7 @@ export default async function IndentsPage({
               total={total}
               buildHref={(p) => pageHref(query, p)}
             />
-            <ListNote>
-              An indent is an internal request to the store, not a purchase. The store checks live
-              stock first: available quantity is issued straight away, and only the shortfall goes to
-              a vendor as a PO. Value-based routing still applies — indents under ₹2.00 L skip Owner
-              approval.
-            </ListNote>
+            <ListNote>{INDENT_NOTE}</ListNote>
           </>
         )}
       </div>
