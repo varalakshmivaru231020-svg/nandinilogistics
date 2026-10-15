@@ -10,6 +10,65 @@ advisory.
 
 ## Last release
 
+`a1dc609` · 15 Oct 2026 · 2 commits, from `9614543`. Every item below was run.
+
+| | |
+|---|---|
+| Rolled forward from | `9614543` |
+| Backup taken first | `nninfra-20261015-115330.dump` — 424K, 107 tables, `pg_restore --list` readable |
+| Migrations | no pending |
+| Permission catalogue | 564 codes, 0 created |
+| Role grants | 1524 → 1524 (nothing new this release) |
+| Code gate | 1547 unit tests, 406 over HTTP, 96 on the phone, `flutter analyze` clean, `pnpm build` clean |
+| Health | `==> Healthy (HTTP 200)` |
+| Read on production | the board for a Sales Head (3 towers · 148 flats · 116 available, 32 booked · legend 3 · chips 4 · types 3 · panel buttons Hold unit and Remove booking), the task tabs for a PM and a Supervisor, and the checkpoint icons ↑ ↓ 🗑 for the Owner |
+| Android client | `app-release.apk`, 50.3 MB, built from clean. `BoardScreen`, `flat-action:`, `fieldsFrom` and `excludeSemantics` present inside `lib/arm64-v8a/libapp.so`; `moduleSpecs` absent |
+
+**What it put live:** three screens the app had the wrong shape for.
+
+**Available Flats is a board.** The drawer's entry opens `/units/board`, and the
+phone was drawing the flats *table* instead. The board now travels: the towers
+as chips — clusters, on a villa project — the three-colour legend, the status
+and type chips, the floors stacked highest first, and every flat as a tile in
+the colour of its state. A filter **fades** what it excludes rather than
+removing it, so a tower does not change shape as the filters are used. A tile
+opens the web's right-rail panel: who it is held or booked for, Hold unit,
+Release hold, Remove booking, and "Book unit" — which opens the flat's record,
+because booking is a cost sheet followed by a booking rather than one action.
+`src/lib/units/board.ts` holds the three states, their words, the tower wording
+and the holder line, and `board-grid.tsx` reads them too.
+
+**The task detail has the web's tabs.** Checklist · Review and approval ·
+History, with the "Next:" line beside them. The checklist tab carries the bar
+the web draws, the "Yours to review · N" chip and each point's own square — ✓
+through, ✕ denied, its number until then — with Approve and Deny where the
+viewer holds the point. The levels tab is the web's own list of who judges and
+what each is holding.
+
+**A checkpoint moves by its icons** — ↑, ↓ and 🗑 as the web draws them, each
+keeping its name for a screen reader, beside the worded "Edit text".
+
+**Found by reading it on production:** the record offered Approve and Deny only
+when `canDo` allowed, and `canDo` reads the **task's** status. On a task in
+Rework with one denied point back at its approver, the web offered the buttons
+and `reviewChecklistItemAction` accepted them — the action authorises on the
+level's own permission and on the point waiting on you, and never asks the
+task's status. So the phone hid a button that worked. It now asks exactly what
+the web and the action ask. Re-read afterwards: the approver holding that point
+gets Approve/Deny on it and on nothing else; a supervisor holding none gets
+none.
+
+Two more things the same read settled rather than broke: the empty "Next:" line
+is the web's own behaviour on a Rework task, and Available Flats refusing a
+Project Manager, a Supervisor and a Store Manager is correct — those roles hold
+no unit permissions at all, so the web refuses them too. The list's gate is now
+the board's own `unit.board.view`, which is the screen the phone shows; the file
+keeps the unit master's permission.
+
+---
+
+## Release before this one
+
 `63ea2cf` · 15 Oct 2026 · 1 commit, from `adebcb0`. Every item below was run.
 
 | | |
@@ -47,7 +106,7 @@ dispatch.
 
 ---
 
-## Release before this one
+## Release before that
 
 `c89a39d` · 15 Oct 2026 · 2 commits, from `df28f1b`. Every item below was run.
 
@@ -92,58 +151,6 @@ contained `moduleSpecs`, a symbol from the file deleted in this very commit. So
 part of what had been handed out was the old app with a new version number.
 `flutter clean` is now F0, and F4's note says to grep for something removed as
 well as something added.
-
----
-
-## Release before that
-
-`419d635` · 15 Oct 2026 · 8 commits, from `2b5b14c`. Every item below was run.
-
-| | |
-|---|---|
-| Rolled forward from | `2b5b14c` |
-| Backup taken first | `nninfra-20261015-081032.dump` — 421K, 107 tables, `pg_restore --list` readable |
-| Migrations | no pending |
-| Permission catalogue | 564 codes, 0 created |
-| Role grants | 1524 → 1524 (nothing new this release) |
-| Code gate | 1506 unit tests, 405 over HTTP, 81 on the phone, `flutter analyze` clean, `pnpm build` clean |
-| Health | `==> Healthy (HTTP 200)` |
-| Records on the phone | **six roles read on production, 0 broken**: Owner 24 of 28 modules opened, a PM 13 / 14 refused, a Supervisor 9 / 17, a Store Manager 13 / 13, a Sales Head 12 / 15, a Sales executive 11 / 16 — every refusal a permission, none an error |
-| Forms on the phone | 13 as the Owner, 0 broken, 0 missing; 4–6 for the others, the rest refused |
-| Android client | `app-release.apk`, 49.6 MB, built after the server. `http://168.231.103.114:3021` found inside `lib/arm64-v8a/libapp.so`; the cleartext policy naming that host ships as `res/8G.xml` |
-
-**What it put live:** parity with the web, made a test rather than a claim.
-`tests/unit/mobile-parity.test.ts` reads the records, the forms and the Dart,
-and fails when a web action is unreachable from the app and unexplained;
-`pnpm parity:matrix` writes `docs/MOBILE_PARITY.md` from the same registries.
-**125 of the 152 actions on the boundary are now reachable**, and each of the
-other 27 carries a reason. With it: notifications (the web screen the phone
-never had), lists a page at a time with every parameter travelling in the same
-request, the edits and deletes, and creating a tower's flats from the phone.
-
-Two defects came out of walking the flows as five roles rather than as the
-Owner:
-
-- `sales/site-visits` and `units/price-lists` **took `page` and ignored it**,
-  so the second page of either was the first page again. Both were calls my
-  bulk edit had missed, which is why `tests/e2e/mobile-boundary.test.ts` now
-  walks every list and asks for a page it can check.
-- the web drew a tower's flat numbering **inside its own setup screen**, so
-  there was nothing for a form to call. It now lives in
-  `src/lib/units/tower-plan.ts`, and the web previews what the action will do
-  rather than its own copy of it.
-
-**Open, and not a deploy problem:** production is served over **plain HTTP on
-a bare IP** (`http://168.231.103.114:3021`), so everything the phone sends,
-including the password, crosses the internet readable. The Android client has
-to name that host in its cleartext allow-list to work at all, which is the
-signal that something is wrong. A domain and a certificate would let that line
-be deleted.
-
-**Deliberately not mirrored, and listed in `src/lib/api/parity.ts`:** the 12
-actions that move a file (no upload or download path at the boundary yet),
-Masters and Users (web-only by the brief, 8 actions), and 6 actions whose web
-screen does not exist either.
 
 ---
 
