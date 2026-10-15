@@ -10,6 +10,69 @@ advisory.
 
 ## Last release
 
+`872cd11` · 15 Oct 2026 · 1 commit, from `07bbd91`. Every item below was run.
+
+| | |
+|---|---|
+| Rolled forward from | `07bbd91` |
+| Backup taken first | `nninfra-20261015-130950.dump` — 107 tables, `pg_restore --list` readable |
+| Migrations | no pending |
+| Permission catalogue | 564 codes, 0 created |
+| Role grants | 1524 → 1524 (nothing new this release) |
+| Code gate | 1576 unit tests, 406 over HTTP, 104 on the phone, `flutter analyze` clean, `pnpm build` clean |
+| Health | `==> Healthy (HTTP 200)` |
+| Read on production | every screen's creates (`Receive goods · GRN`, `New item master record`, `New unit` + `Create units`), the task form's levels (`levels · shown when checklistIds · led by assigneeId`), the KB's `files` field, the customer's `Identity documents` collection with `Attach Aadhaar or PAN`, and the site log's `position:geo` |
+| Android client | `app-release.apk`, 51.3 MB, built from clean. `openRecord`, `fieldsFrom`, `level-add:`, `files-` and `geo-` present inside `lib/arm64-v8a/libapp.so`; `moduleSpecs` absent; `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION` in the manifest. Two new plugins — `geolocator` for the site log's position, `file_picker` for attachments |
+
+**What it put live:** the seven gaps named after the last release.
+
+1. **A customer's Aadhaar and PAN copies.** `Customer.kycDocuments` has been on
+   the model since the schema was written and nothing filled it — the web
+   records the two numbers and the paper lived elsewhere. Attaching and reading
+   them is now on the customer's record, behind `viewKyc` to read and
+   `verifyKyc` to attach, removable only while KYC is unverified, and in the
+   audit trail. **The web has no customer detail screen to put this on, so it
+   is the phone's own** rather than parity.
+2. **Knowledge-base attachments**, which *is* parity: the editor has always
+   taken files and the phone could not choose one.
+3. **Every form audited against its web modal.** `form-fields.test.ts` reads
+   every name each modal submits and insists the form asks for it, with a
+   written reason for the few it deliberately does not. It found two real
+   gaps — the site log had no position while the browser fills latitude and
+   longitude from its own geolocation, and the employee form had no country
+   code, so a number typed without one lost it. Both fixed; the code list is
+   now one list the web and the phone read. **Every dropdown is searchable**:
+   a short list keeps the design's chips and gains a "Search…" chip beside
+   them.
+4. **Review and approval levels are drawn as levels** — numbered rows, level 1
+   locked to the assignee with "· the assignee" beside it, a searchable picker
+   per level above, Remove, and "+ Add level N" — and they appear only once a
+   checklist is picked, as the web reveals them.
+5. **Goods receipt can be raised from its own list.** The web does it in two
+   screens, because the lines cannot be drawn until the order is known, so the
+   forms layer grew a shape for exactly that: `openRecord` asks one question
+   and opens the record where the next step lives.
+6. **The item master's create**, in the web's own fields, with the code
+   generated as the web generates it.
+7. **Available Flats carries its create buttons** — a single flat and a whole
+   tower — where the web's page header has them.
+
+**Two plugins were added to the app**, each behind a seam so a widget test can
+drive it: `geolocator` (the site log's position, asked for at the moment it is
+used and refusable — the log saves without it, as the web's does) and
+`file_picker` (attachments, offering only the types `upload-rules.ts` lets the
+server store). `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION` are declared
+in the manifest.
+
+**One thing to know about the GRN picker:** it lists approved and part-received
+orders only, which is what the web lists. On production that list is currently
+empty — there is no order awaiting delivery — so the picker opens with nothing
+in it until one is approved.
+
+---
+
+## Release before this one
+
 `a1dc609` · 15 Oct 2026 · 2 commits, from `9614543`. Every item below was run.
 
 | | |
@@ -67,7 +130,7 @@ keeps the unit master's permission.
 
 ---
 
-## Release before this one
+## Release before that
 
 `63ea2cf` · 15 Oct 2026 · 1 commit, from `adebcb0`. Every item below was run.
 
@@ -103,54 +166,6 @@ record says "Mark cleared", and "Approve & despatch" where the record says
 "Approve & send". `screen-rows.test.ts` reads each label out of the web row
 that carries it, and fails if a row names an action the boundary cannot
 dispatch.
-
----
-
-## Release before that
-
-`c89a39d` · 15 Oct 2026 · 2 commits, from `df28f1b`. Every item below was run.
-
-| | |
-|---|---|
-| Rolled forward from | `df28f1b` |
-| Backup taken first | `nninfra-20261015-093705.dump` — 424K, 107 tables, `pg_restore --list` readable |
-| Migrations | no pending |
-| Permission catalogue | 564 codes, 0 created |
-| Role grants | 1524 → 1524 (nothing new this release) |
-| Code gate | 1522 unit tests, 405 over HTTP, 84 on the phone, `flutter analyze` clean, `pnpm build` clean |
-| Health | `==> Healthy (HTTP 200)` |
-| Lists on the phone | **28 of 30 send the web's own composed row as the Owner; 0 flat, 0 broken** — and across six roles, every refusal a permission. The two are `tasks/reports`, which is a report, and the schedule, which wants a project first |
-| Android client | `app-release.apk`, 50.2 MB, **built from clean**. `http://168.231.103.114:3021` and `ServerRowCard` found inside `lib/arm64-v8a/libapp.so`; `moduleSpecs` — deleted this release — absent, which is how a stale build is caught |
-
-**What it put live:** the list screens. Records and forms were already the
-web's; every **list** was still the app's own — its title, its subtitle, its
-status word, its filters, its three figures and a detail sheet of its own, all
-hand-written in `mobile/lib/modules/spec.dart`, 1,213 lines of a second guess
-at thirty screens. That file is deleted. `src/lib/screens/rows/` now composes
-each row the way its own web screen composes it, from the web's own label maps,
-tone maps and arithmetic, and the pages import those back.
-
-Four drifts fell out of reading the screens rather than trusting the app:
-
-- the lead list writes **"Site Visit"** where the export file writes "Site
-  visit planned";
-- the project list writes **"Planned"** and **"Ongoing"** where
-  `PROJECT_STATUS_LABEL` says "Planning" and "Active";
-- a vendor on hold reads **"On hold"**, and read "INACTIVE" on the phone;
-- **Item Master is not the stock export** — the screen is one row per item
-  across every store the filter allows, narrowed by a stock state no column
-  carries, and the file is one row per store balance.
-
-The band is now the web's own figures, read over every row in scope rather than
-the fifty on screen, and the empty state and the `ListNote` are the screen's own
-sentences.
-
-**Found while verifying this release:** `flutter build apk --release` **reused a
-cached build** — 13 seconds against the 47 a real one takes — and the APK still
-contained `moduleSpecs`, a symbol from the file deleted in this very commit. So
-part of what had been handed out was the old app with a new version number.
-`flutter clean` is now F0, and F4's note says to grep for something removed as
-well as something added.
 
 ---
 
