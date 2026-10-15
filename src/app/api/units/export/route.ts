@@ -18,7 +18,11 @@ export const dynamic = "force-dynamic";
  * can go back in.
  */
 export async function GET(request: Request) {
-  const gate = await exportGate(request, PERM.unit.unit.view, PERM.unit.unit.export);
+  const gate = await exportGate(request, PERM.unit.unit.view, PERM.unit.unit.export, {
+    // The app's screen for this key is the web's board, which has its own
+    // permission; the file is still the unit master's.
+    asList: [PERM.unit.board.view],
+  });
   if (!gate.ok) return gate.response;
   const { ctx, params } = gate;
 

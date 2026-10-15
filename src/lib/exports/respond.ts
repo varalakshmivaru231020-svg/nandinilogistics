@@ -89,7 +89,22 @@ export type ExportGate =
  * Someone who may see indents but not export them can still see them on a
  * phone, which is what the web already lets them do on screen.
  */
-export async function exportGate(request: Request, ...codes: string[]): Promise<ExportGate> {
+export async function exportGate(
+  request: Request,
+  ...rest: Array<string | { asList: string[] }>
+): Promise<ExportGate> {
+  /*
+   * A screen whose **list** is gated differently from its file says so with a
+   * trailing `{ asList }`.
+   *
+   * Available Flats is the one: the web's board asks `unit.board.view`, while
+   * the flats export asks the unit master's own view. Hanging the board off
+   * this route gave a Project Manager — who may see the board and not the
+   * master — nothing at all on the phone, where the web shows them the board.
+   */
+  const last = rest[rest.length - 1];
+  const override = typeof last === "object" ? last.asList : null;
+  const codes = rest.filter((c): c is string => typeof c === "string");
   const ctx = await getAuthContext();
   if (!ctx) return { ok: false, response: new NextResponse("Sign-in required.", { status: 401 }) };
 
@@ -102,7 +117,7 @@ export async function exportGate(request: Request, ...codes: string[]): Promise<
   }
 
   const needed = asList
-    ? [...codes.filter((c) => !c.endsWith(".export")), PERM.admin.mobile.use]
+    ? [...(override ?? codes.filter((c) => !c.endsWith(".export"))), PERM.admin.mobile.use]
     : codes;
 
   if (needed.length === 0 || !needed.every((c) => ctx.has(c))) {

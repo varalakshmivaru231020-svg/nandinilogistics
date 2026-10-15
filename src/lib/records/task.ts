@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import type { AuthContext } from "@/lib/rbac/context";
 import { canDo, STATUS_LABEL, type TaskShape } from "@/lib/tasks/lifecycle";
-import { waitingLevel } from "@/lib/tasks/checklist-flow";
+import { earliestWaitingLevel, levelOrder, waitingLevel } from "@/lib/tasks/checklist-flow";
 import { money, toneOf, words, type RecordAction, type RecordView } from "./shared";
 
 /**
@@ -304,9 +304,21 @@ export async function taskRecord(ctx: AuthContext, id: string): Promise<RecordVi
          * one point sends that point alone back to reviewer 1.
          */
         const rowActions: RecordAction[] = [];
-        if (waiting && mine) {
-          const which = waiting.kind === "REVIEW" ? "review" : "approve";
-          if (may(which)) {
+        /*
+         * The web shows Approve and Deny whenever the point is standing in
+         * front of **this viewer** — `mineToJudge` in `task-detail.tsx` — and
+         * `reviewChecklistItemAction` allows exactly that: the permission for
+         * the level's kind, and the point waiting on you or you being an
+         * Admin. It deliberately does not ask the task's status, because a
+         * point travels on its own: a denied point goes back to reviewer 1
+         * while the task reads REWORK, and somebody still has to judge it.
+         *
+         * This used to ask `canDo`, which does read the status — so the phone
+         * hid a button the web offered and the server would have accepted.
+         */
+        if (waiting && (mine || isAdmin)) {
+          const reviewing = waiting.kind === "REVIEW";
+          if (ctx.has(reviewing ? PERM.task.level.review : PERM.task.level.approve)) {
             rowActions.push({
               key: "pass", label: "Approve", emphasis: "approve",
               action: "tasks/reviewChecklistItem", args: [i.id, "PASS"],
@@ -362,7 +374,11 @@ export async function taskRecord(ctx: AuthContext, id: string): Promise<RecordVi
         done: settled,
         total: rows.length,
         ...(mineCount > 0
-          ? { note: `${may("review") ? "Yours to review" : "Yours to approve"} · ${mineCount}` }
+          ? {
+              note:
+                `${ctx.has(PERM.task.level.review) ? "Yours to review" : "Yours to approve"} · ` +
+                `${mineCount}`,
+            }
           : {}),
       },
     });
@@ -525,21 +541,24 @@ export async function taskRecord(ctx: AuthContext, id: string): Promise<RecordVi
 
   const stage = task.levels.length > 0
     ? (() => {
-        const w = items.length > 0 ? waitingLevel(items[0], flowLevels) : null;
+        const judging = task.status === "UNDER_REVIEW" || task.status === "UNDER_APPROVAL";
+        const w = judging ? earliestWaitingLevel(items, flowLevels) : null;
         return w ? `${w.kind === "REVIEW" ? "Under review" : "Under approval"} L${w.level}` : null;
       })()
     : null;
 
   /*
    * Who it reaches after the level holding it now — the line the web prints
-   * beside its tabs, in the same words: "Reviewer level 2 · Anil Deshpande".
+   * beside its tabs, worked out the way its page works it out: only once the
+   * work has started is a point actually in front of anyone, so a task in
+   * Rework has no "next" even though a point is waiting on somebody.
    */
   const nextUp = (() => {
-    const at = items.length > 0 ? waitingLevel(items[0], flowLevels) : null;
+    const judging = task.status === "UNDER_REVIEW" || task.status === "UNDER_APPROVAL";
+    const at = judging ? earliestWaitingLevel(items, flowLevels) : null;
     if (!at) return null;
-    const after = flowLevels
-      .filter((l) => (l.kind === at.kind ? l.level > at.level : l.kind === "APPROVAL"))
-      .sort((a, b) => (a.kind === b.kind ? a.level - b.level : a.kind === "REVIEW" ? -1 : 1))[0];
+    const order = levelOrder(flowLevels);
+    const after = order[order.findIndex((l) => l.kind === at.kind && l.level === at.level) + 1] ?? null;
     if (!after) return null;
     const who = task.levels.find((l) => l.kind === after.kind && l.level === after.level)?.user.name ?? "—";
     return `${after.kind === "REVIEW" ? "Reviewer" : "Approver"} level ${after.level} · ${who}`;

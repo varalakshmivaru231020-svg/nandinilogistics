@@ -102,6 +102,45 @@ describe("the task detail's tabs are the web's tabs", () => {
     expect(record.includes('text: "✕"')).toBe(true);
   });
 
+  /**
+   * Found on production: the record asked `canDo`, which reads the **task's**
+   * status, while the web asks only whether the point is in front of this
+   * viewer and `reviewChecklistItemAction` authorises on the level's own
+   * permission. On a task in Rework with a denied point back at reviewer 1,
+   * the web offered Approve and Deny and the server accepted them — and the
+   * phone hid the buttons.
+   */
+  it("judges a point by the rule the web and the action share, not the task's status", () => {
+    const detail = read("src/app/(app)/tasks/[id]/task-detail.tsx");
+    const action = read("src/app/(app)/tasks/actions.ts");
+
+    // The web: the point is waiting, and it is waiting on you (or you are Admin).
+    expect(detail.includes("at !== null && (at.userId === viewerId || isAdmin)")).toBe(true);
+    // The action: the level's own permission, and the same waiting check.
+    expect(action.includes("reviewing ? PERM.task.level.review : PERM.task.level.approve")).toBe(true);
+    expect(action.includes("at.userId !== ctx.id && !admin")).toBe(true);
+
+    // The record now asks exactly that, and no longer asks `canDo`.
+    expect(record.includes("if (waiting && (mine || isAdmin))")).toBe(true);
+    expect(
+      record.includes("PERM.task.level.review : PERM.task.level.approve"),
+      "the record does not ask the permission the action authorises",
+    ).toBe(true);
+    expect(
+      /if \(waiting && mine\)[\s\S]{0,200}may\(which\)/.test(record),
+      "the record is gating a point's buttons on the task's status again",
+    ).toBe(false);
+  });
+
+  it("prints the Next line only when a point is really in front of somebody", () => {
+    const page = read("src/app/(app)/tasks/[id]/page.tsx");
+    // The web: only once the work has started is a point in front of anyone.
+    expect(page.includes("const at = judging ? earliestWaitingLevel(flowItems, levels) : null")).toBe(true);
+    // The record works it out the same way, through the same two helpers.
+    expect(record.includes("judging ? earliestWaitingLevel(items, flowLevels) : null")).toBe(true);
+    expect(record.includes("levelOrder(flowLevels)")).toBe(true);
+  });
+
   it("counts what is waiting on the viewer, as the web's chip does", () => {
     expect(detail.includes("Yours to review")).toBe(true);
     expect(detail.includes("Yours to approve")).toBe(true);
