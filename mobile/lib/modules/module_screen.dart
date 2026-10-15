@@ -329,7 +329,12 @@ class ModuleScreenState extends State<ModuleScreen> {
     // key is `/units/board`, and the server sends the board itself.
     final board = _page?.screen?.board;
     if (board != null) {
-      return BoardScreen(api: widget.api, board: board, onChanged: _load);
+      return BoardScreen(
+        api: widget.api,
+        board: board,
+        forms: _screen?.forms ?? const [],
+        onChanged: _load,
+      );
     }
 
     if (_needsProject) {

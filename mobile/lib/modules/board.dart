@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/act.dart';
 import '../core/api.dart';
+import '../core/nav.dart';
 import '../core/row.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
@@ -24,10 +25,15 @@ class BoardScreen extends StatefulWidget {
     required this.api,
     required this.board,
     required this.onChanged,
+    this.forms = const [],
   });
 
   final Api api;
   final ScreenBoardDef board;
+
+  /// The buttons the web's board page carries in its header — "+ Add units",
+  /// and a single flat — as the server lists them for this screen.
+  final List<FormRef> forms;
 
   /// Something was held, released or removed — the list behind this reloads.
   final Future<void> Function() onChanged;
@@ -69,6 +75,21 @@ class _BoardScreenState extends State<BoardScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(T.gutter, 12, T.gutter, 24),
       children: [
+        // What the web's board page offers in its own header.
+        if (widget.forms.isNotEmpty) ...[
+          Wrap(spacing: 7, runSpacing: 7, children: [
+            for (final f in widget.forms)
+              Btn(
+                f.title,
+                key: Key('board-form:${f.key}'),
+                emphasis: Emphasis.outline,
+                icon: Icons.add_rounded,
+                height: 40,
+                onPressed: () => _make(f),
+              ),
+          ]),
+          const SizedBox(height: 11),
+        ],
         // The three-colour legend, in the web's own words.
         Wrap(
           spacing: 12,
@@ -244,6 +265,13 @@ class _BoardScreenState extends State<BoardScreen> {
         ),
       ]),
     );
+  }
+
+  Future<void> _make(FormRef form) async {
+    final made = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => FormScreen(api: widget.api, formKey: form.key),
+    ));
+    if (made == true) await widget.onChanged();
   }
 
   Future<void> _run(BoardFlat f, Map<String, dynamic> a) async {

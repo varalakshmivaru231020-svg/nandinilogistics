@@ -202,7 +202,7 @@ class _ConfirmState extends State<_Confirm> {
     final args = widget.act.args.map((a) => fill(a, _extra)).toList();
     if (widget.act.remark != RemarkMode.none) args.add(_remark.text.trim());
 
-    final res = await widget.api.run(widget.act.action, args);
+    final res = await widget.api.run(widget.act.action, args, files: _extra.uploads);
     if (!mounted) return;
 
     if (res.ok) {

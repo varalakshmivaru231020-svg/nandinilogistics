@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../core/act.dart';
@@ -227,6 +229,7 @@ class RecordScreenState extends State<RecordScreen> {
           _Collection(
             collection: c,
             onRun: _run,
+            onOpenFile: _openFile,
           ),
           const SizedBox(height: 11),
         ],
@@ -252,6 +255,39 @@ class RecordScreenState extends State<RecordScreen> {
                 }),
           ),
       ]),
+    );
+  }
+
+  /// Opens a stored file: fetched through the web's own route with this
+  /// session's token, shown here where it is a picture, and named with its
+  /// type where it is not — a phone has no reader for a drawing file, and
+  /// pretending otherwise would be worse than saying so.
+  Future<void> _openFile(Map<String, dynamic> file) async {
+    final url = '${file["url"]}';
+    final name = '${file["name"]}';
+    final got = await widget.api.file(url);
+    if (!mounted) return;
+    if (got == null) {
+      notify(context, 'That file could not be opened.');
+      return;
+    }
+    final mime = got.mime ?? '${file["mime"] ?? ""}';
+    sheet<void>(
+      context,
+      title: name,
+      explain: mime.isEmpty ? null : mime,
+      body: (ctx) => mime.startsWith('image/')
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.memory(Uint8List.fromList(got.bytes)),
+            )
+          : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Alert(
+                'This is a $mime file, which opens on the web. '
+                'It is stored and attached — this phone has no reader for it.',
+                tone: Tone.info,
+              ),
+            ]),
     );
   }
 
@@ -346,10 +382,17 @@ class _Section extends StatelessWidget {
 /// carry their own actions, because a checklist point is settled point by
 /// point rather than by a verdict on the whole task.
 class _Collection extends StatelessWidget {
-  const _Collection({required this.collection, required this.onRun});
+  const _Collection({
+    required this.collection,
+    required this.onRun,
+    required this.onOpenFile,
+  });
 
   final Map<String, dynamic> collection;
   final Future<void> Function(Map<String, dynamic>) onRun;
+
+  /// A row that stands for a stored file — an attachment, an identity copy.
+  final void Function(Map<String, dynamic> file) onOpenFile;
 
   @override
   Widget build(BuildContext context) {
@@ -411,6 +454,7 @@ class _Collection extends StatelessWidget {
     final actions = ((r['actions'] as List?) ?? const []).cast<Map<String, dynamic>>();
     final trailing = r['trailing'] as String?;
     final badge = r['badge'] as Map<String, dynamic>?;
+    final file = r['file'] as Map<String, dynamic>?;
     // The web draws some of a row's buttons as icons — ↑ ↓ 🗑 on a checkpoint —
     // and the glyph it uses comes with the action.
     final glyphs = actions.where((a) => (a['glyph'] as String?)?.isNotEmpty ?? false).toList();
@@ -480,6 +524,20 @@ class _Collection extends StatelessWidget {
               for (final p in pills)
                 Pill('${p["label"]}', tone: _tone(p['tone'] as String?), compact: true),
             ]),
+          ),
+        // What the file is, and the button that opens it.
+        if (file != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 9),
+            child: Btn(
+              'View',
+              key: Key('file:${r["id"]}'),
+              emphasis: Emphasis.outline,
+              icon: Icons.visibility_outlined,
+              height: 40,
+              expand: true,
+              onPressed: () => onOpenFile(file),
+            ),
           ),
         if (worded.isNotEmpty || glyphs.isNotEmpty)
           Padding(

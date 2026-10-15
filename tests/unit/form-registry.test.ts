@@ -57,6 +57,10 @@ const SOURCE: Record<string, string> = {
   "projects/projects:edit": "projects/[id]/edit-project-button.tsx",
   "schedule/activities:addCategory": "schedule/schedule-screen.tsx",
   "schedule/activities:addActivity": "schedule/schedule-screen.tsx",
+  // The two creates the app was missing: the item master's own form, and the
+  // first step of a goods receipt.
+  "material/stock:create": "material/stock/item-form.tsx",
+  "material/grn:create": "material/grn/new/po-picker.tsx",
 };
 
 /**
@@ -90,6 +94,23 @@ function labelled(src: string, label: string): boolean {
  * here: a label the web writes is the label the phone writes.
  */
 const OURS = new Set([
+  /*
+   * The editor prints this through `ACCEPTED_LABEL` — "Drop files here —
+   * {ACCEPTED_LABEL}" — so the sentence is shared rather than repeated in the
+   * source this test reads.
+   */
+  "kb:create → PDF, Word, Excel, images, DWG or plain text — up to 25 MB",
+  "kb:edit → PDF, Word, Excel, images, DWG or plain text — up to 25 MB",
+  // One field on the phone, two hidden inputs on the web — see above.
+  "projects/progress:create → Location",
+  "projects/progress:create → Taken from this phone, as the web takes it from the browser.",
+  // The web's first step of a goods receipt is a list of links, not a form, so
+  // its button is the phone's own word for following one.
+  "material/grn:create → Open the order",
+  "material/grn:create → Approved POs only — material can only be received against an approved order.",
+  // The web adds a unit of measure in place, beside the picker. Masters are
+  // web-only by the brief, so the phone says where it is done.
+  "material/stock:create → A new unit of measure is added on the web.",
   "material/indents:create → Item",
   // The vendor form's category picker is a list of chips with an "add a new
   // category" box rather than a labelled field.
@@ -153,6 +174,19 @@ const OUTSIDE_THE_FORM = new Set([
   // The goods receipt's edit passes it as the action's third argument rather
   // than as a field.
   "material/grn:edit → expectedUpdatedAt",
+  /*
+   * The web's first step of a goods receipt is a list of links — each PO is an
+   * anchor to the next screen, not an input — so there is no submitted name to
+   * compare. The field is the phone's way of asking the same question.
+   */
+  "material/grn:create → poId",
+  /*
+   * The web posts two hidden inputs, `latitude` and `longitude`, filled from
+   * the browser's geolocation. The phone asks once, as one field, and sends
+   * the same two names — so there is no `position` in the web's source to
+   * compare, and its label and note are the phone's own.
+   */
+  "projects/progress:create → position",
 ]);
 
 /**
@@ -169,6 +203,15 @@ function source(key: string): string {
 describe("every form points at something real", () => {
   it("names an action the mobile boundary exposes", () => {
     for (const form of Object.values(FORMS)) {
+      /*
+       * A form whose shape is `openRecord` calls nothing: it asks one question
+       * and opens the record where the next step lives, which is how the web's
+       * goods receipt works — a list of links, then the order's own screen.
+       */
+      if (form.shape.kind === "openRecord") {
+        expect(form.action, `${form.key} opens a record, so it names no action`).toBe("");
+        continue;
+      }
       expect(MOBILE_ACTIONS[form.action], `${form.key} → ${form.action}`).toBeDefined();
     }
   });
@@ -314,7 +357,7 @@ describe("the fields are the web's fields", () => {
           if (f.hint && !OURS.has(`${key} → ${f.hint}`)) {
             expect(src.includes(f.hint), `${key} hint ${f.hint}`).toBe(true);
           }
-          if (f.note) {
+          if (f.note && !OURS.has(`${key} → ${f.note}`)) {
             expect(src.includes(f.note), `${key} note ${f.note}`).toBe(true);
           }
         }

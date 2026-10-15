@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 
 import 'row.dart';
 
@@ -76,8 +77,52 @@ class Api {
   /// Runs one of the web's own server actions. Arguments are positional, in the
   /// order `/actions` gives them — which is the order the server tells us, not
   /// an order this app decides.
-  Future<Res<Map<String, dynamic>>> run(String action, List<Object?> args) =>
-      post('/do/$action', body: {'args': args});
+  ///
+  /// With files it goes as multipart, under the field names the action reads —
+  /// which is exactly how the browser posts them, and what the `do` route has
+  /// always accepted. The arguments ride along as the `args` part.
+  Future<Res<Map<String, dynamic>>> run(
+    String action,
+    List<Object?> args, {
+    List<Upload> files = const [],
+  }) {
+    if (files.isEmpty) return post('/do/$action', body: {'args': args});
+    return _send(() async {
+      final req = http.MultipartRequest('POST', _url('/do/$action'))
+        ..headers.addAll(_headers)
+        ..fields['args'] = jsonEncode(args);
+      for (final f in files) {
+        req.files.add(http.MultipartFile.fromBytes(
+          f.field,
+          f.bytes,
+          filename: f.name,
+          contentType: f.mime == null ? null : MediaType.parse(f.mime!),
+        ));
+      }
+      /*
+       * Sent through **this** client, not the request's own.
+       * `MultipartRequest.send()` makes a fresh `Client()` of its own, which
+       * in a test goes to the real network and in the app opens a second
+       * connection for no reason.
+       */
+      return http.Response.fromStream(await _client.send(req));
+    });
+  }
+
+  /// Fetches a stored file — an attachment, an identity copy — through the
+  /// web's own route, with this session's token. The path is the url the
+  /// server gave, not one the app assembled.
+  Future<({List<int> bytes, String? mime})?> file(String url) async {
+    try {
+      final res = await _client
+          .get(Uri.parse('$baseUrl$url'), headers: _headers)
+          .timeout(timeout);
+      if (res.statusCode != 200) return null;
+      return (bytes: res.bodyBytes, mime: res.headers['content-type']);
+    } catch (_) {
+      return null;
+    }
+  }
 
   String describeFailure(Object error) {
     if (error is TimeoutException) {
@@ -140,6 +185,16 @@ class Api {
 
 /// One list, as the boundary returns it: the screen's own query, its columns
 /// and what its filters amount to in words.
+/// One file on its way up: the field the action reads it under, its bytes and
+/// what it is.
+class Upload {
+  const Upload({required this.field, required this.name, required this.bytes, this.mime});
+  final String field;
+  final String name;
+  final List<int> bytes;
+  final String? mime;
+}
+
 class ListPage {
   const ListPage({
     required this.title,

@@ -34,7 +34,44 @@ export async function customerRecord(ctx: AuthContext, id: string): Promise<Reco
   const booked = live.reduce((s, b) => s + Number(b.totalAmount), 0);
   const received = live.reduce((s, b) => s + Number(b.receivedAmount), 0);
 
+  /*
+   * The identity copies KYC is verified against. `Customer.kycDocuments` has
+   * been on the model since the schema was written and nothing filled it: the
+   * numbers were recorded and the paper was somewhere else. A phone standing in
+   * front of the customer is the right instrument, so they are attached and
+   * read here.
+   */
+  const documents = Array.isArray(customer.kycDocuments)
+    ? (customer.kycDocuments as Array<Record<string, unknown>>)
+    : [];
+
   const actions: RecordAction[] = [];
+  if (!customer.kycVerifiedAt && ctx.has(PERM.sales.customer.verifyKyc)) {
+    actions.push({
+      key: "addKyc",
+      label: "Attach Aadhaar or PAN",
+      emphasis: "primary",
+      action: "sales/bookings/addKycDocuments",
+      args: [id, "$kind"],
+      remark: "none",
+      fields: [
+        {
+          name: "kind",
+          label: "Which document",
+          kind: "select",
+          required: true,
+          initial: "Aadhaar",
+          options: [
+            { value: "Aadhaar", label: "Aadhaar" },
+            { value: "PAN", label: "PAN" },
+            { value: "Other", label: "Other" },
+          ],
+        },
+        { name: "files", label: "The copy", kind: "files", required: true, wide: true },
+      ],
+      confirm: "It is stored against this customer and recorded in the audit trail.",
+    });
+  }
   if (!customer.kycVerifiedAt && ctx.has(PERM.sales.customer.verifyKyc)) {
     actions.push({
       key: "verifyKyc",
@@ -104,6 +141,45 @@ export async function customerRecord(ctx: AuthContext, id: string): Promise<Reco
         })),
         emptyMessage: "No units booked yet.",
       },
+      /*
+       * What has been attached, and how to open it. Only for somebody who may
+       * see a PAN — a scan of it is the same fact in a stronger form — and
+       * removable only while KYC is unverified, which is what the action
+       * enforces.
+       */
+      ...(canKyc
+        ? [{
+            key: `kyc:${id}`,
+            label: `Identity documents · ${documents.length}`,
+            rows: documents.map((d) => ({
+              id: String(d.key ?? ""),
+              title: String(d.fileName ?? "Document"),
+              subtitle: [
+                String(d.kind ?? "Identity"),
+                d.uploadedBy ? `by ${String(d.uploadedBy)}` : null,
+                d.fileSize ? `${Math.round(Number(d.fileSize) / 1024)} KB` : null,
+              ].filter(Boolean).join(" · "),
+              /** The route both clients read it through. */
+              file: {
+                url: `/api/sales/customers/kyc/${encodeURIComponent(String(d.key ?? ""))}`,
+                name: String(d.fileName ?? "document"),
+                mime: d.mimeType ? String(d.mimeType) : null,
+              },
+              actions: customer.kycVerifiedAt || !ctx.has(PERM.sales.customer.verifyKyc)
+                ? []
+                : [{
+                    key: "remove",
+                    label: "Remove",
+                    emphasis: "reject" as const,
+                    action: "sales/bookings/removeKycDocument",
+                    args: [id, String(d.key ?? "")],
+                    remark: "none" as const,
+                    confirm: "The copy is deleted. It can be attached again.",
+                  }],
+            })),
+            emptyMessage: "No identity copy attached yet.",
+          }]
+        : []),
     ],
     actions,
     serverTime: new Date().toISOString(),

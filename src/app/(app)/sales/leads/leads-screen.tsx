@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { COUNTRY_CODES } from "@/lib/forms/dial-codes";
 import { cn, money, maskPhone, phone } from "@/lib/utils";
 import { LEAD_IMPORT_COLUMNS } from "@/lib/sales/lead-import";
 import {
@@ -61,12 +62,7 @@ type Lookup = Array<{ id: string; name: string; code?: string }>;
  * is stored with the code in front of it, which is how every screen reads it
  * back and how duplicate detection strips it again.
  */
-const COUNTRY_CODES = [
-  "+91 India", "+971 UAE", "+966 Saudi Arabia", "+974 Qatar", "+965 Kuwait", "+973 Bahrain",
-  "+968 Oman", "+65 Singapore", "+60 Malaysia", "+1 USA / Canada", "+44 UK", "+61 Australia",
-  "+64 New Zealand", "+49 Germany", "+33 France", "+81 Japan", "+86 China", "+94 Sri Lanka",
-  "+977 Nepal", "+880 Bangladesh",
-];
+
 
 /** What the design puts in an empty box, by the kind of thing it asks for. */
 const PLACEHOLDER: Record<string, string> = {

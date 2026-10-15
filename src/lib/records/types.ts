@@ -50,6 +50,14 @@ export interface CollectionRow {
   body?: string | null;
   /** What may be done to this row, as opposed to the record. */
   actions?: RecordAction[];
+  /**
+   * A stored file this row stands for, and where to read it.
+   *
+   * The url is served by the web's own route, which reads the session cookie
+   * or the app's bearer token — so one route serves a browser and a phone, and
+   * neither gets a link that works without permission.
+   */
+  file?: { url: string; name: string; mime: string | null };
 }
 
 export interface RecordCollection {

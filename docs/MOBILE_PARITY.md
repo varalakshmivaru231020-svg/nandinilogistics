@@ -13,12 +13,12 @@ Last written 2026-10-15.
 
 | | |
 |---|---|
-| Web actions on the boundary | **152** |
-| Reachable from the app | **125** |
-| Not reachable, with a reason | 27 |
+| Web actions on the boundary | **154** |
+| Reachable from the app | **128** |
+| Not reachable, with a reason | 26 |
 | Web list screens | 30 |
 | …with a record screen | 28 |
-| …with a create form | 14 |
+| …with a create form | 16 |
 | …with an edit form | 11 |
 
 ## The modules
@@ -35,8 +35,8 @@ The last column says where each one is raised.
 | `projects/progress` | `/projects/progress` | ✅ | `create` | — | ✅ | its own list |
 | `material/indents` | `/material/indents` | ✅ | `create` | ✅ | ✅ | its own list |
 | `material/purchase-orders` | `/material/purchase-orders` | ✅ | — | ✅ | ✅ | the indent — “Raise purchase order” |
-| `material/grn` | `/material/grn` | ✅ | — | ✅ | ✅ | the purchase order — “Receive goods” |
-| `material/stock` | `/material/stock` | ✅ | — | — | ✅ | the item master, which is web-only |
+| `material/grn` | `/material/grn` | ✅ | `create` | ✅ | ✅ | the purchase order — “Receive goods” |
+| `material/stock` | `/material/stock` | ✅ | `create` | — | ✅ | the item master, which is web-only |
 | `material/vendors` | `/material/vendors` | ✅ | `create` | ✅ | ✅ | its own list |
 | `material/issues` | `/material/issues` | ✅ | — | — | ✅ | the indent — “Issue from stock” |
 | `material/returns` | `/material/returns` | ✅ | — | — | ✅ | the issue slip — “Raise return” |
@@ -64,9 +64,8 @@ The last column says where each one is raised.
 
 ## The actions the phone cannot reach
 
-### brief:web-only — 8
+### brief:web-only — 7
 
-- `material/stock/createItem` — The item master.
 - `material/stock/updateItem` — The item master.
 - `material/stock/addUom` — The UOM master.
 - `material/vendors/addItemCategory` — The item-category master.

@@ -650,10 +650,15 @@ Articles with categories, attachments, publish/draft.
 
 ## 8. Every action and its permission
 
-**153 actions in scope**, by name. The app calls these and no others, and the
-permission named is the one the server checks. (183 exist in all; 29 belong to
+**155 actions in scope**, by name. The app calls these and no others, and the
+permission named is the one the server checks. (185 exist in all; 29 belong to
 the Masters & Users module, and `runAction` is the wrapper they all go through
 rather than an action of its own.)
+
+Two were added for the phone: `addKycDocuments` and `removeKycDocument` attach
+a customer's Aadhaar and PAN copies to the `kycDocuments` field the schema has
+always had and nothing filled. The web records the two numbers; a phone
+standing in front of the customer is the right instrument for the copies.
 
 Names and definitions are not quite the same count: `requestExtension` exists
 twice — once for a task's deadline and once for a schedule activity's — and it
@@ -744,6 +749,7 @@ authorizes `…view` first only to get a context) ·
 `sales.booking.create` · `advanceBooking` → `sales.booking.agreement` or
 `sales.booking.register` · `cancelBooking` `…cancel` · `createCustomer`
 `sales.customer.create` · `verifyKyc` `sales.customer.verifyKyc` ·
+`addKycDocuments` / `removeKycDocument` `sales.customer.verifyKyc` ·
 `raiseDemand` `sales.demand.raise` · `createReceipt` `sales.receipt.create` ·
 `clearReceipt` / `bounceReceipt` `sales.receipt.clear`
 

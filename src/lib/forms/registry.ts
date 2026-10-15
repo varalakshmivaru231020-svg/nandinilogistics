@@ -1,6 +1,9 @@
 import "server-only";
 
 import { PERM } from "@/lib/permissions/codes";
+import { ACCEPTED_LABEL } from "@/lib/upload-rules";
+
+import { COUNTRY_CODES } from "./dial-codes";
 import { PROJECT_STATUSES, PROJECT_STATUS_LABEL } from "@/lib/projects/list-filters";
 import type { AuthContext } from "@/lib/rbac/context";
 
@@ -157,6 +160,7 @@ const TASK_FIELDS: ReadonlyArray<FormFieldDef> = [
         emptyLabel: "None",
       },
       { name: "location", label: "Location", kind: "text", placeholder: "Tower B · Fl 8", wide: true },
+      { name: "files", label: "Attachments", kind: "files", wide: true },
       {
         name: "checklistIds",
         label: "Checklist",
@@ -166,14 +170,21 @@ const TASK_FIELDS: ReadonlyArray<FormFieldDef> = [
         placeholder: "Search checklists by name or category…",
         wide: true,
       },
+      /*
+       * The web reveals these two only once a checklist is picked, and draws
+       * each as numbered levels with level 1 locked to the assignee — the
+       * order is the meaning, so it is drawn that way here too.
+       */
       {
         name: "reviewerIds",
         label: "Reviewers",
         note: "They check the work, in order. Level 1 is the person doing it.",
         kind: "multi",
         source: "people",
-        placeholder: PEOPLE_SEARCH,
+        placeholder: "Search people…",
         leadWith: "assigneeId",
+        levels: true,
+        showWhen: "checklistIds",
         wide: true,
       },
       {
@@ -182,7 +193,9 @@ const TASK_FIELDS: ReadonlyArray<FormFieldDef> = [
         note: "They sign it off after the reviews, in order. The last approval closes the task.",
         kind: "multi",
         source: "people",
-        placeholder: PEOPLE_SEARCH,
+        placeholder: "Search people…",
+        levels: true,
+        showWhen: "checklistIds",
         wide: true,
       },
     ];
@@ -249,6 +262,19 @@ const ARTICLE_FIELDS: ReadonlyArray<FormFieldDef> = [
         wide: true,
       },
       { name: "body", label: "Description", kind: "textarea", required: true, wide: true },
+      /*
+       * The drawer's own file input. The boundary has always accepted
+       * multipart, so these travel under the same name the browser posts and
+       * the action reads them the same way.
+       */
+      {
+        name: "files",
+        label: "Attachments",
+        kind: "files",
+        note: ACCEPTED_LABEL,
+        hint: "Multiple attachments supported per article",
+        wide: true,
+      },
     ];
 
 
@@ -306,6 +332,86 @@ export const FORMS: Record<string, FormDef> = {
       { name: "panNumber", label: "PAN", kind: "text", placeholder: "ABCDE1234F", caps: true },
       { name: "aadhaarNumber", label: "Aadhaar", kind: "text" },
       { name: "addressLine", label: "Address", kind: "textarea", wide: true },
+    ],
+  },
+
+  // src/app/(app)/material/grn/new/po-picker.tsx — the web's first step of a
+  // goods receipt: which approved order arrived. Its second step is the order's
+  // own "Receive goods", which is where the lines are, so this form opens that
+  // record rather than calling anything.
+  "material/grn:create": {
+    key: "material/grn:create",
+    module: "material/grn",
+    title: "Receive goods · GRN",
+    description:
+      "Store team: pick the approved PO, enter what actually arrived — stock is received automatically.",
+    submitLabel: "Open the order",
+    permission: PERM.material.grn.create,
+    action: "",
+    shape: { kind: "openRecord", module: "material/purchase-orders", id: "poId" },
+    fields: [
+      {
+        name: "poId",
+        label: "Against purchase order",
+        kind: "lookup",
+        required: true,
+        source: "receivablePos",
+        placeholder: "Type the PO number — e.g. PO-2201",
+        hint: "Approved POs only — material can only be received against an approved order.",
+      },
+    ],
+  },
+
+  /* ------------------------------------------------------------ item master */
+
+  // src/app/(app)/material/stock/item-form.tsx — the design's item master
+  // form. The code is generated from the name, which is why it is not asked
+  // for, and stock only opens here: after that it moves through receipts and
+  // issues, never by editing the item.
+  "material/stock:create": {
+    key: "material/stock:create",
+    module: "material/stock",
+    title: "New item master record",
+    description: "Item code is generated automatically from the item name.",
+    submitLabel: "Create item",
+    permission: PERM.masters.item.create,
+    action: "material/stock/createItem",
+    shape: {
+      kind: "positional",
+      order: [
+        {
+          name: "$name",
+          uomId: "$uomId",
+          reorderLevel: "$reorderLevel",
+          specification: "$specification",
+          openingStock: "$openingStock",
+        },
+      ],
+    },
+    done: "Item created.",
+    fields: [
+      { name: "name", label: "Item name", kind: "text", required: true, placeholder: "OPC 53 Cement" },
+      {
+        name: "uomId",
+        label: "Unit of measure",
+        kind: "lookup",
+        required: true,
+        source: "uoms",
+        emptyLabel: "Select unit…",
+        // The web adds a unit in place, beside the picker. A unit is a master,
+        // and Masters is web-only by the brief, so the phone picks from what is
+        // there.
+        hint: "A new unit of measure is added on the web.",
+      },
+      { name: "openingStock", label: "Available stock", kind: "number", placeholder: "220" },
+      { name: "reorderLevel", label: "Reorder level", kind: "number", placeholder: "400" },
+      {
+        name: "specification",
+        label: "Specification",
+        kind: "textarea",
+        wide: true,
+        placeholder: "IS 269 grade 53, 50 kg bag",
+      },
     ],
   },
 
@@ -463,6 +569,18 @@ export const FORMS: Record<string, FormDef> = {
       { name: "notes", label: "Notes", kind: "textarea", wide: true },
       { name: "manpowerCount", label: "Workers on site", kind: "number" },
       { name: "weather", label: "Weather", kind: "text", placeholder: "Clear / rain" },
+      /*
+       * Where the log was written. The web fills two hidden inputs from the
+       * browser's geolocation; a phone standing on the site is the better
+       * instrument, and the record shows the position either way.
+       */
+      {
+        name: "position",
+        label: "Location",
+        kind: "geo",
+        note: "Taken from this phone, as the web takes it from the browser.",
+        wide: true,
+      },
     ],
   },
 
@@ -738,6 +856,15 @@ export const FORMS: Record<string, FormDef> = {
       },
       { name: "name", label: "Name", kind: "text", required: true, placeholder: "Full name" },
       { name: "designationId", label: "Designation", kind: "select", source: "designations" },
+      {
+        name: "mobileCode",
+        label: "Country code",
+        kind: "select",
+        initial: "+91 India",
+        options: COUNTRY_CODES.map((c) => ({ value: c, label: c })),
+        // The web joins the code to the number and posts one value.
+        prefixes: "mobile",
+      },
       { name: "mobile", label: "Mobile number", kind: "phone", required: true, placeholder: "98765 43210" },
       {
         name: "aadhaar",

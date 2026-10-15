@@ -42,7 +42,23 @@ export type FieldKind =
   /** Several people, as the calendar's "On whom" picker collects. */
   | "multi"
   /** Repeating lines — the items of an indent, a transfer, an issue. */
-  | "rows";
+  | "rows"
+  /**
+   * Where the thing is, taken from the device.
+   *
+   * The web's site log fills two hidden inputs from the browser's own
+   * geolocation; a phone standing on the site is the better instrument, and
+   * the field sends the same two names.
+   */
+  | "geo"
+  /**
+   * Files, as the web's `<input type="file" multiple>` collects them.
+   *
+   * They travel as multipart under this field's own name — the `do` route has
+   * always accepted multipart, so the action reads them exactly as it reads
+   * the browser's.
+   */
+  | "files";
 
 export interface FormFieldDef {
   /** The name the action reads — `panNumber`, not "PAN". */
@@ -106,6 +122,26 @@ export interface FormFieldDef {
    * level order, so the phone has to send it the same way round.
    */
   leadWith?: string;
+  /**
+   * For `multi`: draw it as the web's **numbered levels** rather than a bag of
+   * chips — "Level 1", "Level 2", "+ Add level 3", one person a level, in
+   * order, and nobody twice.
+   *
+   * `tasks/new/new-task-form.tsx` draws reviewers and approvers that way
+   * because the order *is* the meaning: level 1 looks first.
+   */
+  levels?: boolean;
+  /**
+   * Shown only once another field has a value, as the web reveals its review
+   * and approval levels only once a checklist has been picked.
+   */
+  showWhen?: string;
+  /**
+   * This field's own value is **prefixed onto another field** and not sent by
+   * itself — the country code beside a mobile number, which the web joins to
+   * the number before it posts and then deletes.
+   */
+  prefixes?: string;
   /** The web's small print under a label, where it carries one. */
   note?: string;
 }
@@ -129,7 +165,18 @@ export type FormShape =
       order: ReadonlyArray<
         string | boolean | number | null | Readonly<Record<string, string>>
       >;
-    };
+    }
+  /**
+   * Nothing is called: the form **opens a record**, which is where the next
+   * step lives.
+   *
+   * The web receives goods in two screens — pick the approved order, then enter
+   * what arrived against its lines — because the lines cannot be drawn until
+   * the order is known. Its first screen is a list of links, and this is that
+   * link: one question, and the record it leads to. `id` names the field
+   * holding the record's id.
+   */
+  | { kind: "openRecord"; module: string; id: string };
 
 export interface FormDef {
   /** "sales/customers:create" — the module, then what the form does. */

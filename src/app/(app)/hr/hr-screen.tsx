@@ -12,6 +12,7 @@ import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { useToast } from "@/components/ui/toast";
 import { Drawer } from "@/components/ui/drawer";
 import { Modal } from "@/components/ui/modal";
+import { COUNTRY_CODES } from "@/lib/forms/dial-codes";
 import { cn } from "@/lib/utils";
 import { uploadProblem } from "@/lib/upload-rules";
 import type { AttendanceSummaryRow } from "@/lib/hr/attendance-report";
@@ -42,13 +43,7 @@ interface TypeRow { id: string; name: string; count: number; canDelete: boolean 
  * The design colours the employment type: staff navy, a contract purple, and
  * direct labour green. Anything else stays slate.
  */
-/** The country codes the design's forms offer, in its order. */
-const COUNTRY_CODES = [
-  "+91 India", "+971 UAE", "+966 Saudi Arabia", "+974 Qatar", "+965 Kuwait", "+973 Bahrain",
-  "+968 Oman", "+65 Singapore", "+60 Malaysia", "+1 USA / Canada", "+44 UK", "+61 Australia",
-  "+64 New Zealand", "+49 Germany", "+33 France", "+81 Japan", "+86 China", "+94 Sri Lanka",
-  "+977 Nepal", "+880 Bangladesh",
-];
+
 
 const TYPE_PILL: Record<string, string> = {
   "company staff": "bg-surface-hover text-navy-800",

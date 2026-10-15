@@ -403,6 +403,10 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
     fn: a15.updateProjectAction as MobileAction,
     args: [{ name: "id", kind: "text" }, { name: "formData", kind: "form" }],
   },
+  "sales/bookings/addKycDocuments": {
+    fn: a17.addKycDocumentsAction as MobileAction,
+    args: [{ name: "customerId", kind: "text" }, { name: "formData", kind: "form" }],
+  },
   "sales/bookings/advanceBooking": {
     fn: a17.advanceBookingAction as MobileAction,
     args: [{ name: "bookingId", kind: "text" }, { name: "to", kind: "enum", values: ["AGREEMENT", "REGISTERED"] }],
@@ -426,6 +430,10 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
   "sales/bookings/raiseDemand": {
     fn: a17.raiseDemandAction as MobileAction,
     args: [{ name: "demandId", kind: "text" }],
+  },
+  "sales/bookings/removeKycDocument": {
+    fn: a17.removeKycDocumentAction as MobileAction,
+    args: [{ name: "customerId", kind: "text" }, { name: "key", kind: "text" }],
   },
   "sales/bookings/verifyKyc": {
     fn: a17.verifyKycAction as MobileAction,

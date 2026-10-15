@@ -3,9 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import type { Prisma } from "@prisma/client";
+
 import { prisma } from "@/lib/db";
 import { authorize, runAction, assertProjectAccess, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
+import { FileTooLargeError, put, remove, UnsupportedFileTypeError } from "@/lib/storage";
 import { nextDocumentNumber } from "@/lib/numbering";
 import { buildPaymentSchedule } from "@/lib/sales/cost-sheet";
 import { clearsOnEntry } from "@/lib/sales/receipt-status";
@@ -74,7 +77,123 @@ export async function verifyKycAction(customerId: string): Promise<ActionResult<
   });
 }
 
+/**
+ * Attaches a customer's identity copies — the Aadhaar and PAN scans KYC is
+ * verified against.
+ *
+ * `Customer.kycDocuments` has been on the model since the schema was written
+ * and nothing filled it: the web records the two **numbers** and verifies
+ * against paper nobody could see in the system. A phone standing in front of
+ * the customer is the right instrument for this, so the documents are
+ * collected here and listed on the customer's record.
+ *
+ * Stored like every other upload, under the same limits, and recorded in the
+ * audit trail — an identity document arriving is not a silent event.
+ */
+export async function addKycDocumentsAction(
+  customerId: string,
+  formData: FormData,
+): Promise<ActionResult<{ added: number }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.sales.customer.verifyKyc);
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { id: true, name: true, kycDocuments: true, kycVerifiedAt: true },
+    });
+    if (!customer) throw new Error("Customer not found.");
+    if (customer.kycVerifiedAt) {
+      throw new Error("KYC is already verified — the documents on it cannot be changed.");
+    }
+
+    const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+    if (files.length === 0) throw new Error("Choose the Aadhaar or PAN copy to attach.");
+
+    const kind = String(formData.get("kind") ?? "").trim() || "Identity";
+    const held = Array.isArray(customer.kycDocuments)
+      ? (customer.kycDocuments as Array<Record<string, unknown>>)
+      : [];
+
+    const added: Array<Record<string, unknown>> = [];
+    for (const file of files) {
+      try {
+        const stored = await put(
+          `kyc-${customerId}`,
+          file.name,
+          Buffer.from(await file.arrayBuffer()),
+          file.type,
+        );
+        added.push({
+          key: stored.key,
+          kind,
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: file.type || null,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: ctx.name,
+        });
+      } catch (err) {
+        if (err instanceof FileTooLargeError || err instanceof UnsupportedFileTypeError) {
+          throw new Error(err.message);
+        }
+        throw err;
+      }
+    }
+
+    await prisma.customer.update({
+      where: { id: customerId },
+      data: { kycDocuments: [...held, ...added] as Prisma.InputJsonValue },
+    });
+    await recordAudit({
+      action: "UPDATE", entity: "Customer", entityId: customerId, userId: ctx.id,
+      summary: `Attached ${added.length} ${kind} document(s) to ${customer.name}`,
+    });
+
+    revalidatePath("/sales/customers");
+    return { added: added.length };
+  });
+}
+
+/** Removes one of those copies, while KYC is still unverified. */
+export async function removeKycDocumentAction(
+  customerId: string,
+  key: string,
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.sales.customer.verifyKyc);
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { name: true, kycDocuments: true, kycVerifiedAt: true },
+    });
+    if (!customer) throw new Error("Customer not found.");
+    if (customer.kycVerifiedAt) {
+      throw new Error("KYC is already verified — the documents on it cannot be changed.");
+    }
+
+    const held = Array.isArray(customer.kycDocuments)
+      ? (customer.kycDocuments as Array<Record<string, unknown>>)
+      : [];
+    const gone = held.find((d) => d.key === key);
+    if (!gone) throw new Error("That document is not on this customer.");
+
+    await prisma.customer.update({
+      where: { id: customerId },
+      data: { kycDocuments: held.filter((d) => d.key !== key) as Prisma.InputJsonValue },
+    });
+    await remove(key).catch(() => undefined);
+    await recordAudit({
+      action: "DELETE", entity: "Customer", entityId: customerId, userId: ctx.id,
+      summary: `Removed ${String(gone.fileName ?? "a document")} from ${customer.name}`,
+    });
+
+    revalidatePath("/sales/customers");
+    return null;
+  });
+}
+
 /* --------------------------------- Bookings ------------------------------- */
+
 
 /**
  * Books a unit.

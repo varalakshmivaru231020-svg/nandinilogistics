@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 
 import '../design/components.dart';
 import '../design/tokens.dart';
+import 'api.dart';
+import 'pick_file.dart';
+import 'where.dart';
 
 /// Forms, as the server describes them.
 ///
@@ -53,6 +56,9 @@ class FieldDef {
     this.minRows = 0,
     this.minRowsMessage,
     this.leadWith,
+    this.levels = false,
+    this.showWhen,
+    this.prefixes,
   });
 
   final String name;
@@ -104,6 +110,18 @@ class FieldDef {
   /// For `multi`: the field whose value is sent first in the list.
   final String? leadWith;
 
+  /// For `multi`: drawn as the web's numbered levels — "Level 1", "Level 2",
+  /// "+ Add level 3" — one person a level, in order, and nobody twice.
+  final bool levels;
+
+  /// Shown only once this other field has a value, as the web reveals its
+  /// review and approval levels only once a checklist has been picked.
+  final String? showWhen;
+
+  /// This field's value is prefixed onto another and not sent by itself — the
+  /// country code beside a mobile number, which the web joins and then drops.
+  final String? prefixes;
+
   factory FieldDef.from(Map<String, dynamic> j) {
     final v = j['variant'] as Map<String, dynamic>?;
     return FieldDef(
@@ -137,6 +155,9 @@ class FieldDef {
       minRows: (j['minRows'] as num?)?.toInt() ?? 0,
       minRowsMessage: j['minRowsMessage'] as String?,
       leadWith: j['leadWith'] as String?,
+      levels: j['levels'] == true,
+      showWhen: j['showWhen'] as String?,
+      prefixes: j['prefixes'] as String?,
     );
   }
 
@@ -156,6 +177,8 @@ class FormDef {
     this.shape = 'formData',
     this.order = const [],
     this.done,
+    this.opensModule,
+    this.opensIdField,
   });
 
   final String key;
@@ -165,10 +188,18 @@ class FormDef {
   final String action;
   final List<FieldDef> fields;
 
-  /// "formData" — one object of every field; "positional" — `order` names them.
+  /// "formData" — one object of every field; "positional" — `order` names them;
+  /// "openRecord" — nothing is called, the form opens a record instead.
   final String shape;
   final List<Object?> order;
   final String? done;
+
+  /// Where the shape is `openRecord`: the module to open, and the field
+  /// holding the id. The web's goods receipt works this way — pick the
+  /// approved order, then enter what arrived against its lines, because the
+  /// lines cannot be drawn until the order is known.
+  final String? opensModule;
+  final String? opensIdField;
 
   factory FormDef.from(Map<String, dynamic> j) {
     final shape = (j['shape'] as Map<String, dynamic>?) ?? const {'kind': 'formData'};
@@ -180,6 +211,8 @@ class FormDef {
       action: '${j["action"]}',
       shape: '${shape["kind"]}',
       order: (shape['order'] as List?)?.cast<Object?>() ?? const [],
+      opensModule: shape['module'] as String?,
+      opensIdField: shape['id'] as String?,
       done: j['done'] as String?,
       fields: ((j['fields'] as List?) ?? const [])
           .cast<Map<String, dynamic>>()
@@ -229,6 +262,13 @@ class FormValues {
   /// One `FormValues` per line of a `rows` field.
   final Map<String, List<FormValues>> rows = {};
 
+  /// The files chosen for each `files` field, which travel as multipart under
+  /// that field's own name — the name the action reads them under.
+  final Map<String, List<Upload>> files = {};
+
+  /// Every chosen file, flattened, for the one request that carries them.
+  List<Upload> get uploads => [for (final list in files.values) ...list];
+
   TextEditingController controller(String name) => _text[name]!;
 
   void dispose() {
@@ -242,9 +282,22 @@ class FormValues {
     }
   }
 
+  /// One field's value as the string it will travel as. Used by a form whose
+  /// only job is to open a record.
+  String text(String name) {
+    final f = fields.where((x) => x.name == name).firstOrNull;
+    if (f == null) return '';
+    if (f.isText) return controller(name).text.trim();
+    return '${values[name] ?? ""}';
+  }
+
   Object? read(FieldDef f) {
     // Not submitted: the stored value stands, as a disabled input does.
     if (f.locked) return null;
+    // Joined onto another field and never sent by itself.
+    if (f.prefixes != null) return null;
+    // Files do not travel in the body: they are parts of the request.
+    if (f.kind == 'files') return (files[f.name] ?? const []).isEmpty ? null : 'attached';
     if (f.isText) {
       final t = controller(f.name).text.trim();
       if (t.isEmpty) return null;
@@ -274,6 +327,18 @@ class FormValues {
   Map<String, Object?> asMap() {
     final out = <String, Object?>{};
     for (final f in fields) {
+      /*
+       * Where the thing is: one field on screen, the two names the action
+       * reads — which is exactly what the web posts from its own geolocation.
+       */
+      if (f.kind == 'geo') {
+        final at = values[f.name] as Map<String, Object?>?;
+        if (at != null) {
+          out['latitude'] = at['latitude'];
+          out['longitude'] = at['longitude'];
+        }
+        continue;
+      }
       final v = read(f);
       if (v == null) continue;
       // An empty list is nothing to send in a form body.
@@ -285,6 +350,19 @@ class FormValues {
         continue;
       }
       out[f.name] = v;
+    }
+
+    /*
+     * The country code beside a mobile number. The web joins the two and posts
+     * one value, prefixing only a number that does not already carry a code.
+     */
+    for (final f in fields) {
+      final onto = f.prefixes;
+      if (onto == null) continue;
+      final code = '${values[f.name] ?? f.initial ?? ""}'.split(' ').first;
+      final typed = '${out[onto] ?? ""}'.trim();
+      if (code.isEmpty || typed.isEmpty || typed.startsWith('+')) continue;
+      out[onto] = '$code $typed';
     }
     return out;
   }
@@ -381,9 +459,24 @@ class _FormBodyState extends State<FormBody> {
     return (f.label, f.kind);
   }
 
+  /// Whether a field that waits on another is due yet. The web reveals review
+  /// and approval levels only once a checklist has been picked.
+  bool _due(FieldDef f) {
+    final on = f.showWhen;
+    if (on == null) return true;
+    final value = v.values[on];
+    if (value is List) return value.isNotEmpty;
+    if (value is String) return value.trim().isNotEmpty;
+    if (value == null) {
+      final text = v.fields.any((x) => x.name == on && x.isText);
+      return text && v.controller(on).text.trim().isNotEmpty;
+    }
+    return value != false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final drawn = v.fields.where((f) => !f.hidden).toList();
+    final drawn = v.fields.where((f) => !f.hidden && _due(f)).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       for (final f in drawn) ...[
         _control(f, v),
@@ -457,12 +550,42 @@ class _FormBodyState extends State<FormBody> {
           enabled: enabled,
           onChanged: (s) => setState(() => into.values[f.name] = s),
         ),
+      'multi' when f.levels => _Levels(
+          field: f,
+          label: label + (f.required ? ' *' : ''),
+          // Level 1 is the field it follows — the assignee — and is read from
+          // that field rather than stored here, exactly as the web derives it.
+          lockedFirst: f.leadWith != null && _leader(f).isNotEmpty,
+          picked: [
+            if (f.leadWith != null && _leader(f).isNotEmpty) _leader(f),
+            ...((into.values[f.name] as List?) ?? const []).cast<String>(),
+          ],
+          enabled: enabled,
+          onChanged: (list) => setState(() {
+            final lead = f.leadWith != null && _leader(f).isNotEmpty;
+            into.values[f.name] = lead ? list.skip(1).toList() : list;
+          }),
+        ),
       'multi' => _PickMany(
           field: f,
           label: _labelled(f, label),
           picked: ((into.values[f.name] as List?) ?? const []).cast<String>(),
           enabled: enabled,
           onChanged: (list) => setState(() => into.values[f.name] = list),
+        ),
+      'files' => _Files(
+          field: f,
+          label: _labelled(f, label),
+          chosen: into.files[f.name] ?? const [],
+          enabled: enabled,
+          onChanged: (list) => setState(() => into.files[f.name] = list),
+        ),
+      'geo' => _Geo(
+          field: f,
+          label: _labelled(f, label),
+          value: into.values[f.name] as Map<String, Object?>?,
+          enabled: enabled,
+          onChanged: (at) => setState(() => into.values[f.name] = at),
         ),
       'rows' => _Lines(
           field: f,
@@ -472,6 +595,15 @@ class _FormBodyState extends State<FormBody> {
         ),
       _ => const SizedBox.shrink(),
     };
+  }
+
+  /// The value of the field a level list follows — the assignee.
+  String _leader(FieldDef f) {
+    final name = f.leadWith;
+    if (name == null) return '';
+    final value = v.values[name];
+    if (value is String) return value;
+    return '';
   }
 
   /// The label, with the web's required mark and its small print.
@@ -629,6 +761,12 @@ class _PickOne extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chosen = field.options.where((o) => o.value == value).firstOrNull;
+    /*
+     * The design draws a short list of choices as chips — three priorities, two
+     * marks — and anything longer as a searchable picker. Both are searchable:
+     * the chips carry a Search chip beside them, so every dropdown in the app
+     * can be found by typing rather than by scrolling.
+     */
     final asChips = field.kind == 'select' && field.options.length <= 6;
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -647,6 +785,25 @@ class _PickOne extends StatelessWidget {
               label: o.label,
               selected: value == o.value,
               onTap: enabled ? () => onChanged(o.value) : null,
+            ),
+          // Searchable, like every other dropdown.
+          if (field.options.length > 3)
+            FilterChip2(
+              key: Key('search-${field.name}'),
+              label: 'Search…',
+              onTap: enabled
+                  ? () async {
+                      final picked = await _search(
+                        context,
+                        field,
+                        field.options,
+                        clear: !field.required && value != null
+                            ? (field.emptyLabel ?? 'None')
+                            : null,
+                      );
+                      if (picked != null) onChanged(picked.isEmpty ? null : picked);
+                    }
+                  : null,
             ),
         ])
       else
@@ -734,6 +891,270 @@ class _PickMany extends StatelessWidget {
         const SizedBox(height: 5),
         Text(field.hint!, style: T.caption().copyWith(fontWeight: FontWeight.w500)),
       ],
+    ]);
+  }
+}
+
+/// The files a form attaches — the web's own `<input type="file" multiple>`.
+///
+/// The boundary has always accepted multipart; what was missing was a way to
+/// choose a file at all. Each one travels under this field's name, so the
+/// action reads them exactly as it reads the browser's.
+class _Files extends StatefulWidget {
+  const _Files({
+    required this.field,
+    required this.label,
+    required this.chosen,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final FieldDef field;
+  final String label;
+  final List<Upload> chosen;
+  final bool enabled;
+  final ValueChanged<List<Upload>> onChanged;
+
+  @override
+  State<_Files> createState() => _FilesState();
+}
+
+class _FilesState extends State<_Files> {
+  bool _busy = false;
+
+  Future<void> _pick() async {
+    setState(() => _busy = true);
+    final picked = await Files.live.pick(widget.field.name);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (picked.isNotEmpty) widget.onChanged([...widget.chosen, ...picked]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(widget.label, style: T.caption()),
+      if (widget.field.note != null) ...[
+        const SizedBox(height: 2),
+        Text(widget.field.note!,
+            style: T.caption(color: T.disabledInk).copyWith(fontWeight: FontWeight.w500)),
+      ],
+      const SizedBox(height: 6),
+      if (widget.chosen.isNotEmpty) ...[
+        Wrap(spacing: 7, runSpacing: 7, children: [
+          for (final f in widget.chosen)
+            FilterChip2(
+              label: '${f.name} · ${(f.bytes.length / 1024).round()} KB',
+              onRemove: widget.enabled
+                  ? () => widget.onChanged(
+                        widget.chosen.where((x) => x != f).toList(),
+                      )
+                  : null,
+            ),
+        ]),
+        const SizedBox(height: 8),
+      ],
+      Btn(
+        widget.chosen.isEmpty ? '+ Add file' : '+ Add another file',
+        key: Key('files-${widget.field.name}'),
+        emphasis: Emphasis.outline,
+        icon: Icons.attach_file_rounded,
+        busy: _busy,
+        expand: true,
+        onPressed: widget.enabled ? _pick : null,
+      ),
+      if (widget.field.hint != null) ...[
+        const SizedBox(height: 5),
+        Text(widget.field.hint!, style: T.caption().copyWith(fontWeight: FontWeight.w500)),
+      ],
+    ]);
+  }
+}
+
+/// Where this is, taken from the phone.
+///
+/// The web's site log fills two hidden inputs from the browser's geolocation
+/// and saves the log either way if it cannot. So does this: the button asks,
+/// the coordinates show once they are known, and a refusal is said plainly
+/// rather than blocking the form.
+class _Geo extends StatefulWidget {
+  const _Geo({
+    required this.field,
+    required this.label,
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final FieldDef field;
+  final String label;
+  final Map<String, Object?>? value;
+  final bool enabled;
+  final ValueChanged<Map<String, Object?>?> onChanged;
+
+  @override
+  State<_Geo> createState() => _GeoState();
+}
+
+class _GeoState extends State<_Geo> {
+  bool _busy = false;
+  String? _problem;
+
+  Future<void> _take() async {
+    setState(() {
+      _busy = true;
+      _problem = null;
+    });
+    final at = await Where.live.position();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _problem = at == null ? (Where.live.problem ?? 'The position could not be read.') : null;
+    });
+    widget.onChanged(at == null ? null : {'latitude': at.lat, 'longitude': at.lng});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final at = widget.value;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(widget.label, style: T.caption()),
+      if (widget.field.note != null) ...[
+        const SizedBox(height: 2),
+        Text(widget.field.note!,
+            style: T.caption(color: T.disabledInk).copyWith(fontWeight: FontWeight.w500)),
+      ],
+      const SizedBox(height: 6),
+      Btn(
+        at == null
+            ? 'Use my location'
+            : '${(at["latitude"] as num).toStringAsFixed(5)}, '
+                '${(at["longitude"] as num).toStringAsFixed(5)}',
+        key: Key('geo-${widget.field.name}'),
+        emphasis: Emphasis.outline,
+        icon: Icons.my_location_rounded,
+        busy: _busy,
+        expand: true,
+        onPressed: widget.enabled ? _take : null,
+      ),
+      if (_problem != null) ...[
+        const SizedBox(height: 5),
+        Text(_problem!, style: T.caption(color: T.badInk).copyWith(fontWeight: FontWeight.w500)),
+      ],
+    ]);
+  }
+}
+
+/// One person a level, in order, and nobody twice — the web's own `Levels`.
+///
+/// The order *is* the meaning here: review level 1 looks at the work first, and
+/// on a task it is the assignee, which the web shows and will not let anybody
+/// change. So the first row is locked when the field follows another, and the
+/// rest are searchable pickers with the web's own "+ Add level N" under them.
+class _Levels extends StatelessWidget {
+  const _Levels({
+    required this.field,
+    required this.label,
+    required this.picked,
+    required this.lockedFirst,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final FieldDef field;
+  final String label;
+
+  /// Every level in order, including the locked first one where there is one.
+  final List<String> picked;
+  final bool lockedFirst;
+  final bool enabled;
+  final ValueChanged<List<String>> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    String nameOf(String id) =>
+        field.options.where((o) => o.value == id).firstOrNull?.label ?? 'The assignee';
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: T.caption()),
+      if (field.note != null) ...[
+        const SizedBox(height: 2),
+        Text(field.note!, style: T.caption(color: T.disabledInk).copyWith(fontWeight: FontWeight.w500)),
+      ],
+      const SizedBox(height: 8),
+      for (final (i, id) in picked.indexed) ...[
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SizedBox(
+            width: 52,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 13),
+              child: Text('Level ${i + 1}',
+                  style: T.caption().copyWith(fontWeight: FontWeight.w600)),
+            ),
+          ),
+          Expanded(
+            child: lockedFirst && i == 0
+                // Level 1 follows the assignee: shown, and not editable.
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                    decoration: BoxDecoration(
+                      color: T.fieldFill,
+                      border: Border.all(color: T.line),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Text('${nameOf(id)} · the assignee',
+                        style: T.body(weight: FontWeight.w600).copyWith(fontSize: 12.5),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  )
+                : Btn(
+                    id.isEmpty ? (field.placeholder ?? 'Search people…') : nameOf(id),
+                    key: Key('level:${field.name}:$i'),
+                    emphasis: Emphasis.outline,
+                    icon: Icons.search_rounded,
+                    expand: true,
+                    onPressed: enabled
+                        ? () async {
+                            final free = field.options
+                                .where((o) => o.value == id || !picked.contains(o.value))
+                                .toList();
+                            final one = await _search(context, field, free);
+                            if (one == null) return;
+                            onChanged([
+                              for (final (xi, x) in picked.indexed) if (xi == i) one else x,
+                            ]);
+                          }
+                        : null,
+                  ),
+          ),
+          if (!(lockedFirst && i == 0)) ...[
+            const SizedBox(width: 7),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Btn(
+                'Remove',
+                key: Key('level-remove:${field.name}:$i'),
+                emphasis: Emphasis.outline,
+                height: 38,
+                onPressed: enabled
+                    ? () => onChanged([
+                          for (final (xi, x) in picked.indexed) if (xi != i) x,
+                        ])
+                    : null,
+              ),
+            ),
+          ],
+        ]),
+        const SizedBox(height: 8),
+      ],
+      Btn(
+        '+ Add level ${picked.length + 1}',
+        key: Key('level-add:${field.name}'),
+        emphasis: Emphasis.outline,
+        height: 40,
+        expand: true,
+        onPressed: enabled ? () => onChanged([...picked, '']) : null,
+      ),
     ]);
   }
 }

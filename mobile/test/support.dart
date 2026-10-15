@@ -44,15 +44,54 @@ class Boundary {
           ))
       .toList();
 
+  /// Every multipart request, as (the part names, the file names) — which is
+  /// how a test checks that a chosen file went up as a part rather than as a
+  /// value in the body.
+  final List<({List<String> fields, List<String> files})> multipart = [];
+
+  /// Every file fetched through the web's own routes, by path.
+  final List<String> fetched = [];
+
   MockClient get client => MockClient((request) async {
+        // A stored file is read through the web's own route, not the boundary.
+        if (!request.url.path.startsWith('/api/mobile/v1')) {
+          fetched.add(request.url.hasQuery
+              ? '${request.url.path}?${request.url.query}'
+              : request.url.path);
+          // A real 1×1 PNG: `Image.memory` decodes what it is given, and a
+          // handful of made-up bytes fails the test rather than the code.
+          return http.Response.bytes(onePixelPng, 200, headers: {'content-type': 'image/png'});
+        }
         final path = request.url.path.replaceFirst('/api/mobile/v1', '');
         if (request.method == 'GET') {
           gets.add(request.url.hasQuery ? '$path?${request.url.query}' : path);
         }
+        final type = request.headers['content-type'] ?? '';
+        /*
+         * A multipart body is not JSON. The parts are read off the raw body
+         * here rather than parsed properly — enough to say which names went up
+         * and which files came with them.
+         */
+        if (type.startsWith('multipart/form-data')) {
+          // Read as bytes: a multipart body carries file bytes, which are not
+          // text and must not be decoded as if they were.
+          final raw = String.fromCharCodes(request.bodyBytes);
+          multipart.add((
+            fields: [
+              for (final m in RegExp(r'name="([^"]+)"').allMatches(raw)) m.group(1)!,
+            ],
+            files: [
+              for (final m in RegExp(r'filename="([^"]+)"').allMatches(raw)) m.group(1)!,
+            ],
+          ));
+        }
         Map<String, dynamic>? body;
-        if (request.body.isNotEmpty) {
+        // A multipart body is bytes, not text: reading it as a string throws,
+        // and that is what made the first multipart test look like a server
+        // fault rather than a test one.
+        if (!type.startsWith('multipart/form-data') && request.bodyBytes.isNotEmpty) {
           try {
-            body = jsonDecode(request.body) as Map<String, dynamic>;
+            body = jsonDecode(utf8.decode(request.bodyBytes)) as Map<String, dynamic>;
           } catch (_) {}
         }
         calls.add((path: path, body: body));
@@ -83,6 +122,12 @@ class Boundary {
         return json({'ok': true, 'data': match}, 200);
       });
 }
+
+/// A 1×1 transparent PNG — the smallest thing a viewer can really show.
+final onePixelPng = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/'
+  'q842iQAAAABJRU5ErkJggg==',
+);
 
 Session sessionWith(List<String> codes, {bool superAdmin = false}) => Session(
       token: 't',

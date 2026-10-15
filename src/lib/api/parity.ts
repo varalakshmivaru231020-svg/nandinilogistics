@@ -35,10 +35,6 @@ export interface ParityExemption {
 export const PARITY: Record<string, ParityExemption> = {
   /* ------------------------------------------- masters, which stay on the web */
 
-  "material/stock/createItem": {
-    reason: "brief:web-only",
-    note: "The item master.",
-  },
   "material/stock/updateItem": {
     reason: "brief:web-only",
     note: "The item master.",

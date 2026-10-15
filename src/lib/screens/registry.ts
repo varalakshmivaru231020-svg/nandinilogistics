@@ -57,7 +57,9 @@ export type OptionSource =
   /** How somebody is employed — the HR master's own list. */
   | "employmentTypes"
   /** Designations, as the HR form offers them. */
-  | "designations";
+  | "designations"
+  /** The purchase orders still expecting material, as the GRN's first step lists them. */
+  | "receivablePos";
 
 export interface ScreenFilterDef {
   /** The query parameter, which is the same one the web reads from its URL. */

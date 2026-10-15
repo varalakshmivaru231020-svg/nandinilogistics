@@ -191,6 +191,27 @@ export async function loadOptions(source: OptionSource, ctx: AuthContext): Promi
       });
       return rows.map((d) => ({ value: d.id, label: d.name }));
     }
+    case "receivablePos": {
+      /*
+       * The orders the web's goods-receipt picker lists: approved or part
+       * received, oldest first, in the caller's project scope — and labelled
+       * as that screen labels them, with the vendor and the line count.
+       */
+      const rows = await prisma.purchaseOrder.findMany({
+        where: { ...projectScopeFilter(ctx), status: { in: ["APPROVED", "PARTIALLY_RECEIVED"] } },
+        orderBy: { poDate: "asc" },
+        take: 50,
+        include: {
+          vendor: { select: { name: true } },
+          _count: { select: { items: true } },
+        },
+      });
+      return rows.map((p) => ({
+        value: p.id,
+        label: p.poNo,
+        hint: `${p.vendor.name} · ${p._count.items} line${p._count.items === 1 ? "" : "s"}`,
+      }));
+    }
     case "checklistCategories": {
       const rows = await prisma.checklistCategory.findMany({
         orderBy: { sortOrder: "asc" },

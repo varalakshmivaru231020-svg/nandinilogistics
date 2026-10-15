@@ -4,6 +4,7 @@ import '../core/api.dart';
 import '../core/form.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
+import 'record_screen.dart';
 
 /// Making something: the web's own form, on a phone.
 ///
@@ -111,7 +112,29 @@ class _FormScreenState extends State<FormScreen> {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
-    final res = await widget.api.run(def.action, values.args(def, recordId: widget.recordId));
+    /*
+     * A form that opens a record calls nothing: the web's goods receipt is two
+     * screens, and this is the first — which order arrived. The second is that
+     * order's own "Receive goods", where its lines are.
+     */
+    if (def.shape == 'openRecord' && def.opensModule != null) {
+      final id = values.text(def.opensIdField ?? '');
+      setState(() => _busy = false);
+      if (id.isEmpty) return;
+      final changed = await navigator.push<bool>(MaterialPageRoute(
+        builder: (_) => RecordScreen(api: widget.api, module: def.opensModule!, id: id),
+      ));
+      if (!mounted) return;
+      if (changed == true) navigator.pop(true);
+      return;
+    }
+
+    final res = await widget.api.run(
+      def.action,
+      values.args(def, recordId: widget.recordId),
+      // Whatever was attached, under the names the action reads.
+      files: values.uploads,
+    );
     if (!mounted) return;
 
     if (res.ok) {
