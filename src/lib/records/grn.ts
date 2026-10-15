@@ -107,6 +107,20 @@ export async function grnRecord(ctx: AuthContext, id: string): Promise<RecordVie
     });
   }
 
+  if (ctx.has(PERM.material.grn.update)) {
+    actions.push({
+      key: "edit",
+      label: "Edit receipt",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "material/grn:edit",
+      confirm:
+        "The challan, the vehicle and the remarks. A posted quantity is corrected by a stock adjustment, never rewritten.",
+    });
+  }
+
   if (ctx.has(PERM.material.grn.delete)) {
     actions.push({
       key: "delete",

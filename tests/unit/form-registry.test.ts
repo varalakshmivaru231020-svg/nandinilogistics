@@ -48,6 +48,14 @@ const SOURCE: Record<string, string> = {
   "hr/employees:edit": "hr/hr-screen.tsx",
   "schedule/activities:edit": "schedule/schedule-screen.tsx",
   "units:edit": "units/unit-manager.tsx",
+  "units:create": "units/unit-manager.tsx",
+  "material/indents:edit": "material/indents/new/indent-form.tsx",
+  "material/purchase-orders:edit": "material/purchase-orders/new/po-form.tsx",
+  "material/grn:edit": "material/grn/[id]/edit/grn-edit-form.tsx",
+  "projects/projects:create": "projects/new-project-button.tsx",
+  "projects/projects:edit": "projects/[id]/edit-project-button.tsx",
+  "schedule/activities:addCategory": "schedule/schedule-screen.tsx",
+  "schedule/activities:addActivity": "schedule/schedule-screen.tsx",
 };
 
 /**
@@ -59,6 +67,9 @@ const SOURCE: Record<string, string> = {
  * BAG" is, or the unit in brackets, as `Quantity${` (${s.uom})`}` is.
  */
 function labelled(src: string, label: string): boolean {
+  // An ampersand is written `&amp;` in JSX text.
+  const web = label.replace(/&/g, "&amp;");
+  if (src.includes(`>${web}`) || src.includes(`"${web}"`)) return true;
   if (src.includes(`label="${label}"`) || src.includes(`label={"${label}"}`)) return true;
   if (src.includes(`"${label}"`)) return true;
   // A template literal that starts with the label: `Quantity${…}`.
@@ -87,9 +98,26 @@ const OURS = new Set([
   "checklists:create → Category",
   // The transfer modal has no heading over its lines; a phone's rows need one.
   "material/transfers:create → Items",
+  // As on the create form: the web picks the item in a search pane, so the
+  // line has no labelled item field.
+  "material/indents:edit → Item",
+  "material/purchase-orders:edit → Item",
   // The web's own title carries the activity's code — "Edit EXC" — which a
-  // registry entry cannot know.
+  // registry entry cannot know. The goods receipt's edit page does the same
+  // with its number.
   "schedule/activities:edit → Edit activity",
+  "material/grn:edit → Edit goods receipt",
+  /*
+   * The web's schedule takes the project from the screen's own chooser and the
+   * main category from the row whose "+ Sub-activity" you pressed. A form has
+   * to name both.
+   */
+  "schedule/activities:addCategory → Project",
+  "schedule/activities:addActivity → Project",
+  "schedule/activities:addActivity → Under which main category",
+  // The unit form's project and block come from the row on the web's manager.
+  "units:create → Project",
+  "units:create → Block",
 ]);
 
 /**
@@ -100,6 +128,9 @@ const OUTSIDE_THE_FORM = new Set([
   "checklists:create → categoryId",
   // The stale guard the lead's edit drawer posts as a hidden input.
   "sales/leads:edit → updatedAt",
+  // The goods receipt's edit passes it as the action's third argument rather
+  // than as a field.
+  "material/grn:edit → expectedUpdatedAt",
 ]);
 
 /**
@@ -245,6 +276,7 @@ describe("the fields are the web's fields", () => {
             expect(labelled(src, f.label), `${key} label ${f.label}`).toBe(true);
           }
           for (const r of f.row ?? []) {
+            if (r.hidden) continue;
             if (OURS.has(`${key} → ${r.label}`)) continue;
             expect(labelled(src, r.label), `${key} line label ${r.label}`).toBe(true);
           }

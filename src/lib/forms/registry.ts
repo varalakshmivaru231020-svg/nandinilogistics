@@ -1,6 +1,7 @@
 import "server-only";
 
 import { PERM } from "@/lib/permissions/codes";
+import { PROJECT_STATUSES, PROJECT_STATUS_LABEL } from "@/lib/projects/list-filters";
 import type { AuthContext } from "@/lib/rbac/context";
 
 import type { FormDef, FormFieldDef, FormRef } from "./types";
@@ -19,6 +20,40 @@ import type { FormDef, FormFieldDef, FormRef } from "./types";
  */
 
 const PEOPLE_SEARCH = "Search people…";
+
+const PROJECT_FIELDS: ReadonlyArray<FormFieldDef> = [
+  {
+    name: "name",
+    label: "Project name",
+    kind: "text",
+    required: true,
+    placeholder: "e.g. NN Lakefront",
+    wide: true,
+  },
+  { name: "code", label: "Project code", kind: "text", required: true, placeholder: "PRJ-005" },
+  { name: "projectTypeId", label: "Project type", kind: "select", required: true, source: "projectTypes" },
+  { name: "addressLine", label: "Location", kind: "text", placeholder: "Area, city", wide: true },
+  { name: "landAreaText", label: "Land area", kind: "text", placeholder: "4.2 acres" },
+  {
+    name: "reraNumber",
+    label: "RERA registration no.",
+    kind: "text",
+    placeholder: "PRM/KA/RERA/…",
+    wide: true,
+  },
+  {
+    name: "approvalDetails",
+    label: "Approval details",
+    kind: "text",
+    placeholder: "plan sanction ref.",
+    wide: true,
+  },
+  { name: "totalTowers", label: "Towers / blocks", kind: "number", placeholder: "2" },
+  { name: "totalFloors", label: "Floors per tower", kind: "number", placeholder: "18" },
+  { name: "totalUnits", label: "Total units", kind: "number", placeholder: "456" },
+  { name: "startDate", label: "Planned start", kind: "date" },
+  { name: "targetDate", label: "Target completion", kind: "date" },
+];
 
 const CALENDAR_FIELDS: ReadonlyArray<FormFieldDef> = [
       {
@@ -748,6 +783,292 @@ export const FORMS: Record<string, FormDef> = {
 
   // src/app/(app)/units/unit-manager.tsx → UnitFormModal. The project and the
   // block cannot move, so they are not on the edit form at all.
+  // src/app/(app)/material/indents/new/indent-form.tsx, opened on an indent.
+  // The project is fixed and the rates come from the item master — the edit
+  // schema's own comment says so.
+  "material/indents:edit": {
+    key: "material/indents:edit",
+    module: "material/indents",
+    title: "Edit requirement indent",
+    submitLabel: "Save indent",
+    permission: PERM.material.indent.update,
+    action: "material/indents/updateIndent",
+    shape: { kind: "positional", order: ["$id", "$values"] },
+    done: "Indent changed.",
+    onRecord: true,
+    edits: true,
+    fields: [
+      { name: "requiredByDate", label: "Required by", kind: "date", required: true },
+      {
+        name: "purpose",
+        label: "Activity / work front",
+        kind: "suggest",
+        required: true,
+        source: "workPackages",
+        placeholder: "Slab casting floor 7",
+      },
+      {
+        name: "remarks",
+        label: "Remarks",
+        kind: "textarea",
+        required: true,
+        placeholder: "e.g. needed before the pour on 10 Sep, deliver to floor 7 hoist…",
+        wide: true,
+      },
+      {
+        name: "items",
+        label: "Requested items",
+        kind: "rows",
+        addLabel: "Add item",
+        minRows: 1,
+        minRowsMessage: "Add at least one item",
+        wide: true,
+        row: [
+          { name: "id", label: "Line", kind: "text", hidden: true },
+          {
+            name: "itemId",
+            label: "Item",
+            kind: "lookup",
+            required: true,
+            source: "items",
+            placeholder: "Search item name or code…",
+          },
+          { name: "requestedQty", label: "Reqd qty", kind: "number", required: true },
+          { name: "specification", label: "Specification", kind: "text", hidden: true },
+        ],
+      },
+    ],
+  },
+
+  // src/app/(app)/material/purchase-orders/new/po-form.tsx, opened on an
+  // order. The project cannot move, so it is not here.
+  "material/purchase-orders:edit": {
+    key: "material/purchase-orders:edit",
+    module: "material/purchase-orders",
+    title: "Edit purchase order",
+    description: "Raised POs go to Project Manager, then Admin.",
+    submitLabel: "Save order",
+    permission: PERM.material.purchaseOrder.update,
+    action: "material/purchase-orders/updatePurchaseOrder",
+    shape: { kind: "positional", order: ["$id", "$values"] },
+    done: "Order changed.",
+    onRecord: true,
+    edits: true,
+    fields: [
+      {
+        name: "vendorId",
+        label: "Vendor",
+        kind: "lookup",
+        required: true,
+        source: "vendors",
+        placeholder: "Search vendor by name, code or number…",
+      },
+      { name: "expectedDate", label: "Delivery due", kind: "date" },
+      {
+        name: "terms",
+        label: "Payment & delivery terms",
+        kind: "text",
+        placeholder: "30 days credit · delivery at site",
+        wide: true,
+      },
+      {
+        name: "deliveryAddress",
+        label: "Remarks",
+        kind: "textarea",
+        placeholder: "e.g. deliver in two lots, unload at basement gate…",
+        wide: true,
+      },
+      // The web's own form has no input for other charges — it carries
+      // whatever the order already had, so this does the same, unseen.
+      { name: "otherCharges", label: "Other charges", kind: "money", hidden: true },
+      {
+        name: "items",
+        label: "Order lines",
+        kind: "rows",
+        addLabel: "Add line",
+        minRows: 1,
+        minRowsMessage: "Add at least one item",
+        wide: true,
+        row: [
+          { name: "id", label: "Line", kind: "text", hidden: true },
+          {
+            name: "itemId",
+            label: "Item",
+            kind: "lookup",
+            required: true,
+            source: "items",
+            placeholder: "Search item name or code…",
+          },
+          { name: "orderedQty", label: "Qty", kind: "number", required: true },
+          { name: "rate", label: "Rate ₹", kind: "money", required: true },
+          // None of these three is drawn on the web's own form: the tax comes
+          // from the item master and the other two are carried. All three ride
+          // along so an edit sends back what it was given.
+          { name: "taxPct", label: "GST %", kind: "number", hidden: true },
+          { name: "discountPct", label: "Disc %", kind: "number", hidden: true },
+          { name: "specification", label: "Specification", kind: "text", hidden: true },
+        ],
+      },
+    ],
+  },
+
+  // src/app/(app)/material/grn/[id]/edit — the paperwork only. Quantities are
+  // not editable once the receipt is in the stock ledger, which is every
+  // posted receipt; those are corrected with a stock adjustment.
+  "material/grn:edit": {
+    key: "material/grn:edit",
+    module: "material/grn",
+    // Its own title carries the receipt's number — "Edit GRN/NNS/…" — and its
+    // description the order it is against.
+    title: "Edit goods receipt",
+    submitLabel: "Save",
+    permission: PERM.material.grn.update,
+    action: "material/grn/updateGrn",
+    shape: { kind: "positional", order: ["$id", "$values", "$expectedUpdatedAt"] },
+    done: "Goods receipt changed.",
+    onRecord: true,
+    edits: true,
+    fields: [
+      { name: "challanNo", label: "Challan no.", kind: "text" },
+      { name: "challanDate", label: "Challan date", kind: "date" },
+      { name: "vehicleNo", label: "Vehicle no.", kind: "text", caps: true },
+      { name: "remarks", label: "Remarks", kind: "textarea", wide: true },
+      // The stale guard the action compares against, carried not drawn.
+      { name: "expectedUpdatedAt", label: "Unchanged since", kind: "text", hidden: true },
+    ],
+  },
+
+  /* ------------------------------------------------------------- projects */
+
+  // src/app/(app)/projects/new-project-button.tsx. The breakdown the web's
+  // dialog can carry is optional on the action, and is built on the web or
+  // from the schedule — a phone raises the project.
+  "projects/projects:create": {
+    key: "projects/projects:create",
+    module: "projects/projects",
+    title: "Create project",
+    submitLabel: "Create project",
+    permission: PERM.project.project.create,
+    action: "projects/createProject",
+    shape: { kind: "formData" },
+    done: "Project created.",
+    fields: PROJECT_FIELDS,
+  },
+
+  // src/app/(app)/projects/[id]/edit-project-button.tsx — the same fields with
+  // the status, which only an existing project has.
+  "projects/projects:edit": {
+    key: "projects/projects:edit",
+    module: "projects/projects",
+    title: "Edit project",
+    submitLabel: "Save",
+    permission: PERM.project.project.update,
+    action: "projects/updateProject",
+    shape: { kind: "positional", order: ["$id", "$values"] },
+    done: "Project changed.",
+    onRecord: true,
+    edits: true,
+    // The same particulars, plus the two its own screen adds: the city and
+    // the status, which only a project that exists has.
+    fields: [
+      // Its own screen places only four of the create dialog's placeholders.
+      ...PROJECT_FIELDS.map((f) =>
+        ["addressLine", "landAreaText", "reraNumber", "approvalDetails"].includes(f.name)
+          ? f
+          : { ...f, placeholder: undefined },
+      ),
+      { name: "cityId", label: "City", kind: "select", source: "cities" },
+      {
+        name: "status",
+        label: "Status",
+        kind: "select",
+        required: true,
+        options: PROJECT_STATUSES.map((v) => ({ value: v, label: PROJECT_STATUS_LABEL[v] })),
+      },
+    ],
+  },
+
+  /* ---------------------------------------------------------------- units */
+
+  // src/app/(app)/units/unit-manager.tsx → UnitFormModal, raising one flat.
+  "units:create": {
+    key: "units:create",
+    module: "units",
+    title: "New unit",
+    submitLabel: "Create unit",
+    permission: PERM.unit.unit.create,
+    action: "units/createUnit",
+    shape: { kind: "formData" },
+    done: "Unit created.",
+    fields: [
+      { name: "projectId", label: "Project", kind: "select", required: true, source: "projects" },
+      { name: "blockId", label: "Block", kind: "lookup", required: true, source: "blocks" },
+      { name: "unitNumber", label: "Unit number", kind: "text", required: true, placeholder: "A-0101" },
+      { name: "unitTypeId", label: "Unit type", kind: "select", required: true, source: "unitTypes" },
+      { name: "floorNumber", label: "Floor", kind: "number", required: true, hint: "0 for ground." },
+      { name: "carpetArea", label: "Carpet area (sq.ft)", kind: "number", required: true },
+      { name: "builtUpArea", label: "Built-up area (sq.ft)", kind: "number" },
+      {
+        name: "superBuiltUpArea",
+        label: "Super built-up area (sq.ft)",
+        kind: "number",
+        required: true,
+        hint: "The area rates apply to.",
+      },
+      { name: "facing", label: "Facing", kind: "text", placeholder: "East" },
+      { name: "plcTag", label: "PLC tag", kind: "text", hint: "e.g. CORNER, PARK_FACING" },
+      { name: "parkingSlots", label: "Parking slots", kind: "number" },
+    ],
+  },
+
+  /* ------------------------------------------------------------- schedule */
+
+  // src/app/(app)/schedule/schedule-screen.tsx → AddPanel, whose two modes are
+  // a main category and a sub-activity under one.
+  "schedule/activities:addCategory": {
+    key: "schedule/activities:addCategory",
+    module: "schedule/activities",
+    title: "Main category",
+    submitLabel: "Add",
+    permission: PERM.schedule.activity.create,
+    action: "schedule/addMainCategory",
+    shape: { kind: "positional", order: ["$projectId", "$name", "$plannedStart", "$plannedEnd"] },
+    done: "Main category added.",
+    fields: [
+      { name: "projectId", label: "Project", kind: "select", required: true, source: "projects" },
+      { name: "name", label: "Name", kind: "text", required: true, placeholder: "e.g. Slab 4", wide: true },
+      { name: "plannedStart", label: "Planned start", kind: "date", required: true },
+      { name: "plannedEnd", label: "Planned end", kind: "date", required: true },
+    ],
+  },
+
+  "schedule/activities:addActivity": {
+    key: "schedule/activities:addActivity",
+    module: "schedule/activities",
+    title: "Sub-activity",
+    submitLabel: "Add",
+    permission: PERM.schedule.activity.create,
+    action: "schedule/addSubActivity",
+    shape: {
+      kind: "positional",
+      order: ["$projectId", "$workPackageId", "$name", "$plannedStart", "$plannedEnd"],
+    },
+    done: "Sub-activity added.",
+    fields: [
+      { name: "projectId", label: "Project", kind: "select", required: true, source: "projects" },
+      {
+        name: "workPackageId",
+        label: "Under which main category",
+        kind: "lookup",
+        required: true,
+        source: "workPackages",
+      },
+      { name: "name", label: "Name", kind: "text", required: true, placeholder: "e.g. Slab 4", wide: true },
+      { name: "plannedStart", label: "Planned start", kind: "date", required: true },
+      { name: "plannedEnd", label: "Planned end", kind: "date", required: true },
+    ],
+  },
+
   "units:edit": {
     key: "units:edit",
     module: "units",

@@ -494,7 +494,13 @@ suite("the material records", () => {
        * creates a goods receipt rather than changing the order, so it does not
        * — and it is the one action whose arguments are a parsed object.
        */
-      for (const a of rec.actions.filter((x) => x.key !== "receive")) {
+      const writesToTheOrder = rec.actions.filter(
+        // Receiving creates a goods receipt, and an action that opens a form
+        // carries no arguments at all until the form is filled in.
+        (x) => x.key !== "receive" && x.action !== "",
+      );
+      expect(writesToTheOrder.length).toBeGreaterThan(0);
+      for (const a of writesToTheOrder) {
         expect(
           a.args.some((x) => typeof x === "string" && /^\d{4}-\d{2}-\d{2}T/.test(x)),
           `${a.key} carries the stale guard`,

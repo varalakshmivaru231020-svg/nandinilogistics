@@ -61,6 +61,19 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
   if (!project) return null;
 
   const actions: RecordAction[] = [];
+  if (ctx.has(PERM.project.project.update)) {
+    actions.push({
+      key: "edit",
+      label: "Edit project",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "projects/projects:edit",
+      confirm: "Its particulars, its dates and its status.",
+    });
+  }
+
   if (ctx.has(PERM.project.team.assign)) {
     const free = await prisma.user.findMany({
       where: { status: "ACTIVE", NOT: { projectAccess: { some: { projectId: id } } } },

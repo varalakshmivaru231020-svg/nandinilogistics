@@ -312,6 +312,28 @@ export async function purchaseOrderRecord(
     }
   }
 
+  /*
+   * Editing. The web's own condition: the update permission, the rate
+   * permission — an edit is an edit of the rates — and either an order nobody
+   * has approved yet or the right to revise one.
+   */
+  if (
+    ctx.has(PERM.material.purchaseOrder.update) &&
+    canSeeRate &&
+    (isPoEditable(po) || ctx.has(PERM.material.purchaseOrder.revise))
+  ) {
+    actions.push({
+      key: "edit",
+      label: "Edit order",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "material/purchase-orders:edit",
+      confirm: "An edit after approval raises a revision and restarts it at the Project Manager.",
+    });
+  }
+
   if (po.status === "DRAFT" && ctx.has(PERM.material.purchaseOrder.delete)) {
     actions.push({
       key: "delete",

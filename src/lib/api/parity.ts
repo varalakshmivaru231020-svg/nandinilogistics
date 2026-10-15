@@ -125,6 +125,34 @@ export const PARITY: Record<string, ParityExemption> = {
     reason: "no-web-ui",
     note: "No web screen calls it; a receipt is inspected as it is created.",
   },
+  /*
+   * The schedule's templates and dependencies: five actions, no screen on the
+   * web that calls any of them. Links arrive with the programme import, and
+   * templates have no UI at all. The phone shows what the data holds — an
+   * activity's predecessors are drawn read-only — and offers none of these,
+   * because inventing a destructive control the desk does not have is not
+   * parity.
+   */
+  "schedule/addDependency": {
+    reason: "no-web-ui",
+    note: "No web screen links two activities; links come in with the import.",
+  },
+  "schedule/removeDependency": {
+    reason: "no-web-ui",
+    note: "The same — the phone draws the links read-only.",
+  },
+  "schedule/applyTemplate": {
+    reason: "no-web-ui",
+    note: "No web screen applies a schedule template.",
+  },
+  "schedule/saveScheduleAsTemplate": {
+    reason: "no-web-ui",
+    note: "No web screen saves one.",
+  },
+  "schedule/deleteTemplate": {
+    reason: "no-web-ui",
+    note: "No web screen deletes one.",
+  },
 
   /* ------------------------------------------------- done another way */
 
@@ -135,22 +163,21 @@ export const PARITY: Record<string, ParityExemption> = {
 
   /* ----------------------------------------------- still to build (todo) */
 
-  "material/indents/updateIndent": { reason: "todo", note: "Editing an indent before approval." },
-  "material/purchase-orders/updatePurchaseOrder": { reason: "todo", note: "Editing a purchase order." },
-  "material/grn/updateGrn": { reason: "todo", note: "Editing a goods receipt." },
-  "projects/updateProject": { reason: "todo", note: "Editing a project." },
-  "projects/createProject": { reason: "todo", note: "Raising a project with its breakdown." },
 
-  "units/createUnit": { reason: "todo", note: "Adding one flat to a block." },
-  "units/board/generateUnits": { reason: "todo", note: "Generating a tower's flats." },
+  /*
+   * Generating a tower's flats. The web's unit-setup screen works out the plan
+   * — floors by units per floor, with per-flat overrides — inside the
+   * component and posts the finished array. Doing it on the phone means
+   * either repeating that arithmetic, which is what this project's rules
+   * forbid, or lifting it into a pure module both clients can call. The second
+   * is right and is a web change; it is not done.
+   */
+  "units/board/generateUnits": {
+    reason: "todo",
+    note: "Needs the plan arithmetic lifted out of src/app/(app)/units/board/unit-setup.tsx into a shared module first.",
+  },
 
 
 
 
-  "schedule/addMainCategory": { reason: "todo", note: "Building the programme." },
-  "schedule/addSubActivity": { reason: "todo", note: "Building the programme." },
-  "schedule/addDependency": { reason: "todo", note: "Linking two activities." },
-  "schedule/applyTemplate": { reason: "todo", note: "Applying a schedule template." },
-  "schedule/saveScheduleAsTemplate": { reason: "todo", note: "Saving one." },
-  "schedule/deleteTemplate": { reason: "todo", note: "Deleting one." },
 };

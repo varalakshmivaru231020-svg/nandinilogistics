@@ -332,23 +332,16 @@ export async function activityRecord(ctx: AuthContext, id: string): Promise<Reco
             {
               key: `links:${id}`,
               label: `Depends on · ${activity.predecessors.length}`,
+              /*
+               * Read-only, as on the web: the dependency actions exist on the
+               * server and no web screen offers them — links come in with the
+               * programme import. Inventing a destructive control the desk
+               * does not have is not parity; see docs/MOBILE_PARITY.md.
+               */
               rows: activity.predecessors.map((d) => ({
                 id: d.id,
                 title: d.predecessor.name,
                 subtitle: `${d.predecessor.code} · ${d.type}${d.lagDays ? ` · lag ${d.lagDays} d` : ""}`,
-                actions: ctx.has(PERM.schedule.dependency.manage)
-                  ? [
-                      {
-                        key: `unlink:${d.id}`,
-                        label: "Remove",
-                        emphasis: "reject" as const,
-                        action: "schedule/removeDependency",
-                        args: [d.id],
-                        remark: "none" as const,
-                        confirm: "The link goes; neither activity moves.",
-                      },
-                    ]
-                  : [],
               })),
               emptyMessage: "Nothing has to finish before this one.",
             },

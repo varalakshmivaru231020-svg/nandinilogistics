@@ -234,6 +234,90 @@ export async function prefillFor(
       };
     }
 
+    /* ------------------------------------------------------------ projects */
+    case "projects/projects:edit": {
+      const pr = await prisma.project.findUnique({ where: { id } });
+      if (!pr) return null;
+      if (!ctx.canAccessAllProjects && !ctx.projectIds.includes(id)) {
+        return { values: {}, refusal: "You are not mapped to this project." };
+      }
+      return {
+        values: {
+          name: pr.name,
+          code: pr.code,
+          projectTypeId: txt(pr.projectTypeId),
+          addressLine: txt(pr.addressLine),
+          cityId: txt(pr.cityId),
+          // What was typed, as the design shows it.
+          landAreaText: pr.landAreaText || (pr.landArea ? String(pr.landArea) : ""),
+          reraNumber: txt(pr.reraNumber),
+          approvalDetails: txt(pr.approvalDetails),
+          totalTowers: pr.totalTowers,
+          totalFloors: pr.totalFloors,
+          totalUnits: pr.totalUnits,
+          startDate: day(pr.startDate),
+          targetDate: day(pr.targetDate),
+          status: pr.status,
+        },
+      };
+    }
+
+    /* ------------------------------------------------------- goods receipts */
+    case "material/grn:edit": {
+      const g = await prisma.grn.findUnique({ where: { id } });
+      if (!g) return null;
+      return {
+        values: {
+          challanNo: txt(g.challanNo),
+          challanDate: day(g.challanDate),
+          vehicleNo: txt(g.vehicleNo),
+          remarks: txt(g.remarks),
+          expectedUpdatedAt: at(g.updatedAt),
+        },
+      };
+    }
+
+    /* ------------------------------------------------------ purchase orders */
+    case "material/purchase-orders:edit": {
+      const po = await prisma.purchaseOrder.findUnique({
+        where: { id },
+        include: {
+          items: {
+            include: { item: { select: { name: true, uom: { select: { name: true } } } } },
+          },
+        },
+      });
+      if (!po) return null;
+      if (!ctx.has(PERM.material.purchaseOrder.viewRate)) {
+        return {
+          values: {},
+          refusal: "Editing an order means editing its rates, which you may not see.",
+        };
+      }
+      return {
+        values: {
+          vendorId: po.vendorId,
+          paymentTermId: txt(po.paymentTermId),
+          expectedDate: day(po.expectedDate),
+          deliveryAddress: txt(po.deliveryAddress),
+          terms: txt(po.terms),
+          otherCharges: num(po.otherCharges),
+        },
+        rows: {
+          items: po.items.map((l) => ({
+            _label: `${l.item.name} · ${l.item.uom.name}`,
+            id: l.id,
+            itemId: l.itemId,
+            orderedQty: Number(l.orderedQty),
+            rate: Number(l.rate),
+            discountPct: Number(l.discountPct),
+            taxPct: Number(l.taxPct),
+            specification: txt(l.specification),
+          })),
+        },
+      };
+    }
+
     default:
       return null;
   }
