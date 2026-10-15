@@ -146,6 +146,9 @@ class ListPage {
     required this.rows,
     required this.summary,
     required this.serverTime,
+    this.total = 0,
+    this.page,
+    this.hasMore = false,
   });
 
   final String title;
@@ -158,12 +161,25 @@ class ListPage {
   /// evidence — a phone an hour fast must not disagree about what is overdue.
   final int serverTime;
 
+  /// How many rows match, which is more than came back when a page was asked
+  /// for.
+  final int total;
+
+  /// The page these rows are, where one was asked for.
+  final int? page;
+
+  /// Whether there is another page behind this one.
+  final bool hasMore;
+
   static ListPage from(Map<String, dynamic> d) => ListPage(
         title: (d['title'] as String?) ?? '',
         filters: (d['filters'] as String?) ?? '',
         columns: ((d['columns'] as List?) ?? const []).cast<Map<String, dynamic>>(),
         rows: ((d['rows'] as List?) ?? const []).cast<Map<String, dynamic>>(),
         summary: ((d['summary'] as List?) ?? const []).cast<Map<String, dynamic>>(),
+        total: (d['total'] as num?)?.toInt() ?? ((d['rows'] as List?) ?? const []).length,
+        page: (d['page'] as num?)?.toInt(),
+        hasMore: d['hasMore'] == true,
         serverTime:
             DateTime.tryParse((d['serverTime'] as String?) ?? '')?.millisecondsSinceEpoch ??
                 DateTime.now().millisecondsSinceEpoch,

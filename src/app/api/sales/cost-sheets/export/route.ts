@@ -84,6 +84,7 @@ export async function GET(request: Request) {
 
   return exportResponse({
     ctx,
+    params: gate.params,
     format: gate.format,
     title: "Cost Sheets",
     entity: "CostSheet",

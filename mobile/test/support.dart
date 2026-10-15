@@ -24,6 +24,10 @@ class Boundary {
   final Map<String, Object> routes;
   final List<({String path, Map<String, dynamic>? body})> calls = [];
 
+  /// Every GET, with the query it carried — which is how a test checks that a
+  /// filter, a search and a page travelled together.
+  final List<String> gets = [];
+
   /// A long timeout on purpose.
   ///
   /// `pumpAndSettle` advances a fake clock, so a short timeout fires before the
@@ -42,6 +46,9 @@ class Boundary {
 
   MockClient get client => MockClient((request) async {
         final path = request.url.path.replaceFirst('/api/mobile/v1', '');
+        if (request.method == 'GET') {
+          gets.add(request.url.hasQuery ? '$path?${request.url.query}' : path);
+        }
         Map<String, dynamic>? body;
         if (request.body.isNotEmpty) {
           try {
@@ -50,7 +57,10 @@ class Boundary {
         }
         calls.add((path: path, body: body));
 
-        final match = routes[path];
+        // A route may be keyed with its query, which is how a test pins down
+        // the exact parameters a screen sent — a page, a filter, a search.
+        final withQuery = request.url.hasQuery ? '$path?${request.url.query}' : path;
+        final match = routes[withQuery] ?? routes[path];
         // Encoded as UTF-8 bytes, exactly as the real boundary answers. A
         // String body goes out as latin-1 here, which cannot carry a ₹ — and
         // that is how the client's own latin-1 bug was found.

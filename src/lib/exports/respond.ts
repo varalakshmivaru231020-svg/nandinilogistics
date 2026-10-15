@@ -27,6 +27,18 @@ import type { ReportResult } from "@/lib/reports/types";
 export const EXPORT_MAX_ROWS = 20_000;
 
 /**
+ * How many rows a page of a list carries, when the caller asks for one.
+ *
+ * The web paginates three of its lists — indents and purchase orders thirty
+ * to a page, units fifty — and reads the rest whole. A phone cannot read
+ * twenty thousand rows over a site connection, so the JSON mode takes `page`
+ * and `pageSize` and the client walks them. Without `page` nothing changes:
+ * the whole list comes back, as it did for every caller before this.
+ */
+export const LIST_PAGE_SIZE = 50;
+export const LIST_PAGE_MAX = 200;
+
+/**
  * `json` is not an export format — it is the Android client reading the list.
  *
  * Deliberately not added to `ExportFormat`: the web's export menu is built from
@@ -110,6 +122,8 @@ export async function exportResponse(opts: {
   filters: string;
   result: ReportResult;
   projectId?: string | null;
+  /** The request's own query, for the page the client asked for. */
+  params?: URLSearchParams;
 }): Promise<NextResponse> {
   const { ctx, format, title, entity, filters, result } = opts;
   const now = new Date();
@@ -121,6 +135,22 @@ export async function exportResponse(opts: {
    * actually matters.
    */
   if (format === "json") {
+    /*
+     * A page of it, where one was asked for. The filters and the scope have
+     * already decided which rows these are — this only decides how many of
+     * them travel at once — so a page cannot show something the whole list
+     * would not have.
+     */
+    const asked = Number(opts.params?.get("page") ?? 0);
+    const page = Number.isFinite(asked) && asked >= 1 ? Math.floor(asked) : null;
+    const sizeAsked = Number(opts.params?.get("pageSize") ?? 0);
+    const pageSize = Math.min(
+      LIST_PAGE_MAX,
+      Number.isFinite(sizeAsked) && sizeAsked >= 1 ? Math.floor(sizeAsked) : LIST_PAGE_SIZE,
+    );
+    const total = result.rows.length;
+    const rows = page === null ? result.rows : result.rows.slice((page - 1) * pageSize, page * pageSize);
+
     return NextResponse.json(
       {
         ok: true,
@@ -128,9 +158,14 @@ export async function exportResponse(opts: {
           title,
           filters,
           columns: result.columns,
-          rows: result.rows,
+          rows,
           summary: result.summary ?? [],
-          total: result.rows.length,
+          total,
+          // What the client needs to walk the list, and nothing when it asked
+          // for the lot.
+          ...(page === null
+            ? {}
+            : { page, pageSize, hasMore: page * pageSize < total }),
           emptyMessage: result.emptyMessage ?? null,
           serverTime: now.toISOString(),
         },

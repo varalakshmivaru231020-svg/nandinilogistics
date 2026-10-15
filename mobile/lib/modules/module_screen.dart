@@ -85,10 +85,17 @@ class ModuleScreenState extends State<ModuleScreen> {
     super.dispose();
   }
 
+  /// How many rows a page carries. The web reads thirty indents and fifty
+  /// units to a page; a phone over a site connection cannot read a whole list
+  /// of twenty thousand, so it walks them.
+  static const _pageSize = 50;
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
+      _rows = const [];
+      _more = false;
     });
 
     // The descriptor once per screen; the rows on every refresh.
@@ -98,19 +105,58 @@ class ModuleScreenState extends State<ModuleScreen> {
       if (d.ok) _screen = ScreenDef.from(d.data!);
     }
 
-    final res = await widget.api.get('/list/${widget.spec.key}', query: _query);
+    final res = await widget.api.get('/list/${widget.spec.key}', query: {
+      ..._query,
+      'page': '1',
+      'pageSize': '$_pageSize',
+    });
     if (!mounted) return;
     setState(() {
       _loading = false;
       _needsProject = res.code == 'project-required';
       if (res.ok) {
         _page = ListPage.from(res.data!);
+        _rows = _page!.rows;
+        _more = _page!.hasMore;
       } else {
         _error = _needsProject ? null : res.error;
         _page = null;
       }
     });
   }
+
+  /// The next page, appended. The filters and the search are the ones already
+  /// applied, so a page cannot show a row the whole list would not have.
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_more || _page == null) return;
+    setState(() => _loadingMore = true);
+
+    final next = (_page!.page ?? 1) + 1;
+    final res = await widget.api.get('/list/${widget.spec.key}', query: {
+      ..._query,
+      'page': '$next',
+      'pageSize': '$_pageSize',
+    });
+    if (!mounted) return;
+    setState(() {
+      _loadingMore = false;
+      if (!res.ok) {
+        // The page that failed is not the list's problem; say so and stop.
+        _moreError = res.error;
+        _more = false;
+        return;
+      }
+      final page = ListPage.from(res.data!);
+      _page = page;
+      _rows = [..._rows, ...page.rows];
+      _more = page.hasMore;
+    });
+  }
+
+  List<Map<String, dynamic>> _rows = const [];
+  bool _more = false;
+  bool _loadingMore = false;
+  String? _moreError;
 
   void _set(String key, String? value) {
     setState(() {
@@ -162,7 +208,7 @@ class ModuleScreenState extends State<ModuleScreen> {
   @override
   Widget build(BuildContext context) {
     final spec = widget.spec;
-    final rows = _page?.rows ?? const <Map<String, dynamic>>[];
+    final rows = _rows;
     final now = _page?.serverTime ?? DateTime.now().millisecondsSinceEpoch;
 
     return Scaffold(
@@ -187,7 +233,8 @@ class ModuleScreenState extends State<ModuleScreen> {
           subtitle: _loading
               ? 'Loading…'
               // "12 indents", in the web's own noun — not "12 records".
-              : '${rows.length} ${_noun(rows.length)} · '
+              // What matches, not what has been fetched so far.
+              : '${_page?.total ?? rows.length} ${_noun(_page?.total ?? rows.length)} · '
                   '${widget.session.project?.code ?? "All projects"}',
           onBack: widget.onBack,
           actions: [
@@ -314,13 +361,33 @@ class ModuleScreenState extends State<ModuleScreen> {
       separatorBuilder: (_, __) => const SizedBox(height: 9),
       itemBuilder: (_, i) {
         if (i == rows.length) {
-          return _page!.filters.isEmpty
-              ? const SizedBox.shrink()
-              : Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(_page!.filters,
-                      style: T.caption().copyWith(fontWeight: FontWeight.w500)),
-                );
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (_more) ...[
+              const SizedBox(height: 4),
+              Btn(
+                _loadingMore ? 'Loading…' : 'Load the next $_pageSize',
+                key: const Key('load-more'),
+                emphasis: Emphasis.outline,
+                busy: _loadingMore,
+                expand: true,
+                onPressed: _loadMore,
+              ),
+              const SizedBox(height: 8),
+              Text('${rows.length} of ${_page?.total ?? rows.length} loaded',
+                  style: T.caption().copyWith(fontWeight: FontWeight.w500),
+                  textAlign: TextAlign.center),
+            ],
+            if (_moreError != null) ...[
+              const SizedBox(height: 8),
+              Alert(_moreError!),
+            ],
+            if (_page != null && _page!.filters.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(_page!.filters,
+                    style: T.caption().copyWith(fontWeight: FontWeight.w500)),
+              ),
+          ]);
         }
         return SpecRow(
           spec: widget.spec,
