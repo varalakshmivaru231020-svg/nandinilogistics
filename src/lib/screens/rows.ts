@@ -2,6 +2,7 @@ import "server-only";
 
 import type { StatFigure } from "@/lib/metrics/figures";
 import { webTone } from "@/lib/records/shared";
+import type { ResolvedField } from "@/lib/forms/types";
 import type { RecordAction, Tone } from "@/lib/records/types";
 
 /**
@@ -85,6 +86,58 @@ export interface RowFigure {
   hint?: string;
 }
 
+/** One flat on the availability board, as a tile and as the panel behind it. */
+export interface BoardFlat {
+  id: string;
+  /** The tile's bold line. */
+  number: string;
+  floor: number;
+  /** The tile's second line — the plan, or a dash. */
+  type: string | null;
+  state: "AVAILABLE" | "HELD" | "BOOKED";
+  /** "Available", "Held", "Booked" — the word the panel's chip carries. */
+  stateLabel: string;
+  /** The panel's own second line: plan · area · state. */
+  summary: string;
+  /** Who it is held or booked for, and which of the two. */
+  holder?: { label: string; name: string };
+  /**
+   * What the panel's own navigation button says — "Book unit" where this
+   * viewer may book one, "Open the flat" otherwise. Booking is a cost sheet
+   * followed by a booking, and both live on the flat's record.
+   */
+  open: string;
+  /** What may be done to this flat, in the panel's own words. */
+  actions?: RecordAction[];
+}
+
+/**
+ * The availability board, as `/units/board` draws it: the towers, the flats by
+ * floor, the three-colour legend, the figures in the right rail and what has
+ * gone out on the project.
+ */
+export interface ScreenBoard {
+  project: { id: string; name: string } | null;
+  /** The projects the chips offer, in the web's own order. */
+  projects: Array<{ id: string; name: string }>;
+  /** "Tower A", "Cluster B" — already worded for this project's type. */
+  blocks: Array<{ id: string; name: string; flats: BoardFlat[] }>;
+  legend: Array<{ value: string; label: string; tone: Tone }>;
+  /** The status chips — All · Available · Held · Booked. */
+  filters: Array<{ value: string; label: string }>;
+  /** The plans on this project, for the type chips. */
+  types: string[];
+  /** The line the design prints under the tower's figures. */
+  priceList: string | null;
+  /**
+   * Field sets a flat's buttons point at with `fieldsFrom`, sent once — the
+   * list of customers a flat can be held for is the same list on every flat.
+   */
+  fieldSets?: Record<string, ResolvedField[]>;
+  /** "No units in this tower yet". */
+  emptyTower: string;
+}
+
 /**
  * The screen around the rows: its band, what it says when nothing matches, and
  * the note the web prints under the list.
@@ -97,6 +150,12 @@ export interface ScreenShell {
   empty?: { title: string; description?: string };
   /** `ListNote` — the paragraph under the list, which is part of the screen. */
   note?: string;
+  /**
+   * Where the web's screen is a **board** rather than a list — Available Flats
+   * — the board itself. The rows are still sent, because the same records are
+   * behind both, and the app draws the board.
+   */
+  board?: ScreenBoard;
 }
 
 /** The web's own band, in the tones the phone draws. */

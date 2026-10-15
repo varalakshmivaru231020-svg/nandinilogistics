@@ -33,6 +33,11 @@ export async function taskRecord(ctx: AuthContext, id: string): Promise<RecordVi
           actions: { orderBy: { round: "asc" }, include: { actor: { select: { name: true } } } },
         },
       },
+      events: {
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: { actor: { select: { name: true } } },
+      },
       comments: {
         orderBy: { createdAt: "asc" },
         include: { author: { select: { name: true } } },
@@ -317,9 +322,22 @@ export async function taskRecord(ctx: AuthContext, id: string): Promise<RecordVi
           }
         }
 
+        /*
+         * The square the web draws at the head of the line: a tick once the
+         * point is through, a cross while it stands denied this round, and the
+         * point's number until then.
+         */
+        const deniedNow = i.reviews.some((r) => r.round === flow.round && r.verdict === "FAIL");
+        const badge = !waiting
+          ? { text: "✓", tone: "good" as const }
+          : deniedNow
+            ? { text: "✕", tone: "bad" as const }
+            : { text: String(n + 1).padStart(2, "0"), tone: "draft" as const };
+
         return {
           id: i.id,
           title: i.checkpoint?.text ?? `Point ${n + 1}`,
+          badge,
           subtitle: last
             ? `${last.verdict === "PASS" ? "Approved" : "Denied"} by ${last.level.user.name}` +
               (last.remark ? ` — ${last.remark}` : "")
@@ -327,20 +345,76 @@ export async function taskRecord(ctx: AuthContext, id: string): Promise<RecordVi
           trailing: String(n + 1).padStart(2, "0"),
           pills,
           actions: rowActions,
+          mine: Boolean(waiting && mine),
         };
       });
 
     const settled = rows.filter((r) => r.pills[0]?.label === "Approved").length;
+    // What is waiting on this viewer, which the web's own chip counts.
+    const mineCount = rows.filter((r) => r.mine).length;
     collections.push({
       key: `checklist:${c.id}`,
       label: `${c.checklist.name} · ${settled} of ${rows.length} approved`,
-      rows,
+      rows: rows.map(({ mine: _mine, ...row }) => row),
       emptyMessage: "This checklist has no points.",
+      tab: "checklist",
+      progress: {
+        done: settled,
+        total: rows.length,
+        ...(mineCount > 0
+          ? { note: `${may("review") ? "Yours to review" : "Yours to approve"} · ${mineCount}` }
+          : {}),
+      },
+    });
+  }
+
+  /*
+   * "Review and approval", as the web's own tab draws it: one line a level, in
+   * order, each saying what it is holding — a level is not done or pending any
+   * more, it holds some points and has passed others, and that count is what
+   * tells somebody whether there is anything for them to do.
+   */
+  if (task.levels.length > 0) {
+    const all = items;
+    collections.push({
+      tab: "levels",
+      key: "levels",
+      label: "One person a level, in order. Each point is judged on its own: a denial sends that " +
+        "point back to reviewer level 1 and leaves the rest where they are.",
+      rows: task.levels.map((l) => {
+        const here = all.filter((item) => {
+          const at = waitingLevel(item, flowLevels);
+          return at !== null && at.kind === l.kind && at.level === l.level;
+        });
+        const past = all.filter((item) =>
+          item.verdicts.some(
+            (v) => v.round === item.round && v.kind === l.kind && v.level === l.level && v.verdict === "PASS",
+          ),
+        );
+        const holding = here.length > 0;
+        const through = !holding && all.length > 0 && past.length === all.length;
+        return {
+          id: l.id,
+          badge: through
+            ? { text: "✓", tone: "good" as const }
+            : { text: String(l.level), tone: holding ? ("info" as const) : ("draft" as const) },
+          title: l.user.name + (l.userId === ctx.id ? " (you)" : ""),
+          subtitle: `${l.kind === "REVIEW" ? "Reviewer" : "Approver"} L${l.level}`,
+          pills: [
+            holding
+              ? { label: `${here.length} point${here.length === 1 ? "" : "s"} with them`, tone: "info" as const }
+              : through
+                ? { label: "Passed every point", tone: "good" as const }
+                : { label: `${past.length} of ${all.length} passed`, tone: "draft" as const },
+          ],
+        };
+      }),
     });
   }
 
   if (task.comments.length > 0) {
     collections.push({
+      tab: "history",
       key: "comments",
       label: `${task.comments.length} comment${task.comments.length === 1 ? "" : "s"}`,
       rows: task.comments.map((c) => ({
@@ -388,6 +462,7 @@ export async function taskRecord(ctx: AuthContext, id: string): Promise<RecordVi
 
   if (task.extensions.length > 0) {
     collections.push({
+      tab: "history",
       key: "extensions",
       label: `${task.extensions.length} extension request${task.extensions.length === 1 ? "" : "s"}`,
       rows: task.extensions.map((e) => ({
@@ -421,12 +496,27 @@ export async function taskRecord(ctx: AuthContext, id: string): Promise<RecordVi
 
   if (task.attachments.length > 0) {
     collections.push({
+      tab: "history",
       key: "attachments",
       label: `${task.attachments.length} file${task.attachments.length === 1 ? "" : "s"}`,
       rows: task.attachments.map((a) => ({
         id: a.id,
         title: a.fileName,
         trailing: `${Math.round(Number(a.fileSize) / 1024)} KB`,
+      })),
+    });
+  }
+
+  if (task.events.length > 0) {
+    collections.push({
+      tab: "history",
+      key: "history",
+      label: "History",
+      rows: task.events.map((e) => ({
+        id: e.id,
+        title: e.summary,
+        subtitle: `${e.actor.name} · ${e.createdAt.toISOString()}`,
+        ...(e.remark ? { body: e.remark } : {}),
       })),
     });
   }
@@ -440,10 +530,38 @@ export async function taskRecord(ctx: AuthContext, id: string): Promise<RecordVi
       })()
     : null;
 
+  /*
+   * Who it reaches after the level holding it now — the line the web prints
+   * beside its tabs, in the same words: "Reviewer level 2 · Anil Deshpande".
+   */
+  const nextUp = (() => {
+    const at = items.length > 0 ? waitingLevel(items[0], flowLevels) : null;
+    if (!at) return null;
+    const after = flowLevels
+      .filter((l) => (l.kind === at.kind ? l.level > at.level : l.kind === "APPROVAL"))
+      .sort((a, b) => (a.kind === b.kind ? a.level - b.level : a.kind === "REVIEW" ? -1 : 1))[0];
+    if (!after) return null;
+    const who = task.levels.find((l) => l.kind === after.kind && l.level === after.level)?.user.name ?? "—";
+    return `${after.kind === "REVIEW" ? "Reviewer" : "Approver"} level ${after.level} · ${who}`;
+  })();
+
+  /*
+   * The web's own three tabs, in its own order: a checklist tab where there is
+   * a checklist, a levels tab where somebody judges it, and history always.
+   * `task-detail.tsx` builds the same list the same way.
+   */
+  const tabs = [
+    ...(task.checklists.length > 0 ? [{ key: "checklist", label: "Checklist" }] : []),
+    ...(task.levels.length > 0 ? [{ key: "levels", label: "Review and approval" }] : []),
+    { key: "history", label: "History" },
+  ];
+
   return {
     key: "tasks",
     id: task.id,
     title: task.title,
+    tabs,
+    ...(nextUp ? { tabNote: `Next: ${nextUp}` } : {}),
     subtitle: `${task.taskNo}${task.project ? ` · ${task.project.code}` : ""}`,
     pills: [
       { label: stage ?? STATUS_LABEL[task.status], tone: toneOf(task.status) },

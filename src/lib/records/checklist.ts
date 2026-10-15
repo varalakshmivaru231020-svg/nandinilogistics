@@ -119,12 +119,13 @@ export async function checklistRecord(ctx: AuthContext, id: string): Promise<Rec
         rows: checklist.checkpoints.map((p, i) => ({
           id: p.id,
           title: p.text,
-          trailing: String(i + 1).padStart(2, "0"),
+          badge: { text: String(i + 1).padStart(2, "0"), tone: "info" as const },
           actions: mayEdit
             ? [
                 {
                   key: `text:${p.id}`,
-                  label: "Edit",
+                  // The web's own link beside the point, not an icon.
+                  label: "Edit text",
                   emphasis: "outline" as const,
                   action: "checklists/updateCheckpoint",
                   args: [p.id, { text: "$text" }],
@@ -146,6 +147,7 @@ export async function checklistRecord(ctx: AuthContext, id: string): Promise<Rec
                       {
                         key: `up:${p.id}`,
                         label: "Move up",
+                        glyph: "↑",
                         emphasis: "outline" as const,
                         action: "checklists/moveCheckpoint",
                         args: [p.id, "up"],
@@ -159,6 +161,7 @@ export async function checklistRecord(ctx: AuthContext, id: string): Promise<Rec
                       {
                         key: `down:${p.id}`,
                         label: "Move down",
+                        glyph: "↓",
                         emphasis: "outline" as const,
                         action: "checklists/moveCheckpoint",
                         args: [p.id, "down"],
@@ -169,7 +172,8 @@ export async function checklistRecord(ctx: AuthContext, id: string): Promise<Rec
                   : []),
                 {
                   key: `drop:${p.id}`,
-                  label: "Delete",
+                  label: "Delete checkpoint",
+                  glyph: "🗑",
                   emphasis: "reject" as const,
                   action: "checklists/deleteCheckpoint",
                   args: [p.id],

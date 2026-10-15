@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/modal";
 import { cn, formatDate, moneyShort, phone, qty } from "@/lib/utils";
 import { releaseHoldAction } from "../../sales/cost-sheets/actions";
 import { cancelBookingAction } from "../../sales/bookings/actions";
+import { boardState, blockName } from "@/lib/units/board";
 import { ReserveDrawer } from "./reserve-drawer";
 
 interface Hold {
@@ -43,21 +44,7 @@ export interface BookingRow {
   customerName: string; customerPhone: string; soldByName: string | null;
 }
 
-/**
- * The board paints three states, as the design does: a flat is free, someone is
- * holding it, or it is gone. Everything after a booking — agreement, registry —
- * is still gone, and a blocked flat is held back.
- */
-const BOARD_STATE: Record<string, "AVAILABLE" | "HELD" | "BOOKED"> = {
-  AVAILABLE: "AVAILABLE",
-  HELD: "HELD",
-  BLOCKED: "HELD",
-  BOOKED: "BOOKED",
-  AGREEMENT: "BOOKED",
-  REGISTERED: "BOOKED",
-};
 
-const boardState = (status: string) => BOARD_STATE[status] ?? "AVAILABLE";
 
 /** One state, one colour, everywhere. */
 const STATUS_STYLE: Record<string, { cell: string; dot: string; label: string }> = {
@@ -104,10 +91,9 @@ export function BoardGrid({
 
   const block = blocks.find((b) => b.id === blockId) ?? blocks[0] ?? null;
   const project = projects.find((p) => p.id === activeProjectId);
-  // The design writes "Cluster A" for a villa project and "Tower A" otherwise.
-  const blockWord = /villa|plot/i.test(projectType ?? "") ? "Cluster" : "Tower";
-  const blockName = (b: Block) =>
-    /^(tower|cluster|block)\b/i.test(b.name) ? b.name : `${blockWord} ${b.name}`;
+  // "Cluster A" for a villa project, "Tower A" otherwise — shared with the
+  // board the phone is sent.
+  const blockLabel = (b: Block) => blockName(b.name, projectType);
 
   const types = [...new Set(blocks.flatMap((b) => b.units.map((u) => u.unitTypeName).filter(Boolean)))] as string[];
 
@@ -157,7 +143,7 @@ export function BoardGrid({
           <div className="mb-3 flex flex-wrap items-center gap-[7px]">
             {blocks.map((b) => (
               <TowerChip key={b.id} picked={b.id === block?.id} onClick={() => { setBlockId(b.id); setSelected(null); }}>
-                {blockName(b)}
+                {blockLabel(b)}
               </TowerChip>
             ))}
 
@@ -220,7 +206,7 @@ export function BoardGrid({
         <div className="flex flex-col gap-3.5">
           <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
             <p className="mb-3 font-display text-[13px] font-bold text-navy-950">
-              {project?.name}{block ? ` · ${blockName(block)}` : ""}
+              {project?.name}{block ? ` · ${blockLabel(block)}` : ""}
             </p>
             <div className="grid grid-cols-2 gap-[9px]">
               <Stat value={count("AVAILABLE")} label="Available" className="bg-good-050 text-good-700" />

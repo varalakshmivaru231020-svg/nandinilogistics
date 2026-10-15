@@ -7,6 +7,7 @@ import '../core/row.dart';
 import '../core/session.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
+import 'board.dart';
 import 'form_screen.dart';
 import 'record_screen.dart';
 
@@ -288,8 +289,12 @@ class ModuleScreenState extends State<ModuleScreen> {
             ),
           ),
         // The web's own band, read over every row in scope rather than the page
-        // on screen — which is what the web's second query is for.
-        if (!_loading && _error == null && (_page?.screen?.band ?? const []).isNotEmpty)
+        // on screen — which is what the web's second query is for. A board has
+        // its own figures, beside its own chips.
+        if (!_loading &&
+            _error == null &&
+            _page?.screen?.board == null &&
+            (_page?.screen?.band ?? const []).isNotEmpty)
           Band(_page!.screen!.band),
         if (_query.isNotEmpty)
           Chips([
@@ -319,6 +324,13 @@ class ModuleScreenState extends State<ModuleScreen> {
 
   Widget _body(List<Map<String, dynamic>> rows, int now) {
     if (_loading) return const Center(child: CircularProgressIndicator());
+
+    // Available Flats is a board, not a list — the web's own screen for this
+    // key is `/units/board`, and the server sends the board itself.
+    final board = _page?.screen?.board;
+    if (board != null) {
+      return BoardScreen(api: widget.api, board: board, onChanged: _load);
+    }
 
     if (_needsProject) {
       return ListView(padding: const EdgeInsets.all(T.gutter), children: [

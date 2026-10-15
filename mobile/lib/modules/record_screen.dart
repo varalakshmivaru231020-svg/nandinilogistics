@@ -137,6 +137,10 @@ class RecordScreenState extends State<RecordScreen> {
 
   Emphasis _emphasis(String raw) => emphasisOf(raw);
 
+  /// Which tab is open. Null until the record has been read, and then the
+  /// first one the server listed — the web opens on its first tab too.
+  String? _tab;
+
   Widget _body() {
     if (_loading) return const Center(child: CircularProgressIndicator());
 
@@ -161,6 +165,18 @@ class RecordScreenState extends State<RecordScreen> {
     final sections = _list('sections');
     final collections = _list('collections');
 
+    /*
+     * The tabs the web's own detail screen has — Checklist · Review and
+     * approval · History on a task. A collection says which it belongs under;
+     * one that names none shows on every tab, as the web's cards above its tab
+     * strip do.
+     */
+    final tabs = _list('tabs');
+    final tab = _tab ?? (tabs.isEmpty ? null : '${tabs.first["key"]}');
+    final shown = tab == null
+        ? collections
+        : collections.where((c) => c['tab'] == null || c['tab'] == tab).toList();
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(T.gutter, 13, T.gutter, 24),
       children: [
@@ -184,7 +200,30 @@ class RecordScreenState extends State<RecordScreen> {
           _Section(section: s),
           const SizedBox(height: 11),
         ],
-        for (final c in collections) ...[
+        if (tabs.isNotEmpty) ...[
+          Panel(
+            padding: const EdgeInsets.fromLTRB(11, 10, 11, 10),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Wrap(spacing: 7, runSpacing: 7, children: [
+                for (final t in tabs)
+                  FilterChip2(
+                    label: '${t["label"]}',
+                    selected: tab == '${t["key"]}',
+                    onTap: () => setState(() => _tab = '${t["key"]}'),
+                  ),
+              ]),
+              // "Next: Reviewer level 2 · Anil Deshpande", beside the web's tabs.
+              if ((_rec?['tabNote'] as String?)?.isNotEmpty ?? false)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text('${_rec!["tabNote"]}',
+                      style: T.caption().copyWith(fontWeight: FontWeight.w500)),
+                ),
+            ]),
+          ),
+          const SizedBox(height: 11),
+        ],
+        for (final c in shown) ...[
           _Collection(
             collection: c,
             onRun: _run,
@@ -315,6 +354,9 @@ class _Collection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rows = ((collection['rows'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    final progress = collection['progress'] as Map<String, dynamic>?;
+    final total = (progress?['total'] as num?)?.toDouble() ?? 0;
+    final done = total > 0 ? ((progress?['done'] as num?)?.toDouble() ?? 0) / total : 0.0;
 
     return Panel(
       padding: EdgeInsets.zero,
@@ -324,7 +366,34 @@ class _Collection extends StatelessWidget {
           decoration: const BoxDecoration(
             border: Border(bottom: BorderSide(color: Color(0xFFEEF1F8))),
           ),
-          child: Overline('${collection["label"]}'),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Overline('${collection["label"]}'),
+            /*
+             * The bar the web draws over a checklist: how many points are
+             * through every level, and what is waiting on this viewer. Green
+             * once every point is through, violet until then — as the web
+             * colours it.
+             */
+            if (progress != null) ...[
+              const SizedBox(height: 8),
+              if ((progress['note'] as String?)?.isNotEmpty ?? false) ...[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Pill('${progress["note"]}', tone: Tone.info, compact: true),
+                ),
+                const SizedBox(height: 8),
+              ],
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: done,
+                  minHeight: 7,
+                  backgroundColor: T.line,
+                  color: done >= 1 ? T.goodInk : T.plumInk,
+                ),
+              ),
+            ],
+          ]),
         ),
         if (rows.isEmpty)
           Padding(
@@ -341,6 +410,11 @@ class _Collection extends StatelessWidget {
     final pills = ((r['pills'] as List?) ?? const []).cast<Map<String, dynamic>>();
     final actions = ((r['actions'] as List?) ?? const []).cast<Map<String, dynamic>>();
     final trailing = r['trailing'] as String?;
+    final badge = r['badge'] as Map<String, dynamic>?;
+    // The web draws some of a row's buttons as icons — ↑ ↓ 🗑 on a checkpoint —
+    // and the glyph it uses comes with the action.
+    final glyphs = actions.where((a) => (a['glyph'] as String?)?.isNotEmpty ?? false).toList();
+    final worded = actions.where((a) => (a['glyph'] as String?)?.isEmpty ?? true).toList();
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -349,7 +423,25 @@ class _Collection extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (trailing != null && trailing.length <= 3) ...[
+          // The square at the head of the line: the server says what is in it —
+          // a tick once the point is approved, a cross while it stands denied,
+          // its number until then.
+          if (badge != null) ...[
+            Container(
+              width: 26,
+              height: 26,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: toneOf(_tone(badge['tone'] as String?)).fill,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text('${badge["text"]}',
+                  style: T.num(11,
+                      color: toneOf(_tone(badge['tone'] as String?)).ink,
+                      weight: FontWeight.w800)),
+            ),
+            const SizedBox(width: 11),
+          ] else if (trailing != null && trailing.length <= 3) ...[
             Container(
               width: 26,
               height: 26,
@@ -389,14 +481,15 @@ class _Collection extends StatelessWidget {
                 Pill('${p["label"]}', tone: _tone(p['tone'] as String?), compact: true),
             ]),
           ),
-        if (actions.isNotEmpty)
+        if (worded.isNotEmpty || glyphs.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 9),
             child: Row(children: [
-              for (final (i, a) in actions.indexed) ...[
+              for (final (i, a) in worded.indexed) ...[
                 if (i > 0) const SizedBox(width: 8),
                 Expanded(
                   child: Btn('${a["label"]}',
+                      key: Key('row:${r["id"]}:${a["key"]}'),
                       emphasis: '${a["emphasis"]}' == 'approve'
                           ? Emphasis.approve
                           : '${a["emphasis"]}' == 'reject'
@@ -405,6 +498,39 @@ class _Collection extends StatelessWidget {
                       height: 40,
                       expand: true,
                       onPressed: () => onRun(a)),
+                ),
+              ],
+              // The icon buttons, as the web's own: the glyph, with the label
+              // as its name for anyone reading the screen aloud.
+              for (final a in glyphs) ...[
+                const SizedBox(width: 8),
+                // The glyph is the whole button, so the label is the only name
+                // it has — `excludeSemantics` keeps the arrow out of it.
+                Semantics(
+                  label: '${a["label"]}',
+                  button: true,
+                  excludeSemantics: true,
+                  child: InkWell(
+                    key: Key('row:${r["id"]}:${a["key"]}'),
+                    onTap: () => onRun(a),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: '${a["emphasis"]}' == 'reject' ? T.badLine : T.line,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text('${a["glyph"]}',
+                          style: T.body(
+                            color: '${a["emphasis"]}' == 'reject' ? T.badInk : T.secondary,
+                            weight: FontWeight.w700,
+                          )),
+                    ),
+                  ),
                 ),
               ],
             ]),

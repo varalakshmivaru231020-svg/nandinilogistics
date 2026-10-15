@@ -2,7 +2,10 @@ import { prisma } from "@/lib/db";
 import { capRows, EXPORT_MAX_ROWS, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
 import { unitFigures } from "@/lib/metrics/figures";
 import { bandOf, type ScreenShell } from "@/lib/screens/rows";
+import { projectScopeFilter, type AuthContext } from "@/lib/rbac/context";
 import { unitDecisions } from "@/lib/records/unit";
+import { screenBoard } from "@/lib/screens/rows/board";
+import { expireStaleHolds } from "@/lib/sales/service";
 import { UNIT_EMPTY, unitScreenRow } from "@/lib/screens/rows/unit";
 import { PERM } from "@/lib/permissions/codes";
 import { describeUnitFilters, readUnitListParams, unitExportColumns, unitListWhere } from "@/lib/units/unit-list";
@@ -59,7 +62,16 @@ export async function GET(request: Request) {
       remove: ctx.has(PERM.unit.unit.delete),
       changeStatus: ctx.has(PERM.unit.unit.changeStatus),
     };
+    /*
+     * "Available Flats" is a **board**, not a list: `/units/board` is what the
+     * drawer's entry opens, and the phone's screen for this key is the same
+     * board. So the rows travel as well — the same flats are behind both — and
+     * the board travels with them.
+     */
+    const board = await boardFor(ctx);
+
     screen = {
+      ...(board ? { board } : {}),
       rows: window.map((u) =>
         unitScreenRow(
           {
@@ -128,5 +140,103 @@ export async function GET(request: Request) {
       summary: [{ label: "Units", value: note }],
       emptyMessage: "No units match these filters.",
     },
+  });
+}
+
+/**
+ * The board the web paints at `/units/board`, for the project this caller is
+ * working in — their chosen workspace, or the first project they can reach, as
+ * the web picks it.
+ *
+ * Holds release themselves, so the sweep the board page runs before reading
+ * runs here too; otherwise the phone would show a hold the web has already let
+ * go.
+ */
+async function boardFor(ctx: AuthContext) {
+  if (!ctx.has(PERM.unit.board.view)) return undefined;
+
+  await prisma.$transaction((tx) => expireStaleHolds(tx));
+
+  const projects = await prisma.project.findMany({
+    where: projectScopeFilter(ctx, "id"),
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, projectType: { select: { name: true } } },
+  });
+  const project = projects[0];
+  if (!project) return undefined;
+
+  const [blocks, priceList, customers] = await Promise.all([
+    prisma.block.findMany({
+      where: { projectId: project.id },
+      orderBy: { code: "asc" },
+      include: {
+        units: {
+          orderBy: [{ floorNumber: "desc" }, { unitNumber: "asc" }],
+          include: {
+            unitType: { select: { name: true } },
+            holds: {
+              where: { isActive: true },
+              take: 1,
+              include: {
+                lead: { select: { name: true } },
+                customer: { select: { name: true } },
+              },
+            },
+            bookings: {
+              where: { status: { notIn: ["CANCELLED"] } },
+              orderBy: { bookingDate: "desc" },
+              take: 1,
+              select: { id: true, status: true, customer: { select: { name: true } } },
+            },
+          },
+        },
+      },
+    }),
+    prisma.priceList.findFirst({
+      where: { projectId: project.id, status: "ACTIVE" },
+      orderBy: { effectiveFrom: "desc" },
+      select: { version: true, effectiveFrom: true },
+    }),
+    ctx.has(PERM.unit.hold.create) || ctx.has(PERM.sales.booking.create)
+      ? prisma.customer.findMany({
+          orderBy: { name: "asc" },
+          take: 200,
+          select: { id: true, name: true, phone: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  return screenBoard(ctx, {
+    project: { id: project.id, name: project.name },
+    projects: projects.map((p) => ({ id: p.id, name: p.name })),
+    projectType: project.projectType?.name ?? null,
+    priceList,
+    customers,
+    blocks: blocks.map((b) => ({
+      id: b.id,
+      name: b.name,
+      units: b.units.map((u) => ({
+        id: u.id,
+        unitNumber: u.unitNumber,
+        floorNumber: u.floorNumber,
+        status: u.status,
+        superBuiltUpArea: u.superBuiltUpArea,
+        unitType: u.unitType,
+        hold: u.holds[0]
+          ? {
+              id: u.holds[0].id,
+              customerName: u.holds[0].customer?.name ?? null,
+              leadName: u.holds[0].lead?.name ?? null,
+            }
+          : null,
+        booking: u.bookings[0]
+          ? {
+              id: u.bookings[0].id,
+              status: u.bookings[0].status,
+              customerName: u.bookings[0].customer.name,
+            }
+          : null,
+      })),
+    })),
   });
 }

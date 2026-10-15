@@ -37,6 +37,11 @@ export interface RecordSection {
 export interface CollectionRow {
   id: string;
   title: string;
+  /**
+   * The square the web draws at the head of a checklist line: "01" while the
+   * point is open, a tick once it is approved, a cross once it is denied.
+   */
+  badge?: { text: string; tone: Tone };
   subtitle?: string | null;
   /** The figure on the right — a quantity, a value. */
   trailing?: string | null;
@@ -53,6 +58,17 @@ export interface RecordCollection {
   label: string;
   rows: CollectionRow[];
   emptyMessage?: string;
+  /**
+   * Which tab of the record this belongs under, where the web's screen has
+   * tabs — the task detail puts its checklists, its levels and its history on
+   * three. The key of one of `RecordView.tabs`.
+   */
+  tab?: string;
+  /**
+   * The bar the web draws over a checklist: how many points are through every
+   * level, and what is waiting on this viewer.
+   */
+  progress?: { done: number; total: number; note?: string };
 }
 
 /**
@@ -91,6 +107,21 @@ export interface RecordAction {
   fields?: ResolvedField[];
   remark: "none" | "optional" | "required";
   remarkLabel?: string;
+  /**
+   * The glyph the web's own icon button carries — ↑, ↓, 🗑 — where the action is
+   * drawn as an icon rather than a word. The label stays, as its name.
+   */
+  glyph?: string;
+  /**
+   * Take the fields from a set the screen sends once, by name, instead of
+   * carrying them here.
+   *
+   * The availability board has a Hold button on every free flat, and its one
+   * field is a list of every customer. Repeating that list a hundred and
+   * twelve times is a hundred and twelve times the payload for the same
+   * question, so the board sends the set once and each button points at it.
+   */
+  fieldsFrom?: string;
   /** What the confirmation sheet says will happen. */
   confirm?: string;
 }
@@ -101,6 +132,14 @@ export interface RecordView {
   title: string;
   subtitle: string | null;
   pills: Array<{ label: string; tone: Tone }>;
+  /**
+   * The tabs the web's own detail screen has — "Checklist", "Review and
+   * approval", "History" — in its own order and its own words. Absent where
+   * the screen has none, and then everything shows at once.
+   */
+  tabs?: Array<{ key: string; label: string }>;
+  /** The line the web prints beside its tabs: "Next: Anil Deshpande". */
+  tabNote?: string;
   /** Raised → PM → Store → Issued, where the record has a chain. */
   chain?: Array<{ initials: string; state: "done" | "current" | "pending" }>;
   sections: RecordSection[];
