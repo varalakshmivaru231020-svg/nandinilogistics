@@ -494,6 +494,61 @@ void main() {
     });
   });
 
+  group('an action that takes a shape', () {
+    /*
+     * Generating a tower: the action takes the project, the name, and a shape
+     * — floors, flats per floor, kind — which the server lays out with the
+     * same function the web's grid previews. The placeholders are inside an
+     * object, so they have to be filled in there too.
+     */
+    testWidgets('fills the placeholders inside the object', (tester) async {
+      final b = await pumpForm(tester, {
+        '/form/units/generate': {
+          'key': 'units:generate',
+          'module': 'units',
+          'title': 'Create units',
+          'submitLabel': 'Generate units',
+          'action': 'units/board/generateUnits',
+          'shape': {
+            'kind': 'positional',
+            'order': [
+              r'$projectId',
+              r'$towerName',
+              {'floors': r'$floors', 'perFloor': r'$perFloor', 'unitTypeId': r'$unitTypeId'},
+            ],
+          },
+          'fields': [
+            field('projectId', 'Project', 'select', required: true, options: [
+              {'value': 'p1', 'label': 'NNS — NN Skyline'},
+            ]),
+            field('towerName', 'Tower or block', 'text', required: true),
+            field('floors', 'Floors', 'number', required: true, initial: 8),
+            field('perFloor', 'Flats per floor', 'number', required: true, initial: 4),
+            field('unitTypeId', 'Unit type', 'select', options: [
+              {'value': 't1', 'label': '2 BHK'},
+            ]),
+          ],
+        },
+        '/do/units/board/generateUnits': const {'created': 32},
+      }, 'units:generate');
+
+      await tester.tap(find.text('NNS — NN Skyline'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('field-towerName')), 'Tower A');
+      await tester.enterText(find.byKey(const Key('field-floors')), '8');
+      await tester.tap(find.text('2 BHK'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('submit')));
+      await tester.pumpAndSettle();
+
+      expect(b.actions.single.args, [
+        'p1',
+        'Tower A',
+        {'floors': 8, 'perFloor': 4, 'unitTypeId': 't1'},
+      ]);
+    });
+  });
+
   group('a module whose form is not described yet', () {
     testWidgets('says so, and says where it can still be done', (tester) async {
       await pumpForm(tester, {

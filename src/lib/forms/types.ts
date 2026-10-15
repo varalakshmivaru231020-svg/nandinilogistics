@@ -119,8 +119,17 @@ export type FormShape =
    * every field as one object (what an action taking a parsed input takes),
    * `$id` is the record the form was opened on, and anything else is passed
    * as the literal it is.
+   *
+   * An argument may itself be an object whose values are `$field` names,
+   * which is how an action that takes a shape — a tower's floors and flats —
+   * is called from a handful of fields.
    */
-  | { kind: "positional"; order: ReadonlyArray<string | boolean | number | null> };
+  | {
+      kind: "positional";
+      order: ReadonlyArray<
+        string | boolean | number | null | Readonly<Record<string, string>>
+      >;
+    };
 
 export interface FormDef {
   /** "sales/customers:create" — the module, then what the form does. */

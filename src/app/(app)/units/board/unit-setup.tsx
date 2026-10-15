@@ -7,13 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_PER_FLOOR, planTower, towerSummary, type PlannedFlat,
+} from "@/lib/units/tower-plan";
 import { generateUnitsAction, type PlannedUnit } from "./setup-actions";
 
 interface Project { id: string; code: string; name: string }
 interface UnitType { id: string; name: string }
-
-/** A flat as planned on screen, before anything is written. */
-interface Planned { key: string; floor: number; number: string; unitTypeId: string | null }
 
 /**
  * The design's Create-units view: the project and tower, the structure, and
@@ -38,29 +38,20 @@ export function UnitSetup({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const defaultPerFloor = 4;
+  const defaultPerFloor = DEFAULT_PER_FLOOR;
   const defaultTypeId = unitTypes[0]?.id ?? null;
 
-  const planned: Planned[] = [];
-  for (let floor = 1; floor <= floors; floor++) {
-    const count = perFloor[floor] ?? defaultPerFloor;
-    for (let i = 1; i <= count; i++) {
-      const key = `${floor}-${i}`;
-      const over = overrides[key];
-      planned.push({
-        key,
-        floor,
-        number: over?.number ?? `${floor}${String(i).padStart(2, "0")}`,
-        unitTypeId: over?.unitTypeId === undefined ? defaultTypeId : over.unitTypeId,
-      });
-    }
-  }
+  // The same layout the action writes — one function, so the preview cannot
+  // disagree with what is generated.
+  const planned: PlannedFlat[] = planTower({
+    floors,
+    perFloor: defaultPerFloor,
+    floorOverrides: perFloor,
+    unitTypeId: defaultTypeId,
+    flatOverrides: overrides,
+  });
 
-  const summary = new Map<string, number>();
-  for (const p of planned) {
-    const label = unitTypes.find((t) => t.id === p.unitTypeId)?.name ?? "Unassigned";
-    summary.set(label, (summary.get(label) ?? 0) + 1);
-  }
+  const summary = new Map(towerSummary(planned, unitTypes).map((s) => [s.label, s.count]));
 
   async function generate() {
     setBusy(true);

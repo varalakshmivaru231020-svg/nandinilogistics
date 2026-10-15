@@ -49,6 +49,7 @@ const SOURCE: Record<string, string> = {
   "schedule/activities:edit": "schedule/schedule-screen.tsx",
   "units:edit": "units/unit-manager.tsx",
   "units:create": "units/unit-manager.tsx",
+  "units:generate": "units/board/unit-setup.tsx",
   "material/indents:edit": "material/indents/new/indent-form.tsx",
   "material/purchase-orders:edit": "material/purchase-orders/new/po-form.tsx",
   "material/grn:edit": "material/grn/[id]/edit/grn-edit-form.tsx",
@@ -118,6 +119,27 @@ const OURS = new Set([
   // The unit form's project and block come from the row on the web's manager.
   "units:create → Project",
   "units:create → Block",
+  /*
+   * The Create-units screen's own controls are steppers with aria-labels
+   * rather than labelled fields, and its project comes from the board behind
+   * it. A form has to name all four.
+   */
+  "units:generate → Project",
+  "units:generate → Tower or block",
+  "units:generate → Floors",
+  "units:generate → Flats per floor",
+  "units:generate → Unit type",
+  "units:generate → Create units",
+  // Its own button counts the flats — "Generate 32 units" — which a registry
+  // entry cannot know.
+  "units:generate → Generate units",
+  /*
+   * The web explains the numbering by laying every floor out on screen; a
+   * phone has no grid, so it says it in a line instead.
+   */
+  "units:generate → Floor 1 flat 1 is numbered 101.",
+  // And the line saying where a single flat is renumbered, which is the web.
+  "units:generate → One tower, its floors and the flats on each. Renumbering a single flat is done on the web.",
 ]);
 
 /**
@@ -289,7 +311,7 @@ describe("the fields are the web's fields", () => {
           if (f.placeholder) {
             expect(src.includes(f.placeholder), `${key} placeholder ${f.placeholder}`).toBe(true);
           }
-          if (f.hint) {
+          if (f.hint && !OURS.has(`${key} → ${f.hint}`)) {
             expect(src.includes(f.hint), `${key} hint ${f.hint}`).toBe(true);
           }
           if (f.note) {
@@ -303,8 +325,10 @@ describe("the fields are the web's fields", () => {
         if (!OURS.has(`${key} → ${form.title}`)) {
           expect(src.includes(form.title), `${key} title`).toBe(true);
         }
-        expect(src.includes(form.submitLabel), `${key} submit label`).toBe(true);
-        if (form.description) {
+        if (!OURS.has(`${key} → ${form.submitLabel}`)) {
+          expect(src.includes(form.submitLabel), `${key} submit label`).toBe(true);
+        }
+        if (form.description && !OURS.has(`${key} → ${form.description}`)) {
           expect(src.includes(form.description), `${key} description`).toBe(true);
         }
       });

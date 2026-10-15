@@ -1021,6 +1021,52 @@ export const FORMS: Record<string, FormDef> = {
     ],
   },
 
+  // src/app/(app)/units/board/unit-setup.tsx. The web's grid lays every floor
+  // out so any one flat can be renumbered before the tower is generated; a
+  // phone sends the shape and `planTower()` lays it out — the same function
+  // the grid previews, so both write the same flats.
+  "units:generate": {
+    key: "units:generate",
+    module: "units",
+    title: "Create units",
+    description:
+      "One tower, its floors and the flats on each. Renumbering a single flat is done on the web.",
+    submitLabel: "Generate units",
+    permission: PERM.unit.unit.create,
+    action: "units/board/generateUnits",
+    shape: {
+      kind: "positional",
+      order: [
+        "$projectId",
+        "$tower",
+        // The shape, which the action lays out.
+        { floors: "$floors", perFloor: "$perFloor", unitTypeId: "$unitTypeId" },
+      ],
+    },
+    done: "Units created.",
+    fields: [
+      { name: "projectId", label: "Project", kind: "select", required: true, source: "projects" },
+      {
+        name: "tower",
+        label: "Tower or block",
+        kind: "text",
+        required: true,
+        placeholder: "e.g. Tower D",
+        wide: true,
+      },
+      { name: "floors", label: "Floors", kind: "number", required: true, initial: 8 },
+      {
+        name: "perFloor",
+        label: "Flats per floor",
+        kind: "number",
+        required: true,
+        initial: 4,
+        hint: "Floor 1 flat 1 is numbered 101.",
+      },
+      { name: "unitTypeId", label: "Unit type", kind: "select", source: "unitTypes" },
+    ],
+  },
+
   /* ------------------------------------------------------------- schedule */
 
   // src/app/(app)/schedule/schedule-screen.tsx → AddPanel, whose two modes are

@@ -14,8 +14,8 @@ Last written 2026-10-15.
 | | |
 |---|---|
 | Web actions on the boundary | **152** |
-| Reachable from the app | **124** |
-| Not reachable, with a reason | 28 |
+| Reachable from the app | **125** |
+| Not reachable, with a reason | 27 |
 | Web list screens | 30 |
 | …with a record screen | 28 |
 | …with a create form | 14 |
@@ -51,7 +51,7 @@ The last column says where each one is raised.
 | `sales/bookings` | `/sales/bookings` | ✅ | — | — | ✅ | the cost sheet — “Confirm booking” |
 | `sales/receipts` | `/sales/receipts` | ✅ | — | — | ✅ | the booking's milestone — “Collect” |
 | `sales/cost-sheets` | `/sales/cost-sheets` | ✅ | — | — | ✅ | the flat — “Generate a cost sheet” |
-| `units` | `/units/board` | ✅ | `create` | ✅ | ✅ | its own list |
+| `units` | `/units/board` | ✅ | `create`, `generate` | ✅ | ✅ | its own list |
 | `units/price-lists` | `/units/price-lists` | ✅ | `create` | — | ✅ | its own list |
 | `hr/employees` | `/hr` | ✅ | — | ✅ | ✅ | its own list |
 | `hr/attendance` | `/hr` | ✅ | `mark` | — | ✅ | its own list |
@@ -102,10 +102,6 @@ The last column says where each one is raised.
 ### equivalent — 1
 
 - `workspace/setWorkspace` — The app sends the chosen project as the `x-project` header instead of a cookie; the chooser is in its shell.
-
-### todo — 1
-
-- `units/board/generateUnits` — Needs the plan arithmetic lifted out of src/app/(app)/units/board/unit-setup.tsx into a shared module first.
 
 ## Every screen's states
 

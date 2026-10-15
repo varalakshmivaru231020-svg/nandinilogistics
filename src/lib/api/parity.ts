@@ -164,18 +164,6 @@ export const PARITY: Record<string, ParityExemption> = {
   /* ----------------------------------------------- still to build (todo) */
 
 
-  /*
-   * Generating a tower's flats. The web's unit-setup screen works out the plan
-   * — floors by units per floor, with per-flat overrides — inside the
-   * component and posts the finished array. Doing it on the phone means
-   * either repeating that arithmetic, which is what this project's rules
-   * forbid, or lifting it into a pure module both clients can call. The second
-   * is right and is a web change; it is not done.
-   */
-  "units/board/generateUnits": {
-    reason: "todo",
-    note: "Needs the plan arithmetic lifted out of src/app/(app)/units/board/unit-setup.tsx into a shared module first.",
-  },
 
 
 

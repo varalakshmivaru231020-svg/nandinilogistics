@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { assertProjectAccess, authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
+import { planTower, towerProblem, type TowerShape } from "@/lib/units/tower-plan";
 
 export interface PlannedUnit {
   floorNumber: number;
@@ -17,11 +18,16 @@ export interface PlannedUnit {
  * The design's "Generate N units": one tower, its floors, and the flats on
  * each. Written in a single transaction so a half-built tower is impossible,
  * and refused if any of the numbers already exist in the project.
+ *
+ * It takes either the flats themselves — which is what the Create-units grid
+ * sends, since any one of them can be renumbered there — or the shape of the
+ * tower, which `planTower()` lays out. The grid previews that same function,
+ * so both callers write the same flats.
  */
 export async function generateUnitsAction(
   projectId: string,
   towerName: string,
-  units: PlannedUnit[],
+  plan: PlannedUnit[] | TowerShape,
 ): Promise<ActionResult<{ created: number }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.unit.unit.create);
@@ -29,6 +35,19 @@ export async function generateUnitsAction(
 
     const name = towerName.trim();
     if (!name) throw new Error("A tower or block name is required.");
+
+    const units: PlannedUnit[] = Array.isArray(plan)
+      ? plan
+      : (() => {
+          const problem = towerProblem(plan);
+          if (problem) throw new Error(problem);
+          return planTower(plan).map((f) => ({
+            floorNumber: f.floor,
+            unitNumber: f.number,
+            unitTypeId: f.unitTypeId,
+          }));
+        })();
+
     if (units.length === 0) throw new Error("There are no units to create.");
 
     const numbers = units.map((u) => u.unitNumber.trim());
