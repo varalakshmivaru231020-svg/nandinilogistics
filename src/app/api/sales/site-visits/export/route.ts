@@ -81,5 +81,13 @@ export async function GET(request: Request) {
     + (ownership.conductedById ? " · Your visits" : "")
     + (canSeeContact ? "" : " · Phones hidden");
 
-  return exportResponse({ ctx, format: gate.format, title: "Site Visits", entity: "SiteVisit", filters, result });
+  return exportResponse({
+    ctx,
+    params: gate.params,
+    format: gate.format,
+    title: "Site Visits",
+    entity: "SiteVisit",
+    filters,
+    result,
+  });
 }

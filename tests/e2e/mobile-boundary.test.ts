@@ -368,6 +368,33 @@ suite("the mobile boundary", () => {
     });
   });
 
+  /*
+   * Every list, walked. This caught two routes that took the page parameter
+   * and ignored it — one of them a single-line call a bulk edit had skipped —
+   * which no unit test could see, because the slicing happens in the shared
+   * responder and the routes only have to pass the query through.
+   */
+  describe("every list takes the page it is given", () => {
+    it("answers with that page, and no more rows than asked for", async () => {
+      const { body } = await get("/lists");
+      const lists = body.data!.lists as unknown as string[];
+
+      const ignored: string[] = [];
+      for (const key of lists) {
+        const res = await get(`/list/${key}?page=1&pageSize=5`);
+        if (!res.body.ok) continue; // a refusal or a project it needs
+        const data = res.body.data as unknown as {
+          rows: unknown[];
+          page?: number;
+          total: number;
+        };
+        if (data.page !== 1) ignored.push(`${key}: no page in the answer`);
+        if (data.rows.length > 5) ignored.push(`${key}: ${data.rows.length} rows for pageSize=5`);
+      }
+      expect(ignored, ignored.join("\n")).toEqual([]);
+    });
+  });
+
   describe("every endpoint still needs a session", () => {
     it("refuses the lot without a token", async () => {
       for (const path of ["/me", "/actions", "/lists", "/reports", "/list/material/indents"]) {
