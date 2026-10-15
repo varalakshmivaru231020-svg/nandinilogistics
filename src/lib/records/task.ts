@@ -167,6 +167,93 @@ export async function taskRecord(ctx: AuthContext, id: string): Promise<RecordVi
       confirm: "It comes back to the assignee. Only an Admin can do this.",
     });
   }
+  if (may("edit")) {
+    actions.push({
+      key: "edit",
+      label: "Edit task",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "tasks:edit",
+      confirm: "The Assigner may correct a task until work starts on it.",
+    });
+  }
+
+  /*
+   * Priority, reassigning and deleting are bulk controls on the web's task
+   * list — it takes the selected rows. A phone works on the task in front of
+   * it, so each is offered here for this one task, with the same action and
+   * the same permission.
+   */
+  // The action authorizes with `task.update`, the same as editing.
+  if (may("edit") && ctx.has(PERM.task.task.update)) {
+    actions.push({
+      key: "priority",
+      label: "Change priority",
+      emphasis: "outline",
+      action: "tasks/setPriority",
+      args: [[id], "$priority"],
+      remark: "none",
+      fields: [
+        {
+          name: "priority",
+          label: "Priority",
+          kind: "select",
+          required: true,
+          initial: task.priority,
+          options: [
+            { value: "HIGH", label: "High" },
+            { value: "MEDIUM", label: "Medium" },
+            { value: "LOW", label: "Low" },
+          ],
+        },
+      ],
+      confirm: "It changes where the task sits in everybody's list.",
+    });
+  }
+
+  if (may("reassign") && ctx.has(PERM.task.task.reassign)) {
+    const people = await prisma.user.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, designation: { select: { name: true } } },
+    });
+    actions.push({
+      key: "reassign",
+      label: "Hand it to somebody else",
+      emphasis: "outline",
+      action: "tasks/reassignTasks",
+      args: [[id], "$assigneeId"],
+      remark: "none",
+      fields: [
+        {
+          name: "assigneeId",
+          label: "Assign to",
+          kind: "lookup",
+          required: true,
+          placeholder: "Search people…",
+          options: people
+            .filter((p) => p.id !== task.assignee?.id)
+            .map((p) => ({ value: p.id, label: p.name, hint: p.designation?.name ?? undefined })),
+        },
+      ],
+      confirm: "Reassigning is an Admin's call — for when somebody is on leave.",
+    });
+  }
+
+  if (ctx.has(PERM.task.task.delete)) {
+    actions.push({
+      key: "delete",
+      label: "Delete task",
+      emphasis: "reject",
+      action: "tasks/deleteTasks",
+      args: [[id]],
+      remark: "none",
+      confirm: "The task and everything on it go for good.",
+    });
+  }
+
   if (may("comment")) {
     actions.push({
       key: "comment", label: "Comment", emphasis: "outline",
@@ -261,6 +348,40 @@ export async function taskRecord(ctx: AuthContext, id: string): Promise<RecordVi
         title: c.author?.name ?? "—",
         subtitle: c.createdAt.toISOString(),
         body: c.body,
+        // Your own words are yours to correct or withdraw, as on the web.
+        actions:
+          c.authorId === ctx.id
+            ? [
+                {
+                  key: `edit:${c.id}`,
+                  label: "Edit",
+                  emphasis: "outline" as const,
+                  action: "tasks/editComment",
+                  args: [c.id, "$body"],
+                  remark: "none" as const,
+                  fields: [
+                    {
+                      name: "body",
+                      label: "Comment",
+                      kind: "textarea" as const,
+                      required: true,
+                      initial: c.body,
+                      wide: true,
+                    },
+                  ],
+                  confirm: "Everybody on the task sees the correction.",
+                },
+                {
+                  key: `drop:${c.id}`,
+                  label: "Delete",
+                  emphasis: "reject" as const,
+                  action: "tasks/deleteComment",
+                  args: [c.id],
+                  remark: "none" as const,
+                  confirm: "It comes off the task's record.",
+                },
+              ]
+            : [],
       })),
     });
   }

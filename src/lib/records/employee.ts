@@ -56,6 +56,31 @@ export async function employeeRecord(ctx: AuthContext, id: string): Promise<Reco
     });
   }
 
+  if (ctx.has(PERM.hr.employee.update)) {
+    actions.push({
+      key: "edit",
+      label: "Edit employee",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "hr/employees:edit",
+      confirm: "The photograph and the identity copies are changed on the web.",
+    });
+  }
+
+  if (ctx.has(PERM.hr.employee.delete)) {
+    actions.push({
+      key: "delete",
+      label: "Remove employee",
+      emphasis: "reject",
+      action: "hr/deleteEmployee",
+      args: [id],
+      remark: "none",
+      confirm: "Attendance already recorded against them stays on the report.",
+    });
+  }
+
   const present = employee.attendance.filter((a) => a.status === "PRESENT").length;
   const absent = employee.attendance.filter((a) => a.status === "ABSENT").length;
 

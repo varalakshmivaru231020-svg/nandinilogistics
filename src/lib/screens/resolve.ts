@@ -177,6 +177,20 @@ export async function loadOptions(source: OptionSource, ctx: AuthContext): Promi
         hint: st.project?.code ?? undefined,
       }));
     }
+    case "employmentTypes": {
+      const rows = await prisma.employmentType.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      });
+      return rows.map((t) => ({ value: t.id, label: t.name }));
+    }
+    case "designations": {
+      const rows = await prisma.designation.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      });
+      return rows.map((d) => ({ value: d.id, label: d.name }));
+    }
     case "checklistCategories": {
       const rows = await prisma.checklistCategory.findMany({
         orderBy: { sortOrder: "asc" },

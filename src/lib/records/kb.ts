@@ -41,6 +41,19 @@ export async function kbRecord(ctx: AuthContext, id: string): Promise<RecordView
         : "Everybody who may read the knowledge base will see it.",
     });
   }
+  if (canEdit) {
+    actions.push({
+      key: "edit",
+      label: "Edit article",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "kb:edit",
+      confirm: "The web's editor is rich text and takes attachments; this takes the words.",
+    });
+  }
+
   if (ctx.has(PERM.kb.article.delete)) {
     actions.push({
       key: "delete",

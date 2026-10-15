@@ -54,6 +54,37 @@ export async function unitRecord(ctx: AuthContext, id: string): Promise<RecordVi
 
   const actions: RecordAction[] = [];
 
+  if (ctx.has(PERM.unit.unit.update)) {
+    actions.push({
+      key: "edit",
+      label: "Edit unit",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "units:edit",
+      confirm: "A unit cannot move to another project or block.",
+    });
+  }
+
+  // Only a flat nothing has happened to.
+  if (
+    unit.status === "AVAILABLE" &&
+    unit.bookings.length === 0 &&
+    unit.holds.length === 0 &&
+    ctx.has(PERM.unit.unit.delete)
+  ) {
+    actions.push({
+      key: "delete",
+      label: "Delete unit",
+      emphasis: "reject",
+      action: "units/deleteUnit",
+      args: [id],
+      remark: "none",
+      confirm: "Only a flat with no hold, booking or cost sheet on it can go.",
+    });
+  }
+
   if (ctx.has(PERM.unit.unit.changeStatus) && (unit.status === "AVAILABLE" || blocked)) {
     // The web's own two words, and the reason it insists on when blocking.
     actions.push(
@@ -165,6 +196,53 @@ export async function unitRecord(ctx: AuthContext, id: string): Promise<RecordVi
       ],
       confirm:
         "Every line comes from a charge head in the master and a rate from the active price list.",
+    });
+  }
+
+  /*
+   * Holding it from the board, which is what the web's Reserve drawer does:
+   * for a lead, for a number of days, with what was promised written down.
+   */
+  if (unit.status === "AVAILABLE" && ctx.has(PERM.unit.hold.create)) {
+    const leads = await prisma.lead.findMany({
+      where: {
+        state: { notIn: ["BOOKED", "LOST"] },
+        ...(ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id }),
+      },
+      orderBy: { name: "asc" },
+      take: 200,
+      select: { id: true, name: true, leadNo: true },
+    });
+    actions.push({
+      key: "hold",
+      label: "Hold this flat",
+      emphasis: "outline",
+      action: "sales/cost-sheets/holdUnit",
+      args: [id, "$leadId", null, "$remarks", "$days"],
+      remark: "none",
+      fields: [
+        {
+          name: "leadId",
+          label: "For which lead",
+          kind: "lookup",
+          placeholder: "Search leads…",
+          emptyLabel: "— None —",
+          options: leads.map((l) => ({ value: l.id, label: l.name, hint: l.leadNo })),
+        },
+        {
+          name: "days",
+          label: "For how many days",
+          kind: "number",
+          hint: "The hold lapses on its own when the days run out.",
+        },
+        {
+          name: "remarks",
+          label: "What was promised",
+          kind: "textarea",
+          wide: true,
+        },
+      ],
+      confirm: "It leaves the availability board until the hold is released or lapses.",
     });
   }
 

@@ -185,6 +185,19 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
     });
   }
 
+  if (mayEdit) {
+    actions.push({
+      key: "edit",
+      label: "Edit lead",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "sales/leads:edit",
+      confirm: "A booked lead's name and phone are fixed — corrected on the customer.",
+    });
+  }
+
   if (ctx.has(PERM.sales.lead.assign)) {
     actions.push({
       key: "assign",
@@ -205,6 +218,56 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
       ],
       confirm: "It moves to their pipeline, and they are told.",
     });
+  }
+
+  /*
+   * The Flats tab: holding an available flat for this lead, and releasing one
+   * it already holds. The available list is the lead's own project where it
+   * has one, which is what the web's tower filter narrows.
+   */
+  if (!closed && ctx.has(PERM.unit.hold.create)) {
+    const available = await prisma.unit.findMany({
+      where: {
+        status: "AVAILABLE",
+        ...(lead.projectId ? { projectId: lead.projectId } : {}),
+      },
+      orderBy: [{ floorNumber: "asc" }, { unitNumber: "asc" }],
+      take: 120,
+      select: {
+        id: true,
+        unitNumber: true,
+        floorNumber: true,
+        block: { select: { name: true } },
+        unitType: { select: { name: true } },
+      },
+    });
+    if (available.length > 0) {
+      actions.push({
+        key: "blockUnit",
+        label: "Hold a flat",
+        emphasis: "outline",
+        action: "sales/leads/blockUnitForLead",
+        args: [id, "$unitId"],
+        remark: "none",
+        fields: [
+          {
+            name: "unitId",
+            label: "Available units",
+            kind: "lookup",
+            required: true,
+            placeholder: "Search flats…",
+            options: available.map((u) => ({
+              value: u.id,
+              label: u.unitNumber,
+              hint: [u.block?.name, `floor ${u.floorNumber}`, u.unitType?.name]
+                .filter(Boolean)
+                .join(" · "),
+            })),
+          },
+        ],
+        confirm: "It comes off the availability board while the hold stands.",
+      });
+    }
   }
 
   if (!closed && ctx.has(PERM.sales.lead.markLost)) {
@@ -351,6 +414,19 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
           title: h.unit.unitNumber,
           subtitle: h.unit.unitType?.name ?? null,
           pills: [{ label: "On hold", tone: "warn" as const }],
+          actions: ctx.has(PERM.unit.hold.release)
+            ? [
+                {
+                  key: `release:${h.id}`,
+                  label: "Release hold",
+                  emphasis: "reject" as const,
+                  action: "sales/leads/releaseUnitForLead",
+                  args: [id, h.id],
+                  remark: "none" as const,
+                  confirm: "The flat goes back on the board as available.",
+                },
+              ]
+            : [],
         })),
         emptyMessage: "Nothing is held for this lead.",
       },

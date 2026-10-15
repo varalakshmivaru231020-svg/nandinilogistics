@@ -39,6 +39,7 @@ class FieldDef {
     this.options = const [],
     this.caps = false,
     this.emptyLabel,
+    this.locked = false,
     this.wide = false,
     this.initial,
     this.variantWhen,
@@ -92,6 +93,11 @@ class FieldDef {
 
   /// Carried and submitted, never drawn.
   final bool hidden;
+
+  /// Shown as it stands and not editable — a booked lead's name, an identity
+  /// number this person may not see. The web disables the input; a disabled
+  /// input is not submitted, so the stored value stands either way.
+  final bool locked;
   final int minRows;
   final String? minRowsMessage;
 
@@ -127,6 +133,7 @@ class FieldDef {
           .toList(),
       fixedRows: j['fixedRows'] == true,
       hidden: j['hidden'] == true,
+      locked: j['locked'] == true,
       minRows: (j['minRows'] as num?)?.toInt() ?? 0,
       minRowsMessage: j['minRowsMessage'] as String?,
       leadWith: j['leadWith'] as String?,
@@ -198,7 +205,9 @@ class FormValues {
       } else if (f.kind == 'checkbox') {
         values[f.name] = start == true;
       } else if (f.kind == 'multi') {
-        values[f.name] = <String>[];
+        values[f.name] = start == null || '$start'.isEmpty
+            ? <String>[]
+            : '$start'.split(',').where((p) => p.isNotEmpty).toList();
       } else if (f.kind == 'rows') {
         rows[f.name] = f.initialRows.isNotEmpty
             ? f.initialRows.map((seed) => FormValues(f.row, seed: seed)).toList()
@@ -234,6 +243,8 @@ class FormValues {
   }
 
   Object? read(FieldDef f) {
+    // Not submitted: the stored value stands, as a disabled input does.
+    if (f.locked) return null;
     if (f.isText) {
       final t = controller(f.name).text.trim();
       if (t.isEmpty) return null;
@@ -383,6 +394,7 @@ class _FormBodyState extends State<FormBody> {
 
   Widget _control(FieldDef f, FormValues into) {
     final (label, kind) = _shape(f);
+    final enabled = widget.enabled && !f.locked;
 
     if (f.isText) {
       final box = Field(
@@ -391,7 +403,7 @@ class _FormBodyState extends State<FormBody> {
         controller: into.controller(f.name),
         hint: f.placeholder,
         note: f.hint,
-        enabled: widget.enabled,
+        enabled: enabled,
         lines: kind == 'textarea' ? 3 : 1,
         keyboard: switch (kind) {
           'number' || 'money' => const TextInputType.numberWithOptions(decimal: true),
@@ -427,9 +439,7 @@ class _FormBodyState extends State<FormBody> {
       'checkbox' => _Check(
           label: label,
           value: into.values[f.name] == true,
-          onChanged: widget.enabled
-              ? (b) => setState(() => into.values[f.name] = b)
-              : null,
+          onChanged: enabled ? (b) => setState(() => into.values[f.name] = b) : null,
         ),
       'date' || 'datetime' => _DateField(
           label: _labelled(f, label),
@@ -437,27 +447,27 @@ class _FormBodyState extends State<FormBody> {
           time: kind == 'datetime',
           value: into.values[f.name] as String?,
           initial: f.initial?.toString(),
-          enabled: widget.enabled,
+          enabled: enabled,
           onChanged: (s) => setState(() => into.values[f.name] = s),
         ),
       'select' || 'lookup' => _PickOne(
           field: f,
           label: _labelled(f, label),
           value: into.values[f.name] as String?,
-          enabled: widget.enabled,
+          enabled: enabled,
           onChanged: (s) => setState(() => into.values[f.name] = s),
         ),
       'multi' => _PickMany(
           field: f,
           label: _labelled(f, label),
           picked: ((into.values[f.name] as List?) ?? const []).cast<String>(),
-          enabled: widget.enabled,
+          enabled: enabled,
           onChanged: (list) => setState(() => into.values[f.name] = list),
         ),
       'rows' => _Lines(
           field: f,
           lines: into.rows.putIfAbsent(f.name, () => []),
-          enabled: widget.enabled,
+          enabled: enabled,
           onChanged: () => setState(() {}),
         ),
       _ => const SizedBox.shrink(),
@@ -468,6 +478,7 @@ class _FormBodyState extends State<FormBody> {
   String _labelled(FieldDef f, String label) {
     final bits = [
       label + (f.required ? ' *' : ''),
+      if (f.locked) '· fixed',
       if (f.note != null) '· ${f.note}',
     ];
     return bits.join(' ');

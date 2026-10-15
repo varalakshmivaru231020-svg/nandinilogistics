@@ -110,6 +110,39 @@ export async function indentRecord(ctx: AuthContext, id: string): Promise<Record
       confirm: "It goes to the Project Manager. You cannot edit it after that.",
     });
   }
+  /*
+   * The stock check, which is what decides how much of the indent the store
+   * can issue and how much becomes a purchase order. The web runs it from the
+   * indent screen; the numbers it writes are what the lines below read.
+   */
+  if (
+    ["SUBMITTED", "PM_APPROVED", "ADMIN_APPROVED"].includes(indent.status) &&
+    ctx.has(PERM.material.indent.stockCheck)
+  ) {
+    actions.push({
+      key: "stockCheck",
+      label: "Run the stock check",
+      emphasis: "outline",
+      action: "material/indents/stockCheck",
+      args: [id],
+      remark: "none",
+      confirm: "It settles what the store can issue now and what has to be bought.",
+    });
+  }
+
+  if (indent.status === "DRAFT" && ctx.has(PERM.material.indent.update)) {
+    actions.push({
+      key: "edit",
+      label: "Edit indent",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "material/indents:edit",
+      confirm: "Only before its first approval. Rates come from the item master, not from here.",
+    });
+  }
+
   if (indent.status === "DRAFT" && ctx.has(PERM.material.indent.delete)) {
     actions.push({
       key: "delete",

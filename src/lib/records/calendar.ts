@@ -134,6 +134,19 @@ export async function calendarRecord(ctx: AuthContext, id: string): Promise<Reco
     });
   }
 
+  if (!done && !cancelled && (raisedIt || admin) && ctx.has(PERM.calendar.event.update)) {
+    actions.push({
+      key: "edit",
+      label: "Edit",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "calendar:edit",
+      confirm: "Only whoever raised a calendar task can change it.",
+    });
+  }
+
   if (!cancelled && (raisedIt || admin) && ctx.has(PERM.calendar.event.cancel)) {
     actions.push({
       key: "cancel", label: "Cancel", emphasis: "reject",

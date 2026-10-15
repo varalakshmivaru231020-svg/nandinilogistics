@@ -38,6 +38,16 @@ const SOURCE: Record<string, string> = {
   "kb:create": "kb/kb-screen.tsx",
   "material/transfers:create": "material/transfers/transfers-screen.tsx",
   "checklists:create": "checklists/checklists-screen.tsx",
+  // The edits. The web uses one component for both in every case but the
+  // lead, whose edit drawer is its own.
+  "calendar:edit": "calendar/calendar-screen.tsx",
+  "tasks:edit": "tasks/new/new-task-form.tsx",
+  "material/vendors:edit": "material/vendors/vendor-form.tsx",
+  "kb:edit": "kb/kb-screen.tsx",
+  "sales/leads:edit": "sales/leads/[id]/lead-edit-modal.tsx",
+  "hr/employees:edit": "hr/hr-screen.tsx",
+  "schedule/activities:edit": "schedule/schedule-screen.tsx",
+  "units:edit": "units/unit-manager.tsx",
 };
 
 /**
@@ -77,13 +87,27 @@ const OURS = new Set([
   "checklists:create → Category",
   // The transfer modal has no heading over its lines; a phone's rows need one.
   "material/transfers:create → Items",
+  // The web's own title carries the activity's code — "Edit EXC" — which a
+  // registry entry cannot know.
+  "schedule/activities:edit → Edit activity",
 ]);
 
 /**
  * Arguments the web passes from outside its form, so they are not `name="…"`
  * anywhere: the checklist's category is the tab you are standing on.
  */
-const OUTSIDE_THE_FORM = new Set(["checklists:create → categoryId"]);
+const OUTSIDE_THE_FORM = new Set([
+  "checklists:create → categoryId",
+  // The stale guard the lead's edit drawer posts as a hidden input.
+  "sales/leads:edit → updatedAt",
+]);
+
+/**
+ * Forms whose words are the app's own, because the web has the action and no
+ * screen that calls it. Both are written down in docs/MOBILE_PARITY.md; there
+ * is nothing on the web to copy, so there is nothing to compare against.
+ */
+const NO_WEB_SCREEN = new Set(["calendar:edit", "tasks:edit"]);
 
 function source(key: string): string {
   return readFileSync(join(ROOT, "src", "app", "(app)", SOURCE[key]), "utf8");
@@ -213,7 +237,10 @@ describe("the fields are the web's fields", () => {
       });
 
       it("uses the web's own labels", () => {
+        if (NO_WEB_SCREEN.has(key)) return;
         for (const f of form.fields) {
+          // A field that is carried and never drawn has no label to compare.
+          if (f.hidden) continue;
           if (!OURS.has(`${key} → ${f.label}`)) {
             expect(labelled(src, f.label), `${key} label ${f.label}`).toBe(true);
           }
@@ -225,6 +252,7 @@ describe("the fields are the web's fields", () => {
       });
 
       it("uses the web's own placeholders and hints", () => {
+        if (NO_WEB_SCREEN.has(key)) return;
         for (const f of form.fields) {
           if (f.placeholder) {
             expect(src.includes(f.placeholder), `${key} placeholder ${f.placeholder}`).toBe(true);
@@ -239,7 +267,10 @@ describe("the fields are the web's fields", () => {
       });
 
       it("says what the web's title and buttons say", () => {
-        expect(src.includes(form.title), `${key} title`).toBe(true);
+        if (NO_WEB_SCREEN.has(key)) return;
+        if (!OURS.has(`${key} → ${form.title}`)) {
+          expect(src.includes(form.title), `${key} title`).toBe(true);
+        }
         expect(src.includes(form.submitLabel), `${key} submit label`).toBe(true);
         if (form.description) {
           expect(src.includes(form.description), `${key} description`).toBe(true);

@@ -47,6 +47,19 @@ export async function vendorRecord(ctx: AuthContext, id: string): Promise<Record
   const canSeeRate = ctx.has(PERM.material.purchaseOrder.viewRate);
 
   const actions: RecordAction[] = [];
+  if (ctx.has(PERM.masters.vendor.update)) {
+    actions.push({
+      key: "edit",
+      label: "Edit vendor",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "material/vendors:edit",
+      confirm: "The vendor code is generated and cannot be typed.",
+    });
+  }
+
   if (ctx.has(PERM.material.purchaseOrder.create)) {
     // The web's "Raise a PO" on this screen. The order itself is built on the
     // web, where the lines and rates are.

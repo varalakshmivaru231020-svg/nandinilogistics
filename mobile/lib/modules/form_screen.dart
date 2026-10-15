@@ -65,7 +65,11 @@ class _FormScreenState extends State<FormScreen> {
       _loadError = null;
       _loadCode = null;
     });
-    final res = await widget.api.get(_path);
+    // An edit form is opened on a record and comes back holding its values.
+    final res = await widget.api.get(
+      _path,
+      query: widget.recordId == null ? null : {'id': widget.recordId!},
+    );
     if (!mounted) return;
     if (!res.ok) {
       setState(() {

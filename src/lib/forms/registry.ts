@@ -3,7 +3,7 @@ import "server-only";
 import { PERM } from "@/lib/permissions/codes";
 import type { AuthContext } from "@/lib/rbac/context";
 
-import type { FormDef, FormRef } from "./types";
+import type { FormDef, FormFieldDef, FormRef } from "./types";
 
 /**
  * The forms, in the web's own words.
@@ -20,22 +20,7 @@ import type { FormDef, FormRef } from "./types";
 
 const PEOPLE_SEARCH = "Search people…";
 
-export const FORMS: Record<string, FormDef> = {
-  /* ------------------------------------------------------------- calendar */
-
-  // src/app/(app)/calendar/calendar-screen.tsx → NewCalendarTask
-  "calendar:create": {
-    key: "calendar:create",
-    module: "calendar",
-    title: "New calendar task",
-    description:
-      "A title, a timeline, and whoever it is on. They accept it before it lands on their calendar.",
-    submitLabel: "Add to my calendar",
-    permission: PERM.calendar.event.create,
-    action: "calendar/createCalendarTask",
-    shape: { kind: "formData" },
-    done: "Calendar task added.",
-    fields: [
+const CALENDAR_FIELDS: ReadonlyArray<FormFieldDef> = [
       {
         name: "title",
         label: "Title",
@@ -83,23 +68,9 @@ export const FORMS: Record<string, FormDef> = {
         placeholder: PEOPLE_SEARCH,
         wide: true,
       },
-    ],
-  },
+    ];
 
-  /* ---------------------------------------------------------------- tasks */
-
-  // src/app/(app)/tasks/new/new-task-form.tsx
-  "tasks:create": {
-    key: "tasks:create",
-    module: "tasks",
-    title: "New task",
-    description: "Assigned to one person, who accepts it and owns it until it closes.",
-    submitLabel: "Assign task",
-    permission: PERM.task.task.create,
-    action: "tasks/createTask",
-    shape: { kind: "formData" },
-    done: "Task raised.",
-    fields: [
+const TASK_FIELDS: ReadonlyArray<FormFieldDef> = [
       {
         name: "title",
         label: "Title",
@@ -179,7 +150,105 @@ export const FORMS: Record<string, FormDef> = {
         placeholder: PEOPLE_SEARCH,
         wide: true,
       },
-    ],
+    ];
+
+const VENDOR_FIELDS: ReadonlyArray<FormFieldDef> = [
+      {
+        name: "name",
+        label: "Vendor name",
+        kind: "text",
+        required: true,
+        placeholder: "Sri Balaji Agencies",
+        wide: true,
+      },
+      { name: "contactPerson", label: "Contact person", kind: "text", placeholder: "B. Ramesh" },
+      {
+        name: "phone",
+        label: "Mobile number",
+        kind: "phone",
+        required: true,
+        placeholder: "98450 00000",
+      },
+      { name: "email", label: "Email", kind: "email", placeholder: "sales@vendor.in" },
+      { name: "gstin", label: "GSTIN", kind: "text", placeholder: "29ABCDE1234F1Z5", caps: true },
+      { name: "pan", label: "PAN", kind: "text", placeholder: "ABCDE1234F", caps: true },
+      // The design writes the terms in words; they are matched to the master.
+      { name: "paymentTerms", label: "Payment terms", kind: "text", placeholder: "30 days credit" },
+      {
+        name: "accountNumber",
+        label: "Bank account number",
+        kind: "text",
+        placeholder: "50100234567890",
+      },
+      { name: "ifsc", label: "IFSC code", kind: "text", placeholder: "HDFC0001234", caps: true },
+      {
+        name: "bankName",
+        label: "Bank & branch",
+        kind: "text",
+        placeholder: "HDFC Bank · Mysore Road",
+      },
+      { name: "upiId", label: "UPI ID", kind: "text", placeholder: "sribalaji@okhdfcbank" },
+      {
+        name: "categoryIds",
+        label: "Supply categories",
+        kind: "multi",
+        source: "itemCategories",
+        wide: true,
+      },
+      {
+        name: "addressLine",
+        label: "Address",
+        kind: "textarea",
+        placeholder: "Yard address, city",
+        wide: true,
+      },
+    ];
+
+const ARTICLE_FIELDS: ReadonlyArray<FormFieldDef> = [
+      {
+        name: "title",
+        label: "Name",
+        kind: "text",
+        required: true,
+        placeholder: "e.g. Sales pitch — NN Riverview",
+        wide: true,
+      },
+      { name: "body", label: "Description", kind: "textarea", required: true, wide: true },
+    ];
+
+
+export const FORMS: Record<string, FormDef> = {
+  /* ------------------------------------------------------------- calendar */
+
+  // src/app/(app)/calendar/calendar-screen.tsx → NewCalendarTask
+  "calendar:create": {
+    key: "calendar:create",
+    module: "calendar",
+    title: "New calendar task",
+    description:
+      "A title, a timeline, and whoever it is on. They accept it before it lands on their calendar.",
+    submitLabel: "Add to my calendar",
+    permission: PERM.calendar.event.create,
+    action: "calendar/createCalendarTask",
+    shape: { kind: "formData" },
+    done: "Calendar task added.",
+    fields: CALENDAR_FIELDS,
+  },
+
+  /* ---------------------------------------------------------------- tasks */
+
+  // src/app/(app)/tasks/new/new-task-form.tsx
+  "tasks:create": {
+    key: "tasks:create",
+    module: "tasks",
+    title: "New task",
+    description: "Assigned to one person, who accepts it and owns it until it closes.",
+    submitLabel: "Assign task",
+    permission: PERM.task.task.create,
+    action: "tasks/createTask",
+    shape: { kind: "formData" },
+    done: "Task raised.",
+    fields: TASK_FIELDS,
   },
 
   /* ------------------------------------------------------------ customers */
@@ -310,57 +379,7 @@ export const FORMS: Record<string, FormDef> = {
     action: "material/vendors/createVendor",
     shape: { kind: "positional", order: ["$values"] },
     done: "Vendor created.",
-    fields: [
-      {
-        name: "name",
-        label: "Vendor name",
-        kind: "text",
-        required: true,
-        placeholder: "Sri Balaji Agencies",
-        wide: true,
-      },
-      { name: "contactPerson", label: "Contact person", kind: "text", placeholder: "B. Ramesh" },
-      {
-        name: "phone",
-        label: "Mobile number",
-        kind: "phone",
-        required: true,
-        placeholder: "98450 00000",
-      },
-      { name: "email", label: "Email", kind: "email", placeholder: "sales@vendor.in" },
-      { name: "gstin", label: "GSTIN", kind: "text", placeholder: "29ABCDE1234F1Z5", caps: true },
-      { name: "pan", label: "PAN", kind: "text", placeholder: "ABCDE1234F", caps: true },
-      // The design writes the terms in words; they are matched to the master.
-      { name: "paymentTerms", label: "Payment terms", kind: "text", placeholder: "30 days credit" },
-      {
-        name: "accountNumber",
-        label: "Bank account number",
-        kind: "text",
-        placeholder: "50100234567890",
-      },
-      { name: "ifsc", label: "IFSC code", kind: "text", placeholder: "HDFC0001234", caps: true },
-      {
-        name: "bankName",
-        label: "Bank & branch",
-        kind: "text",
-        placeholder: "HDFC Bank · Mysore Road",
-      },
-      { name: "upiId", label: "UPI ID", kind: "text", placeholder: "sribalaji@okhdfcbank" },
-      {
-        name: "categoryIds",
-        label: "Supply categories",
-        kind: "multi",
-        source: "itemCategories",
-        wide: true,
-      },
-      {
-        name: "addressLine",
-        label: "Address",
-        kind: "textarea",
-        placeholder: "Yard address, city",
-        wide: true,
-      },
-    ],
+    fields: VENDOR_FIELDS,
   },
 
   /* ------------------------------------------------------------- attendance */
@@ -528,16 +547,234 @@ export const FORMS: Record<string, FormDef> = {
     action: "kb/createArticle",
     shape: { kind: "formData" },
     done: "Article published.",
+    fields: ARTICLE_FIELDS,
+  },
+  /* =======================================================================
+   * Edits.
+   *
+   * Each one is the create form's own field list — the same const, so the two
+   * cannot drift — opened on a record, with `edits: true` so the fields come
+   * back holding what the record holds. The web uses one component for both
+   * in every case but the lead, whose edit drawer is its own.
+   * ===================================================================== */
+
+  /*
+   * The web has `updateCalendarTaskAction` and no screen that calls it, so
+   * these words are the app's own — see docs/MOBILE_PARITY.md, where the
+   * asymmetry is written down rather than left to be discovered.
+   */
+  "calendar:edit": {
+    key: "calendar:edit",
+    module: "calendar",
+    title: "Edit calendar task",
+    submitLabel: "Save changes",
+    permission: PERM.calendar.event.update,
+    action: "calendar/updateCalendarTask",
+    shape: { kind: "positional", order: ["$id", "$values"] },
+    done: "Calendar task changed.",
+    onRecord: true,
+    edits: true,
+    fields: CALENDAR_FIELDS,
+  },
+
+  /*
+   * The same asymmetry: `canDo("edit")` is in the task lifecycle and
+   * `updateTaskAction` enforces it — the Assigner may correct a task until
+   * work starts — but no web screen offers it.
+   */
+  "tasks:edit": {
+    key: "tasks:edit",
+    module: "tasks",
+    title: "Edit task",
+    submitLabel: "Save changes",
+    permission: PERM.task.task.update,
+    action: "tasks/updateTask",
+    shape: { kind: "positional", order: ["$id", "$values"] },
+    done: "Task changed.",
+    onRecord: true,
+    edits: true,
+    // The checklist and its levels are set when a task is raised, so the edit
+    // form is the task's own fields — exactly what the web's edit screen takes.
+    fields: TASK_FIELDS.filter(
+      (f) => !["checklistIds", "reviewerIds", "approverIds"].includes(f.name),
+    ),
+  },
+
+  "material/vendors:edit": {
+    key: "material/vendors:edit",
+    module: "material/vendors",
+    title: "Edit vendor",
+    description:
+      "Vendor code is generated automatically. Only vendor name and mobile number are mandatory.",
+    submitLabel: "Save vendor",
+    permission: PERM.masters.vendor.update,
+    action: "material/vendors/updateVendor",
+    shape: { kind: "positional", order: ["$id", "$values"] },
+    done: "Vendor changed.",
+    onRecord: true,
+    edits: true,
+    fields: VENDOR_FIELDS,
+  },
+
+  "kb:edit": {
+    key: "kb:edit",
+    module: "kb",
+    title: "Edit article",
+    submitLabel: "Save changes",
+    permission: PERM.kb.article.update,
+    action: "kb/updateArticle",
+    shape: { kind: "positional", order: ["$id", "$values"] },
+    done: "Article changed.",
+    onRecord: true,
+    edits: true,
+    fields: ARTICLE_FIELDS,
+  },
+
+  // src/app/(app)/sales/leads/[id]/lead-edit-modal.tsx — its own drawer, with
+  // the stale guard the action checks and the fields a booked lead cannot
+  // change.
+  "sales/leads:edit": {
+    key: "sales/leads:edit",
+    module: "sales/leads",
+    title: "Edit lead",
+    submitLabel: "Save changes",
+    permission: PERM.sales.lead.update,
+    action: "sales/leads/updateLead",
+    shape: { kind: "positional", order: ["$id", "$values"] },
+    done: "Lead changed.",
+    onRecord: true,
+    edits: true,
     fields: [
+      { name: "name", label: "Name", kind: "text", required: true },
+      { name: "phone", label: "Phone", kind: "phone", required: true },
+      { name: "altPhone", label: "Alternate phone", kind: "phone" },
+      { name: "email", label: "Email", kind: "email" },
+      { name: "sourceId", label: "Source", kind: "select", required: true, source: "leadSources" },
       {
-        name: "title",
-        label: "Name",
-        kind: "text",
-        required: true,
-        placeholder: "e.g. Sales pitch — NN Riverview",
+        name: "projectId",
+        label: "Project of interest",
+        kind: "select",
+        source: "projects",
+        emptyLabel: "Select…",
+      },
+      {
+        name: "unitTypeId",
+        label: "Interested in",
+        kind: "select",
+        source: "unitTypes",
+        hint: "Matched against available inventory.",
+        emptyLabel: "Select…",
+      },
+      { name: "budgetMin", label: "Budget from (₹)", kind: "money" },
+      { name: "budgetMax", label: "Budget to (₹)", kind: "money" },
+      {
+        name: "requirement",
+        label: "Requirement",
+        kind: "textarea",
+        placeholder: "2–3 BHK, east facing, ready to move",
         wide: true,
       },
-      { name: "body", label: "Description", kind: "textarea", required: true, wide: true },
+      { name: "nextActionAt", label: "Next action on", kind: "date" },
+      // The stale guard the action compares against, carried not drawn.
+      { name: "updatedAt", label: "Unchanged since", kind: "text", hidden: true },
+    ],
+  },
+
+  // src/app/(app)/hr/hr-screen.tsx → EmployeeDrawer, without the photograph
+  // and the identity copies, which are files.
+  "hr/employees:edit": {
+    key: "hr/employees:edit",
+    module: "hr/employees",
+    title: "Edit employee",
+    submitLabel: "Save changes",
+    permission: PERM.hr.employee.update,
+    action: "hr/updateEmployee",
+    shape: { kind: "positional", order: ["$id", "$values"] },
+    done: "Employee changed.",
+    onRecord: true,
+    edits: true,
+    fields: [
+      {
+        name: "employmentTypeId",
+        label: "Type of employment",
+        kind: "select",
+        required: true,
+        source: "employmentTypes",
+      },
+      { name: "name", label: "Name", kind: "text", required: true, placeholder: "Full name" },
+      { name: "designationId", label: "Designation", kind: "select", source: "designations" },
+      { name: "mobile", label: "Mobile number", kind: "phone", required: true, placeholder: "98765 43210" },
+      {
+        name: "aadhaar",
+        label: "Aadhaar number",
+        kind: "text",
+        required: true,
+        placeholder: "1234 5678 9012",
+      },
+      { name: "pan", label: "PAN", kind: "text", placeholder: "ABCDE1234F", caps: true },
+      { name: "altContact", label: "Alternate number", kind: "phone", placeholder: "+91 90000 00000" },
+      {
+        name: "address",
+        label: "Address",
+        kind: "textarea",
+        placeholder: "House, area, city",
+        wide: true,
+      },
+    ],
+  },
+
+  // src/app/(app)/schedule/schedule-screen.tsx → EditActivityModal. The
+  // baseline is not here and never will be — it is what slippage is measured
+  // against.
+  "schedule/activities:edit": {
+    key: "schedule/activities:edit",
+    module: "schedule/activities",
+    // The web's own title carries the activity's code — "Edit EXC".
+    title: "Edit activity",
+    description: "The baseline stays where it was — it is what slippage is measured against.",
+    submitLabel: "Save",
+    permission: PERM.schedule.activity.update,
+    action: "schedule/updateActivity",
+    shape: { kind: "positional", order: ["$id", "$name", "$plannedStart", "$plannedEnd"] },
+    done: "Activity corrected.",
+    onRecord: true,
+    edits: true,
+    fields: [
+      { name: "name", label: "Activity name", kind: "text", required: true, wide: true },
+      { name: "plannedStart", label: "Planned start", kind: "date", required: true },
+      { name: "plannedEnd", label: "Planned finish", kind: "date", required: true },
+    ],
+  },
+
+  // src/app/(app)/units/unit-manager.tsx → UnitFormModal. The project and the
+  // block cannot move, so they are not on the edit form at all.
+  "units:edit": {
+    key: "units:edit",
+    module: "units",
+    title: "Edit unit",
+    submitLabel: "Save unit",
+    permission: PERM.unit.unit.update,
+    action: "units/updateUnit",
+    shape: { kind: "positional", order: ["$id", "$values"] },
+    done: "Unit changed.",
+    onRecord: true,
+    edits: true,
+    fields: [
+      { name: "unitNumber", label: "Unit number", kind: "text", required: true, placeholder: "A-0101" },
+      { name: "unitTypeId", label: "Unit type", kind: "select", required: true, source: "unitTypes" },
+      { name: "floorNumber", label: "Floor", kind: "number", required: true, hint: "0 for ground." },
+      { name: "carpetArea", label: "Carpet area (sq.ft)", kind: "number", required: true },
+      { name: "builtUpArea", label: "Built-up area (sq.ft)", kind: "number" },
+      {
+        name: "superBuiltUpArea",
+        label: "Super built-up area (sq.ft)",
+        kind: "number",
+        required: true,
+        hint: "The area rates apply to.",
+      },
+      { name: "facing", label: "Facing", kind: "text", placeholder: "East" },
+      { name: "plcTag", label: "PLC tag", kind: "text", hint: "e.g. CORNER, PARK_FACING" },
+      { name: "parkingSlots", label: "Parking slots", kind: "number" },
     ],
   },
 };

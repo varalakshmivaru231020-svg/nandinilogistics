@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import type { AuthContext } from "@/lib/rbac/context";
 
-import { words, type RecordAction, type RecordView } from "./shared";
+import { type RecordAction, type RecordView } from "./shared";
 
 /**
  * One checklist template, with its points in order.
@@ -27,7 +27,21 @@ export async function checklistRecord(ctx: AuthContext, id: string): Promise<Rec
   if (!checklist) return null;
 
   const actions: RecordAction[] = [];
-  if (ctx.has(PERM.checklist.checklist.update)) {
+  const mayEdit = ctx.has(PERM.checklist.checklist.update);
+
+  if (ctx.has(PERM.checklist.checklist.delete)) {
+    actions.push({
+      key: "delete",
+      label: "Delete checklist",
+      emphasis: "reject",
+      action: "checklists/deleteChecklist",
+      args: [id],
+      remark: "none",
+      confirm: "Tasks already raised from it keep their copy of the points.",
+    });
+  }
+
+  if (mayEdit) {
     actions.push({
       key: "setActive",
       label: checklist.isActive ? "Take out of use" : "Put back in use",
@@ -38,6 +52,25 @@ export async function checklistRecord(ctx: AuthContext, id: string): Promise<Rec
       confirm: checklist.isActive
         ? "It cannot be picked for a new task. Tasks already raised from it are untouched."
         : "It can be picked for a new task again.",
+    });
+    actions.push({
+      key: "addPoint",
+      label: "Add a point",
+      emphasis: "primary",
+      action: "checklists/addCheckpoint",
+      args: [id, "$text"],
+      remark: "none",
+      fields: [
+        {
+          name: "text",
+          label: "Checkpoint",
+          kind: "text",
+          required: true,
+          placeholder: "Add the next checkpoint — it takes the next sequence number",
+          wide: true,
+        },
+      ],
+      confirm: "It goes to the end of the list, with the next number.",
     });
     actions.push({
       key: "duplicate",
@@ -86,14 +119,65 @@ export async function checklistRecord(ctx: AuthContext, id: string): Promise<Rec
         rows: checklist.checkpoints.map((p, i) => ({
           id: p.id,
           title: p.text,
-          subtitle: words(p.responseType),
           trailing: String(i + 1).padStart(2, "0"),
-          pills: [
-            p.isMandatory
-              ? { label: "Mandatory", tone: "warn" as const }
-              : { label: "Optional", tone: "draft" as const },
-            ...(p.needsFile ? [{ label: "Needs a photo", tone: "info" as const }] : []),
-          ],
+          actions: mayEdit
+            ? [
+                {
+                  key: `text:${p.id}`,
+                  label: "Edit",
+                  emphasis: "outline" as const,
+                  action: "checklists/updateCheckpoint",
+                  args: [p.id, { text: "$text" }],
+                  remark: "none" as const,
+                  fields: [
+                    {
+                      name: "text",
+                      label: "Checkpoint",
+                      kind: "text" as const,
+                      required: true,
+                      initial: p.text,
+                      wide: true,
+                    },
+                  ],
+                  confirm: "Tasks already raised from this checklist keep their own copy.",
+                },
+                ...(i > 0
+                  ? [
+                      {
+                        key: `up:${p.id}`,
+                        label: "Move up",
+                        emphasis: "outline" as const,
+                        action: "checklists/moveCheckpoint",
+                        args: [p.id, "up"],
+                        remark: "none" as const,
+                        confirm: "It swaps with the point above it.",
+                      },
+                    ]
+                  : []),
+                ...(i < checklist.checkpoints.length - 1
+                  ? [
+                      {
+                        key: `down:${p.id}`,
+                        label: "Move down",
+                        emphasis: "outline" as const,
+                        action: "checklists/moveCheckpoint",
+                        args: [p.id, "down"],
+                        remark: "none" as const,
+                        confirm: "It swaps with the point below it.",
+                      },
+                    ]
+                  : []),
+                {
+                  key: `drop:${p.id}`,
+                  label: "Delete",
+                  emphasis: "reject" as const,
+                  action: "checklists/deleteCheckpoint",
+                  args: [p.id],
+                  remark: "none" as const,
+                  confirm: "The remaining points are renumbered.",
+                },
+              ]
+            : [],
         })),
         emptyMessage: "This checklist has no points yet.",
       },

@@ -144,6 +144,12 @@ export interface FormDef {
   /** Opened on an existing record rather than from a list's "New" button. */
   onRecord?: boolean;
   /**
+   * An edit form, whose fields start as the record stands. The values come
+   * from `prefillFor()`, keyed by this form's key, and a field the record
+   * cannot change comes back locked.
+   */
+  edits?: boolean;
+  /**
    * A form whose fields are not fixed. "Capture lead" is whatever Masters →
    * Lead Settings says it is, and the attendance sheet is one line per active
    * worker — both are read when the form is served rather than written here.

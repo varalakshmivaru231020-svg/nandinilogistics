@@ -123,6 +123,19 @@ export async function activityRecord(ctx: AuthContext, id: string): Promise<Reco
     });
   }
 
+  if (ctx.has(PERM.schedule.activity.update)) {
+    actions.push({
+      key: "edit",
+      label: "Correct the activity",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "schedule/activities:edit",
+      confirm: "The baseline stays where it was — it is what slippage is measured against.",
+    });
+  }
+
   if (!done && !pending && ctx.has(PERM.schedule.extension.request)) {
     actions.push({
       key: "requestExtension",

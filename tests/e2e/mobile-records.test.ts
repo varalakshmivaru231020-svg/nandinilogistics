@@ -372,6 +372,111 @@ suite("the material records", () => {
     });
   });
 
+  /*
+   * An edit form is the dangerous kind: it posts a whole `FormData`, so a
+   * field it does not send is a field it clears. These prove the form comes
+   * back holding what the record holds, and that submitting one change leaves
+   * everything else alone — including a multi-select, which is the one that
+   * would quietly empty.
+   */
+  describe("an edit form", () => {
+    let vendorId = "";
+    let categoryIds: string[] = [];
+
+    beforeAll(async () => {
+      const vendor = await prisma.vendor.findFirstOrThrow({ where: { status: "ACTIVE" } });
+      vendorId = vendor.id;
+      const categories = await prisma.itemCategory.findMany({ take: 2, select: { id: true } });
+      categoryIds = categories.map((c) => c.id);
+      // Two supply categories, so the round-trip has something to lose.
+      await prisma.vendorCategory.createMany({
+        data: categoryIds.map((itemCategoryId) => ({ vendorId, itemCategoryId })),
+        skipDuplicates: true,
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.vendorCategory.deleteMany({
+        where: { vendorId, itemCategoryId: { in: categoryIds } },
+      });
+    });
+
+    it("comes back holding what the record holds", async () => {
+      const { body } = await get(`/form/material/vendors/edit?id=${vendorId}`);
+      expect(body.ok, body.error).toBe(true);
+      const form = body.data as unknown as {
+        title: string;
+        submitLabel: string;
+        fields: Array<{ name: string; initial?: unknown; locked?: boolean }>;
+      };
+
+      expect(form.title).toBe("Edit vendor");
+      expect(form.submitLabel).toBe("Save vendor");
+      const byName = new Map(form.fields.map((f) => [f.name, f]));
+      const vendor = await prisma.vendor.findUniqueOrThrow({ where: { id: vendorId } });
+      expect(byName.get("name")!.initial).toBe(vendor.name);
+      // A multi-select arrives as the ids it holds, comma separated.
+      const held = String(byName.get("categoryIds")!.initial ?? "").split(",").filter(Boolean);
+      expect(held.sort()).toEqual([...categoryIds].sort());
+    });
+
+    it("changing one field leaves the rest alone", async () => {
+      const { body } = await get(`/form/material/vendors/edit?id=${vendorId}`);
+      const form = body.data as unknown as {
+        action: string;
+        fields: Array<{ name: string; kind: string; initial?: unknown }>;
+      };
+
+      // Exactly what the client sends: everything it is holding, one changed.
+      const payload: Record<string, unknown> = {};
+      for (const f of form.fields) {
+        if (f.initial === undefined || f.initial === "") continue;
+        payload[f.name] =
+          f.kind === "multi"
+            ? String(f.initial).split(",").filter(Boolean)
+            : f.initial;
+      }
+      payload.contactPerson = `Checked ${suffix}`;
+
+      const sent = await act(form.action, [vendorId, payload]);
+      expect(sent.body.ok, sent.body.error).toBe(true);
+
+      const after = await prisma.vendor.findUniqueOrThrow({
+        where: { id: vendorId },
+        include: { categories: { select: { itemCategoryId: true } } },
+      });
+      expect(after.contactPerson).toBe(`Checked ${suffix}`);
+      // The things nobody touched are still there.
+      expect(after.gstin).toBeTruthy();
+      expect(after.categories.map((c) => c.itemCategoryId).sort()).toEqual(
+        [...categoryIds].sort(),
+      );
+    });
+
+    /** A booked lead's name and phone are fixed, so the form says so. */
+    it("locks what the record will not let go of", async () => {
+      const booked = await prisma.lead.findFirst({
+        where: { bookings: { some: {} } },
+        select: { id: true },
+      });
+      if (!booked) return;
+
+      const { body } = await get(`/form/sales/leads/edit?id=${booked.id}`);
+      expect(body.ok, body.error).toBe(true);
+      const fields = (body.data as unknown as { fields: Array<{ name: string; locked?: boolean }> })
+        .fields;
+      const locked = fields.filter((f) => f.locked).map((f) => f.name);
+      expect(locked).toContain("name");
+      expect(locked).toContain("phone");
+    });
+
+    it("refuses a record it is not open on, and says which", async () => {
+      const missing = await get("/form/material/vendors/edit");
+      expect(missing.status).toBe(404);
+      expect(missing.body.code).toBe("not-found");
+    });
+  });
+
   describe("a purchase order and its receipt", () => {
     it("carries the lines, the trail and the stale guard", async () => {
       const list = await get("/list/material/purchase-orders");

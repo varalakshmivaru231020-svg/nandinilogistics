@@ -4,6 +4,7 @@ import type { AuthContext } from "@/lib/rbac/context";
 import { loadOptions } from "@/lib/screens/resolve";
 
 import { attendanceSheetFields, leadFormFields } from "./lead-form";
+import { prefillFor } from "./prefill";
 import { FORMS } from "./registry";
 import type { FormDef, FormFieldDef, ResolvedField, ResolvedForm } from "./types";
 
@@ -15,7 +16,7 @@ import type { FormDef, FormFieldDef, ResolvedField, ResolvedForm } from "./types
  * dropdown on the indent list, scoped to the caller either way.
  */
 
-export type FormRefusal = "unknown-form" | "forbidden";
+export type FormRefusal = "unknown-form" | "forbidden" | "no-record" | { refused: string };
 
 async function resolveField(f: FormFieldDef, ctx: AuthContext): Promise<ResolvedField> {
   const { source, options, row, ...rest } = f;
@@ -29,10 +30,24 @@ async function resolveField(f: FormFieldDef, ctx: AuthContext): Promise<Resolved
 export async function resolveForm(
   ctx: AuthContext,
   key: string,
+  recordId?: string | null,
 ): Promise<ResolvedForm | FormRefusal> {
   const def: FormDef | undefined = FORMS[key];
   if (!def) return "unknown-form";
   if (!ctx.has(def.permission)) return "forbidden";
+
+  /*
+   * An edit form starts as the record stands. Without that it would send
+   * blanks for everything left alone, which on a `FormData` action means
+   * clearing them.
+   */
+  let prefill = null as Awaited<ReturnType<typeof prefillFor>>;
+  if (def.edits) {
+    if (!recordId) return "no-record";
+    prefill = await prefillFor(ctx, key, recordId);
+    if (!prefill) return "no-record";
+    if (prefill.refusal) return { refused: prefill.refusal };
+  }
 
   // The permission, the viewer-dependent half and the raw fields all stay on
   // the server; what is left is what the client is sent.
@@ -52,11 +67,25 @@ export async function resolveForm(
   return {
     ...rest,
     ...upgrade,
-    fields: dynamic === "leadFields"
-      ? await leadFormFields(ctx)
-      : dynamic === "attendanceSheet"
-        ? await attendanceSheetFields(ctx)
-        : await Promise.all(fields.map((f) => resolveField(f, ctx))),
+    fields: await (async () => {
+      const resolved =
+        dynamic === "leadFields"
+          ? await leadFormFields(ctx)
+          : dynamic === "attendanceSheet"
+            ? await attendanceSheetFields(ctx)
+            : await Promise.all(fields.map((f) => resolveField(f, ctx)));
+      if (!prefill) return resolved;
+      return resolved.map((f) => {
+        const held = prefill.values[f.name];
+        const rows = prefill.rows?.[f.name];
+        return {
+          ...f,
+          ...(held === undefined ? {} : { initial: held }),
+          ...(rows ? { initialRows: rows, fixedRows: false } : {}),
+          ...(prefill.locked?.includes(f.name) ? { locked: true } : {}),
+        };
+      });
+    })(),
     serverTime: new Date().toISOString(),
   };
 }

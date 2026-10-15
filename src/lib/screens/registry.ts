@@ -53,7 +53,11 @@ export type OptionSource =
   /** Every store, with the project it belongs to. */
   | "stores2"
   /** Checklist categories, for a new checklist. */
-  | "checklistCategories";
+  | "checklistCategories"
+  /** How somebody is employed — the HR master's own list. */
+  | "employmentTypes"
+  /** Designations, as the HR form offers them. */
+  | "designations";
 
 export interface ScreenFilterDef {
   /** The query parameter, which is the same one the web reads from its URL. */
