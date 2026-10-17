@@ -293,14 +293,20 @@ class RecordScreenState extends State<RecordScreen> {
 
   Future<void> _run(Map<String, dynamic> a) async {
     final navigator = Navigator.of(context);
+    /*
+     * Which record the action is about. Usually this one — but a row's action
+     * is about the row: renaming a project document opens the document's own
+     * form, and the server says so with `formId`.
+     */
+    final about = (a['formId'] as String?) ?? widget.id;
     final ok = await runServerAction(
       context,
       widget.api,
       a,
-      recordId: widget.id,
+      recordId: about,
       openForm: (formKey) async {
         final made = await navigator.push<bool>(MaterialPageRoute(
-          builder: (_) => FormScreen(api: widget.api, formKey: formKey, recordId: widget.id),
+          builder: (_) => FormScreen(api: widget.api, formKey: formKey, recordId: about),
         ));
         return made == true;
       },

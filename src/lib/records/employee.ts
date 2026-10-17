@@ -43,7 +43,6 @@ export function employeeDecisions(
       args: [],
       remark: "none",
       form: "hr/employees:edit",
-      confirm: "The photograph and the identity copies are changed on the web.",
     });
   }
 
@@ -154,6 +153,32 @@ export async function employeeRecord(ctx: AuthContext, id: string): Promise<Reco
             },
           ]
         : []),
+      /*
+       * The photograph. The web's own header shows it, and the phone showed
+       * nothing at all — the one thing on an employee record that says who
+       * this is. Served by `/api/hr/photo/[id]`, which checks the same
+       * `hr.employee.view` this record is behind.
+       */
+      ...(employee.photoKey
+        ? [
+            {
+              key: `photo:${id}`,
+              label: "Photograph",
+              rows: [
+                {
+                  id: `photo-${id}`,
+                  title: employee.name,
+                  subtitle: employee.employeeCode,
+                  file: {
+                    url: `/api/hr/photo/${id}`,
+                    name: `${employee.employeeCode}.jpg`,
+                    mime: "image/jpeg",
+                  },
+                },
+              ],
+            },
+          ]
+        : []),
       ...(canIdentity
         ? [
             {
@@ -164,6 +189,13 @@ export async function employeeRecord(ctx: AuthContext, id: string): Promise<Reco
                 title: d.fileName,
                 subtitle: words(d.kind),
                 trailing: `${Math.max(1, Math.round(d.fileSize / 1024))} KB`,
+                // The web's own route, behind the identity permission that
+                // already decides whether these are listed at all.
+                file: {
+                  url: `/api/hr/documents/${d.id}`,
+                  name: d.fileName,
+                  mime: d.mimeType,
+                },
               })),
               emptyMessage: "No Aadhaar or PAN card on file.",
             },

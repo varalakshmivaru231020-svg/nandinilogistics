@@ -188,11 +188,29 @@ export async function prefillFor(
     }
 
     /* --------------------------------------------------------------- units */
+    /* --------------------------------------------------- a project document */
+    case "projects/projects:editDocument": {
+      const d = await prisma.projectDocument.findUnique({
+        where: { id },
+        select: { title: true, documentTypeId: true, access: true, projectId: true },
+      });
+      if (!d) return null;
+      return {
+        values: {
+          title: d.title,
+          documentTypeId: d.documentTypeId,
+          access: txt(d.access),
+        },
+      };
+    }
+
     case "units:edit": {
       const u = await prisma.unit.findUnique({ where: { id } });
       if (!u) return null;
       return {
         values: {
+          // What the action checks the flat has not moved since.
+          updatedAt: at(u.updatedAt),
           unitNumber: u.unitNumber,
           floorNumber: u.floorNumber,
           unitTypeId: txt(u.unitTypeId),

@@ -9,6 +9,7 @@ import { Alert, Field, Input, Select } from "@/components/ui/primitives";
 import { cn, formatDate } from "@/lib/utils";
 import { documentChains } from "@/lib/projects/document-chains";
 import { deleteDocumentAction, updateDocumentAction, uploadDocumentAction } from "./actions";
+import { ACCESS_CHOICES } from "@/lib/projects/documents";
 
 export interface DocumentRow {
   id: string;
@@ -215,14 +216,7 @@ export function DocumentsTab({
   );
 }
 
-/** Who may open a document, in the words the repository shows. */
-const ACCESS_CHOICES = [
-  "All roles · view",
-  "PM · Supervisor",
-  "PM · Engineers",
-  "Owner · PM",
-  "Owner only",
-];
+
 
 function UploadModal({
   projectId, documentTypes, superseding, onClose, onDone,

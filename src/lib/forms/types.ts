@@ -143,6 +143,21 @@ export interface FormFieldDef {
    */
   prefixes?: string;
   /**
+   * For `files`: at most this many, which for a photograph is one.
+   *
+   * The web's employee photo is a single `<input type="file">` without
+   * `multiple`: choosing another replaces it rather than adding to it.
+   */
+  maxFiles?: number;
+  /**
+   * For `files`: offer the phone's camera beside the chooser.
+   *
+   * Implied by an `accept` that asks for images. Said outright where the web's
+   * own control invites a photograph without restricting the type — the goods
+   * receipt's "⎙ Capture / attach photo" is that.
+   */
+  camera?: boolean;
+  /**
    * For `files`: what the web's own input accepts — `image/*,.pdf` on a
    * checklist verdict, everything the store allows elsewhere.
    *

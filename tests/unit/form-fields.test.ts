@@ -50,16 +50,24 @@ const SOURCE: Record<string, string> = {
 /**
  * A name the web submits that the form does not — each with why.
  *
- * Anything added here is a decision, not an oversight.
+ * Anything added here is a decision, not an oversight. Two of these turned out
+ * to be neither:
+ *
+ *   - `units:edit → updatedAt` claimed the stamp went "as the action's own
+ *     argument rather than as a field". It went nowhere, and
+ *     `updateUnitAction` reads it out of the body — so every unit edit from a
+ *     phone came back "Reload the unit before editing it." A reason that is
+ *     merely plausible hides the bug it describes;
+ *     `tests/unit/form-coverage.test.ts` now reads the **action** instead, and
+ *     could not have been told that story.
+ *   - `hr/employees:edit → photo` was true while the boundary carried no file.
  */
 const NOT_ASKED = new Map<string, string>([
   ["units:create → updatedAt", "the stale guard the web posts as a hidden input; a create has nothing to guard"],
-  ["units:edit → updatedAt", "sent as the action's own argument rather than as a field"],
   ["units:edit → projectId", "a flat cannot move to another project — the web's edit leaves both out"],
   ["units:edit → blockId", "as above: a flat cannot move to another block"],
   ["kb:create → category", "the web's editor posts the category it is standing in; the phone asks for it as `categoryName`"],
   ["kb:edit → category", "as above"],
-  ["hr/employees:edit → photo", "the photograph and the identity copies are changed on the web, as the form says"],
   ["tasks:edit → checklistIds", "a checklist and its levels are set when a task is raised; the web's edit screen is the same component but does not change them"],
   ["tasks:edit → reviewerIds", "as above"],
   ["tasks:edit → approverIds", "as above"],

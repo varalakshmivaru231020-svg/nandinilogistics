@@ -65,38 +65,25 @@ export const PARITY: Record<string, ParityExemption> = {
   },
 
   /* ------------------------------------------------- files, which cannot move */
+  /*
+   * This list was written when the boundary carried no file at all. It carries
+   * them now — a `files` field travels as multipart and the action reads it as
+   * it reads the browser's — so a document, a challan, a photograph and an
+   * identity copy are all the app's own. What is left here is the bulk import
+   * of a spreadsheet, which is not a file the phone has.
+   */
 
-  "projects/[id]/documents/uploadDocument": {
-    reason: "no-file-transfer",
-    note: "A document is a file. The boundary has no upload path.",
-  },
-  "projects/[id]/documents/updateDocument": {
-    reason: "no-file-transfer",
-    note: "Renames a document that was uploaded on the web; shown read-only here.",
-  },
-  "projects/[id]/documents/deleteDocument": {
-    reason: "no-file-transfer",
-    note: "Deleting what cannot be uploaded or opened from the phone.",
-  },
-  "material/grn/addGrnAttachments": {
-    reason: "no-file-transfer",
-    note: "Challans and weighbridge slips are files.",
-  },
-  "material/grn/deleteGrnAttachment": {
-    reason: "no-file-transfer",
-    note: "Deleting an attachment the phone cannot open.",
-  },
   "sales/leads/importLeads": {
     reason: "no-file-transfer",
-    note: "A portal export is a .csv or .xlsx.",
+    note: "A portal export is a .csv or .xlsx — picked, mapped and previewed at a desk.",
   },
   "sales/leads/previewLeadImport": {
     reason: "no-file-transfer",
-    note: "The dry run of that import.",
+    note: "The dry run of that import, whose mapping screen is the desk's.",
   },
   "units/importUnits": {
     reason: "no-file-transfer",
-    note: "A unit sheet.",
+    note: "A unit sheet, mapped column by column before it is accepted.",
   },
   "units/previewUnitImport": {
     reason: "no-file-transfer",
@@ -104,17 +91,12 @@ export const PARITY: Record<string, ParityExemption> = {
   },
   "schedule/importActivities": {
     reason: "no-file-transfer",
-    note: "A programme sheet.",
+    note: "A programme sheet, with its own mapping and dependency screen.",
   },
   "schedule/previewActivityImport": {
     reason: "no-file-transfer",
     note: "The dry run of that import.",
   },
-  "hr/createEmployee": {
-    reason: "no-file-transfer",
-    note: "The design makes a photograph mandatory on a new employee.",
-  },
-
   /* --------------------------------------------- nothing on the web either */
 
   "material/grn/inspectGrn": {

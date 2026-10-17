@@ -112,6 +112,23 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
   }
 
   /*
+   * Uploading a document. The repository was read-only on the phone because
+   * the boundary carried no file; it carries them now, and a drawing
+   * photographed on site is the case for it.
+   */
+  if (ctx.has(PERM.project.project.tabDocuments) && ctx.has(PERM.project.document.upload)) {
+    actions.push({
+      key: "upload",
+      label: "Upload",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "projects/projects:uploadDocument",
+    });
+  }
+
+  /*
    * The five tabs the web draws, each behind its own permission. Somebody may
    * hold `project.view` and none of them — the Store Manager does — and the
    * web then draws the header with no tab under it. A phone screen with
@@ -255,10 +272,55 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
                 subtitle: [
                   d.documentType?.name,
                   `${d._count.versions} ${d._count.versions === 1 ? "version" : "versions"}`,
+                  d.access,
                 ].filter(Boolean).join(" · "),
                 trailing: d.createdAt.toISOString().slice(0, 10),
+                // Opened through the web's own route, behind the download
+                // permission it has always checked.
+                ...(ctx.has(PERM.project.document.download)
+                  ? {
+                      file: {
+                        url: `/api/documents/${d.id}`,
+                        name: d.fileName,
+                        mime: d.mimeType,
+                      },
+                    }
+                  : {}),
+                actions: [
+                  ...(ctx.has(PERM.project.document.upload)
+                    ? [
+                        {
+                          key: "edit",
+                          label: "Edit",
+                          emphasis: "outline" as const,
+                          glyph: "✎",
+                          action: "",
+                          args: [],
+                          remark: "none" as const,
+                          form: "projects/projects:editDocument",
+                          // The document's own form, not the project's.
+                          formId: d.id,
+                        },
+                      ]
+                    : []),
+                  ...(ctx.has(PERM.project.document.delete)
+                    ? [
+                        {
+                          key: "delete",
+                          label: "Delete",
+                          emphasis: "reject" as const,
+                          glyph: "🗑",
+                          action: "projects/[id]/documents/deleteDocument",
+                          args: [d.id],
+                          remark: "none" as const,
+                          // The web's own words in its confirmation.
+                          confirm: "The file and its record go. It cannot be undone.",
+                        },
+                      ]
+                    : []),
+                ],
               })),
-              emptyMessage: "No documents on this project. They are uploaded on the web.",
+              emptyMessage: "No documents on this project yet.",
             },
           ]
         : []),

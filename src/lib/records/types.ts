@@ -102,6 +102,14 @@ export interface RecordAction {
    */
   form?: string;
   /**
+   * The id to hand that form instead of the record's own.
+   *
+   * A row's action is about the row: renaming a project document is the
+   * document's own form, not the project's. Without this the form would be
+   * prefilled from — and saved onto — whatever the record is.
+   */
+  formId?: string;
+  /**
    * Positional arguments before the remark. A string of the form `$name` is
    * the value of the field of that name in `fields`, which is how an action
    * that needs more than a remark — a new finish date, an amount — is called.

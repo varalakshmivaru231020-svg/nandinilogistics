@@ -43,7 +43,7 @@ export async function grnRecord(ctx: AuthContext, id: string): Promise<RecordVie
         },
       },
       attachments: {
-        select: { id: true, fileName: true, label: true, fileSize: true },
+        select: { id: true, fileName: true, label: true, fileSize: true, mimeType: true },
       },
     },
   });
@@ -118,6 +118,23 @@ export async function grnRecord(ctx: AuthContext, id: string): Promise<RecordVie
       form: "material/grn:edit",
       confirm:
         "The challan, the vehicle and the remarks. A posted quantity is corrected by a stock adjustment, never rewritten.",
+    });
+  }
+
+  /*
+   * The challan and the weighbridge slip. The web's Attachments card takes
+   * them on the receipt itself, and so does this — a receipt is signed for at
+   * the gate, where the phone is.
+   */
+  if (ctx.has(PERM.material.grn.update)) {
+    actions.push({
+      key: "attach",
+      label: "Attach",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "material/grn:attach",
     });
   }
 
@@ -243,8 +260,28 @@ export async function grnRecord(ctx: AuthContext, id: string): Promise<RecordVie
           title: a.fileName,
           subtitle: a.label,
           trailing: `${Math.max(1, Math.round(a.fileSize / 1024))} KB`,
+          // Served by the web's own route, which reads this session's token.
+          file: {
+            url: `/api/material/grn/attachments/${a.id}`,
+            name: a.fileName,
+            mime: a.mimeType,
+          },
+          actions: ctx.has(PERM.material.grn.update)
+            ? [
+                {
+                  key: "remove",
+                  label: "Remove",
+                  emphasis: "reject" as const,
+                  glyph: "🗑",
+                  action: "material/grn/deleteGrnAttachment",
+                  args: [a.id],
+                  remark: "none" as const,
+                  confirm: "The file goes with it.",
+                },
+              ]
+            : undefined,
         })),
-        emptyMessage: "Challans, weighbridge slips and photos are added on the web.",
+        emptyMessage: "No challan, weighbridge slip or photograph on this receipt yet.",
       },
     ],
     actions,

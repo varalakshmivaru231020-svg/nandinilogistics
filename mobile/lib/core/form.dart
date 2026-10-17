@@ -60,6 +60,8 @@ class FieldDef {
     this.showWhen,
     this.prefixes,
     this.accept,
+    this.maxFiles,
+    this.camera,
   });
 
   final String name;
@@ -128,11 +130,20 @@ class FieldDef {
   /// happens in front of the thing being judged.
   final String? accept;
 
+  /// For `files`: at most this many. A photograph is one, and choosing
+  /// another replaces it, as the web's single file input does.
+  final int? maxFiles;
+
+  /// Whether the camera is offered beside the chooser, said outright by the
+  /// server where the web's control invites a photograph of any type.
+  final bool? camera;
+
   /// Whether a picture taken now belongs here.
   ///
-  /// Only where the web's own input asks for images: the checklist verdict
-  /// does, and a general attachment box does not get a camera it never had.
-  bool get takesPhotos => accept != null && accept!.contains('image/');
+  /// Only where the web's own control asks for one: the checklist verdict and
+  /// the goods receipt do, and a general attachment box does not get a camera
+  /// it never had.
+  bool get takesPhotos => camera ?? (accept?.contains('image/') ?? false);
 
   factory FieldDef.from(Map<String, dynamic> j) {
     final v = j['variant'] as Map<String, dynamic>?;
@@ -171,6 +182,8 @@ class FieldDef {
       showWhen: j['showWhen'] as String?,
       prefixes: j['prefixes'] as String?,
       accept: j['accept'] as String?,
+      maxFiles: (j['maxFiles'] as num?)?.toInt(),
+      camera: j['camera'] as bool?,
     );
   }
 
@@ -955,7 +968,12 @@ class _FilesState extends State<_Files> {
     final picked = await from();
     if (!mounted) return;
     setState(() => _busy = false);
-    if (picked.isNotEmpty) widget.onChanged([...widget.chosen, ...picked]);
+    if (picked.isEmpty) return;
+    // At the cap — one, for a photograph — the new file replaces what was
+    // held rather than piling up beside it.
+    final cap = widget.field.maxFiles;
+    final all = [...widget.chosen, ...picked];
+    widget.onChanged(cap == null || all.length <= cap ? all : all.sublist(all.length - cap));
   }
 
   Future<void> _pick() => _take(() => Files.live.pick(widget.field.name));
@@ -1019,7 +1037,9 @@ class _FilesState extends State<_Files> {
         ])
       else
         Btn(
-          widget.chosen.isEmpty ? '+ Add file' : '+ Add another file',
+          widget.chosen.isEmpty
+              ? '+ Add file'
+              : (widget.field.maxFiles == 1 ? '+ Replace file' : '+ Add another file'),
           key: Key('files-${widget.field.name}'),
           emphasis: Emphasis.outline,
           icon: Icons.attach_file_rounded,

@@ -59,7 +59,9 @@ export type OptionSource =
   /** Designations, as the HR form offers them. */
   | "designations"
   /** The purchase orders still expecting material, as the GRN's first step lists them. */
-  | "receivablePos";
+  | "receivablePos"
+  /** The kinds of project document the master holds — plan, approval, agreement. */
+  | "documentTypes";
 
 export interface ScreenFilterDef {
   /** The query parameter, which is the same one the web reads from its URL. */

@@ -62,7 +62,13 @@ class Boundary {
           // handful of made-up bytes fails the test rather than the code.
           return http.Response.bytes(onePixelPng, 200, headers: {'content-type': 'image/png'});
         }
-        final path = request.url.path.replaceFirst('/api/mobile/v1', '');
+        /*
+         * Decoded, as the boundary decodes it. One action key carries a route
+         * folder — `projects/[id]/documents/uploadDocument` — and a bracket
+         * travels escaped, so the raw path names no action anybody can read.
+         */
+        final path =
+            Uri.decodeComponent(request.url.path).replaceFirst('/api/mobile/v1', '');
         if (request.method == 'GET') {
           gets.add(request.url.hasQuery ? '$path?${request.url.query}' : path);
         }

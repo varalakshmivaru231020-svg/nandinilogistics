@@ -14,11 +14,11 @@ Last written 2026-10-17.
 | | |
 |---|---|
 | Web actions on the boundary | **154** |
-| Reachable from the app | **128** |
-| Not reachable, with a reason | 26 |
+| Reachable from the app | **134** |
+| Not reachable, with a reason | 20 |
 | Web list screens | 30 |
 | …with a record screen | 28 |
-| …with a create form | 16 |
+| …with a create form | 17 |
 | …with an edit form | 11 |
 
 ## The modules
@@ -31,11 +31,11 @@ The last column says where each one is raised.
 
 | Web module | Web route | Record | Create | Edit | | Where it is raised |
 |---|---|---|---|---|---|---|
-| `projects/projects` | `/projects` | ✅ | `create` | ✅ | ✅ | its own list |
+| `projects/projects` | `/projects` | ✅ | `uploadDocument`, `editDocument`, `create` | ✅ | ✅ | its own list |
 | `projects/progress` | `/projects/progress` | ✅ | `create` | — | ✅ | its own list |
 | `material/indents` | `/material/indents` | ✅ | `create` | ✅ | ✅ | its own list |
 | `material/purchase-orders` | `/material/purchase-orders` | ✅ | — | ✅ | ✅ | the indent — “Raise purchase order” |
-| `material/grn` | `/material/grn` | ✅ | `create` | ✅ | ✅ | the purchase order — “Receive goods” |
+| `material/grn` | `/material/grn` | ✅ | `create`, `attach` | ✅ | ✅ | the purchase order — “Receive goods” |
 | `material/stock` | `/material/stock` | ✅ | `create` | — | ✅ | the item master, which is web-only |
 | `material/vendors` | `/material/vendors` | ✅ | `create` | ✅ | ✅ | its own list |
 | `material/issues` | `/material/issues` | ✅ | — | — | ✅ | the indent — “Issue from stock” |
@@ -53,7 +53,7 @@ The last column says where each one is raised.
 | `sales/cost-sheets` | `/sales/cost-sheets` | ✅ | — | — | ✅ | the flat — “Generate a cost sheet” |
 | `units` | `/units/board` | ✅ | `create`, `generate` | ✅ | ✅ | its own list |
 | `units/price-lists` | `/units/price-lists` | ✅ | `create` | — | ✅ | its own list |
-| `hr/employees` | `/hr` | ✅ | — | ✅ | ✅ | its own list |
+| `hr/employees` | `/hr` | ✅ | `create` | ✅ | ✅ | its own list |
 | `hr/attendance` | `/hr` | ✅ | `mark` | — | ✅ | its own list |
 | `tasks` | `/tasks` | ✅ | `create` | ✅ | ✅ | its own list |
 | `tasks/reports` | `/tasks/reports` | ❌ | — | — | n/a | a report over tasks — there is nothing behind a row |
@@ -74,20 +74,14 @@ The last column says where each one is raised.
 - `checklists/saveCategory` — The checklist-category master.
 - `checklists/deleteCategory` — The checklist-category master.
 
-### no-file-transfer — 12
+### no-file-transfer — 6
 
-- `projects/[id]/documents/uploadDocument` — A document is a file. The boundary has no upload path.
-- `projects/[id]/documents/updateDocument` — Renames a document that was uploaded on the web; shown read-only here.
-- `projects/[id]/documents/deleteDocument` — Deleting what cannot be uploaded or opened from the phone.
-- `material/grn/addGrnAttachments` — Challans and weighbridge slips are files.
-- `material/grn/deleteGrnAttachment` — Deleting an attachment the phone cannot open.
-- `sales/leads/importLeads` — A portal export is a .csv or .xlsx.
-- `sales/leads/previewLeadImport` — The dry run of that import.
-- `units/importUnits` — A unit sheet.
+- `sales/leads/importLeads` — A portal export is a .csv or .xlsx — picked, mapped and previewed at a desk.
+- `sales/leads/previewLeadImport` — The dry run of that import, whose mapping screen is the desk's.
+- `units/importUnits` — A unit sheet, mapped column by column before it is accepted.
 - `units/previewUnitImport` — The dry run of that import.
-- `schedule/importActivities` — A programme sheet.
+- `schedule/importActivities` — A programme sheet, with its own mapping and dependency screen.
 - `schedule/previewActivityImport` — The dry run of that import.
-- `hr/createEmployee` — The design makes a photograph mandatory on a new employee.
 
 ### no-web-ui — 6
 

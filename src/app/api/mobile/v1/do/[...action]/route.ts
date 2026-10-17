@@ -22,7 +22,20 @@ import { apiFail, apiOk, mobileRoute } from "@/lib/api/mobile";
 
 export const POST = mobileRoute([], async (req) => {
   const url = new URL(req.url);
-  const key = url.pathname.split("/api/mobile/v1/do/")[1] ?? "";
+  /*
+   * Decoded, because an action's key is a route folder and one of them is
+   * `[id]` — `projects/[id]/documents/uploadDocument`. A bracket is not legal
+   * in a path, so a client sends it as `%5Bid%5D`, and the raw pathname then
+   * matches nothing: every one of those three actions answered "No such
+   * action" from the app.
+   */
+  const raw = url.pathname.split("/api/mobile/v1/do/")[1] ?? "";
+  let key = raw;
+  try {
+    key = decodeURIComponent(raw);
+  } catch {
+    // A malformed escape is not a key either; it falls through to the 404.
+  }
   const def = MOBILE_ACTIONS[key];
 
   /*

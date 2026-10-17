@@ -7,6 +7,7 @@ import { COUNTRY_CODES } from "./dial-codes";
 import { PROJECT_STATUSES, PROJECT_STATUS_LABEL } from "@/lib/projects/list-filters";
 import type { AuthContext } from "@/lib/rbac/context";
 
+import { ACCESS_CHOICES } from "@/lib/projects/documents";
 import type { FormDef, FormFieldDef, FormRef } from "./types";
 
 /**
@@ -277,6 +278,77 @@ const ARTICLE_FIELDS: ReadonlyArray<FormFieldDef> = [
       },
     ];
 
+
+/*
+ * src/app/(app)/hr/hr-screen.tsx → the employee drawer, which is one form for
+ * both the new employee and the edit.
+ *
+ * The photograph and the two identity copies are part of it: `saveFiles()`
+ * reads `photo` and `doc:<kind>` out of the same body as the particulars. The
+ * phone sent neither, so a new employee could not be added from it at all and
+ * an edit could not change the photograph — now that the boundary carries
+ * files, both are the web's form.
+ */
+const EMPLOYEE_FIELDS: ReadonlyArray<FormFieldDef> = [
+  {
+    name: "photo",
+    label: "Photo",
+    kind: "files",
+    // The web's own square: one image, and a new one replaces it.
+    accept: "image/*",
+    maxFiles: 1,
+  },
+  {
+    name: "employmentTypeId",
+    label: "Type of employment",
+    kind: "select",
+    required: true,
+    source: "employmentTypes",
+  },
+  { name: "name", label: "Name", kind: "text", required: true, placeholder: "Full name" },
+  { name: "designationId", label: "Designation", kind: "select", source: "designations" },
+  {
+    name: "mobileCode",
+    label: "Country code",
+    kind: "select",
+    initial: "+91 India",
+    options: COUNTRY_CODES.map((c) => ({ value: c, label: c })),
+    // The web joins the code to the number and posts one value.
+    prefixes: "mobile",
+  },
+  { name: "mobile", label: "Mobile number", kind: "phone", required: true, placeholder: "98765 43210" },
+  {
+    name: "aadhaar",
+    label: "Aadhaar number",
+    kind: "text",
+    required: true,
+    placeholder: "1234 5678 9012",
+  },
+  { name: "pan", label: "PAN", kind: "text", placeholder: "ABCDE1234F", caps: true },
+  { name: "altContact", label: "Alternate number", kind: "phone", placeholder: "+91 90000 00000" },
+  {
+    name: "address",
+    label: "Address",
+    kind: "textarea",
+    placeholder: "House, area, city",
+    wide: true,
+  },
+  {
+    name: "doc:Aadhaar card",
+    label: "Aadhaar card",
+    kind: "files",
+    accept: "application/pdf,image/*",
+    maxFiles: 1,
+    note: "Aadhaar card and PAN card copies only",
+  },
+  {
+    name: "doc:PAN card",
+    label: "PAN card",
+    kind: "files",
+    accept: "application/pdf,image/*",
+    maxFiles: 1,
+  },
+];
 
 export const FORMS: Record<string, FormDef> = {
   /* ------------------------------------------------------------- calendar */
@@ -835,10 +907,118 @@ export const FORMS: Record<string, FormDef> = {
 
   // src/app/(app)/hr/hr-screen.tsx → EmployeeDrawer, without the photograph
   // and the identity copies, which are files.
+  /*
+   * src/app/(app)/material/grn/[id]/grn-detail.tsx → the Attachments card,
+   * whose one control takes a label and the files themselves. Challans,
+   * weighbridge slips and photographs are the receipt's evidence, and the
+   * phone is where they are taken.
+   */
+  "material/grn:attach": {
+    key: "material/grn:attach",
+    module: "material/grn",
+    title: "Attachments",
+    submitLabel: "Attach",
+    permission: PERM.material.grn.update,
+    action: "material/grn/addGrnAttachments",
+    shape: { kind: "positional", order: ["$id", "$values"] },
+    done: "Attached.",
+    onRecord: true,
+    fields: [
+      { name: "label", label: "Label", kind: "text", placeholder: "Challan, slip, photo…" },
+      { name: "files", label: "Files", kind: "files", required: true },
+    ],
+  },
+
+  /* ------------------------------------------------- a project's documents */
+
+  // src/app/(app)/projects/[id]/documents/documents-tab.tsx → UploadModal.
+  "projects/projects:uploadDocument": {
+    key: "projects/projects:uploadDocument",
+    module: "projects/projects",
+    title: "Upload a document",
+    description: "PDF, image, drawing or Office document, up to 25 MB.",
+    submitLabel: "Upload",
+    permission: PERM.project.document.upload,
+    action: "projects/[id]/documents/uploadDocument",
+    shape: { kind: "positional", order: ["$id", "$values"] },
+    done: "Document uploaded.",
+    onRecord: true,
+    fields: [
+      { name: "title", label: "Title", kind: "text", required: true, wide: true },
+      {
+        name: "documentTypeId",
+        label: "Document type",
+        kind: "select",
+        required: true,
+        source: "documentTypes",
+        emptyLabel: "Select…",
+      },
+      {
+        name: "access",
+        label: "Access",
+        kind: "select",
+        initial: ACCESS_CHOICES[0],
+        options: ACCESS_CHOICES.map((a) => ({ value: a, label: a })),
+      },
+      { name: "file", label: "File", kind: "files", required: true, maxFiles: 1 },
+    ],
+  },
+
+  // The same screen → EditModal, which takes an object rather than a form:
+  // the stored file is untouched, so only the three particulars travel.
+  "projects/projects:editDocument": {
+    key: "projects/projects:editDocument",
+    module: "projects/projects",
+    title: "Edit document",
+    description: "The stored file is unchanged — a new file is a new version.",
+    submitLabel: "Save",
+    permission: PERM.project.document.upload,
+    action: "projects/[id]/documents/updateDocument",
+    shape: {
+      kind: "positional",
+      order: ["$id", { title: "$title", documentTypeId: "$documentTypeId", access: "$access" }],
+    },
+    done: "Document changed.",
+    onRecord: true,
+    edits: true,
+    fields: [
+      { name: "title", label: "Title", kind: "text", required: true, wide: true },
+      {
+        name: "documentTypeId",
+        label: "Document type",
+        kind: "select",
+        required: true,
+        source: "documentTypes",
+        emptyLabel: "Select…",
+      },
+      {
+        name: "access",
+        label: "Access",
+        kind: "select",
+        options: ACCESS_CHOICES.map((a) => ({ value: a, label: a })),
+      },
+    ],
+  },
+
+  "hr/employees:create": {
+    key: "hr/employees:create",
+    module: "hr/employees",
+    title: "New employee",
+    // The drawer's own description.
+    description: "Name, mobile, photo and Aadhaar are mandatory",
+    submitLabel: "Create employee",
+    permission: PERM.hr.employee.create,
+    action: "hr/createEmployee",
+    shape: { kind: "formData" },
+    done: "Employee added.",
+    fields: EMPLOYEE_FIELDS,
+  },
+
   "hr/employees:edit": {
     key: "hr/employees:edit",
     module: "hr/employees",
     title: "Edit employee",
+    description: "Name, mobile, photo and Aadhaar are mandatory",
     submitLabel: "Save changes",
     permission: PERM.hr.employee.update,
     action: "hr/updateEmployee",
@@ -846,43 +1026,7 @@ export const FORMS: Record<string, FormDef> = {
     done: "Employee changed.",
     onRecord: true,
     edits: true,
-    fields: [
-      {
-        name: "employmentTypeId",
-        label: "Type of employment",
-        kind: "select",
-        required: true,
-        source: "employmentTypes",
-      },
-      { name: "name", label: "Name", kind: "text", required: true, placeholder: "Full name" },
-      { name: "designationId", label: "Designation", kind: "select", source: "designations" },
-      {
-        name: "mobileCode",
-        label: "Country code",
-        kind: "select",
-        initial: "+91 India",
-        options: COUNTRY_CODES.map((c) => ({ value: c, label: c })),
-        // The web joins the code to the number and posts one value.
-        prefixes: "mobile",
-      },
-      { name: "mobile", label: "Mobile number", kind: "phone", required: true, placeholder: "98765 43210" },
-      {
-        name: "aadhaar",
-        label: "Aadhaar number",
-        kind: "text",
-        required: true,
-        placeholder: "1234 5678 9012",
-      },
-      { name: "pan", label: "PAN", kind: "text", placeholder: "ABCDE1234F", caps: true },
-      { name: "altContact", label: "Alternate number", kind: "phone", placeholder: "+91 90000 00000" },
-      {
-        name: "address",
-        label: "Address",
-        kind: "textarea",
-        placeholder: "House, area, city",
-        wide: true,
-      },
-    ],
+    fields: EMPLOYEE_FIELDS,
   },
 
   // src/app/(app)/schedule/schedule-screen.tsx → EditActivityModal. The
@@ -1109,7 +1253,8 @@ export const FORMS: Record<string, FormDef> = {
         name: "status",
         label: "Status",
         kind: "select",
-        required: true,
+        // Not required: the web's own select has no required mark, and the
+        // schema takes it as optional.
         options: PROJECT_STATUSES.map((v) => ({ value: v, label: PROJECT_STATUS_LABEL[v] })),
       },
     ],
@@ -1203,7 +1348,9 @@ export const FORMS: Record<string, FormDef> = {
     module: "schedule/activities",
     title: "Main category",
     submitLabel: "Add",
-    permission: PERM.schedule.activity.create,
+    // `addMainCategoryAction` authorizes the work package's own permission,
+    // not the activity's — a category *is* a work package.
+    permission: PERM.project.workPackage.create,
     action: "schedule/addMainCategory",
     shape: { kind: "positional", order: ["$projectId", "$name", "$plannedStart", "$plannedEnd"] },
     done: "Main category added.",
@@ -1254,6 +1401,16 @@ export const FORMS: Record<string, FormDef> = {
     onRecord: true,
     edits: true,
     fields: [
+      /*
+       * The unit as it stood when the form was fetched.
+       *
+       * `updateUnitAction` reads it out of the body and refuses the edit
+       * without it — "Reload the unit before editing it." — because a hold or
+       * a booking may have moved the flat in the meantime. The web posts it
+       * from a hidden input; the phone had no such field, so **every** edit
+       * from a phone was refused. Carried, never drawn.
+       */
+      { name: "updatedAt", label: "Last changed", kind: "datetime", hidden: true },
       { name: "unitNumber", label: "Unit number", kind: "text", required: true, placeholder: "A-0101" },
       { name: "unitTypeId", label: "Unit type", kind: "select", required: true, source: "unitTypes" },
       { name: "floorNumber", label: "Floor", kind: "number", required: true, hint: "0 for ground." },

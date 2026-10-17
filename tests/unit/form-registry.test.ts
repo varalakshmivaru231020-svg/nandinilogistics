@@ -61,6 +61,13 @@ const SOURCE: Record<string, string> = {
   // first step of a goods receipt.
   "material/stock:create": "material/stock/item-form.tsx",
   "material/grn:create": "material/grn/new/po-picker.tsx",
+  // The forms that carry a file, which were web-only while the boundary could
+  // not: the employee drawer, the receipt's attachments card and the project
+  // document repository.
+  "hr/employees:create": "hr/hr-screen.tsx",
+  "material/grn:attach": "material/grn/[id]/grn-detail.tsx",
+  "projects/projects:uploadDocument": "projects/[id]/documents/documents-tab.tsx",
+  "projects/projects:editDocument": "projects/[id]/documents/documents-tab.tsx",
 };
 
 /**
@@ -161,6 +168,25 @@ const OURS = new Set([
   "units:generate → Floor 1 flat 1 is numbered 101.",
   // And the line saying where a single flat is renumbered, which is the web.
   "units:generate → One tower, its floors and the flats on each. Renumbering a single flat is done on the web.",
+  /*
+   * The web's photograph is a square you press, labelled from inside — "Upload
+   * photo", then "✓ Photo added", then "Change" over the picture on file. A
+   * field needs one name for all three states.
+   */
+  "hr/employees:create → Photo",
+  "hr/employees:edit → Photo",
+  /*
+   * The receipt's attachments card has one unlabelled box with a placeholder —
+   * "Challan, slip, photo…" — beside a Choose files button that submits as
+   * soon as a file is picked. A form needs a name over the box and a word on
+   * the button.
+   */
+  "material/grn:attach → Label",
+  "material/grn:attach → Files",
+  "material/grn:attach → Attach",
+  // The web's own title carries the document's name — Edit "Tower B drawing"
+  // — which a registry entry cannot know, as with Edit activity.
+  "projects/projects:editDocument → Edit document",
 ]);
 
 /**
@@ -169,6 +195,16 @@ const OURS = new Set([
  */
 const OUTSIDE_THE_FORM = new Set([
   "checklists:create → categoryId",
+  /*
+   * The web writes these two as one input per kind — `name={`doc:${kind}`}`
+   * over `["Aadhaar card", "PAN card"]` — so the literal name appears nowhere.
+   * `saveFiles()` reads exactly these, and the integration test
+   * `uploads-from-phone` posts them.
+   */
+  "hr/employees:create → doc:Aadhaar card",
+  "hr/employees:create → doc:PAN card",
+  "hr/employees:edit → doc:Aadhaar card",
+  "hr/employees:edit → doc:PAN card",
   // The stale guard the lead's edit drawer posts as a hidden input.
   "sales/leads:edit → updatedAt",
   // The goods receipt's edit passes it as the action's third argument rather

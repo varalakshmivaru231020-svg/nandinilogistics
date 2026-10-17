@@ -199,7 +199,13 @@ export const RECORDS: Record<string, RecordDef> = {
   },
   calendar: {
     key: "calendar",
-    permission: PERM.calendar.event.view,
+    /*
+     * The agenda's own permission, which is what `/calendar` guards itself
+     * with and what the mobile calendar route asks for. `calendar.event.view`
+     * is asked for nowhere else in the app, so a user holding the agenda and
+     * not that code could read the calendar and not open a day on it.
+     */
+    permission: PERM.calendar.agenda.view,
     load: calendarRecord,
   },
 };

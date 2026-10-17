@@ -184,6 +184,14 @@ export async function purchaseOrderRecord(
           remarks: "$remarks",
           items: "$items",
         },
+        /*
+         * The second argument the action takes: the attachments, labelled as
+         * the web's own form labels them. The files chosen below travel as
+         * parts of the same request and are put into this form at the
+         * boundary — so the challan is attached as the receipt is booked,
+         * which is the only moment the person holding it is at the gate.
+         */
+        { label: "Challan" },
       ],
       remark: "none",
       fields: [
@@ -209,6 +217,15 @@ export async function purchaseOrderRecord(
           caps: true,
         },
         { name: "remarks", label: "Remarks", kind: "textarea", wide: true },
+        {
+          // The web's own field group, whose control reads "Capture / attach
+          // photo" — a photograph of the challan or of the material itself.
+          name: "files",
+          label: "Challan / material photo",
+          kind: "files",
+          camera: true,
+          wide: true,
+        },
         {
           name: "items",
           label: "What arrived",

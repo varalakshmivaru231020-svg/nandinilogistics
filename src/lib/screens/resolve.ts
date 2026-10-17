@@ -191,6 +191,13 @@ export async function loadOptions(source: OptionSource, ctx: AuthContext): Promi
       });
       return rows.map((d) => ({ value: d.id, label: d.name }));
     }
+    case "documentTypes": {
+      const rows = await prisma.documentType.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      });
+      return rows.map((t) => ({ value: t.id, label: t.name }));
+    }
     case "receivablePos": {
       /*
        * The orders the web's goods-receipt picker lists: approved or part
