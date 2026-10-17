@@ -201,6 +201,13 @@ export async function purchaseOrderRecord(
           kind: "lookup",
           required: true,
           placeholder: "Search stores…",
+          /*
+           * Already answered, as the web's own form opens it:
+           * `useState(stores[0]?.id ?? "")`. A phone that opened it blank
+           * refused the whole receipt — "Receiving store is required." —
+           * until the storeman chose what the desk never has to.
+           */
+          initial: stores[0]?.id,
           options: stores.map((st) => ({
             value: st.id,
             label: st.name,

@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../core/act.dart';
 import '../core/api.dart';
-import 'form_screen.dart';
+import '../core/viewer.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
+import 'form_screen.dart';
 
 /// One record, as the server describes it.
 ///
@@ -259,9 +260,12 @@ class RecordScreenState extends State<RecordScreen> {
   }
 
   /// Opens a stored file: fetched through the web's own route with this
-  /// session's token, shown here where it is a picture, and named with its
-  /// type where it is not — a phone has no reader for a drawing file, and
-  /// pretending otherwise would be worse than saying so.
+  /// session's token, shown here where it is a picture, and handed to whatever
+  /// this phone reads where it is not.
+  ///
+  /// It used to say of a drawing that it "opens on the web", which is true of
+  /// a browser and false of a phone: a PDF reader is one intent away, and a
+  /// document the app can upload and not open is half a repository.
   Future<void> _openFile(Map<String, dynamic> file) async {
     final url = '${file["url"]}';
     final name = '${file["name"]}';
@@ -272,22 +276,18 @@ class RecordScreenState extends State<RecordScreen> {
       return;
     }
     final mime = got.mime ?? '${file["mime"] ?? ""}';
-    sheet<void>(
+    final picture = mime.startsWith('image/');
+
+    await sheet<void>(
       context,
       title: name,
       explain: mime.isEmpty ? null : mime,
-      body: (ctx) => mime.startsWith('image/')
-          ? ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.memory(Uint8List.fromList(got.bytes)),
-            )
-          : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Alert(
-                'This is a $mime file, which opens on the web. '
-                'It is stored and attached — this phone has no reader for it.',
-                tone: Tone.info,
-              ),
-            ]),
+      body: (ctx) => _Stored(
+        name: name,
+        mime: mime,
+        bytes: got.bytes,
+        picture: picture,
+      ),
     );
   }
 
@@ -314,6 +314,74 @@ class RecordScreenState extends State<RecordScreen> {
     if (!ok) return;
     _changed = true;
     await _load();
+  }
+}
+
+/// A stored file, in the sheet that opened it: the picture itself where it is
+/// one, and the button that hands the bytes to the phone either way.
+class _Stored extends StatefulWidget {
+  const _Stored({
+    required this.name,
+    required this.mime,
+    required this.bytes,
+    required this.picture,
+  });
+
+  final String name;
+  final String mime;
+  final List<int> bytes;
+  final bool picture;
+
+  @override
+  State<_Stored> createState() => _StoredState();
+}
+
+class _StoredState extends State<_Stored> {
+  bool _busy = false;
+  String? _problem;
+
+  Future<void> _open() async {
+    setState(() {
+      _busy = true;
+      _problem = null;
+    });
+    final problem = await Viewer.live.open(
+      name: widget.name,
+      bytes: widget.bytes,
+      mime: widget.mime.isEmpty ? null : widget.mime,
+    );
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _problem = problem;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (widget.picture) ...[
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.memory(Uint8List.fromList(widget.bytes)),
+        ),
+        const SizedBox(height: 12),
+      ],
+      if (_problem != null) ...[
+        Alert(_problem!, tone: Tone.info),
+        const SizedBox(height: 12),
+      ],
+      Btn(
+        widget.picture ? 'Open in another app' : 'Open',
+        key: const Key('open-file'),
+        emphasis: widget.picture ? Emphasis.outline : Emphasis.primary,
+        icon: Icons.open_in_new_rounded,
+        height: 50,
+        expand: true,
+        busy: _busy,
+        onPressed: _open,
+      ),
+    ]);
   }
 }
 

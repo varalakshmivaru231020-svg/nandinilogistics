@@ -166,6 +166,19 @@ export interface FormFieldDef {
    * thing it is photographing.
    */
   accept?: string;
+  /**
+   * Starts on the first of its options, as the web's own control does.
+   *
+   * Five of the web's screens hold their state as `stores[0]?.id ?? ""` or
+   * `defaultValue={projects[0]?.id}`: a required select with no empty option
+   * is already answered when the form opens. A phone that starts blank there
+   * makes somebody choose what the desk chose for them — and on the goods
+   * receipt it refused the whole receipt until they did.
+   *
+   * Only honest where the web really does preselect, and
+   * `tests/unit/form-defaults.test.ts` reads those screens back.
+   */
+  startsFirst?: boolean;
   /** The web's small print under a label, where it carries one. */
   note?: string;
 }

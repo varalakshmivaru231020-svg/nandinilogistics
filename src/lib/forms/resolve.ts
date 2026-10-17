@@ -20,9 +20,18 @@ export type FormRefusal = "unknown-form" | "forbidden" | "no-record" | { refused
 
 async function resolveField(f: FormFieldDef, ctx: AuthContext): Promise<ResolvedField> {
   const { source, options, row, ...rest } = f;
+  const list = options ? [...options] : source ? await loadOptions(source, ctx) : undefined;
   return {
     ...rest,
-    options: options ? [...options] : source ? await loadOptions(source, ctx) : undefined,
+    options: list,
+    /*
+     * A field the web opens already answered opens already answered here. The
+     * list is only known now, so the default is settled now; a prefill still
+     * wins, because it is applied after this.
+     */
+    ...(f.startsFirst && f.initial === undefined && list?.length
+      ? { initial: list[0].value }
+      : {}),
     row: row ? await Promise.all(row.map((r) => resolveField(r, ctx))) : undefined,
   };
 }

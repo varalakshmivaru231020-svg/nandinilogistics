@@ -35,7 +35,15 @@ const PROJECT_FIELDS: ReadonlyArray<FormFieldDef> = [
     wide: true,
   },
   { name: "code", label: "Project code", kind: "text", required: true, placeholder: "PRJ-005" },
-  { name: "projectTypeId", label: "Project type", kind: "select", required: true, source: "projectTypes" },
+  {
+    name: "projectTypeId",
+    label: "Project type",
+    kind: "select",
+    required: true,
+    source: "projectTypes",
+    // `useState(types[0]?.id ?? "")` on the web's New project dialog.
+    startsFirst: true,
+  },
   { name: "addressLine", label: "Location", kind: "text", placeholder: "Area, city", wide: true },
   { name: "landAreaText", label: "Land area", kind: "text", placeholder: "4.2 acres" },
   {
@@ -628,7 +636,15 @@ export const FORMS: Record<string, FormDef> = {
     shape: { kind: "formData" },
     done: "Log saved.",
     fields: [
-      { name: "projectId", label: "Project", kind: "select", required: true, source: "projects" },
+      {
+        name: "projectId",
+        label: "Project",
+        kind: "select",
+        required: true,
+        source: "projects",
+        // `defaultValue={projects[0]?.id ?? ""}` on the web's own select.
+        startsFirst: true,
+      },
       { name: "logDate", label: "Date", kind: "date", required: true },
       {
         name: "title",
@@ -701,6 +717,8 @@ export const FORMS: Record<string, FormDef> = {
         kind: "lookup",
         required: true,
         source: "stores2",
+        // `useState(stores[0]?.id ?? "")` on the web's transfer modal.
+        startsFirst: true,
       },
       {
         name: "toStoreId",
