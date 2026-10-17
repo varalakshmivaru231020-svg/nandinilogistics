@@ -15,6 +15,34 @@ export const LEAD_STAGE_LABEL: Record<string, string> = {
   VISIT_DONE: "Site Visit", NEGOTIATION: "Negotiation", BOOKED: "Booked", LOST: "Lost",
 };
 
+/**
+ * The pipeline, as the web's board lays it out: one column per step, in order,
+ * and two stages share the Site Visit column.
+ *
+ * Here rather than inside `leads-screen.tsx` because the phone cannot draw six
+ * columns side by side — it draws them as tabs — and a pipeline that is a
+ * sequence in one place and a different sequence in the other is two
+ * pipelines. `drop` is the stage a card dropped on that column moves to.
+ */
+export const LEAD_PIPELINE: ReadonlyArray<{
+  key: string;
+  label: string;
+  stages: string[];
+  drop: string;
+}> = [
+  { key: "new", label: "New", stages: ["NEW"], drop: "NEW" },
+  { key: "contacted", label: "Contacted", stages: ["CONTACTED"], drop: "CONTACTED" },
+  {
+    key: "visit",
+    label: "Site Visit",
+    stages: ["SITE_VISIT_SCHEDULED", "VISIT_DONE"],
+    drop: "SITE_VISIT_SCHEDULED",
+  },
+  { key: "nego", label: "Negotiation", stages: ["NEGOTIATION"], drop: "NEGOTIATION" },
+  { key: "booked", label: "Booked", stages: ["BOOKED"], drop: "BOOKED" },
+  { key: "lost", label: "Lost", stages: ["LOST"], drop: "LOST" },
+];
+
 export const LEAD_STAGE_TONE: Record<string, "muted" | "brand" | "warn" | "navy" | "good" | "bad"> = {
   NEW: "muted", CONTACTED: "brand", SITE_VISIT_SCHEDULED: "warn",
   VISIT_DONE: "navy", NEGOTIATION: "warn", BOOKED: "good", LOST: "bad",

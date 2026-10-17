@@ -24,6 +24,7 @@ class ServerRow {
     this.status,
     this.trailing,
     this.actions = const [],
+    this.phone,
   });
 
   final String id;
@@ -41,6 +42,10 @@ class ServerRow {
   /// the same confirmation sheet, collects the same fields, and shows the same
   /// refusal. The app never decides which of these a row gets.
   final List<Map<String, dynamic>> actions;
+
+  /// Somebody to ring, where the server sent a number this viewer may see.
+  /// The web has no such button — a desk cannot ring anyone.
+  final String? phone;
 
   /// A row the list did not compose — a report's row, read off its columns the
   /// way the web's own report table reads it: the first column is the heading,
@@ -67,6 +72,7 @@ class ServerRow {
 
   static ServerRow from(Map<String, dynamic> d) => ServerRow(
         id: '${d["id"] ?? ""}',
+        phone: (d['contact'] as Map?)?['phone'] as String?,
         title: (d['title'] as String?) ?? '',
         meta: d['meta'] as String?,
         chips: ((d['chips'] as List?) ?? const [])
@@ -149,6 +155,7 @@ class ScreenShell {
     this.emptyDetail,
     this.note,
     this.board,
+    this.tabs,
   });
 
   final List<ServerRow> rows;
@@ -159,6 +166,10 @@ class ScreenShell {
 
   /// The board, where this screen is one — Available Flats.
   final ScreenBoardDef? board;
+
+  /// The web's board columns, where a phone shows them one at a time: the
+  /// lead pipeline is six columns on a desk and six tabs here.
+  final ScreenTabsDef? tabs;
 
   static ScreenShell? from(Object? raw) {
     if (raw is! Map) return null;
@@ -178,6 +189,36 @@ class ScreenShell {
       emptyDetail: empty?['description'] as String?,
       note: d['note'] as String?,
       board: ScreenBoardDef.from(d['board']),
+      tabs: ScreenTabsDef.from(d['tabs']),
+    );
+  }
+}
+
+/// The tabs a list is split into, and the query key they set.
+///
+/// The app does not know what a pipeline is: it draws what it was sent and
+/// sends the chosen key back under the name it was given.
+class ScreenTabsDef {
+  const ScreenTabsDef({required this.param, required this.options});
+
+  final String param;
+  final List<({String key, String label, int count})> options;
+
+  static ScreenTabsDef? from(Object? raw) {
+    if (raw is! Map) return null;
+    final d = raw.cast<String, dynamic>();
+    final options = ((d['options'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    if (options.isEmpty) return null;
+    return ScreenTabsDef(
+      param: '${d["param"] ?? ""}',
+      options: [
+        for (final o in options)
+          (
+            key: '${o["key"] ?? ""}',
+            label: '${o["label"] ?? ""}',
+            count: (o['count'] as num?)?.toInt() ?? 0,
+          ),
+      ],
     );
   }
 }

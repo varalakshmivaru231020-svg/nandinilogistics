@@ -20,7 +20,8 @@ export default async function LeadsPage({
   // Without viewAll a sales executive sees only their own pipeline.
   const ownership = ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id };
   // Shared with the export, so a download holds exactly what this screen shows.
-  const where = leadListWhere(ownership, { q, state, source, fu }, now);
+  // The web draws every column at once, so it asks for no single one of them.
+  const where = leadListWhere(ownership, { q, state, source, fu, pipeline: "all" }, now);
 
   const [leads, statRows, stageCounts, sources, lostReasons, projects, unitTypes, formFields] = await Promise.all([
     prisma.lead.findMany({

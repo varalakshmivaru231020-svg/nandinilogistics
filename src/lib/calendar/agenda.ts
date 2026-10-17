@@ -49,6 +49,14 @@ export interface AgendaItem {
   extendedCount?: number;
 }
 
+/*
+ * What each kind is called on the calendar. Every one of them names where the
+ * item comes from, which is what somebody reading a mixed day needs to know —
+ * so the schedule's items are called "Schedule", the word the navigation and
+ * the module itself use. They were called "Activity", which reads as a
+ * synonym for Task beside the Task items and says nothing about where to go to
+ * change one.
+ */
 export const AGENDA_LABEL: Record<AgendaKind, string> = {
   EVENT: "Calendar",
   INVITE: "Invitation",
@@ -56,7 +64,7 @@ export const AGENDA_LABEL: Record<AgendaKind, string> = {
   FOLLOW_UP: "Follow-up",
   SITE_VISIT: "Site visit",
   APPROVAL: "Approval",
-  ACTIVITY: "Activity",
+  ACTIVITY: "Schedule",
 };
 
 /* ------------------------------- day keys -------------------------------- */

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
 import { leadFigures } from "@/lib/metrics/figures";
-import { LEAD_EMPTY, LEAD_NOTE } from "@/lib/sales/lead-display";
+import { LEAD_EMPTY, LEAD_NOTE, LEAD_PIPELINE } from "@/lib/sales/lead-display";
 import { bandOf, type ScreenShell } from "@/lib/screens/rows";
 import { leadScreenRow } from "@/lib/screens/rows/lead";
 import { PERM } from "@/lib/permissions/codes";
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
     const nowMs = now.getTime();
     const { from, to } = listWindow(gate.params, rowsIn.length);
     const window = rowsIn.slice(from, to);
-    const [dupes, statRows] = await Promise.all([
+    const [dupes, statRows, byStage] = await Promise.all([
       prisma.lead.findMany({
         where: { id: { in: window.map((l) => l.id) } },
         select: { id: true, duplicateOfId: true },
@@ -77,7 +77,18 @@ export async function GET(request: Request) {
         where: leadListWhere(ownership, { ...params, q: "", state: "all", source: "all", fu: "all" }, now),
         select: { state: true, createdAt: true, budgetMax: true },
       }),
+      /*
+       * What each pipeline column holds under the filters that are set, with
+       * the column itself left out — so the counts on the tabs do not change
+       * as you move between them, which is how the web's board reads.
+       */
+      prisma.lead.groupBy({
+        by: ["state"],
+        where: leadListWhere(ownership, { ...params, pipeline: "all" }, now),
+        _count: { _all: true },
+      }),
     ]);
+    const held = new Map(byStage.map((g) => [g.state as string, g._count._all]));
     const dupe = new Map(dupes.map((d) => [d.id, Boolean(d.duplicateOfId)]));
     screen = {
       rows: window.map((l) =>
@@ -106,6 +117,21 @@ export async function GET(request: Request) {
       ),
       empty: LEAD_EMPTY,
       note: LEAD_NOTE,
+      /*
+       * The web's six columns, which a phone shows one at a time. "All" is its
+       * list view — the same screen with no column chosen.
+       */
+      tabs: {
+        param: "pipeline",
+        options: [
+          { key: "all", label: "All", count: [...held.values()].reduce((a, b) => a + b, 0) },
+          ...LEAD_PIPELINE.map((c) => ({
+            key: c.key,
+            label: c.label,
+            count: c.stages.reduce((n, st) => n + (held.get(st) ?? 0), 0),
+          })),
+        ],
+      },
     };
   }
 

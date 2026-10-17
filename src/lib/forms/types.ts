@@ -241,6 +241,16 @@ export interface FormDef {
    * from `prefillFor()`, keyed by this form's key, and a field the record
    * cannot change comes back locked.
    */
+  /**
+   * Opened from a record, this form starts with what that record implies.
+   *
+   * Not an edit — nothing is being changed — but the web's own link carries
+   * the context: "+ New task" on a project goes to `/tasks/new?project=<id>`
+   * and "+ Log entry" to `/projects/progress?project=<id>`. Raising one from
+   * there and having to pick the project again is the phone being worse than
+   * the link.
+   */
+  seeds?: boolean;
   edits?: boolean;
   /**
    * A form whose fields are not fixed. "Capture lead" is whatever Masters →

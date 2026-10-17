@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { AGENDA_LABEL } from "@/lib/calendar/agenda";
 import { MOBILE_LIST_KEYS } from "@/lib/api/mobile-lists";
 import { NAVIGATION } from "@/lib/navigation";
 import { SCREENS } from "@/lib/screens/registry";
@@ -131,5 +132,54 @@ describe("every screen the app can open is described", () => {
     ];
     const undescribed = reachable.filter((k) => !SCREENS[k]);
     expect(undescribed, "add these to src/lib/screens/registry.ts").toEqual([]);
+  });
+});
+
+/**
+ * The calendar's seven words.
+ *
+ * The app held its own copy of them, so the schedule's items read "Activity"
+ * on a phone while the web called them what the navigation calls that module.
+ * The boundary sends `kindLabels` now; the app keeps a fallback for an old
+ * build against a new server, and even that may not drift.
+ */
+describe("what the calendar calls each kind", () => {
+  const calendar = readFileSync(join(ROOT, "mobile", "lib", "modules", "calendar.dart"), "utf8");
+  const route = readFileSync(
+    join(ROOT, "src", "app", "api", "mobile", "v1", "calendar", "route.ts"),
+    "utf8",
+  );
+
+  it("is sent by the boundary, from one list", () => {
+    expect(route.includes("kindLabels: AGENDA_LABEL")).toBe(true);
+  });
+
+  it("is drawn from what was sent, not from the app's own list", () => {
+    expect(calendar.includes("kindLabel['${item[\"kind\"]}']")).toBe(true);
+    expect(
+      calendar.includes("d['kindLabels']"),
+      "the app must read the labels the boundary sends",
+    ).toBe(true);
+  });
+
+  it("names the schedule after the module it comes from", () => {
+    // Every other label names its source; "Activity" read as a synonym for
+    // Task beside the Task items.
+    expect(AGENDA_LABEL.ACTIVITY).toBe("Schedule");
+    const nav = readFileSync(join(ROOT, "src", "lib", "navigation.ts"), "utf8");
+    expect(nav.includes('label: "Schedule"'), "the navigation's own word").toBe(true);
+  });
+
+  it("keeps even the app's fallback in step", () => {
+    const block = calendar.slice(
+      calendar.indexOf("const _kindLabelFallback"),
+      calendar.indexOf("};", calendar.indexOf("const _kindLabelFallback")),
+    );
+    for (const [kind, label] of Object.entries(AGENDA_LABEL)) {
+      expect(
+        block.includes(`'${kind}': '${label}'`),
+        `the app's fallback says something else for ${kind}`,
+      ).toBe(true);
+    }
   });
 });

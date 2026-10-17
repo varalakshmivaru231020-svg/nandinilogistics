@@ -78,9 +78,35 @@ class RecordScreenState extends State<RecordScreen> {
   List<Map<String, dynamic>> _list(String key) =>
       ((_rec?[key] as List?) ?? const []).cast<Map<String, dynamic>>();
 
+  /// Which tab is open — the server's first, until somebody taps another.
+  String? get _openTab {
+    final tabs = _list('tabs');
+    if (tabs.isEmpty) return null;
+    return _tab ?? '${tabs.first["key"]}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final actions = _list('actions');
+    /*
+     * The actions of the tab that is open, and the record's own.
+     *
+     * The web draws "+ New task" on the Tasks tab and "Upload" on Documents,
+     * not all of them at once above everything.
+     */
+    final tab = _openTab;
+    final actions = _list('actions')
+        .where((a) => a['tab'] == null || a['tab'] == tab)
+        .toList()
+      /*
+       * The open tab's own action first, so it is the one on the bar: the web
+       * draws "+ New task" inside the Tasks tab, not behind a More sheet with
+       * the record's own buttons in front of it.
+       */
+      ..sort((a, b) {
+        final mine = a['tab'] == tab ? 0 : 1;
+        final theirs = b['tab'] == tab ? 0 : 1;
+        return mine.compareTo(theirs);
+      });
 
     return PopScope(
       canPop: true,
@@ -175,10 +201,27 @@ class RecordScreenState extends State<RecordScreen> {
      * strip do.
      */
     final tabs = _list('tabs');
-    final tab = _tab ?? (tabs.isEmpty ? null : '${tabs.first["key"]}');
+    final tab = _openTab;
     final shown = tab == null
         ? collections
         : collections.where((c) => c['tab'] == null || c['tab'] == tab).toList();
+
+    /*
+     * A section can belong to a tab too. The project's particulars are its
+     * Overview tab and nowhere else — drawn above the strip they sat on top of
+     * Documents and Site Progress as well, which the web does not do.
+     */
+    /*
+     * With no tabs at all — a viewer who may see only one of them, so the strip
+     * would be a single chip — every section is drawn, tab or no tab. Filtering
+     * by a tab that does not exist would have shown nothing.
+     */
+    final loose = tab == null
+        ? sections
+        : sections.where((x) => x['tab'] == null).toList();
+    final tabbed = tab == null
+        ? const <Map<String, dynamic>>[]
+        : sections.where((x) => x['tab'] == tab).toList();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(T.gutter, 13, T.gutter, 24),
@@ -199,7 +242,7 @@ class RecordScreenState extends State<RecordScreen> {
           ),
           const SizedBox(height: 11),
         ],
-        for (final s in sections) ...[
+        for (final s in loose) ...[
           _Section(section: s),
           const SizedBox(height: 11),
         ],
@@ -226,11 +269,16 @@ class RecordScreenState extends State<RecordScreen> {
           ),
           const SizedBox(height: 11),
         ],
+        for (final s in tabbed) ...[
+          _Section(section: s),
+          const SizedBox(height: 11),
+        ],
         for (final c in shown) ...[
           _Collection(
             collection: c,
             onRun: _run,
             onOpenFile: _openFile,
+            onOpenRecord: _openRecord,
           ),
           const SizedBox(height: 11),
         ],
@@ -289,6 +337,15 @@ class RecordScreenState extends State<RecordScreen> {
         picture: picture,
       ),
     );
+  }
+
+  /// Opens another record from a row — a task on a project, a log on a day.
+  Future<void> _openRecord(String module, String id) async {
+    final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => RecordScreen(api: widget.api, module: module, id: id),
+    ));
+    // Something may have happened to it while it was open.
+    if (changed == true && mounted) await _load();
   }
 
   Future<void> _run(Map<String, dynamic> a) async {
@@ -460,6 +517,7 @@ class _Collection extends StatelessWidget {
     required this.collection,
     required this.onRun,
     required this.onOpenFile,
+    required this.onOpenRecord,
   });
 
   final Map<String, dynamic> collection;
@@ -467,6 +525,10 @@ class _Collection extends StatelessWidget {
 
   /// A row that stands for a stored file — an attachment, an identity copy.
   final void Function(Map<String, dynamic> file) onOpenFile;
+
+  /// A row that stands for another record — the project's tasks are links on
+  /// the web, and a row that cannot be followed is a dead end.
+  final void Function(String module, String id) onOpenRecord;
 
   @override
   Widget build(BuildContext context) {
@@ -533,8 +595,9 @@ class _Collection extends StatelessWidget {
     // and the glyph it uses comes with the action.
     final glyphs = actions.where((a) => (a['glyph'] as String?)?.isNotEmpty ?? false).toList();
     final worded = actions.where((a) => (a['glyph'] as String?)?.isEmpty ?? true).toList();
+    final opens = r['opens'] as Map<String, dynamic>?;
 
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
         border: last ? null : const Border(bottom: BorderSide(color: Color(0xFFF0F3FA))),
@@ -668,6 +731,14 @@ class _Collection extends StatelessWidget {
             ]),
           ),
       ]),
+    );
+
+    if (opens == null) return card;
+    // The whole row is the link, as the web's row is.
+    return InkWell(
+      key: Key('open:${r["id"]}'),
+      onTap: () => onOpenRecord('${opens["module"]}', '${opens["id"]}'),
+      child: card,
     );
   }
 }

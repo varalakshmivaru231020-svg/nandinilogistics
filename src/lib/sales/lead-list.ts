@@ -1,5 +1,7 @@
 import type { LeadState, Prisma } from "@prisma/client";
 
+import { LEAD_PIPELINE } from "./lead-display";
+
 /**
  * The lead list's filters — search, stage, source, follow-up — as one
  * function, used by the Leads screen and by its export, so a download holds
@@ -15,6 +17,12 @@ export interface LeadListParams {
   state: string;
   source: string;
   fu: string;
+  /**
+   * One column of the pipeline — `new`, `visit`, `lost` — which is how the
+   * phone shows the board: the six columns as tabs, one at a time. "all" is
+   * the web's list view, which shows every stage.
+   */
+  pipeline: string;
 }
 
 export function readLeadListParams(params: URLSearchParams): LeadListParams {
@@ -23,6 +31,7 @@ export function readLeadListParams(params: URLSearchParams): LeadListParams {
     state: params.get("state") ?? "all",
     source: params.get("source") ?? "all",
     fu: params.get("fu") ?? "all",
+    pipeline: params.get("pipeline") ?? "all",
   };
 }
 
@@ -43,6 +52,7 @@ export function leadListWhere(
   // A stage that is not a stage (a hand-edited URL) filters nothing rather than
   // reaching the database as an invalid enum.
   const state = (LEAD_STATES as readonly string[]).includes(p.state) ? (p.state as LeadState) : null;
+  const column = LEAD_PIPELINE.find((c) => c.key === p.pipeline) ?? null;
 
   return {
     ...ownership,
@@ -56,6 +66,12 @@ export function leadListWhere(
         }
       : {}),
     ...(state ? { state } : {}),
+    /*
+     * A pipeline column is a set of stages — Site Visit holds two — and it
+     * narrows on top of the stage filter rather than replacing it, exactly as
+     * the web's board is a view of the same filtered leads.
+     */
+    ...(column ? { state: { in: column.stages as LeadState[] } } : {}),
     ...(p.source !== "all" && p.source ? { sourceId: p.source } : {}),
     // Follow-up filter, as in the design: overdue / today / this week / none set.
     ...(p.fu === "overdue" ? { nextActionAt: { lt: now } } : {}),

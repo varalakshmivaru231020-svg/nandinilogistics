@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/dial.dart';
 import '../core/api.dart';
 import '../core/act.dart';
 import '../core/nav.dart';
@@ -296,16 +297,36 @@ class ModuleScreenState extends State<ModuleScreen> {
             _page?.screen?.board == null &&
             (_page?.screen?.band ?? const []).isNotEmpty)
           Band(_page!.screen!.band),
-        if (_query.isNotEmpty)
+        /*
+         * The web's board columns, where it has them: the lead pipeline is six
+         * columns side by side on a desk, which a phone cannot draw, so it is
+         * one tab at a time with the count the server put on each. Tapping one
+         * sets the parameter the server named and reads the list again.
+         */
+        if (_tabs != null)
+          Chips([
+            for (final t in _tabs!.options)
+              FilterChip2(
+                key: Key('tab-${t.key}'),
+                label: t.count > 0 ? '${t.label} ${t.count}' : t.label,
+                selected: (_query[_tabs!.param] ?? 'all') == t.key,
+                onTap: () => _set(_tabs!.param, t.key == 'all' ? null : t.key),
+              ),
+          ], top: 11),
+        if (_query.entries.where((e) => e.key != (_tabs?.param ?? '')).isNotEmpty)
           Chips([
             for (final e in _query.entries)
-              FilterChip2(label: _chipLabel(e.key, e.value), onRemove: () => _set(e.key, null)),
+              if (e.key != _tabs?.param)
+                FilterChip2(label: _chipLabel(e.key, e.value), onRemove: () => _set(e.key, null)),
           ], top: 11),
         Expanded(child: RefreshIndicator(onRefresh: _load, child: _body(rows, now))),
         widget.bottom,
       ]),
     );
   }
+
+  /// The tabs the list came back with, where this screen has them.
+  ScreenTabsDef? get _tabs => _page?.screen?.tabs;
 
   /// An applied filter reads as the web names it — "Invoice pending", not
   /// "invoice: PENDING".
@@ -712,6 +733,16 @@ class ServerRowCard extends StatelessWidget {
                 Text(drawn.trailing!.label!, style: T.caption()),
             ]),
           ],
+          /*
+           * Ring them, or open the chat. The server sends the number only
+           * where this viewer may see contact details, so a masked one draws
+           * nothing — the web has neither button because a desk can do
+           * neither.
+           */
+          if ((drawn.phone ?? '').isNotEmpty) ...[
+            const SizedBox(width: 8),
+            _Reach(number: drawn.phone!, name: drawn.title),
+          ],
         ]),
         for (final l in drawn.lines)
           if (l.value.isNotEmpty && l.value != '—') ...[
@@ -790,5 +821,91 @@ class ServerRowCard extends StatelessWidget {
       },
     );
     if (ok) await onChanged();
+  }
+}
+
+/// The two buttons a handset has and a desk does not: ring them, or open the
+/// chat.
+///
+/// Both go through `Dial`, which is a seam so a test can watch them. A phone
+/// with no dialler or no WhatsApp says so in a line rather than doing nothing.
+class _Reach extends StatelessWidget {
+  const _Reach({required this.number, required this.name});
+
+  final String number;
+  final String name;
+
+  Future<void> _go(BuildContext context, Future<String?> Function() how) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final problem = await how();
+    if (problem == null) return;
+    messenger.showSnackBar(SnackBar(
+      backgroundColor: T.navy950,
+      behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.all(T.gutter),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      content: Text(problem,
+          style: T.body(color: Colors.white, weight: FontWeight.w500).copyWith(fontSize: 13.5)),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      _ReachButton(
+        key: Key('call:$number'),
+        icon: Icons.phone_rounded,
+        tooltip: 'Call $name',
+        tone: T.brand500,
+        onTap: () => _go(context, () => Dial.live.call(number)),
+      ),
+      const SizedBox(width: 7),
+      _ReachButton(
+        key: Key('chat:$number'),
+        icon: Icons.chat_rounded,
+        tooltip: 'WhatsApp $name',
+        tone: const Color(0xFF25D366),
+        onTap: () => _go(context, () => Dial.live.chat(number)),
+      ),
+    ]);
+  }
+}
+
+class _ReachButton extends StatelessWidget {
+  const _ReachButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.tone,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final Color tone;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: tooltip,
+      button: true,
+      excludeSemantics: true,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(9),
+        onTap: onTap,
+        child: Container(
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: tone.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: tone.withValues(alpha: 0.35)),
+          ),
+          child: Icon(icon, size: 18, color: tone),
+        ),
+      ),
+    );
   }
 }

@@ -389,6 +389,7 @@ export const FORMS: Record<string, FormDef> = {
     action: "tasks/createTask",
     shape: { kind: "formData" },
     done: "Task raised.",
+    seeds: true,
     fields: TASK_FIELDS,
   },
 
@@ -635,6 +636,7 @@ export const FORMS: Record<string, FormDef> = {
     action: "projects/progress/createProgressLog",
     shape: { kind: "formData" },
     done: "Log saved.",
+    seeds: true,
     fields: [
       {
         name: "projectId",
@@ -976,6 +978,49 @@ export const FORMS: Record<string, FormDef> = {
         label: "Access",
         kind: "select",
         initial: ACCESS_CHOICES[0],
+        options: ACCESS_CHOICES.map((a) => ({ value: a, label: a })),
+      },
+      { name: "file", label: "File", kind: "files", required: true, maxFiles: 1 },
+    ],
+  },
+
+  /*
+   * The same screen → UploadModal with `superseding` set, which the web opens
+   * from a document's own ⌃ button: *"New version of «title»"*. The upload
+   * continues the version chain rather than replacing anything — the earlier
+   * version stays readable — so the document's particulars come from the one
+   * being superseded and only the file is new.
+   */
+  "projects/projects:newDocumentVersion": {
+    key: "projects/projects:newDocumentVersion",
+    module: "projects/projects",
+    title: "New version",
+    description: "The earlier version stays readable — nothing is overwritten.",
+    submitLabel: "Upload",
+    permission: PERM.project.document.upload,
+    action: "projects/[id]/documents/uploadDocument",
+    // The project's id is the action's first argument; the document being
+    // superseded travels inside the body, as the web posts it.
+    shape: { kind: "positional", order: ["$projectId", "$values"] },
+    done: "New version uploaded.",
+    onRecord: true,
+    edits: true,
+    fields: [
+      { name: "projectId", label: "Project", kind: "text", hidden: true },
+      { name: "supersedesId", label: "Supersedes", kind: "text", hidden: true },
+      { name: "title", label: "Title", kind: "text", required: true, wide: true },
+      {
+        name: "documentTypeId",
+        label: "Document type",
+        kind: "select",
+        required: true,
+        source: "documentTypes",
+        emptyLabel: "Select…",
+      },
+      {
+        name: "access",
+        label: "Access",
+        kind: "select",
         options: ACCESS_CHOICES.map((a) => ({ value: a, label: a })),
       },
       { name: "file", label: "File", kind: "files", required: true, maxFiles: 1 },

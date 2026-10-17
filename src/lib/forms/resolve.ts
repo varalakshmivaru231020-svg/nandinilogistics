@@ -56,6 +56,14 @@ export async function resolveForm(
     prefill = await prefillFor(ctx, key, recordId);
     if (!prefill) return "no-record";
     if (prefill.refusal) return { refused: prefill.refusal };
+  } else if (def.seeds && recordId) {
+    /*
+     * Opened from a record, which fills in what that record implies — the
+     * project a task is being raised against. Nothing is required of it: the
+     * same form opens from its own list with no record behind it, and then it
+     * starts empty, exactly as the web's own "New task" page does.
+     */
+    prefill = await prefillFor(ctx, key, recordId);
   }
 
   // The permission, the viewer-dependent half and the raw fields all stay on

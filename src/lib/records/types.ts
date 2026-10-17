@@ -31,6 +31,14 @@ export interface RecordField {
 export interface RecordSection {
   label: string;
   fields: RecordField[];
+  /**
+   * Which tab this belongs under, where the record has them.
+   *
+   * The project's particulars are its Overview tab and nothing else — the web
+   * draws them only there. Without this the phone showed them above every tab,
+   * so Documents opened with the project master on top of it.
+   */
+  tab?: string;
 }
 
 /** A row inside a child collection — an item line, a comment, a checklist point. */
@@ -50,6 +58,13 @@ export interface CollectionRow {
   body?: string | null;
   /** What may be done to this row, as opposed to the record. */
   actions?: RecordAction[];
+  /**
+   * Another record this row stands for, which tapping it opens.
+   *
+   * The project's Tasks tab is a list of links on the web — each row is
+   * `/tasks/<id>` — and a row that cannot be followed is a dead end.
+   */
+  opens?: { module: string; id: string };
   /**
    * A stored file this row stands for, and where to read it.
    *
@@ -160,6 +175,14 @@ export interface RecordAction {
   fieldsFrom?: string;
   /** What the confirmation sheet says will happen. */
   confirm?: string;
+  /**
+   * The tab this belongs to, where the record has them.
+   *
+   * The web draws "+ New task" only on the Tasks tab and "Upload" only on
+   * Documents. An action with no tab is the record's own — Edit project — and
+   * shows whichever tab is open.
+   */
+  tab?: string;
 }
 
 export interface RecordView {

@@ -3,9 +3,10 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import type { AuthContext } from "@/lib/rbac/context";
-import { qty } from "@/lib/utils";
+import { formatDate, qty } from "@/lib/utils";
+import { STATUS_LABEL as TASK_STATUS_WORD } from "@/lib/tasks/lifecycle";
 
-import { toneOf, type RecordAction, type RecordView } from "./shared";
+import { toneOf, words, type RecordAction, type RecordView } from "./shared";
 
 /**
  * One project: its particulars, its breakdown, its team, its documents and
@@ -56,6 +57,22 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
         take: 24,
         include: { loggedBy: { select: { name: true } } },
       },
+      /*
+       * The work assigned against this project, which is what the web's Tasks
+       * tab shows. It used to show the phases and work packages — "the shape
+       * of the job rather than the work being done on it", as the web's own
+       * comment puts it since that tab was changed. The breakdown lives on the
+       * Schedule, where its dates and progress are.
+       */
+      tasks: {
+        orderBy: { createdAt: "desc" },
+        take: 60,
+        select: {
+          id: true, taskNo: true, title: true, status: true, kind: true,
+          dueAt: true, location: true,
+          assignee: { select: { name: true } },
+        },
+      },
     },
   });
   if (!project) return null;
@@ -86,8 +103,10 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
     if (free.length > 0) {
       actions.push({
         key: "mapUser",
-        label: "Map somebody to this project",
+        // The web's own button, on its Team Mapping tab.
+        label: "Map user",
         emphasis: "primary",
+        tab: "team",
         action: "projects/mapUserToProject",
         args: [id, "$userId"],
         remark: "none",
@@ -112,6 +131,38 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
   }
 
   /*
+   * "+ New task" on the web's Tasks tab, which carries the project in its link
+   * — `/tasks/new?project=<id>` — so raising one from here fills the project
+   * in. That is the point of doing it from here.
+   */
+  if (ctx.has(PERM.project.project.tabWbs) && ctx.has(PERM.task.task.create)) {
+    actions.push({
+      key: "newTask",
+      label: "New task",
+      emphasis: "outline",
+      tab: "wbs",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "tasks:create",
+    });
+  }
+
+  /* "+ Log entry" on the web's Site Progress tab. */
+  if (ctx.has(PERM.project.project.tabProgress) && ctx.has(PERM.project.progressLog.create)) {
+    actions.push({
+      key: "newLog",
+      label: "Log entry",
+      emphasis: "outline",
+      tab: "log",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "projects/progress:create",
+    });
+  }
+
+  /*
    * Uploading a document. The repository was read-only on the phone because
    * the boundary carried no file; it carries them now, and a drawing
    * photographed on site is the case for it.
@@ -121,6 +172,7 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
       key: "upload",
       label: "Upload",
       emphasis: "outline",
+      tab: "docs",
       action: "",
       args: [],
       remark: "none",
@@ -142,14 +194,38 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
     PERM.project.project.tabProgress,
   ].some((code) => ctx.has(code));
 
+  /*
+   * The web's own five tabs, in its order and its words, each behind the
+   * permission that draws it there. A role with none of them gets the sentence
+   * below instead, as it does on the web.
+   */
+  const tabs = [
+    { key: "overview", label: "Overview", permission: PERM.project.project.tabOverview },
+    { key: "wbs", label: "Tasks", permission: PERM.project.project.tabWbs },
+    { key: "team", label: "Team Mapping", permission: PERM.project.project.tabTeam },
+    { key: "docs", label: "Documents", permission: PERM.project.project.tabDocuments },
+    { key: "log", label: "Site Progress", permission: PERM.project.project.tabProgress },
+  ]
+    .filter((t) => ctx.has(t.permission))
+    .map(({ key, label }) => ({ key, label }));
+
+  // Taken once, as the web's page takes it once and passes it down, so the
+  // phone and the desk agree about what is overdue.
+  const nowMs = Date.now();
+
   const packages = project.phases.flatMap((p) => p.workPackages);
   const progressPct = packages.length
     ? Math.round(packages.reduce((s, w) => s + w.progressPct, 0) / packages.length)
     : 0;
 
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const todaysLogs = project.progressLogs.filter((l) => l.logDate.getTime() >= startOfDay.getTime());
+
   return {
     key: "projects/projects",
     id: project.id,
+    ...(tabs.length > 1 ? { tabs } : {}),
     title: project.name,
     subtitle: [project.code, project.city?.name, project.projectType?.name]
       .filter(Boolean)
@@ -175,7 +251,9 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
       : ctx.has(PERM.project.project.tabOverview)
       ? [
           {
-            label: "Overview",
+            // The web's own card heading inside the Overview tab.
+            label: "Project master",
+            tab: "overview",
             fields: [
               { label: "Project name", value: project.name },
               { label: "Project code", value: project.code },
@@ -213,24 +291,33 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
       ...(ctx.has(PERM.project.project.tabWbs)
         ? [
             {
-              key: `wbs:${id}`,
-              label: `Tasks · ${project.phases.length} ${project.phases.length === 1 ? "phase" : "phases"} · ${packages.length} packages`,
-              rows: project.phases.flatMap((phase) => [
-                {
-                  id: phase.id,
-                  title: phase.name,
-                  subtitle: `${phase.code} · ${phase.workPackages.length} ${phase.workPackages.length === 1 ? "package" : "packages"}`,
-                  trailing: `${phase.progressPct}%`,
-                  pills: [{ label: "Phase", tone: "info" as const }],
-                },
-                ...phase.workPackages.map((w) => ({
-                  id: w.id,
-                  title: w.name,
-                  subtitle: `${w.code} · under ${phase.name}`,
-                  trailing: `${w.progressPct}%`,
-                })),
-              ]),
-              emptyMessage: "No breakdown has been set up for this project.",
+              key: `tasks:${id}`,
+              tab: "wbs",
+              // The web's own card heading, with its count.
+              label: `Tasks on this project · ${project.tasks.length}`,
+              rows: project.tasks.map((t) => {
+                /*
+                 * Overdue by the web's own rule: still to be done, and past
+                 * its due date. A task under review or approval is not late —
+                 * it is with somebody else.
+                 */
+                const over =
+                  !["COMPLETED", "CLOSED", "UNDER_REVIEW", "UNDER_APPROVAL"].includes(t.status) &&
+                  t.dueAt.getTime() < nowMs;
+                return {
+                  id: t.id,
+                  title: t.title,
+                  subtitle: [t.taskNo, t.location ?? "—", t.assignee.name].join(" · "),
+                  trailing: formatDate(t.dueAt),
+                  pills: [
+                    { label: TASK_STATUS_WORD[t.status] ?? words(t.status), tone: toneOf(t.status) },
+                    ...(over ? [{ label: "Overdue", tone: "bad" as const }] : []),
+                  ],
+                  // The web's row is a link to the task.
+                  opens: { module: "tasks", id: t.id },
+                };
+              }),
+              emptyMessage: "No task has been raised against this project yet.",
             },
           ]
         : []),
@@ -238,6 +325,7 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
         ? [
             {
               key: `team:${id}`,
+              tab: "team",
               label: `Team Mapping · ${project.team.length}`,
               rows: project.team.map((t) => ({
                 id: t.user.id,
@@ -265,6 +353,7 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
         ? [
             {
               key: `docs:${id}`,
+              tab: "docs",
               label: `Documents · ${project.documents.length}`,
               rows: project.documents.map((d) => ({
                 id: d.id,
@@ -289,6 +378,18 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
                 actions: [
                   ...(ctx.has(PERM.project.document.upload)
                     ? [
+                        {
+                          key: "version",
+                          label: "New version",
+                          emphasis: "outline" as const,
+                          glyph: "⌃",
+                          action: "",
+                          args: [],
+                          remark: "none" as const,
+                          form: "projects/projects:newDocumentVersion",
+                          // The document being superseded, not the project.
+                          formId: d.id,
+                        },
                         {
                           key: "edit",
                           label: "Edit",
@@ -328,19 +429,28 @@ export async function projectRecord(ctx: AuthContext, id: string): Promise<Recor
         ? [
             {
               key: `progress:${id}`,
-              label: `Site Progress · ${project.progressLogs.length}`,
-              rows: project.progressLogs.map((l) => ({
+              tab: "log",
+              /*
+               * Today's, as the web's tab shows them — it is a day's capture,
+               * and every log ever written is the Site Progress screen's own
+               * list, one tap away.
+               */
+              label: `Daily site progress · ${todaysLogs.length} ${todaysLogs.length === 1 ? "photo" : "photos"} today`,
+              rows: todaysLogs.map((l) => ({
                 id: l.id,
                 title: l.title,
                 subtitle: [
+                  l.logDate.toTimeString().slice(0, 5),
+                  // The tick the web prints on a tile that carries a position.
+                  l.latitude ? "geo ✓" : null,
                   l.loggedBy?.name,
                   l.manpowerCount ? `${l.manpowerCount} on site` : null,
                   l.weather,
                 ].filter(Boolean).join(" · "),
                 body: l.notes,
-                trailing: l.logDate.toISOString().slice(0, 10),
+                opens: { module: "projects/progress", id: l.id },
               })),
-              emptyMessage: "Nothing logged from site yet.",
+              emptyMessage: "Nothing captured today. These are written from the supervisor's phone.",
             },
           ]
         : []),

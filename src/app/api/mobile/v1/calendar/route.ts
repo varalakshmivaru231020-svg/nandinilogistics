@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { loadAgenda } from "@/lib/calendar/service";
-import { countsByKind, dayTally, monthGrid, weekGrid } from "@/lib/calendar/agenda";
+import { AGENDA_LABEL, countsByKind, dayTally, monthGrid, weekGrid } from "@/lib/calendar/agenda";
 import { PERM } from "@/lib/permissions/codes";
 import { apiOk, mobileRoute } from "@/lib/api/mobile";
 
@@ -57,6 +57,14 @@ export const GET = mobileRoute([PERM.calendar.agenda.view], async (req, actor) =
     grid,
     items,
     counts: countsByKind(items),
+    /*
+     * What each kind is called, sent rather than held by the app.
+     *
+     * The app kept its own copy of these seven words, which is how a calendar
+     * can read "Activity" on a phone and "Schedule" on the web for the same
+     * item. One definition, `AGENDA_LABEL`, drawn by both.
+     */
+    kindLabels: AGENDA_LABEL,
     tally: dayTally(items, nowMs),
     serverTime: now.toISOString(),
   });

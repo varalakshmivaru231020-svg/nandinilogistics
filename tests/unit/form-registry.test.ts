@@ -67,6 +67,7 @@ const SOURCE: Record<string, string> = {
   "hr/employees:create": "hr/hr-screen.tsx",
   "material/grn:attach": "material/grn/[id]/grn-detail.tsx",
   "projects/projects:uploadDocument": "projects/[id]/documents/documents-tab.tsx",
+  "projects/projects:newDocumentVersion": "projects/[id]/documents/documents-tab.tsx",
   "projects/projects:editDocument": "projects/[id]/documents/documents-tab.tsx",
 };
 

@@ -33,10 +33,16 @@ class CalendarScreen extends StatefulWidget {
   State<CalendarScreen> createState() => CalendarScreenState();
 }
 
-const _kindLabel = {
+/// What each kind is called, where the server has not said.
+///
+/// The boundary sends `kindLabels` — one list, the web's own — and this is only
+/// the fallback for an older build talking to a newer server. It used to be
+/// the app's own idea of the seven words, which is how the schedule's items
+/// came to read "Activity" here and "Schedule" on the web.
+const _kindLabelFallback = {
   'EVENT': 'Calendar', 'INVITE': 'Invitation', 'TASK': 'Task',
   'FOLLOW_UP': 'Follow-up', 'SITE_VISIT': 'Site visit', 'APPROVAL': 'Approval',
-  'ACTIVITY': 'Activity',
+  'ACTIVITY': 'Schedule',
 };
 
 const _toneOfKind = {
@@ -58,6 +64,9 @@ class CalendarScreenState extends State<CalendarScreen> {
   DateTime _anchor = DateTime.now();
   String? _picked;
   final Set<String> _kinds = {};
+
+  /// What each kind is called, as the boundary sends it.
+  Map<String, String> _kindLabel = _kindLabelFallback;
 
   @override
   void initState() {
@@ -89,6 +98,10 @@ class CalendarScreenState extends State<CalendarScreen> {
       _grid = ((d['grid'] as List?) ?? const []).cast<String>();
       _items = ((d['items'] as List?) ?? const []).cast<Map<String, dynamic>>();
       _nowMs = DateTime.parse(d['serverTime'] as String).millisecondsSinceEpoch;
+      final labels = d['kindLabels'] as Map<String, dynamic>?;
+      if (labels != null && labels.isNotEmpty) {
+        _kindLabel = labels.map((k, v) => MapEntry(k, '$v'));
+      }
       _picked ??= _key(DateTime.fromMillisecondsSinceEpoch(_nowMs));
     });
   }
@@ -373,6 +386,7 @@ class CalendarScreenState extends State<CalendarScreen> {
         else
           for (final i in items) ...[
             _AgendaRow(
+              kindLabel: _kindLabel,
               item: i,
               late: _late(i),
               api: widget.api,
@@ -438,6 +452,7 @@ class _AgendaRow extends StatelessWidget {
   const _AgendaRow({
     required this.item,
     required this.late,
+    required this.kindLabel,
     required this.api,
     required this.session,
     required this.onChanged,
@@ -445,6 +460,9 @@ class _AgendaRow extends StatelessWidget {
 
   final Map<String, dynamic> item;
   final bool late;
+
+  /// What each kind is called, as the boundary sent it.
+  final Map<String, String> kindLabel;
   final Api api;
   final Session session;
   final Future<void> Function() onChanged;
@@ -486,7 +504,7 @@ class _AgendaRow extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(left: 17),
           child: Text(
-            [time, _kindLabel['${item["kind"]}'] ?? item['kind'], item['subtitle']]
+            [time, kindLabel['${item["kind"]}'] ?? item['kind'], item['subtitle']]
                 .where((p) => p != null && '$p'.isNotEmpty)
                 .join(' · '),
             style: T.num(11.5, color: T.muted, weight: FontWeight.w500),

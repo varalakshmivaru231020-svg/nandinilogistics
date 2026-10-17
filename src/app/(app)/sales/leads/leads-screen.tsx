@@ -8,7 +8,7 @@ import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { ImportDialog } from "@/components/import/import-dialog";
 import { ListNote } from "@/components/list/list-note";
 import {
-  LEAD_EMPTY, LEAD_NOTE, LEAD_STAGE_LABEL, LEAD_STAGE_TONE, leadFollowUp,
+  LEAD_EMPTY, LEAD_NOTE, LEAD_PIPELINE, LEAD_STAGE_LABEL, LEAD_STAGE_TONE, leadFollowUp,
 } from "@/lib/sales/lead-display";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
@@ -32,14 +32,14 @@ type Stage = (typeof STAGES)[number];
  * The design's six columns. Site Visit is one column holding both the planned
  * and the done stage; dropping a card there schedules the visit.
  */
-const BOARD_COLUMNS: Array<{ key: string; label: string; stages: Stage[]; drop: Stage }> = [
-  { key: "new", label: "New", stages: ["NEW"], drop: "NEW" },
-  { key: "contacted", label: "Contacted", stages: ["CONTACTED"], drop: "CONTACTED" },
-  { key: "visit", label: "Site Visit", stages: ["SITE_VISIT_SCHEDULED", "VISIT_DONE"], drop: "SITE_VISIT_SCHEDULED" },
-  { key: "nego", label: "Negotiation", stages: ["NEGOTIATION"], drop: "NEGOTIATION" },
-  { key: "booked", label: "Booked", stages: ["BOOKED"], drop: "BOOKED" },
-  { key: "lost", label: "Lost", stages: ["LOST"], drop: "LOST" },
-];
+/*
+ * The pipeline itself is in `lead-display.ts`, which the phone's list reads to
+ * draw the same six as tabs. The cast is only to put the stage union back on
+ * the strings this screen drags between.
+ */
+const BOARD_COLUMNS = LEAD_PIPELINE as ReadonlyArray<{
+  key: string; label: string; stages: Stage[]; drop: Stage;
+}>;
 
 // The stage words, the source tones and the follow-up line are shared with the
 // row the phone is sent, so the two screens cannot drift apart.

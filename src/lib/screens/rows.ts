@@ -75,6 +75,14 @@ export interface ScreenRow {
    * action regardless.
    */
   actions?: RecordAction[];
+  /**
+   * Somebody to ring. The phone draws a call button and a WhatsApp button; the
+   * web has neither, because a desk cannot do either.
+   *
+   * Sent only where the viewer may see contact details — a masked number
+   * cannot be dialled, and offering to dial it would offer to leak it.
+   */
+  contact?: { phone: string };
 }
 
 /** A figure in the band, as `ModuleStats` draws one. */
@@ -142,6 +150,19 @@ export interface ScreenBoard {
  * The screen around the rows: its band, what it says when nothing matches, and
  * the note the web prints under the list.
  */
+/**
+ * The tabs a list is split into, where the web's screen is a board of columns.
+ *
+ * Leads are the case: the web lays the pipeline out as six columns side by
+ * side, which a phone cannot do, so it draws them as tabs and asks for one
+ * column at a time. `param` is the query key a tab sets, so the app does not
+ * have to know what a pipeline is — it sends back what it was given.
+ */
+export interface ScreenTabs {
+  param: string;
+  options: Array<{ key: string; label: string; count: number }>;
+}
+
 export interface ScreenShell {
   /** Index-aligned with the result's own rows, so a page slices both. */
   rows: ScreenRow[];
@@ -156,6 +177,8 @@ export interface ScreenShell {
    * behind both, and the app draws the board.
    */
   board?: ScreenBoard;
+  /** The web's board columns, where a phone shows them one at a time. */
+  tabs?: ScreenTabs;
 }
 
 /** The web's own band, in the tones the phone draws. */

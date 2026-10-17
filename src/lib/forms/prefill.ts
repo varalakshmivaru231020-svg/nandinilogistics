@@ -188,7 +188,44 @@ export async function prefillFor(
     }
 
     /* --------------------------------------------------------------- units */
+    /* ------------------------------------- raised from a project's own tabs */
+    /*
+     * These two are seeded rather than edited, and the id they are given is
+     * the **project's** — the record the button was pressed on, as the web's
+     * link carries it in `?project=<id>`.
+     */
+    case "tasks:create":
+    case "projects/progress:create": {
+      const project = await prisma.project.findUnique({
+        where: { id },
+        select: { id: true },
+      });
+      if (!project) return { values: {} };
+      return { values: { projectId: project.id } };
+    }
+
     /* --------------------------------------------------- a project document */
+    case "projects/projects:newDocumentVersion": {
+      const d = await prisma.projectDocument.findUnique({
+        where: { id },
+        select: { title: true, documentTypeId: true, access: true, projectId: true },
+      });
+      if (!d) return null;
+      return {
+        values: {
+          // The action's own first argument, and what this version supersedes.
+          projectId: d.projectId,
+          supersedesId: id,
+          title: d.title,
+          documentTypeId: d.documentTypeId,
+          access: txt(d.access),
+        },
+        // The chain is this document's: a version of it cannot be a version of
+        // something else, and the title is what the web carries over.
+        locked: [],
+      };
+    }
+
     case "projects/projects:editDocument": {
       const d = await prisma.projectDocument.findUnique({
         where: { id },
