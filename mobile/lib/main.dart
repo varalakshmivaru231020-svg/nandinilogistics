@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 
 import 'core/api.dart';
@@ -10,10 +11,27 @@ import 'modules/sign_in.dart';
 /// the app to correct it, so the build command is the decision.
 ///
 ///   flutter build apk --dart-define=NN_BASE_URL=https://erp.example
-const baseUrl = String.fromEnvironment(
-  'NN_BASE_URL',
-  defaultValue: 'http://10.0.2.2:3210',
-);
+///
+/// **A release build that was given no address uses production**, not a
+/// loopback. It used to default to `10.0.2.2:3210` — a development machine as
+/// an *emulator* sees it, which is nothing at all on a real handset — and a
+/// release APK built without the flag went out and reached nothing. The screen
+/// said so ("built to use http://10.0.2.2:3210") and that is how it was found,
+/// but an app that cannot work should never have been buildable by forgetting
+/// one flag.
+///
+/// A debug build still defaults to the emulator's view of this machine, which
+/// is what a developer running `flutter run` wants.
+const _configured = String.fromEnvironment('NN_BASE_URL');
+
+/// The production host: nginx terminates TLS for it and proxies to the app.
+const productionBaseUrl = 'https://nninfra.zapeat.in';
+
+/// What an emulator sees of the machine it is running on.
+const emulatorBaseUrl = 'http://10.0.2.2:3210';
+
+String get baseUrl =>
+    _configured.isNotEmpty ? _configured : (kReleaseMode ? productionBaseUrl : emulatorBaseUrl);
 
 void main() => runApp(const NnInfra());
 

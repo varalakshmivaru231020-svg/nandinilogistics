@@ -11,20 +11,29 @@ app to correct it, and nothing on screen explains it when it is wrong — the ap
 simply reaches nothing and looks broken. So the build command is the decision.
 
 ```bash
+# Production. The address is already the default for a release build, so this
+# is the whole command.
+flutter build apk --release
+
 # A real phone, against a development machine on the same wifi.
 # Works out this machine's address, permits cleartext to it, and builds.
 ./scripts/lan-apk.sh
 
-# Production.
-flutter build apk --release --split-per-abi \
-  --dart-define=NN_BASE_URL=https://erp.example
-
-# An emulator, which sees the host machine as 10.0.2.2.
-flutter build apk --debug --dart-define=NN_BASE_URL=http://10.0.2.2:3210
+# An emulator, which sees the host machine as 10.0.2.2. Also the default for
+# a debug build, so the flag is only needed to point somewhere else.
+flutter build apk --debug
 ```
 
-`NN_BASE_URL` defaults to `http://10.0.2.2:3210` — a development machine as an
-**emulator** sees it, which means nothing on a real handset.
+**A release build defaults to `https://nninfra.zapeat.in`** — nginx terminates
+TLS there and proxies to the app — and a debug build defaults to
+`http://10.0.2.2:3210`, which is this machine as an emulator sees it.
+`--dart-define=NN_BASE_URL=…` overrides either.
+
+It used to default to the emulator address in both, and a release APK built
+without the flag went out and reached nothing: the sign-in screen said "built
+to use http://10.0.2.2:3210" and the server never heard from the phone at all.
+`test/base_url_test.dart` now fails if production is ever a loopback, a private
+address or a non-standard port.
 
 ### Testing on a real handset
 
