@@ -142,6 +142,15 @@ export interface FormFieldDef {
    * the number before it posts and then deletes.
    */
   prefixes?: string;
+  /**
+   * For `files`: what the web's own input accepts — `image/*,.pdf` on a
+   * checklist verdict, everything the store allows elsewhere.
+   *
+   * A field that wants pictures gets the camera as well as the file chooser,
+   * because a phone judging a checkpoint on site is standing in front of the
+   * thing it is photographing.
+   */
+  accept?: string;
   /** The web's small print under a label, where it carries one. */
   note?: string;
 }

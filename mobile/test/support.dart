@@ -47,7 +47,7 @@ class Boundary {
   /// Every multipart request, as (the part names, the file names) — which is
   /// how a test checks that a chosen file went up as a part rather than as a
   /// value in the body.
-  final List<({List<String> fields, List<String> files})> multipart = [];
+  final List<({List<String> fields, List<String> files, List<Object?> args})> multipart = [];
 
   /// Every file fetched through the web's own routes, by path.
   final List<String> fetched = [];
@@ -76,6 +76,11 @@ class Boundary {
           // Read as bytes: a multipart body carries file bytes, which are not
           // text and must not be decoded as if they were.
           final raw = String.fromCharCodes(request.bodyBytes);
+          // The arguments ride along as the `args` part, so what the action is
+          // actually being called with can be asserted on a multipart call too.
+          final argsPart = RegExp(r'name="args"\r\n\r\n(.*?)\r\n--', dotAll: true)
+              .firstMatch(raw)
+              ?.group(1);
           multipart.add((
             fields: [
               for (final m in RegExp(r'name="([^"]+)"').allMatches(raw)) m.group(1)!,
@@ -83,6 +88,9 @@ class Boundary {
             files: [
               for (final m in RegExp(r'filename="([^"]+)"').allMatches(raw)) m.group(1)!,
             ],
+            args: argsPart == null
+                ? const []
+                : (jsonDecode(argsPart) as List).cast<Object?>(),
           ));
         }
         Map<String, dynamic>? body;

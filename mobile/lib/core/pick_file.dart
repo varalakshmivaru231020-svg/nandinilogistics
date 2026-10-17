@@ -1,14 +1,20 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'api.dart';
 
-/// Choosing a file to attach.
+/// Choosing a file to attach, or taking the photograph itself.
 ///
-/// Behind a seam, like the phone's position: a widget test has no file chooser,
-/// and a screen that called the plugin directly could not be driven in one.
+/// Behind a seam, like the phone's position: a widget test has no file chooser
+/// and no camera, and a screen that called the plugins directly could not be
+/// driven in one.
 abstract class Files {
   /// What was chosen, read into memory under the field the action reads.
   Future<List<Upload>> pick(String field);
+
+  /// One picture, taken now. The same field, the same bytes — the server
+  /// cannot tell a photograph from a chosen image and does not need to.
+  Future<List<Upload>> photo(String field);
 
   static Files live = _Picker();
 }
@@ -40,6 +46,31 @@ class _Picker implements Files {
           ),
     ];
   }
+
+  /*
+   * A photograph is stored as the JPEG the camera gives, named by the moment
+   * it was taken: a checklist point carries several, and "image_picker…jpg" in
+   * a list of them says nothing about which is which. The size cap is the
+   * server's own — a 12-megapixel original would be refused, and shrinking it
+   * here is what the browser's own capture does.
+   */
+  @override
+  Future<List<Upload>> photo(String field) async {
+    final shot = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      imageQuality: 85,
+      maxWidth: 2200,
+      maxHeight: 2200,
+    );
+    if (shot == null) return const [];
+    final bytes = await shot.readAsBytes();
+    final at = DateTime.now();
+    final stamp = '${at.year}${_two(at.month)}${_two(at.day)}'
+        '-${_two(at.hour)}${_two(at.minute)}${_two(at.second)}';
+    return [Upload(field: field, name: 'photo-$stamp.jpg', bytes: bytes, mime: 'image/jpeg')];
+  }
+
+  static String _two(int n) => n.toString().padLeft(2, '0');
 
   /// The media type, from the extension the chooser reports. The server checks
   /// again regardless — a picker is a convenience, not a guard.

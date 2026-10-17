@@ -59,6 +59,7 @@ class FieldDef {
     this.levels = false,
     this.showWhen,
     this.prefixes,
+    this.accept,
   });
 
   final String name;
@@ -122,6 +123,17 @@ class FieldDef {
   /// country code beside a mobile number, which the web joins and then drops.
   final String? prefixes;
 
+  /// For `files`: what the web's own input accepts. A field that takes images
+  /// is offered the camera as well as the file chooser — judging a checkpoint
+  /// happens in front of the thing being judged.
+  final String? accept;
+
+  /// Whether a picture taken now belongs here.
+  ///
+  /// Only where the web's own input asks for images: the checklist verdict
+  /// does, and a general attachment box does not get a camera it never had.
+  bool get takesPhotos => accept != null && accept!.contains('image/');
+
   factory FieldDef.from(Map<String, dynamic> j) {
     final v = j['variant'] as Map<String, dynamic>?;
     return FieldDef(
@@ -158,6 +170,7 @@ class FieldDef {
       levels: j['levels'] == true,
       showWhen: j['showWhen'] as String?,
       prefixes: j['prefixes'] as String?,
+      accept: j['accept'] as String?,
     );
   }
 
@@ -339,6 +352,13 @@ class FormValues {
         }
         continue;
       }
+      /*
+       * The files themselves travel as parts of the same request, under this
+       * field's own name — so the field contributes nothing to the values. It
+       * used to send `read()`'s sentinel, which arrived as a text field called
+       * "files" beside the real ones.
+       */
+      if (f.kind == 'files') continue;
       final v = read(f);
       if (v == null) continue;
       // An empty list is nothing to send in a form body.
@@ -402,17 +422,23 @@ class FormValues {
 /// Walks objects and lists, because an action that takes a parsed input takes
 /// one object — raising a return is `{issueId, reason, lines}` — and only some
 /// of its keys come from the form.
-Object? fill(Object? slot, FormValues v, {String? recordId}) {
+Object? fill(Object? slot, FormValues v, {String? recordId, Map<String, Object?> also = const {}}) {
   if (slot is Map) {
-    return slot.map((k, inner) => MapEntry('$k', fill(inner as Object?, v, recordId: recordId)));
+    return slot.map((k, inner) =>
+        MapEntry('$k', fill(inner as Object?, v, recordId: recordId, also: also)));
   }
   if (slot is List) {
-    return slot.map((inner) => fill(inner as Object?, v, recordId: recordId)).toList();
+    return slot.map((inner) => fill(inner as Object?, v, recordId: recordId, also: also)).toList();
   }
   if (slot is! String || !slot.startsWith(r'$')) return slot;
 
   final name = slot.substring(1);
-  if (name == 'values') return v.asMap();
+  /*
+   * The whole body. An action called from a record gets the verdict it stands
+   * for and the remark that was typed as well as the fields — one body, as the
+   * web posts one.
+   */
+  if (name == 'values') return {...v.asMap(), ...also};
   if (name == 'id') return recordId;
 
   final f = v.fields.where((x) => x.name == name).firstOrNull;
@@ -575,7 +601,9 @@ class _FormBodyState extends State<FormBody> {
         ),
       'files' => _Files(
           field: f,
-          label: _labelled(f, label),
+          // Without the note: the chooser prints the web's small print under
+          // itself, where the web prints it, and it was reading twice.
+          label: _labelled(f, label, withNote: false),
           chosen: into.files[f.name] ?? const [],
           enabled: enabled,
           onChanged: (list) => setState(() => into.files[f.name] = list),
@@ -607,11 +635,11 @@ class _FormBodyState extends State<FormBody> {
   }
 
   /// The label, with the web's required mark and its small print.
-  String _labelled(FieldDef f, String label) {
+  String _labelled(FieldDef f, String label, {bool withNote = true}) {
     final bits = [
       label + (f.required ? ' *' : ''),
       if (f.locked) '· fixed',
-      if (f.note != null) '· ${f.note}',
+      if (withNote && f.note != null) '· ${f.note}',
     ];
     return bits.join(' ');
   }
@@ -922,13 +950,16 @@ class _Files extends StatefulWidget {
 class _FilesState extends State<_Files> {
   bool _busy = false;
 
-  Future<void> _pick() async {
+  Future<void> _take(Future<List<Upload>> Function() from) async {
     setState(() => _busy = true);
-    final picked = await Files.live.pick(widget.field.name);
+    final picked = await from();
     if (!mounted) return;
     setState(() => _busy = false);
     if (picked.isNotEmpty) widget.onChanged([...widget.chosen, ...picked]);
   }
+
+  Future<void> _pick() => _take(() => Files.live.pick(widget.field.name));
+  Future<void> _camera() => _take(() => Files.live.photo(widget.field.name));
 
   @override
   Widget build(BuildContext context) {
@@ -954,15 +985,48 @@ class _FilesState extends State<_Files> {
         ]),
         const SizedBox(height: 8),
       ],
-      Btn(
-        widget.chosen.isEmpty ? '+ Add file' : '+ Add another file',
-        key: Key('files-${widget.field.name}'),
-        emphasis: Emphasis.outline,
-        icon: Icons.attach_file_rounded,
-        busy: _busy,
-        expand: true,
-        onPressed: widget.enabled ? _pick : null,
-      ),
+      /*
+       * Two ways in where the field takes pictures, because on site the
+       * photograph does not exist yet: the camera takes it, the chooser finds
+       * one already taken. The web's single file input is both of these on a
+       * desktop and neither on a phone.
+       */
+      if (widget.field.takesPhotos)
+        Row(children: [
+          Expanded(
+            child: Btn(
+              'Take a photo',
+              key: Key('camera-${widget.field.name}'),
+              emphasis: Emphasis.outline,
+              icon: Icons.photo_camera_rounded,
+              busy: _busy,
+              expand: true,
+              onPressed: widget.enabled ? _camera : null,
+            ),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Btn(
+              'Choose a file',
+              key: Key('files-${widget.field.name}'),
+              emphasis: Emphasis.outline,
+              icon: Icons.attach_file_rounded,
+              busy: _busy,
+              expand: true,
+              onPressed: widget.enabled ? _pick : null,
+            ),
+          ),
+        ])
+      else
+        Btn(
+          widget.chosen.isEmpty ? '+ Add file' : '+ Add another file',
+          key: Key('files-${widget.field.name}'),
+          emphasis: Emphasis.outline,
+          icon: Icons.attach_file_rounded,
+          busy: _busy,
+          expand: true,
+          onPressed: widget.enabled ? _pick : null,
+        ),
       if (widget.field.hint != null) ...[
         const SizedBox(height: 5),
         Text(widget.field.hint!, style: T.caption().copyWith(fontWeight: FontWeight.w500)),

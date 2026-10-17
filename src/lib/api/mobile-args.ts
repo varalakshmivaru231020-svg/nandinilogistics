@@ -76,14 +76,34 @@ export function coerce(arg: MobileArg, value: unknown, attached: FormData | null
       return value;
     }
 
-    case "form":
+    case "form": {
       // An attachment cannot travel in JSON, so a multipart body hands the
       // action the request's own FormData where it asked for "@formdata".
       if (value === "@formdata") {
         if (!attached) throw new Error(`\`${arg.name}\` needs a multipart body.`);
         return attached;
       }
-      return toFormData(value, arg.name);
+      /*
+       * Otherwise the fields came as JSON and the files, if there are any, came
+       * as parts of the same multipart request — so they are put back together
+       * here.
+       *
+       * This is what a browser posts as one body, and the two halves are split
+       * only because JSON cannot carry a photograph. Merging here rather than
+       * asking the client to flatten its values into parts keeps one
+       * definition of what a field becomes (`toFormData`, just above): a
+       * client that sent half its body as parts would be a second one, and the
+       * two would drift. A text part is ignored for the same reason — the
+       * fields are the JSON's, whatever else is in the envelope.
+       */
+      const form = toFormData(value, arg.name);
+      if (attached) {
+        for (const [key, part] of attached.entries()) {
+          if (part instanceof File && part.size > 0) form.append(key, part);
+        }
+      }
+      return form;
+    }
 
     /*
      * A record or a list of them — an indent's lines, a tower's planned units.

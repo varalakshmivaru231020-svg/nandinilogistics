@@ -78,6 +78,84 @@ describe("a form argument", () => {
     expect(coerce(arg({ kind: "form" }), "@formdata", attached)).toBe(attached);
     expect(() => coerce(arg({ kind: "form" }), "@formdata", null)).toThrow("multipart body");
   });
+
+  /*
+   * The half-and-half body the app sends: the fields as JSON, because that is
+   * how every other argument travels, and the files as parts of the same
+   * request, because JSON cannot carry a photograph. Merged here so that the
+   * action reads one FormData — the browser's own body.
+   *
+   * This is what was dropping attachments: the files arrived, the fields were
+   * turned into a fresh FormData, and the two were never put together.
+   */
+  it("puts the files of a multipart request into the form the fields built", () => {
+    const attached = new FormData();
+    attached.append("files", new File(["\u0001\u0002"], "snag.jpg", { type: "image/jpeg" }));
+    attached.append("files", new File(["\u0003"], "plan.pdf", { type: "application/pdf" }));
+
+    const form = coerce(
+      arg({ kind: "form" }),
+      { verdict: "APPROVE", remark: "Cover blocks at 25 mm." },
+      attached,
+    ) as FormData;
+
+    expect(form.get("verdict")).toBe("APPROVE");
+    expect(form.get("remark")).toBe("Cover blocks at 25 mm.");
+    expect(form.getAll("files").map((f) => (f as File).name)).toEqual(["snag.jpg", "plan.pdf"]);
+  });
+
+  /*
+   * The fields are the JSON's. A text part of the same request is somebody
+   * else's idea of a field — `args` itself, for one — and taking it would make
+   * two places decide what the body says.
+   */
+  it("ignores the text parts of that request, and empty files", () => {
+    const attached = new FormData();
+    attached.append("remark", "not this one");
+    attached.append("files", new File([], "nothing.jpg", { type: "image/jpeg" }));
+    const form = coerce(arg({ kind: "form" }), { remark: "this one" }, attached) as FormData;
+    expect(form.getAll("remark")).toEqual(["this one"]);
+    expect(form.getAll("files")).toEqual([]);
+  });
+});
+
+/*
+ * The call the phone's checklist verdict makes, exactly as the record describes
+ * it. It used to append the remark as a third argument to an action that takes
+ * two, and the boundary answered 422 — so Approve and Deny did nothing at all
+ * from the phone. The record now sends one body instead; this is that body
+ * arriving.
+ */
+describe("judging a checklist point across the boundary", () => {
+  it("arrives as the item and one form, with the verdict, the remark and the photograph", () => {
+    const def = MOBILE_ACTIONS["tasks/reviewChecklistItem"];
+    expect(def).toBeDefined();
+    expect(def.args.map((a) => a.kind)).toEqual(["text", "form"]);
+
+    const attached = new FormData();
+    attached.append("args", "[…]");
+    attached.append("files", new File(["\u0001"], "photo-20261017-094500.jpg", { type: "image/jpeg" }));
+    attached.delete("args"); // as the route does before handing it over
+
+    const [itemId, form] = buildArgs(
+      def,
+      ["ck1", { verdict: "DENY", remark: "Blocks missing on the east face." }],
+      attached,
+    ) as [string, FormData];
+
+    expect(itemId).toBe("ck1");
+    // The words the action reads — not the PASS/FAIL it stores.
+    expect(form.get("verdict")).toBe("DENY");
+    expect(form.get("remark")).toBe("Blocks missing on the east face.");
+    expect((form.getAll("files")[0] as File).name).toBe("photo-20261017-094500.jpg");
+  });
+
+  it("still refuses a remark sent as a third argument", () => {
+    const def = MOBILE_ACTIONS["tasks/reviewChecklistItem"];
+    expect(() => buildArgs(def, ["ck1", "PASS", "looks fine"], null)).toThrow(
+      "takes 2 argument(s), not 3",
+    );
+  });
 });
 
 describe("building a whole argument list", () => {

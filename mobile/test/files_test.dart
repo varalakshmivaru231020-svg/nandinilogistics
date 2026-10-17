@@ -21,6 +21,10 @@ class _FakeFiles implements Files {
   @override
   Future<List<Upload>> pick(String field) async =>
       [for (final u in answer) Upload(field: field, name: u.name, bytes: u.bytes, mime: u.mime)];
+
+  @override
+  Future<List<Upload>> photo(String field) async =>
+      [Upload(field: field, name: 'photo-20261017-094500.jpg', bytes: const [9, 9], mime: 'image/jpeg')];
 }
 
 void main() {

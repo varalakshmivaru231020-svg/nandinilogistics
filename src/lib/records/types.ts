@@ -116,6 +116,26 @@ export interface RecordAction {
   remark: "none" | "optional" | "required";
   remarkLabel?: string;
   /**
+   * Values the action reads out of the body, where its argument is a
+   * `FormData` — written as `$values` in `args`, the same substitution a form
+   * uses.
+   *
+   * Judging a checklist point is the case: `reviewChecklistItemAction` takes
+   * the item and a form, and reads `verdict`, `remark` and the photographs out
+   * of it. Approve and Deny are the same action with a different verdict, so
+   * the verdict belongs here, and the remark and the files go into the same
+   * body beside it — not appended as another argument, which is what the
+   * action refused.
+   */
+  parts?: Record<string, string>;
+  /**
+   * Which field of that body the remark goes under, where the action takes a
+   * form. Defaults to `remark`, which is what every one of them reads.
+   */
+  remarkField?: string;
+  /** The web's own placeholder in the remark box, where it has one. */
+  remarkPlaceholder?: string;
+  /**
    * The glyph the web's own icon button carries — ↑, ↓, 🗑 — where the action is
    * drawn as an icon rather than a word. The label stays, as its name.
    */

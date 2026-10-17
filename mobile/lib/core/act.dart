@@ -27,6 +27,9 @@ class Act {
     this.emphasis = Emphasis.primary,
     this.remark = RemarkMode.none,
     this.remarkLabel = 'Remark',
+    this.remarkPlaceholder,
+    this.remarkField,
+    this.parts = const {},
     this.fields = const [],
     this.done,
   });
@@ -36,10 +39,17 @@ class Act {
   /// not map a record kind to an action itself.
   final String action;
 
-  /// The leading positional arguments. A remark, where one is collected, is
-  /// appended to these. An argument of the form `$name` is replaced by the
-  /// field of that name in [fields] — extending a calendar task needs a new
-  /// finish as well as a reason, and the web asks for both in one dialog.
+  /// The leading positional arguments. An argument of the form `$name` is
+  /// replaced by the field of that name in [fields] — extending a calendar
+  /// task needs a new finish as well as a reason, and the web asks for both in
+  /// one dialog.
+  ///
+  /// A remark is appended as the last argument, which is how most of these
+  /// actions take one — unless an argument is `$values`, the whole body of a
+  /// form, and then it goes inside that instead, under [remarkField]. The
+  /// difference is the action's, not a choice: one takes `(id, remark)` and the
+  /// other `(id, formData)`, and giving the second a third argument is refused
+  /// by the boundary.
   final List<Object?> args;
 
   final String label;
@@ -48,6 +58,18 @@ class Act {
   final Emphasis emphasis;
   final RemarkMode remark;
   final String remarkLabel;
+
+  /// The web's own placeholder in the remark box — "What is wrong with it?
+  /// (optional)" on a denial.
+  final String? remarkPlaceholder;
+
+  /// Where the remark goes when this action takes a form rather than a
+  /// positional remark: a field of the body, named by the server.
+  final String? remarkField;
+
+  /// Values the body carries whatever the person types — the verdict that
+  /// tells Approve from Deny, which are otherwise the same call.
+  final Map<String, String> parts;
 
   /// What else the sheet collects before the remark, as the server described it.
   final List<FieldDef> fields;
@@ -107,6 +129,10 @@ Future<bool> runServerAction(
         _ => RemarkMode.none,
       },
       remarkLabel: (a['remarkLabel'] as String?) ?? 'Remark',
+      remarkPlaceholder: a['remarkPlaceholder'] as String?,
+      remarkField: a['remarkField'] as String?,
+      parts: ((a['parts'] as Map?) ?? const {})
+          .map((k, v) => MapEntry('$k', '$v')),
       // Where the action needs more than a remark — a new finish date, the
       // lines that arrived — the server sends the fields and the sheet
       // collects them.
@@ -178,6 +204,9 @@ class _ConfirmState extends State<_Confirm> {
     super.dispose();
   }
 
+  /// Whether one of the arguments is the form body itself.
+  bool get _takesBody => widget.act.args.any((a) => a == r'$values');
+
   bool get _remarkMissing =>
       widget.act.remark == RemarkMode.required && _remark.text.trim().isEmpty;
 
@@ -199,8 +228,15 @@ class _ConfirmState extends State<_Confirm> {
 
     // `$name` stands for one of the fields the sheet just collected, wherever
     // it appears — including inside an object the action takes whole.
-    final args = widget.act.args.map((a) => fill(a, _extra)).toList();
-    if (widget.act.remark != RemarkMode.none) args.add(_remark.text.trim());
+    final remark = _remark.text.trim();
+    final body = {
+      ...widget.act.parts,
+      if (widget.act.remark != RemarkMode.none && remark.isNotEmpty)
+        (widget.act.remarkField ?? 'remark'): remark,
+    };
+    final args = widget.act.args.map((a) => fill(a, _extra, also: body)).toList();
+    // Only where the action takes the remark on its own, as its own argument.
+    if (widget.act.remark != RemarkMode.none && !_takesBody) args.add(remark);
 
     final res = await widget.api.run(widget.act.action, args, files: _extra.uploads);
     if (!mounted) return;
@@ -232,6 +268,8 @@ class _ConfirmState extends State<_Confirm> {
           label: widget.act.remark == RemarkMode.required
               ? widget.act.remarkLabel
               : '${widget.act.remarkLabel} · optional',
+          // `hint` is the grey text inside the box — the web's placeholder.
+          hint: widget.act.remarkPlaceholder,
           controller: _remark,
           lines: 2,
           enabled: !_busy,

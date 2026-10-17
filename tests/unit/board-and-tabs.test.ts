@@ -93,6 +93,55 @@ describe("the task detail's tabs are the web's tabs", () => {
     expect(record.includes('tab: "history"')).toBe(true);
   });
 
+  /*
+   * Found on production: the phone's Approve and Deny were a third positional
+   * argument to an action that takes `(itemId, formData)`, so the boundary
+   * answered "This action takes 2 argument(s), not 3" and nothing could be
+   * judged from the app at all. The verdict, the remark and the photographs
+   * are one body, as the web posts one.
+   */
+  it("judges a point with one body, in the words the action reads", () => {
+    const action = read("src/app/(app)/tasks/actions.ts");
+
+    // The action reads the verdict out of the form, in these words.
+    expect(action.includes('const choice = String(formData.get("verdict") ?? "")')).toBe(true);
+    expect(action.includes('if (choice !== "APPROVE" && choice !== "DENY")')).toBe(true);
+
+    // So the record sends those words, in the body, not beside it.
+    expect(record.includes('args: [i.id, "$values"]')).toBe(true);
+    expect(record.includes('parts: { verdict: "APPROVE" }')).toBe(true);
+    expect(record.includes('parts: { verdict: "DENY" }')).toBe(true);
+    // PASS and FAIL are what it stores, never what it is told.
+    expect(record.includes('args: [i.id, "PASS"]')).toBe(false);
+    expect(record.includes('args: [i.id, "FAIL"]')).toBe(false);
+  });
+
+  /*
+   * The web's verdict box takes photographs, and says under itself that it
+   * needs neither them nor a remark. A phone requiring a remark on a denial —
+   * which this record used to — refuses what the web accepts.
+   */
+  it("collects photographs on a verdict, and requires nothing", () => {
+    expect(detail.includes('accept="image/*,.pdf"')).toBe(true);
+    expect(record.includes('accept: "image/*,.pdf"')).toBe(true);
+
+    const words = "The remark and the photographs are both optional.";
+    expect(detail.includes(words), "the web no longer says this").toBe(true);
+    expect(record.includes(words), "the record does not pass the web's words on").toBe(true);
+
+    // On the denial itself: the web requires nothing of either verdict.
+    const deny = record.slice(record.indexOf('parts: { verdict: "DENY" }'));
+    expect(deny.slice(0, 600).includes('remark: "optional"'),
+      "the phone asks for more than the web does to deny a point").toBe(true);
+    for (const placeholder of [
+      "A remark, if you have one (optional)",
+      "What is wrong with it? (optional)",
+    ]) {
+      expect(detail.includes(placeholder), `the web no longer says "${placeholder}"`).toBe(true);
+      expect(record.includes(placeholder), `the record does not send "${placeholder}"`).toBe(true);
+    }
+  });
+
   it("judges a point with Approve and Deny, and nothing else", () => {
     expect(detail.includes(">\n                Approve\n              </button>")).toBe(true);
     expect(record.includes('label: "Approve"')).toBe(true);

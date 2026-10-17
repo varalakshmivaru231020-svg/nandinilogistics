@@ -65,9 +65,20 @@ Map<String, Object> _task() => {
                   'label': 'Approve',
                   'emphasis': 'approve',
                   'action': 'tasks/reviewChecklistItem',
-                  'args': ['i2', 'PASS'],
+                  'args': ['i2', r'$values'],
+                  'parts': {'verdict': 'APPROVE'},
+                  'fields': [
+                    {
+                      'name': 'files',
+                      'label': 'Photographs',
+                      'kind': 'files',
+                      'accept': 'image/*,.pdf',
+                      'note': 'The remark and the photographs are both optional.',
+                    },
+                  ],
                   'remark': 'optional',
                   'remarkLabel': 'Remark',
+                  'remarkPlaceholder': 'A remark, if you have one (optional)',
                   'confirm': 'This point moves to the next level.',
                 },
                 {
@@ -75,9 +86,11 @@ Map<String, Object> _task() => {
                   'label': 'Deny',
                   'emphasis': 'reject',
                   'action': 'tasks/reviewChecklistItem',
-                  'args': ['i2', 'FAIL'],
-                  'remark': 'required',
-                  'remarkLabel': 'What is wrong',
+                  'args': ['i2', r'$values'],
+                  'parts': {'verdict': 'DENY'},
+                  'remark': 'optional',
+                  'remarkLabel': 'Remark',
+                  'remarkPlaceholder': 'What is wrong with it? (optional)',
                   'confirm': 'This point alone goes back to reviewer 1.',
                 },
               ],
@@ -172,8 +185,17 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(b.actions.last.action, 'tasks/reviewChecklistItem');
-      // The optional remark travels as the empty string it was left as.
-      expect(b.actions.last.args, ['i2', 'PASS', '']);
+      /*
+       * The point and **one body**, because that is what the action takes:
+       * `(itemId, formData)`. The verdict is in it in the action's own words;
+       * a remark nobody typed is not, exactly as a browser leaves an empty box
+       * out. Sent as a third argument — which is what this app used to do —
+       * the boundary refuses the call outright.
+       */
+      expect(b.actions.last.args, [
+        'i2',
+        {'verdict': 'APPROVE'},
+      ]);
     });
 
     testWidgets('switching tab shows that tab\'s cards', (tester) async {

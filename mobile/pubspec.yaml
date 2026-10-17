@@ -18,6 +18,7 @@ dependencies:
   geolocator: ^13.0.2
   # Picking a document to attach — an Aadhaar copy, a drawing, a photograph.
   file_picker: ^8.1.6
+  image_picker: ^1.1.2
   # The media type of a multipart part; `http`'s own dependency, named here
   # because this package imports it directly.
   http_parser: ^4.0.2

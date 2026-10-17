@@ -6,6 +6,7 @@ import type { AuthContext } from "@/lib/rbac/context";
 import { canDo, STATUS_LABEL, type TaskShape } from "@/lib/tasks/lifecycle";
 import { earliestWaitingLevel, levelOrder, waitingLevel } from "@/lib/tasks/checklist-flow";
 import { money, toneOf, words, type RecordAction, type RecordView } from "./shared";
+import type { ResolvedField } from "@/lib/forms/types";
 
 /**
  * One task, with its checklist.
@@ -319,16 +320,46 @@ export async function taskRecord(ctx: AuthContext, id: string): Promise<RecordVi
         if (waiting && (mine || isAdmin)) {
           const reviewing = waiting.kind === "REVIEW";
           if (ctx.has(reviewing ? PERM.task.level.review : PERM.task.level.approve)) {
+            /*
+             * The same body the web's verdict box posts: the verdict, a remark
+             * if there is one, and photographs if there are any — "APPROVE" or
+             * "DENY" in the words `reviewChecklistItemAction` reads, not the
+             * PASS/FAIL it stores.
+             *
+             * The action takes `(itemId, formData)` and nothing else, so the
+             * remark cannot be a third argument: it goes into the form beside
+             * the verdict, which is where the action looks for it. On site the
+             * photograph is the point of the verdict, so the field is here and
+             * the phone offers its camera as well as its files.
+             */
+            const photographs = (): ResolvedField[] => [
+              {
+                name: "files",
+                label: "Photographs",
+                kind: "files",
+                accept: "image/*,.pdf",
+                note: "The remark and the photographs are both optional.",
+              },
+            ];
             rowActions.push({
               key: "pass", label: "Approve", emphasis: "approve",
-              action: "tasks/reviewChecklistItem", args: [i.id, "PASS"],
+              action: "tasks/reviewChecklistItem", args: [i.id, "$values"],
+              parts: { verdict: "APPROVE" },
+              fields: photographs(),
               remark: "optional", remarkLabel: "Remark",
+              remarkPlaceholder: "A remark, if you have one (optional)",
               confirm: "This point moves to the next level.",
             });
             rowActions.push({
               key: "fail", label: "Deny", emphasis: "reject",
-              action: "tasks/reviewChecklistItem", args: [i.id, "FAIL"],
-              remark: "required", remarkLabel: "What is wrong",
+              action: "tasks/reviewChecklistItem", args: [i.id, "$values"],
+              parts: { verdict: "DENY" },
+              fields: photographs(),
+              // The web requires neither, on either verdict — it says so under
+              // the box. Requiring a remark here would be the phone refusing
+              // what the web accepts.
+              remark: "optional", remarkLabel: "Remark",
+              remarkPlaceholder: "What is wrong with it? (optional)",
               confirm: "This point alone goes back to reviewer 1. The others do not move.",
             });
           }

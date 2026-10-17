@@ -7,7 +7,7 @@ the registries that decide the behaviour: `src/lib/screens/registry.ts`,
 `src/lib/api/parity.ts`. `tests/unit/mobile-parity.test.ts` fails if an
 action is unreachable from the app and unexplained.
 
-Last written 2026-10-15.
+Last written 2026-10-17.
 
 ## In one line
 
