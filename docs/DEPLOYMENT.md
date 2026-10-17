@@ -10,92 +10,64 @@ advisory.
 
 ## Last release
 
-`a6af7d2` · 17 Oct 2026 · 6 commits, from `fb4e88d`. Every item below was run.
+`f868fd8` · 17 Oct 2026 · 1 commit, from `a6af7d2`. Every item below was run.
 
 | | |
 |---|---|
-| Rolled forward from | `fb4e88d` (the code of `872cd11`) |
-| Backup taken first | `nn_infra_erp-20261017-094009.dump` — 431 KB, `pg_restore --list` readable |
-| Migrations | 37 found, none pending — no schema change in this release |
+| Rolled forward from | `a6af7d2` |
+| Backup taken first | `nn_infra_erp-20261017-121113.dump` — 431 KB, `pg_restore --list` readable |
+| Migrations | 37 found, none pending — no schema change |
 | Permission catalogue | 564 codes, 0 created |
-| Role grants | 1524 → 1524 (nothing new this release) |
-| Code gate | 1853 unit and integration tests, 115 on the phone, `flutter analyze` clean; `pnpm build` is the deploy's own `==> Building`, which passed |
+| Role grants | 1524 → 1524 |
+| Code gate | 1872 unit and integration tests, 119 on the phone, `flutter analyze` clean; the deploy's own `==> Building` passed |
 | Health | `==> Healthy (HTTP 200)`, pm2 `online`, `/login` 200 over TLS |
-| Read on production | `a6af7d2` checked out; every new endpoint routed — `/form/hr/employees/create`, `/form/projects/projects/uploadDocument`, `/form/projects/projects/editDocument`, `/form/material/grn/attach`, `/form/units/edit` each answering `401 Sign-in required` rather than 404, and `/do/projects/%5Bid%5D/documents/uploadDocument` a 405 for GET. The masters the new forms draw on all have live rows: 8 document types, 3 employment types, 9 designations, 2 active stores, 5 project types — and 9 employees, 9 receipts and 4 project documents for the new row actions to act on |
-| Android client | `dist/nninfra-20261017-arm64.apk` (18.7 MB) and `-arm32.apk` (16.1 MB), built from clean. `https://nninfra.zapeat.in` is the only address inside `libapp.so`; `Take a photo`, `Choose a file` and `Replace file` present. Two new plugins — `image_picker` for the camera, `open_filex` with `path_provider` for reading a stored file — and both file providers (`imagepicker`, `crazecoder.openfile`) merged into the app manifest |
+| Read on production | `f868fd8` checked out; `/calendar`, `/record/projects/projects/…`, `/list/sales/leads?pipeline=lost` and `/form/projects/projects/newDocumentVersion` all routed, each answering `401 Sign-in required` rather than 404 |
+| Android client | `dist/nninfra-20261017-arm64.apk` (18.7 MB) and `-arm32.apk` (16.2 MB), from clean. `https://nninfra.zapeat.in` the only address in `libapp.so`; `wa.me` and the dialler's words present; `url_launcher` registered beside `image_picker` and `open_filex` |
 
-**What it put live:** two things that were broken in the field, five the web
-could do and the app could not, and three permission gates that disagreed with
-the web.
+**What it put live:** the three things asked for by name, and one defect found
+while reading the screen they were asked for.
 
-**Broken, and now fixed.**
+1. **The project screen has the web's five tabs** — Overview, Tasks, Team
+   Mapping, Documents, Site Progress — in its order and its words, each behind
+   the permission that draws it there, and each carrying the add button the web
+   puts on it: "+ New task", "+ Log entry", Upload, Map user. The tab's own
+   action is the one on the bar; the record's own (Edit project) stays whichever
+   tab is open. A viewer who holds only one tab gets no strip and still sees
+   that tab's cards.
+2. **Its Tasks tab was showing the wrong thing** — the phases and work
+   packages, which is what the tab used to be before the web changed it to the
+   work assigned against the project. It lists the tasks now, with the number,
+   the location, the assignee, the due date and the web's own overdue rule, and
+   each row opens its task as the web's row links to it.
+3. **Documents carry versions.** "New version" opens the web's own superseding
+   upload: the particulars come from the document being superseded,
+   `supersedesId` travels in the body, and the earlier version stays readable.
+4. **Site Progress is the day's capture**, as the web's tab is — today's logs
+   with the time and the geo tick, and the web's own empty line. Every log ever
+   written is the Site Progress screen's own list.
+5. **The lead pipeline is the web's six columns, as tabs**, with the counts the
+   board puts on its headings and "All" for its list view. The pipeline moved
+   to `lead-display.ts` so the board and the tabs are one definition; the list
+   takes `pipeline=<column>`, and the counts are read with the column left out
+   so they do not move as you change tab.
+6. **How late a follow-up is** shows as a chip in its own tone beside the name,
+   where it was buried in a line down the card.
+7. **Call and WhatsApp on a lead row** — the two things a handset can do that a
+   desk cannot. The number travels only where the viewer may see contact
+   details: a masked number cannot be rung, and offering to ring it would offer
+   to leak it.
+8. **The calendar's "Activity" is "Schedule"**, the word the navigation and the
+   module use. Every other label in that list names where the item came from;
+   this one read as a synonym for Task beside the Task items. The app held its
+   own copy of all seven words — which is how they could differ at all — so the
+   boundary sends them now and the app draws what it is sent.
 
-1. **Approving or denying a checklist point did nothing.** The app appended the
-   remark as a third argument to `reviewChecklistItemAction`, which takes
-   `(itemId, formData)`, so the boundary answered *"This action takes 2
-   argument(s), not 3."* Proved over HTTP against production before anything
-   was changed. The verdict, the remark and the photographs are one body now,
-   as the web's own verdict box posts one — and the verdict travels in the
-   action's own words, `APPROVE` or `DENY`, not the `PASS`/`FAIL` it stores.
-2. **Editing a flat always failed.** `updateUnitAction` reads `updatedAt` out
-   of the body and refuses without it — *"Reload the unit before editing
-   it."* — and the form never sent it. The web posts it from a hidden input;
-   the phone now carries it, prefilled.
-3. **A chosen file never reached any action.** The app sent its fields as JSON
-   and its files as parts of the same request, and `coerce()` built a FormData
-   from the JSON and dropped the parts — so every article attachment, identity
-   copy and task file went up and was silently discarded. The two halves are
-   merged at the boundary, which keeps one definition of what a field becomes.
-4. **Three document actions were unreachable.** Their key carries a route
-   folder, `projects/[id]/documents/uploadDocument`, and a bracket is not legal
-   in a path — so a client sends `%5Bid%5D` and the `do` route, looking up the
-   raw pathname, answered *"No such action"*.
-5. **A goods receipt refused itself.** The web's form opens already answered —
-   `useState(stores[0]?.id ?? "")` — so nobody at a desk ever chooses the
-   receiving store. The phone opened blank and answered *"Receiving store is
-   required."* the moment the storeman pressed Receive goods.
-
-**What the web had and the app did not.**
-
-6. **A new employee**, which `parity.ts` had written off as beyond the boundary
-   because the design makes a photograph mandatory. The whole drawer is here:
-   the particulars, the photograph — taken with the camera on site or chosen
-   from the phone — and the Aadhaar and PAN copies. The edit carries them too,
-   and the record shows the photograph at all for the first time.
-7. **The challan on a goods receipt**: attached as the receipt is booked, which
-   is the web's *"⎙ Capture / attach photo"* and the only moment the person
-   holding it is at the gate; or afterwards from the Attachments card, where
-   they can now also be opened and removed.
-8. **A project's documents**: uploaded, opened, renamed and deleted. The
-   repository was read-only on the phone and its rows opened nothing.
-9. **Photographs on a checklist verdict**, with the web's own
-   `accept="image/*,.pdf"` and its own small print, *"The remark and the
-   photographs are both optional."*
-10. **A stored file opens in whatever this phone reads it with.** It used to
-    say of a drawing that it *"opens on the web"* — true of a browser, false of
-    a phone, where a PDF reader is one intent away.
-
-**Where the gates disagreed with the web.**
-
-11. The calendar record asked `calendar.event.view`, a code nothing else in the
-    app asks for; `/calendar`, the navigation and the mobile calendar route all
-    ask `calendar.agenda.view`.
-12. The schedule's *add main category* form asked `schedule.activity.create`
-    while `addMainCategoryAction` authorizes `project.workPackage.create` — a
-    category *is* a work package.
-13. A project's status was required on the phone and optional on the web.
-
-**What now keeps it true.** Six tests that read both sides rather than taking
-either on trust: `form-coverage` (every field an action reads is a field the
-app sends — this is what found the flat), `record-action-args` (105 record
-actions counted against the arguments their actions take — this is the
-checklist 422), `permission-parity` (the web page, the list route, the record
-and the form all ask for the same codes), `form-defaults` (a control the web
-opens answered opens answered here), `role-coverage` (every role can use the
-app, every permission is granted to somebody, nobody can open a list whose rows
-they would be refused) and `forms-resolve` (every form resolved against the
-database, every chooser a list). Parity is 134 of 154 actions, up from 128,
-with each of the twenty written down and a reason beside it.
+**What keeps it true:** `project-detail` (the tabs, each add on its own tab, the
+seeded task form, the version carried over), `lead-pipeline` (the six columns
+over the list route, the counts, one column at a time, the badge, and no number
+for somebody who may not see one), `asked_for_test.dart` (all of it on screen,
+including the one-tab viewer and a phone with no WhatsApp), and the calendar's
+labels pinned to one definition in `mobile-client-parity`.
 
 ---
 
