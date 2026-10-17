@@ -336,9 +336,17 @@ from here.
 | F0 | **Built from clean** | `cd mobile && flutter clean && flutter pub get` |
 | F1 | Analyzer clean | `cd mobile && flutter analyze` |
 | F2 | Tests pass, including the usability suite | `cd mobile && flutter test` |
-| F3 | Built against the **real** host, not an emulator's loopback | `flutter build apk --release --split-per-abi --dart-define=NN_BASE_URL=https://<host>` |
+| F3 | Built against **`https://nninfra.zapeat.in`** — the hostname, not the bare IP and not an emulator's loopback | `flutter build apk --release --dart-define=NN_BASE_URL=https://nninfra.zapeat.in` |
 | F4 | `NN_BASE_URL` is in the APK you are about to hand out | the default is `http://10.0.2.2:3210`, which is a laptop seen from an emulator — a release carrying it reaches nothing |
 | F5 | Every role can still sign in | `admin.mobile.use` must be granted (B5/D6), or the app refuses with that code while the web works |
+
+**The host is `https://nninfra.zapeat.in`.** nginx has proxied that name to the
+app on 3021 since 8 September, with a Let's Encrypt certificate, a 30 MB
+`client_max_body_size` (above the 25 MB upload limit) and the forwarded headers
+set — and for weeks the app was built against `http://168.231.103.114:3021`
+instead. Plain HTTP on a non-standard port is what a mobile network, a carrier
+proxy or a public hotspot drops; 443 with TLS is not. The production IP has
+been removed from the cleartext allow-list because nothing needs it any more.
 
 **F4 is the one that bites.** The server address is baked in at build time.
 There is no setting to correct it afterwards and no error that explains it — the
