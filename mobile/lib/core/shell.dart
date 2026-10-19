@@ -39,7 +39,9 @@ class BottomBar extends StatelessWidget {
         color: T.card,
         border: Border(top: BorderSide(color: T.line)),
       ),
-      padding: EdgeInsets.fromLTRB(6, 8, 6, MediaQuery.of(context).padding.bottom + 10),
+      // A little air at the ends, so the first and last tabs are not hard
+      // against the edge of the glass.
+      padding: EdgeInsets.fromLTRB(12, 8, 12, MediaQuery.of(context).padding.bottom + 10),
       child: Row(children: [
         _tab('Home', Icons.grid_view_rounded, current == 'dashboard', onHome),
         _tab('Approvals', Icons.fact_check_outlined, current == 'approvals', onApprovals,
@@ -51,6 +53,35 @@ class BottomBar extends StatelessWidget {
   }
 
   Widget _tab(String label, IconData icon, bool active, VoidCallback? onTap, {int? badge}) {
+    /*
+     * The badge rides on the icon, not on the cell.
+     *
+     * It used to be positioned 18 from the right of the whole tab, which is a
+     * different distance from the icon in every tab — the wider the cell, the
+     * further adrift it sat, and on a four-tab bar it read as belonging to
+     * nothing. Stacked on the icon it is in the same place every time.
+     */
+    final mark = Stack(clipBehavior: Clip.none, children: [
+      Icon(icon, size: 21, color: active ? T.brand500 : T.faint),
+      if (badge != null && badge > 0)
+        Positioned(
+          top: -6,
+          left: 12,
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 17),
+            height: 17,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: T.warn,
+              borderRadius: BorderRadius.circular(T.rPill),
+              border: Border.all(color: T.card, width: 1.5),
+            ),
+            child: Text('$badge', style: T.num(10, color: T.navy950, weight: FontWeight.w800)),
+          ),
+        ),
+    ]);
+
     return Expanded(
       child: Semantics(
         button: true,
@@ -59,37 +90,28 @@ class BottomBar extends StatelessWidget {
           onTap: onTap,
           child: SizedBox(
             height: T.target,
-            child: Stack(clipBehavior: Clip.none, children: [
-              Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(icon, size: 21, color: active ? T.brand500 : T.faint),
+            // Centred as a pair, so every tab's icon sits on the same line and
+            // every label under it — whatever the label's length.
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                mark,
                 const SizedBox(height: 3),
-                Text(label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-                      color: active ? T.brand700 : T.muted,
-                    )),
-              ]),
-              if (badge != null && badge > 0)
-                Positioned(
-                  top: 2,
-                  right: 18,
-                  child: Container(
-                    constraints: const BoxConstraints(minWidth: 17),
-                    height: 17,
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: T.warn,
-                      borderRadius: BorderRadius.circular(T.rPill),
-                    ),
-                    child: Text('$badge',
-                        style: T.num(10, color: T.navy950, weight: FontWeight.w800)),
-                  ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Text(label,
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                        color: active ? T.brand700 : T.muted,
+                      )),
                 ),
-            ]),
+              ],
+            ),
           ),
         ),
       ),

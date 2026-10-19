@@ -689,6 +689,9 @@ class Bar extends StatelessWidget {
   final List<Widget> pills;
   final TextStyle? titleStyle;
 
+  /// Whether the buttons need a line of their own, which they do past two.
+  bool get _crowded => actions.length > 2;
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -720,8 +723,29 @@ class Bar extends StatelessWidget {
                 ),
             ]),
           ),
-          for (final a in actions) ...[const SizedBox(width: 8), a],
+          // Two or fewer fit beside the title. More, and they take a row of
+          // their own below it — see the comment on `_crowded`.
+          if (!_crowded)
+            for (final a in actions) ...[const SizedBox(width: 8), a],
         ]),
+        /*
+         * A list screen carries four of these — new, more, search, filter —
+         * and on a phone that left the title about a hundred points wide:
+         * "Leads · 9 records" arrived as "Le…" over "9 reco…". The name of the
+         * screen you are on is not the thing to cut, and none of the four is
+         * worth losing either, so they move to their own line and the title
+         * gets the whole width.
+         */
+        if (_crowded)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Row(children: [
+              for (final (i, a) in actions.indexed) ...[
+                if (i > 0) const SizedBox(width: 8),
+                a,
+              ],
+            ]),
+          ),
         if (pills.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 12),

@@ -20,6 +20,7 @@ class DashboardScreen extends StatefulWidget {
     required this.onNotifications,
     this.unread,
     required this.onOpen,
+    this.onPickProject,
     required this.bottom,
     this.onApprovalCount,
   });
@@ -34,6 +35,10 @@ class DashboardScreen extends StatefulWidget {
   /// How many are unread, for the dot on it.
   final int? unread;
   final void Function(String moduleKey) onOpen;
+
+  /// The chooser, for a module that cannot answer without a project — the
+  /// schedule is one project's Gantt, not three.
+  final Future<void> Function()? onPickProject;
   final Widget bottom;
   final void Function(int)? onApprovalCount;
 
@@ -54,6 +59,10 @@ class _Health {
   String? rightLabel;
   Tone? rightTone;
   bool failed = false;
+
+  /// It answered, and asked for a project first. Not a fault — the schedule
+  /// belongs to one project, and the server says so in those words.
+  bool needsProject = false;
 }
 
 class DashboardScreenState extends State<DashboardScreen> {
@@ -93,7 +102,11 @@ class DashboardScreenState extends State<DashboardScreen> {
       for (final h in wanted)
         widget.api.get('/list/${h.key}').then((r) {
           if (!r.ok) {
-            h.failed = true;
+            // The boundary's own code, so the row can say which of the two
+            // this is rather than printing "could not be read" at somebody who
+            // has simply not chosen a project.
+            h.needsProject = r.code == 'project-required';
+            h.failed = !h.needsProject;
             return;
           }
           _fill(h, ListPage.from(r.data!));
@@ -208,6 +221,9 @@ class DashboardScreenState extends State<DashboardScreen> {
                                 value: '$_tasksOverdue',
                                 label: 'Tasks overdue',
                                 tone: _tasksOverdue > 0 ? Tone.bad : Tone.good,
+                                // It counts tasks; it opens them. It used to
+                                // count them and do nothing.
+                                onTap: () => widget.onOpen('tasks'),
                               ),
                             ),
                         ]),
@@ -225,10 +241,16 @@ class DashboardScreenState extends State<DashboardScreen> {
                         for (final h in _health) ...[
                           _HealthRow(
                             health: h,
-                            // Only where the module is one the menu can reach.
-                            onTap: hrefToModule.containsValue(h.key)
-                                ? () => widget.onOpen(h.key)
-                                : null,
+                            /*
+                             * A module waiting for a project opens the
+                             * chooser; anything else opens the module, where
+                             * the menu can reach it.
+                             */
+                            onTap: h.needsProject && widget.onPickProject != null
+                                ? () => widget.onPickProject!().then((_) => _load())
+                                : hrefToModule.containsValue(h.key)
+                                    ? () => widget.onOpen(h.key)
+                                    : null,
                           ),
                           const SizedBox(height: 8),
                         ],
@@ -298,12 +320,22 @@ class _HealthRow extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(health.label, style: T.body(weight: FontWeight.w700)),
             const SizedBox(height: 2),
-            Text(health.failed ? 'Could not be read' : health.detail,
-                style: T.caption(color: health.failed ? T.badInk : T.muted)
+            Text(
+                health.needsProject
+                    ? 'Choose a project to see it'
+                    : health.failed
+                        ? 'Could not be read'
+                        : health.detail,
+                style: T.caption(
+                        color: health.failed
+                            ? T.badInk
+                            : health.needsProject
+                                ? T.warnInk
+                                : T.muted)
                     .copyWith(fontSize: 12, fontWeight: FontWeight.w500)),
           ]),
         ),
-        if (health.right != null && !health.failed)
+        if (health.right != null && !health.failed && !health.needsProject)
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(health.right!, style: T.metric(19, color: right?.ink ?? T.navy950)),
             Text(health.rightLabel ?? '', style: T.overline().copyWith(fontSize: 10.5)),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../core/dial.dart';
 import '../core/api.dart';
@@ -704,18 +705,24 @@ class ServerRowCard extends StatelessWidget {
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Flexible(
-                  child: Text(drawn.title,
-                      style: T.rowTitle().copyWith(fontSize: 15),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
+              /*
+               * The name gets the line. It used to share it with the chips,
+               * which on a lead — a source chip and an overdue chip — left
+               * "Vikram Shetty" as "Vikr" over "am…", and the next row's name
+               * as a single letter. A card whose heading cannot be read is not
+               * a card.
+               */
+              Text(drawn.title,
+                  style: T.rowTitle().copyWith(fontSize: 15),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
+              if (drawn.chips.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Wrap(spacing: 6, runSpacing: 5, children: [
+                    for (final c in drawn.chips) KindTag(c.text, tone: c.tone),
+                  ]),
                 ),
-                for (final c in drawn.chips) ...[
-                  const SizedBox(width: 6),
-                  KindTag(c.text, tone: c.tone),
-                ],
-              ]),
               if ((drawn.meta ?? '').isNotEmpty) ...[
                 const SizedBox(height: 3),
                 Text(drawn.meta!,
@@ -862,7 +869,9 @@ class _Reach extends StatelessWidget {
       const SizedBox(width: 7),
       _ReachButton(
         key: Key('chat:$number'),
-        icon: Icons.chat_rounded,
+        // WhatsApp's own mark, in its own green — a speech bubble said "a
+        // message", which is not what this button does.
+        icon: FontAwesomeIcons.whatsapp,
         tooltip: 'WhatsApp $name',
         tone: const Color(0xFF25D366),
         onTap: () => _go(context, () => Dial.live.chat(number)),

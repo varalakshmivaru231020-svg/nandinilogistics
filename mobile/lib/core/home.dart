@@ -224,6 +224,7 @@ class HomeState extends State<Home> {
               setState(() => _related = moduleKey);
             }
           },
+          onPickProject: _pickProjectFromModule,
           onApprovalCount: (n) {
             if (_badges['/approvals'] != n) setState(() => _badges['/approvals'] = n);
           },
