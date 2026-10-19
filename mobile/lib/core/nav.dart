@@ -72,7 +72,6 @@ const _icons = <String, IconData>{
   '/units/board': Icons.apartment_outlined,
   '/hr': Icons.badge_outlined,
   '/kb': Icons.menu_book_outlined,
-  '/masters': Icons.settings_outlined,
 };
 
 /// The screens the web reaches from inside another screen rather than from the

@@ -144,10 +144,8 @@ class HomeState extends State<Home> {
         badges: _badges,
         onPick: (m) {
           Navigator.pop(context);
-          if (m.href == '/masters') {
-            notify(context, 'Masters & Users is managed on the web.');
-            return;
-          }
+          // Everything the drawer offers opens: the boundary leaves out what
+          // the app has no screen for, rather than listing it and refusing it.
           _open(m.href);
         },
         onProject: _pickProject,

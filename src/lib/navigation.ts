@@ -23,6 +23,18 @@ export interface NavItem {
   /** Key into the design's icon set — see components/shell/nav-icons.tsx. */
   icon?: string;
   badge?: "indentPending" | "followUpDue" | "reorder" | "tasks" | "approvals";
+  /**
+   * Not offered on the phone.
+   *
+   * Masters & Users is web-only by the brief (§12) — master data, reference
+   * data, users, roles, sessions, audit and settings — so the app has no
+   * screen behind it. It was still listed in the app's drawer, where tapping
+   * it said "managed on the web": a menu entry that exists to refuse you is a
+   * worse answer than no entry.
+   *
+   * The web's own sidebar is unchanged; `visibleNavigation()` ignores this.
+   */
+  webOnly?: boolean;
 }
 
 export interface NavSection {
@@ -92,7 +104,13 @@ export const NAVIGATION: NavSection[] = [
     label: "Administration",
     items: [
       { label: "Knowledge Base", href: "/kb", icon: "kb", permission: PERM.kb.article.view },
-      { label: "Masters & Users", href: "/masters", icon: "masters", anyPermission: MASTER_VIEW_CODES() },
+      {
+        label: "Masters & Users",
+        href: "/masters",
+        icon: "masters",
+        anyPermission: MASTER_VIEW_CODES(),
+        webOnly: true,
+      },
     ],
   },
 ];
