@@ -68,6 +68,16 @@ suite("access control, end to end", () => {
       ["/admin/roles", ["admin"], ["tl", "telecaller", "rider"]],
       ["/admin/audit", ["admin"], ["tl", "telecaller", "rider"]],
       ["/admin/users", ["admin"], ["tl", "telecaller", "rider"]],
+      ["/hr/onboarding", ["admin", "tl", "telecaller"], []],
+      ["/hr/referrals", ["admin", "tl", "rider"], ["telecaller"]],
+      ["/payouts", ["admin", "tl", "telecaller", "rider"], []],
+      ["/payouts/imports", ["admin"], ["tl", "telecaller", "rider"]],
+      ["/advances", ["admin", "tl", "rider"], ["telecaller"]],
+      ["/advances/bike-rent", ["admin", "tl"], ["telecaller", "rider"]],
+      ["/accounts/invoices", ["admin"], ["tl", "telecaller", "rider"]],
+      ["/staff/payslips", ["admin"], ["tl", "telecaller", "rider"]],
+      ["/reports/teamLeader", ["admin", "tl"], ["telecaller", "rider"]],
+      ["/reports/payoutSummary", ["admin"], ["tl", "telecaller", "rider"]],
     ];
 
     for (const [route, allowed, denied] of matrix) {

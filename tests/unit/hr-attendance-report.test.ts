@@ -123,7 +123,11 @@ describe("employee edit audit", () => {
       address: null, altContact: null, employmentTypeId: "t", designationId: null,
     };
     expect(Object.keys(editableEmployee(row)).sort()).toEqual(
-      ["aadhaar", "address", "altContact", "designationId", "employmentTypeId", "mobile", "name", "pan"],
+      [
+        "aadhaar", "address", "altContact", "bankAccountNo", "bankHolderName", "bankIfsc", "bankName",
+        "companyIds", "designationId", "drivingLicence", "emergencyMobileFamily", "emergencyMobileFriend",
+        "employmentTypeId", "insuranceNumber", "joinedOn", "mobile", "monthlySalary", "name", "pan", "pfNumber",
+      ],
     );
   });
 });

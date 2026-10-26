@@ -7,6 +7,7 @@ import { usersHolding } from "@/lib/rbac/holders";
 import { maskPhone } from "@/lib/utils";
 import { dateInputValue, editRefusal } from "@/lib/sales/lead-edit";
 import { LeadDetail } from "./lead-detail";
+import { StartOnboardingButton } from "./start-onboarding-button";
 
 export const metadata = { title: "Lead" };
 
@@ -36,6 +37,7 @@ export default async function LeadDetailPage({
       },
       notes: { orderBy: { createdAt: "desc" }, include: { user: { select: { name: true } } } },
       documents: { orderBy: { createdAt: "desc" } },
+      rider: { select: { id: true, employeeCode: true } },
     },
   });
   if (!lead) notFound();
@@ -221,6 +223,15 @@ export default async function LeadDetailPage({
         assign: ctx.has(PERM.sales.lead.assign),
       }}
       nowMs={now.getTime()}
+      onboarding={
+        // SOW §3.1 stage 4 — the Onboarding stage opens the onboarding form.
+        lead.stage.kind === "ONBOARDING" && (lead.rider || ctx.has(PERM.hr.employee.create)) ? (
+          <StartOnboardingButton
+            leadId={lead.id}
+            rider={lead.rider ? { id: lead.rider.id, code: lead.rider.employeeCode } : null}
+          />
+        ) : null
+      }
     />
   );
 }

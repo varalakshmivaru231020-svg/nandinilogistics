@@ -20,12 +20,15 @@ export async function loadAttendanceReport(
   db: Db,
   range: { from: string; to: string },
   listParams: EmployeeListParams,
+  /** Who the viewer may see — `employeeScope(ctx)`; everyone when omitted. */
+  scope: Prisma.EmployeeWhereInput = {},
 ): Promise<AttendanceSummaryRow[]> {
   const attendanceOn = dateCondition(range);
   const [employees, entries] = await Promise.all([
     db.employee.findMany({
       where: {
         AND: [
+          scope,
           employeeListWhere({ ...listParams, status: "" }),
           { OR: [{ status: { not: "INACTIVE" } }, { attendance: { some: { attendanceOn } } }] },
         ],
@@ -38,7 +41,7 @@ export async function loadAttendanceReport(
       },
     }),
     db.attendanceEntry.findMany({
-      where: { attendanceOn, employee: employeeListWhere({ ...listParams, status: "" }) },
+      where: { attendanceOn, employee: { AND: [scope, employeeListWhere({ ...listParams, status: "" })] } },
       select: { employeeId: true, attendanceOn: true, status: true, overtimeHours: true },
     }),
   ]);

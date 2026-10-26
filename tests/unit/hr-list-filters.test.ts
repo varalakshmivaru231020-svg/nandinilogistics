@@ -26,7 +26,7 @@ describe("employee list filters", () => {
   });
 
   it("ignores malformed ids from a hand-edited URL", () => {
-    expect(readEmployeeListParams({ type: "x' OR '1", designation: "a/b" })).toEqual({ q: "", type: "", designation: "", status: "" });
+    expect(readEmployeeListParams({ type: "x' OR '1", designation: "a/b" })).toEqual({ q: "", type: "", designation: "", company: "", status: "" });
   });
 
   it("defaults to every status", () => {
@@ -49,11 +49,11 @@ describe("employee list filters", () => {
   });
 
   it("describes the filters", () => {
-    expect(describeEmployeeFilters(readEmployeeListParams({}), { type: null, designation: null })).toBe("All employees");
+    expect(describeEmployeeFilters(readEmployeeListParams({}), { type: null, designation: null })).toBe("All riders and staff");
     expect(describeEmployeeFilters(readEmployeeListParams({ q: "ram" }), { type: "Contract", designation: null }))
       .toBe('Search "ram" · Type Contract');
     expect(describeEmployeeFilters(readEmployeeListParams({ status: "INACTIVE" }), { type: null, designation: null }))
-      .toBe("Inactive only");
+      .toBe("Left only");
   });
 
   it("masks identity numbers down to the last four", () => {

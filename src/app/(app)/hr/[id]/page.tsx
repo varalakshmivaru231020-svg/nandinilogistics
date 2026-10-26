@@ -3,13 +3,17 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { maskId } from "@/lib/hr/list-filters";
+import { employeeScope, maskId } from "@/lib/hr/list-filters";
+import { isRiderType, onboardingChecklist, type OnboardingStatus } from "@/lib/riders/onboarding";
+import { referralStatus } from "@/lib/riders/referrals";
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { EmployeeDetail, type AttendanceDay, type AttendanceRow } from "./employee-detail";
+import { RiderPanel } from "./rider-panel";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const e = await prisma.employee.findUnique({ where: { id }, select: { name: true } });
-  return { title: e?.name ?? "Employee" };
+  return { title: e?.name ?? "Rider" };
 }
 
 const AVATAR_COLOURS = ["#0089C9", "#2F308C", "#1F9D66", "#E8A13A"];
@@ -51,18 +55,29 @@ export default async function EmployeeDetailPage({
   const raw = await searchParams;
   const ctx = await requirePermission(PERM.hr.employee.view);
 
-  const employee = await prisma.employee.findUnique({
-    where: { id },
+  // Scoped like the list: a record outside the viewer's team is not found,
+  // which says nothing about whether it exists.
+  const employee = await prisma.employee.findFirst({
+    where: { id, ...employeeScope(ctx) },
     include: {
       employmentType: { select: { name: true } },
       designation: { select: { name: true } },
       documents: { orderBy: { kind: "asc" } },
+      companies: { select: { companyId: true, company: { select: { name: true } } } },
+      decidedBy: { select: { name: true } },
+      referredBy: { select: { name: true, employeeCode: true } },
+      referrals: {
+        orderBy: { createdAt: "desc" },
+        select: { id: true, name: true, employeeCode: true, joinedOn: true, onboardingStatus: true, status: true, leftOn: true },
+      },
+      lead: { select: { id: true, leadNo: true } },
     },
   });
   if (!employee) notFound();
 
   // The design opens on the last fortnight.
   const now = new Date();
+  const nowMs = now.getTime();
   const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
   const defaultFrom = new Date(today.getTime() - 13 * 86_400_000);
   const from = raw.from ? new Date(`${raw.from}T00:00:00.000Z`) : defaultFrom;
@@ -114,6 +129,15 @@ export default async function EmployeeDetailPage({
   const otHours = entries.reduce((s, e) => s + Number(e.overtimeHours), 0);
 
   const canIdentity = ctx.has(PERM.hr.employee.viewIdentity);
+  const identity = (v: string | null) => (canIdentity ? v : maskId(v)) || "—";
+  const rider = isRiderType(employee.employmentType.name);
+
+  // What the form still needs before it can be submitted — the same list the
+  // submit action refuses with.
+  const missing = onboardingChecklist(
+    { ...employee, companyIds: employee.companies.map((c) => c.companyId), isRider: rider },
+    employee.documents.map((d) => d.kind),
+  );
 
   return (
     <EmployeeDetail
@@ -126,15 +150,68 @@ export default async function EmployeeDetailPage({
         type: employee.employmentType.name,
         designation: employee.designation?.name ?? "—",
         fields: [
+          { k: "Rider ID", v: employee.employeeCode },
           { k: "Type of employment", v: employee.employmentType.name },
+          { k: "Status", v: employee.status === "INACTIVE" ? `Left${employee.leftOn ? ` · ${formatDate(employee.leftOn)}` : ""}` : "Active" },
+          { k: "Companies", v: employee.companies.map((c) => c.company.name).join(", ") || "—" },
           { k: "Mobile number", v: employee.mobile },
           { k: "Alternate number", v: employee.altContact || "—" },
+          { k: "Emergency · father / mother", v: employee.emergencyMobileFamily || "—" },
+          { k: "Emergency · friend", v: employee.emergencyMobileFriend || "—" },
           { k: "Designation", v: employee.designation?.name ?? "—" },
-          { k: "Aadhaar number", v: (canIdentity ? employee.aadhaar : maskId(employee.aadhaar)) ?? "—" },
-          { k: "PAN", v: (canIdentity ? employee.pan : maskId(employee.pan)) ?? "—" },
+          { k: "Joined on", v: employee.joinedOn ? formatDate(employee.joinedOn) : "—" },
+          { k: "Aadhaar number", v: identity(employee.aadhaar) },
+          { k: "PAN", v: identity(employee.pan) },
+          { k: "Driving licence", v: identity(employee.drivingLicence) },
+          { k: "Bank", v: employee.bankName ? `${employee.bankName} · ${identity(employee.bankAccountNo)} · ${employee.bankIfsc ?? "—"}` : "—" },
+          { k: "Account holder", v: employee.bankHolderName || "—" },
+          { k: "PF number", v: employee.pfNumber || "—" },
+          { k: "Insurance number", v: employee.insuranceNumber || "—" },
+          ...(employee.monthlySalary !== null ? [{ k: "Monthly salary", v: `₹${Number(employee.monthlySalary).toLocaleString("en-IN")}` }] : []),
           { k: "Address", v: employee.address || "—" },
         ],
       }}
+      extras={
+        <RiderPanel
+          rider={{
+            id: employee.id,
+            name: employee.name,
+            code: employee.employeeCode,
+            onboardingStatus: employee.onboardingStatus as OnboardingStatus,
+            submittedAt: employee.submittedAt ? formatDateTime(employee.submittedAt) : null,
+            decidedAt: employee.decidedAt ? formatDateTime(employee.decidedAt) : null,
+            decidedBy: employee.decidedBy?.name ?? null,
+            rejectionReason: employee.rejectionReason,
+            hasOfferLetter: employee.offerLetterKey !== null,
+            offerLetterAt: employee.offerLetterAt ? formatDate(employee.offerLetterAt) : null,
+            referralCode: employee.referralCode,
+            referredBy: employee.referredBy ? `${employee.referredBy.name} (${employee.referredBy.employeeCode})` : null,
+            hasLogin: employee.userId !== null,
+            leadNo: employee.lead?.leadNo ?? null,
+            leadId: employee.lead && ctx.has(PERM.sales.lead.view) ? employee.lead.id : null,
+          }}
+          missing={missing}
+          referrals={employee.referrals.map((r) => {
+            const s = referralStatus(r, nowMs);
+            return {
+              id: r.id,
+              name: r.name,
+              code: r.employeeCode,
+              joinedOn: r.joinedOn ? formatDate(r.joinedOn) : null,
+              status: s.label,
+              eligible: s.eligible,
+            };
+          })}
+          can={{
+            submit: ctx.has(PERM.hr.employee.submitOnboarding),
+            accept: ctx.has(PERM.hr.employee.acceptOnboarding),
+            reject: ctx.has(PERM.hr.employee.rejectOnboarding),
+            offerLetter: ctx.has(PERM.hr.employee.offerLetter),
+            idCard: ctx.has(PERM.hr.employee.idCard),
+            setPin: ctx.has(PERM.hr.employee.setPin),
+          }}
+        />
+      }
       documents={
         canIdentity
           ? employee.documents.map((d) => ({

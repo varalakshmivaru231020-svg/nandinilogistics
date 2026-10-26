@@ -155,6 +155,94 @@ export const SCREENS: Record<string, ScreenDef> = {
     ],
     dateRange: { label: "Due" },
   },
+  // ------------------------------------------------------------- onboarding
+  "hr/onboarding": {
+    key: "hr/onboarding",
+    href: "/hr/onboarding",
+    title: "Onboarding",
+    searchPlaceholder: null,
+    filters: [
+      { name: "status", label: "Status", allLabel: "All", options: [{ value: "DRAFT", label: "Draft" }, { value: "SUBMITTED", label: "Submitted" }, { value: "ACCEPTED", label: "Accepted" }, { value: "REJECTED", label: "Rejected" }] },
+      { name: "company", label: "Company", allLabel: "All companies", source: "companies" },
+    ],
+  },
+
+  "hr/referrals": {
+    key: "hr/referrals",
+    href: "/hr/referrals",
+    title: "Referrals",
+    searchPlaceholder: null,
+    filters: [
+      { name: "status", label: "Status", allLabel: "All", options: [{ value: "PENDING", label: "Not yet joined" }, { value: "VALID", label: "Valid" }, { value: "EXPIRED", label: "Completed 25 days" }, { value: "LEFT", label: "Left before 25 days" }] },
+    ],
+  },
+
+  // ----------------------------------------------------------------- money
+  payouts: {
+    key: "payouts",
+    href: "/payouts",
+    title: "Payouts",
+    searchPlaceholder: null,
+    filters: [
+      { name: "company", label: "Company", allLabel: "All companies", source: "companies" },
+      { name: "status", label: "Status", allLabel: "All", options: [{ value: "PAID", label: "Paid" }, { value: "HOLD", label: "On hold" }] },
+    ],
+    dateRange: { label: "Period" },
+  },
+
+  "payouts/imports": {
+    key: "payouts/imports",
+    href: "/payouts/imports",
+    title: "Payout imports",
+    searchPlaceholder: null,
+    filters: [
+      { name: "company", label: "Company", allLabel: "All companies", source: "companies" },
+      { name: "status", label: "Status", allLabel: "All", options: [{ value: "DRAFT", label: "Draft" }, { value: "POSTED", label: "Posted" }] },
+    ],
+  },
+
+  advances: {
+    key: "advances",
+    href: "/advances",
+    title: "Advances",
+    searchPlaceholder: null,
+    filters: [
+      { name: "status", label: "Status", allLabel: "All", options: [{ value: "PENDING", label: "Pending" }, { value: "APPROVED", label: "Approved" }, { value: "REJECTED", label: "Rejected" }] },
+      { name: "priority", label: "Priority", allLabel: "Any priority", options: [{ value: "EMERGENCY", label: "Emergency" }, { value: "LOW", label: "Low priority" }] },
+      { name: "company", label: "Company", allLabel: "All companies", source: "companies" },
+    ],
+  },
+
+  "advances/bike-rent": {
+    key: "advances/bike-rent",
+    href: "/advances/bike-rent",
+    title: "Bike rent",
+    searchPlaceholder: null,
+    filters: [
+      { name: "state", label: "State", allLabel: "All", options: [{ value: "active", label: "Running" }, { value: "ended", label: "Ended" }] },
+      { name: "company", label: "Company", allLabel: "All companies", source: "companies" },
+    ],
+  },
+
+  "accounts/invoices": {
+    key: "accounts/invoices",
+    href: "/accounts/invoices",
+    title: "Vendor invoices",
+    searchPlaceholder: "Search invoice no., company…",
+    filters: [
+      { name: "company", label: "Company", allLabel: "All companies", source: "companies" },
+      { name: "status", label: "Status", allLabel: "All", options: [{ value: "RAISED", label: "Raised" }, { value: "SENT", label: "Sent" }, { value: "PARTIALLY_PAID", label: "Partially paid" }, { value: "PAID", label: "Paid" }, { value: "OVERDUE", label: "Overdue" }] },
+    ],
+    dateRange: { label: "Dated" },
+  },
+
+  "staff/payslips": {
+    key: "staff/payslips",
+    href: "/staff/payslips",
+    title: "Payslips",
+    searchPlaceholder: "Search name, employee ID…",
+    filters: [],
+  },
 };
 
 export const SCREEN_KEYS = Object.keys(SCREENS).sort();

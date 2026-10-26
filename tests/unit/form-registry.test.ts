@@ -73,6 +73,11 @@ const OURS = new Set([
    */
   "hr/employees:create → Photo",
   "hr/employees:edit → Photo",
+  // The document slots are drawn from RIDER_DOC_KINDS in src/lib/riders/onboarding.ts, so
+  // their names are not literals in the screen.
+  ...["create", "edit"].flatMap((m) =>
+    ["Aadhaar front", "Aadhaar back", "PAN card", "Passbook", "Driving licence"].map((k) => `hr/employees:${m} → ${k}`),
+  ),
 ]);
 
 /**
@@ -84,10 +89,16 @@ const OUTSIDE_THE_FORM = new Set([
    * The web writes these two as one input per kind — `name={`doc:${kind}`}`
    * over `["Aadhaar card", "PAN card"]` — so the literal name appears nowhere.
    */
-  "hr/employees:create → doc:Aadhaar card",
+  "hr/employees:create → doc:Aadhaar front",
+  "hr/employees:create → doc:Aadhaar back",
   "hr/employees:create → doc:PAN card",
-  "hr/employees:edit → doc:Aadhaar card",
+  "hr/employees:create → doc:Passbook",
+  "hr/employees:create → doc:Driving licence",
+  "hr/employees:edit → doc:Aadhaar front",
+  "hr/employees:edit → doc:Aadhaar back",
   "hr/employees:edit → doc:PAN card",
+  "hr/employees:edit → doc:Passbook",
+  "hr/employees:edit → doc:Driving licence",
   // The stale guard the lead's edit drawer posts as a hidden input.
   "sales/leads:edit → updatedAt",
 ]);

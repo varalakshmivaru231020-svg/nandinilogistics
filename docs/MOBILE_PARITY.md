@@ -13,11 +13,11 @@ Last written 2026-10-26.
 
 | | |
 |---|---|
-| Web actions on the boundary | **24** |
-| Reachable from the app | **22** |
-| Not reachable, with a reason | 2 |
-| Web list screens | 5 |
-| …with a record screen | 5 |
+| Web actions on the boundary | **60** |
+| Reachable from the app | **32** |
+| Not reachable, with a reason | 28 |
+| Web list screens | 13 |
+| …with a record screen | 12 |
 | …with a create form | 4 |
 | …with an edit form | 3 |
 
@@ -36,13 +36,50 @@ The last column says where each one is raised.
 | `hr/employees` | `/hr` | ✅ | `create` | ✅ | ✅ | its own list |
 | `hr/attendance` | `/hr` | ✅ | `mark` | — | ✅ | its own list |
 | `tasks` | `/tasks` | ✅ | `create` | ✅ | ✅ | its own list |
+| `hr/onboarding` | `/hr/onboarding` | ✅ | — | — | ⚠️ | its own list |
+| `hr/referrals` | `/hr/referrals` | ✅ | — | — | ⚠️ | its own list |
+| `payouts` | `/payouts` | ✅ | — | — | ⚠️ | its own list |
+| `payouts/imports` | `/payouts/imports` | ❌ | — | — | ❌ | its own list |
+| `advances` | `/advances` | ✅ | — | — | ⚠️ | its own list |
+| `advances/bike-rent` | `/advances/bike-rent` | ✅ | — | — | ⚠️ | its own list |
+| `accounts/invoices` | `/accounts/invoices` | ✅ | — | — | ⚠️ | its own list |
+| `staff/payslips` | `/staff/payslips` | ✅ | — | — | ⚠️ | its own list |
 
 ## The actions the phone cannot reach
 
-### brief:web-only — 2
+### brief:web-only — 22
 
 - `hr/createEmploymentType` — The employment-type master.
 - `hr/deleteEmploymentType` — The employment-type master.
+- `accounts/invoices/createInvoice` — Admin work on the web admin panel.
+- `accounts/invoices/updateInvoice` — Admin work on the web admin panel.
+- `companies/addCompanyLocation` — Admin work on the web admin panel.
+- `companies/setCompanyOfferTemplates` — Admin work on the web admin panel.
+- `companies/setCompanyTeamLeaders` — Admin work on the web admin panel.
+- `companies/setPayoutColumnMap` — Admin work on the web admin panel.
+- `companies/toggleCompanyLocation` — Admin work on the web admin panel.
+- `companies/updateCompanyLocation` — Admin work on the web admin panel.
+- `companies/uploadRateCard` — Admin work on the web admin panel.
+- `payouts/correctPayoutLine` — Admin work on the web admin panel.
+- `payouts/createPayoutImport` — Admin work on the web admin panel.
+- `payouts/deletePayoutImport` — Admin work on the web admin panel.
+- `payouts/postPayoutImport` — Admin work on the web admin panel.
+- `payouts/previewPayoutImport` — Admin work on the web admin panel.
+- `staff/payslips/payslipDraft` — Admin work on the web admin panel.
+- `staff/payslips/generatePayslip` — Admin work on the web admin panel.
+- `advances/createBikeRent` — Admin work on the web admin panel.
+- `advances/updateBikeRent` — Admin work on the web admin panel.
+- `advances/endBikeRent` — Admin work on the web admin panel.
+- `advances/deleteBikeRent` — Admin work on the web admin panel.
+
+### todo — 6
+
+- `advances/createAdvance` — The Android client is rebuilt after the admin panel.
+- `advances/decideAdvance` — The Android client is rebuilt after the admin panel.
+- `advances/deleteAdvance` — The Android client is rebuilt after the admin panel.
+- `payouts/holdPayoutLine` — The Android client is rebuilt after the admin panel.
+- `payouts/releasePayoutLine` — The Android client is rebuilt after the admin panel.
+- `hr/startOnboardingFromLead` — The Android client is rebuilt after the admin panel.
 
 ## Every screen's states
 

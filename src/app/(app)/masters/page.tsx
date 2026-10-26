@@ -190,7 +190,7 @@ async function Companies() {
     <>
       <div className="grid gap-3 [grid-template-columns:repeat(3,1fr)] max-md:[grid-template-columns:1fr]">
         {companies.map((c) => (
-          <Link key={c.id} href={`/masters/companies?q=${encodeURIComponent(c.code)}`} className="rounded-[13px] border border-line-400 bg-white px-[18px] py-[17px] transition-colors hover:border-brand-500">
+          <Link key={c.id} href={`/companies/${c.id}`} className="rounded-[13px] border border-line-400 bg-white px-[18px] py-[17px] transition-colors hover:border-brand-500">
             <div className="flex items-start justify-between gap-2">
               <p className="font-display text-[13.5px] font-bold text-navy-950">{c.name}</p>
               <span
@@ -220,7 +220,7 @@ async function Companies() {
         </Card>
       )}
       <ListNote>
-        Open the full list under Reference Data → Companies to edit, deactivate, import or export.
+        Open a company for its hubs, Team Leaders, rate card and payout sheet mapping. The full list under Reference Data → Companies edits, deactivates, imports and exports.
       </ListNote>
     </>
   );

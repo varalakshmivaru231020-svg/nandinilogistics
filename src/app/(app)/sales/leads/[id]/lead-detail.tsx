@@ -38,8 +38,10 @@ interface FileRow { id: string; title: string; fileName: string; fileSize: numbe
 
 export function LeadDetail({
   lead, stepper, timeline, followUps, notes, stageHistory, files,
-  tab, edit, can, nowMs, lostReasons, owners,
+  tab, edit, can, nowMs, lostReasons, owners, onboarding,
 }: {
+  /** The onboarding control the server draws once the lead reaches that stage. */
+  onboarding?: React.ReactNode;
   /** The tele-callers this lead can be handed to. */
   owners: Array<{ id: string; name: string }>;
   lead: Lead;
@@ -150,6 +152,8 @@ export function LeadDetail({
             <span className="font-bold text-navy-900">{lead.stageName}</span>
           </p>
         </div>
+
+        {onboarding}
 
         {can.assign && (
           <button

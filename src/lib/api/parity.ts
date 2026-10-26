@@ -43,4 +43,113 @@ export const PARITY: Record<string, ParityExemption> = {
     reason: "brief:web-only",
     note: "The employment-type master.",
   },
+  /* -------------------- Admin screens, web only by the SOW (§2) -------------------- */
+
+  "accounts/invoices/createInvoice": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "accounts/invoices/updateInvoice": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "companies/addCompanyLocation": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "companies/setCompanyOfferTemplates": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "companies/setCompanyTeamLeaders": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "companies/setPayoutColumnMap": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "companies/toggleCompanyLocation": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "companies/updateCompanyLocation": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "companies/uploadRateCard": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "payouts/correctPayoutLine": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "payouts/createPayoutImport": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "payouts/deletePayoutImport": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "payouts/postPayoutImport": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "payouts/previewPayoutImport": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "staff/payslips/payslipDraft": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "staff/payslips/generatePayslip": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "advances/createBikeRent": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "advances/updateBikeRent": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "advances/endBikeRent": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+  "advances/deleteBikeRent": {
+    reason: "brief:web-only",
+    note: "Admin work on the web admin panel.",
+  },
+
+  /* ------------- Rider/TL actions the app will carry once it is rebuilt ------------- */
+
+  "advances/createAdvance": {
+    reason: "todo",
+    note: "The Android client is rebuilt after the admin panel.",
+  },
+  "advances/decideAdvance": {
+    reason: "todo",
+    note: "The Android client is rebuilt after the admin panel.",
+  },
+  "advances/deleteAdvance": {
+    reason: "todo",
+    note: "The Android client is rebuilt after the admin panel.",
+  },
+  "payouts/holdPayoutLine": {
+    reason: "todo",
+    note: "The Android client is rebuilt after the admin panel.",
+  },
+  "payouts/releasePayoutLine": {
+    reason: "todo",
+    note: "The Android client is rebuilt after the admin panel.",
+  },
+  "hr/startOnboardingFromLead": {
+    reason: "todo",
+    note: "The Android client is rebuilt after the admin panel.",
+  },
 };

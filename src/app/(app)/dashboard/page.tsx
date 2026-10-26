@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { CheckSquare, PhoneCall, Users, UserPlus } from "lucide-react";
+import { CheckSquare, ClipboardCheck, PhoneCall, Users, UserPlus, Wallet } from "lucide-react";
 
 import { requireAuth } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { Card, CardBody, CardHeader, CardSubtitle, CardTitle, StatLabel, StatValue } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, money } from "@/lib/utils";
 import { taskSummaryByTeamLeader } from "@/lib/tasks/service";
 
 export const metadata = { title: "Dashboard" };
@@ -122,6 +122,83 @@ export default async function DashboardPage() {
     });
   }
 
+  /* ------------------ Onboarding, advances and payouts (SOW §3.5) ------------ */
+
+  const canDecideOnboarding = ctx.has(PERM.hr.employee.acceptOnboarding);
+  const canDecideAdvances = ctx.has(PERM.advance.advance.approve);
+  const canPayouts = ctx.has(PERM.payout.payout.view);
+
+  const pendingOnboarding = canDecideOnboarding
+    ? await prisma.employee.count({ where: { onboardingStatus: "SUBMITTED" } })
+    : 0;
+  const pendingAdvances = canDecideAdvances
+    ? await prisma.advance.count({ where: { status: "PENDING" } })
+    : 0;
+
+  // The rider behind this login, if any — the rider dashboard is theirs alone.
+  const me = canPayouts
+    ? await prisma.employee.findUnique({ where: { userId: ctx.id }, select: { id: true } })
+    : null;
+  const payoutScope = ctx.has(PERM.payout.payout.viewAll) ? {} : me ? { employeeId: me.id } : {};
+  const [paidLines, heldLines] = canPayouts
+    ? await Promise.all([
+        prisma.payoutLine.aggregate({
+          _sum: { finalPayout: true }, _count: { _all: true },
+          where: { ...payoutScope, status: "PAID", import: { status: "POSTED", postedAt: { gte: new Date(nowMs - 7 * 86_400_000) } } },
+        }),
+        prisma.payoutLine.aggregate({
+          _sum: { finalPayout: true }, _count: { _all: true },
+          where: { ...payoutScope, status: "HOLD", import: { status: "POSTED" } },
+        }),
+      ])
+    : [null, null];
+
+  if (canDecideOnboarding) {
+    kpis.push({
+      label: "Onboarding approvals",
+      value: String(pendingOnboarding),
+      sub: pendingOnboarding > 0 ? "waiting for a decision" : "nothing waiting",
+      href: "/hr/onboarding",
+      icon: <ClipboardCheck className="h-4 w-4" />,
+      tone: pendingOnboarding > 0 ? "bg-warn-050 text-warn-700" : "bg-good-050 text-good-700",
+    });
+  }
+  if (canDecideAdvances) {
+    kpis.push({
+      label: "Advance requests",
+      value: String(pendingAdvances),
+      sub: pendingAdvances > 0 ? "waiting for a decision" : "nothing waiting",
+      href: "/advances",
+      icon: <Wallet className="h-4 w-4" />,
+      tone: pendingAdvances > 0 ? "bg-warn-050 text-warn-700" : "bg-good-050 text-good-700",
+    });
+  }
+  if (canPayouts && paidLines && heldLines) {
+    kpis.push({
+      label: me && !ctx.has(PERM.payout.payout.viewAll) ? "My payout · last 7 days" : "Payouts posted · last 7 days",
+      value: money(Number(paidLines._sum.finalPayout ?? 0)),
+      sub: heldLines._count._all > 0
+        ? `${heldLines._count._all} on hold · ${money(Number(heldLines._sum.finalPayout ?? 0))}`
+        : "nothing on hold",
+      href: "/payouts",
+      icon: <Wallet className="h-4 w-4" />,
+      tone: heldLines._count._all > 0 ? "bg-bad-050 text-bad-700" : "bg-brand-100 text-brand-500",
+    });
+  }
+
+  // Active riders by company — the SOW's second Admin tile.
+  const ridersByCompany = canPeople
+    ? await prisma.company.findMany({
+        where: { status: "ACTIVE" },
+        orderBy: { name: "asc" },
+        select: {
+          id: true, name: true,
+          _count: { select: { riders: { where: { employee: { status: "ACTIVE", onboardingStatus: "ACCEPTED" } } } } },
+        },
+      })
+    : [];
+  const ridersMax = Math.max(1, ...ridersByCompany.map((c) => c._count.riders));
+
   // The SOW's Admin dashboard card: open, overdue and completed tasks per Team Leader.
   const canTaskReport = ctx.has(PERM.task.report.view);
   const perTeamLeader = canTaskReport ? await taskSummaryByTeamLeader(prisma, nowMs) : [];
@@ -158,6 +235,33 @@ export default async function DashboardPage() {
         <Card>
           <CardBody>
             <p className="text-sm text-muted-500">Nothing to show yet — your role has no screens with a summary.</p>
+          </CardBody>
+        </Card>
+      )}
+
+      {canPeople && ridersByCompany.length > 0 && (
+        <Card className="mt-3.5">
+          <CardHeader>
+            <div>
+              <CardTitle>Active riders by company</CardTitle>
+              <CardSubtitle>Accepted and active, by where they are deployed</CardSubtitle>
+            </div>
+            <Link href="/hr">
+              <Button size="sm" variant="secondary">Open riders →</Button>
+            </Link>
+          </CardHeader>
+          <CardBody>
+            <ul className="space-y-2">
+              {ridersByCompany.map((c) => (
+                <li key={c.id} className="grid items-center gap-3 [grid-template-columns:160px_1fr_48px]">
+                  <span className="truncate text-[12.5px] font-semibold text-navy-900">{c.name}</span>
+                  <span className="h-2 overflow-hidden rounded-full bg-surface-field">
+                    <span className="block h-full rounded-full bg-plum-600" style={{ width: `${Math.round((c._count.riders / ridersMax) * 100)}%` }} />
+                  </span>
+                  <span className="num text-right text-[12.5px] font-bold text-navy-950">{c._count.riders}</span>
+                </li>
+              ))}
+            </ul>
           </CardBody>
         </Card>
       )}

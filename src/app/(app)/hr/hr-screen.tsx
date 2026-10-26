@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { uploadProblem } from "@/lib/upload-rules";
 import type { AttendanceSummaryRow } from "@/lib/hr/attendance-report";
 import { isInactive, statusLabel } from "@/lib/hr/employee-status";
+import { isInternalStaffType, isRiderType, ONBOARDING_LABEL, ONBOARDING_TONE, RIDER_DOC_KINDS, type OnboardingStatus } from "@/lib/riders/onboarding";
 import {
   createEmployeeAction, deleteEmployeeAction,
   markAttendanceAction, setEmployeeStatusAction, updateEmployeeAction,
@@ -33,6 +34,12 @@ interface Employee {
   employmentTypeId: string; employmentType: string;
   designationId: string | null; designation: string | null;
   status: string;
+  onboardingStatus: OnboardingStatus;
+  emergencyMobileFamily: string | null; emergencyMobileFriend: string | null;
+  bankAccountNo: string | null; bankHolderName: string | null; bankIfsc: string | null; bankName: string | null;
+  pfNumber: string | null; drivingLicence: string | null; insuranceNumber: string | null;
+  monthlySalary: number | null; joinedOn: string | null;
+  companyIds: string[]; companies: string[];
   /** Whether a photograph is on file, so the row and the form can show it. */
   hasPhoto: boolean;
   documents: Array<{ id: string; kind: string; fileName: string; fileSize: number }>;
@@ -46,9 +53,16 @@ interface TypeRow { id: string; name: string; count: number; canDelete: boolean 
 
 
 const TYPE_PILL: Record<string, string> = {
-  "company staff": "bg-surface-hover text-navy-800",
-  "contract role": "bg-plum-050 text-plum-700",
-  "direct labour": "bg-good-050 text-good-700",
+  "rider": "bg-good-050 text-good-700",
+  "internal staff": "bg-surface-hover text-navy-800",
+  "team leader": "bg-plum-050 text-plum-700",
+};
+
+const ONBOARDING_PILL: Record<string, string> = {
+  draft: "bg-surface-field text-navy-500",
+  warn: "bg-warn-050 text-warn-700",
+  good: "bg-good-050 text-good-700",
+  bad: "bg-bad-050 text-bad-700",
 };
 
 const typePill = (name: string) =>
@@ -82,13 +96,15 @@ const TABS = [
 ];
 
 export function HrScreen({
-  tab, date, from, to, rangeError, employees, markable, employmentTypes, designations, dayMarks, report, can,
+  tab, date, from, to, rangeError, employees, markable, employmentTypes, designations, companies, dayMarks, report, can,
 }: {
   tab: string; date: string; from: string; to: string;
   /** Why the report range was refused, or null. */
   rangeError: string | null;
   employees: Employee[]; markable: MarkRow[]; employmentTypes: TypeRow[];
   designations: Array<{ id: string; name: string }>;
+  /** The active client companies a rider can be deployed to. */
+  companies: Array<{ id: string; name: string }>;
   dayMarks: Mark[]; report: AttendanceSummaryRow[];
   can: Record<string, boolean>;
 }) {
@@ -212,6 +228,8 @@ export function HrScreen({
           employee={editing === "new" ? null : editing}
           employmentTypes={employmentTypes}
           designations={designations}
+          companies={companies}
+          canManageCompanies={Boolean(can.manageCompanies)}
           onClose={() => setEditing(null)}
           onSaved={(m) => { setEditing(null); flash(m); }}
         />
@@ -289,11 +307,11 @@ function StaffTab({
       {/* The design heads this tab with the count and one button, 13px above the table. */}
       <div className="mb-[13px] flex flex-wrap items-center justify-between gap-3">
         <span className="text-[13px] font-medium text-muted-600">
-          {employees.length} employee{employees.length === 1 ? "" : "s"} on record
+          {employees.length} {employees.length === 1 ? "person" : "people"} on record
         </span>
         {can.create && (
           <Button size="md" onClick={() => onEdit("new")}>
-            + New employee
+            + New rider / staff
           </Button>
         )}
       </div>
@@ -302,7 +320,7 @@ function StaffTab({
         <table className="w-full min-w-[820px] border-collapse">
           <thead>
             <tr className="bg-surface-sunken">
-              {["Employee", "Type", "Aadhaar · PAN", "Address", ""].map((h, i) => (
+              {["Rider / staff", "Type", "Onboarding", "Companies", "Aadhaar · PAN", "Address", ""].map((h, i) => (
                 <th
                   key={h || i}
                   className={cn(
@@ -318,7 +336,7 @@ function StaffTab({
           <tbody>
             {employees.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
+                <td colSpan={7} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
                   {EMPLOYEE_EMPTY.title}
                 </td>
               </tr>
@@ -360,7 +378,18 @@ function StaffTab({
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3"><span className={cn("inline-block whitespace-nowrap rounded-full px-2.5 py-[5px] text-[10.5px] font-bold", typePill(e.employmentType))}>{e.employmentType}</span></td>
+                <td className="px-4 py-3">
+                  <span className={cn("inline-block whitespace-nowrap rounded-full px-2.5 py-[5px] text-[10.5px] font-bold", typePill(e.employmentType))}>{e.employmentType}</span>
+                  {isInactive(e.status) && (
+                    <span className="ml-1 inline-block whitespace-nowrap rounded-full bg-surface-field px-2.5 py-[5px] text-[10.5px] font-bold text-navy-500">Left</span>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  <span className={cn("inline-block whitespace-nowrap rounded-full px-2.5 py-[5px] text-[10.5px] font-bold", ONBOARDING_PILL[ONBOARDING_TONE[e.onboardingStatus]])}>
+                    {ONBOARDING_LABEL[e.onboardingStatus]}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-[12px] font-medium text-navy-500">{e.companies.join(", ") || "—"}</td>
                 <td className="px-4 py-3 text-[12px] font-medium text-navy-500">
                   <span className="num">{e.aadhaar ?? "—"}</span>
                   <br />
@@ -655,15 +684,24 @@ function ReportTab({
 /* ------------------------------ Employee form ------------------------------ */
 
 function EmployeeForm({
-  employee, employmentTypes, designations, onClose, onSaved,
+  employee, employmentTypes, designations, companies, canManageCompanies, onClose, onSaved,
 }: {
   employee: Employee | null;
   employmentTypes: TypeRow[];
   designations: Array<{ id: string; name: string }>;
+  companies: Array<{ id: string; name: string }>;
+  canManageCompanies: boolean;
   onClose: () => void;
   onSaved: (m: string) => void;
 }) {
   const [busy, setBusy] = React.useState(false);
+  // Which particulars the form asks for follows the employment type picked:
+  // a rider has emergency numbers, a bank account and companies; internal
+  // staff a monthly salary.
+  const [typeId, setTypeId] = React.useState(employee?.employmentTypeId ?? employmentTypes[0]?.id ?? "");
+  const typeName = employmentTypes.find((t) => t.id === typeId)?.name ?? "";
+  const rider = isRiderType(typeName);
+  const internal = isInternalStaffType(typeName);
   const [error, setError] = React.useState<string | null>(null);
   const [photoName, setPhotoName] = React.useState<string | null>(null);
   const [docs, setDocs] = React.useState<Record<string, { name: string; size: string } | null>>({});
@@ -694,7 +732,7 @@ function EmployeeForm({
       onClose={onClose}
       title={employee ? "Edit employee" : "New employee"}
       description="Name, mobile, photo and Aadhaar are mandatory"
-      size="base"
+      size="lg"
       footer={
         <>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
@@ -756,7 +794,7 @@ function EmployeeForm({
 
           <div className="grid min-w-[240px] flex-1 gap-3">
             <Field label="Type of employment" required>
-              <Select name="employmentTypeId" defaultValue={employee?.employmentTypeId} className="font-semibold" required>
+              <Select name="employmentTypeId" value={typeId} onChange={(e) => setTypeId(e.target.value)} className="font-semibold" required>
                 {employmentTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </Select>
             </Field>
@@ -802,13 +840,80 @@ function EmployeeForm({
           <Textarea name="address" defaultValue={employee?.address ?? ""} placeholder="House, area, city" className="min-h-[74px]" />
         </Field>
 
+        <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+          <Field label="Joining date">
+            <Input name="joinedOn" type="date" defaultValue={employee?.joinedOn ?? ""} />
+          </Field>
+          <Field label="Driving licence">
+            <Input name="drivingLicence" defaultValue={employee?.drivingLicence ?? ""} placeholder="KA01 20230001234" className="uppercase" />
+          </Field>
+          <Field label="PF number">
+            <Input name="pfNumber" defaultValue={employee?.pfNumber ?? ""} placeholder="Optional" />
+          </Field>
+          <Field label="Insurance number">
+            <Input name="insuranceNumber" defaultValue={employee?.insuranceNumber ?? ""} placeholder="Shown on the ID card" />
+          </Field>
+          {internal && (
+            <Field label="Monthly salary (₹)">
+              <Input name="monthlySalary" type="number" min={0} step="1" defaultValue={employee?.monthlySalary ?? ""} placeholder="e.g. 18000" />
+            </Field>
+          )}
+        </div>
+
+        {rider && (
+          <>
+            <div className="!mt-4">
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">Emergency contacts · mandatory for riders</p>
+              <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+                <Field label="Father / mother mobile" required>
+                  <Input name="emergencyMobileFamily" defaultValue={employee?.emergencyMobileFamily ?? ""} placeholder="98765 43210" />
+                </Field>
+                <Field label="Friend mobile" required>
+                  <Input name="emergencyMobileFriend" defaultValue={employee?.emergencyMobileFriend ?? ""} placeholder="98765 43210" />
+                </Field>
+              </div>
+            </div>
+
+            <div className="!mt-4">
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">Bank details · mandatory for riders</p>
+              <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+                <Field label="Account number" required>
+                  <Input name="bankAccountNo" defaultValue={employee?.bankAccountNo ?? ""} placeholder="Account number" />
+                </Field>
+                <Field label="Account holder name" required>
+                  <Input name="bankHolderName" defaultValue={employee?.bankHolderName ?? ""} placeholder="As on the passbook" />
+                </Field>
+                <Field label="IFSC code" required>
+                  <Input name="bankIfsc" defaultValue={employee?.bankIfsc ?? ""} placeholder="HDFC0001234" className="uppercase" />
+                </Field>
+                <Field label="Bank name" required>
+                  <Input name="bankName" defaultValue={employee?.bankName ?? ""} placeholder="Bank" />
+                </Field>
+              </div>
+            </div>
+
+            <Field label="Companies deployed to" required>
+              <select
+                name="companyIds"
+                multiple
+                defaultValue={employee?.companyIds ?? []}
+                disabled={Boolean(employee) && !canManageCompanies}
+                className="min-h-[88px] w-full rounded-[9px] border border-line-400 bg-surface-sunken px-3 py-2 text-[12.5px] font-medium text-navy-900 focus:border-brand-500 focus:bg-white focus:outline-none disabled:opacity-60"
+              >
+                {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <p className="mt-1 text-[11px] font-medium text-muted-400">Hold Ctrl (or Cmd) to pick more than one.</p>
+            </Field>
+          </>
+        )}
+
         <div className="!mt-4">
           <p className="mb-1 text-[11px] font-semibold text-muted-600">
             Attachments <span className="font-medium text-muted-400">· optional</span>
           </p>
-          <p className="mb-[9px] text-[11px] font-medium text-muted-400">Aadhaar card and PAN card copies only</p>
+          <p className="mb-[9px] text-[11px] font-medium text-muted-400">Aadhaar front and back are mandatory for riders · PAN, passbook and driving licence optional</p>
           <div>
-            {(["Aadhaar card", "PAN card"] as const).map((kind) => {
+            {RIDER_DOC_KINDS.map((kind) => {
               // What this row shows: the file just picked, or failing that the
               // copy already on the record. Derived, so removing a new pick
               // falls back to the stored one rather than showing nothing.

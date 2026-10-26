@@ -7,7 +7,7 @@ import { ATTENDANCE_EMPTY, attendanceScreenRow } from "@/lib/screens/rows/hr";
 import { attendanceTotals, parseAttendanceRange } from "@/lib/hr/attendance-report";
 import { loadAttendanceReport } from "@/lib/hr/attendance-report-data";
 import { statusLabel } from "@/lib/hr/employee-status";
-import { describeEmployeeFilters, readEmployeeListParams } from "@/lib/hr/list-filters";
+import { describeEmployeeFilters, employeeScope, readEmployeeListParams } from "@/lib/hr/list-filters";
 import { PERM } from "@/lib/permissions/codes";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
   const listParams = { ...readEmployeeListParams(params), status: "" as const };
 
   const [report, type, designation] = await Promise.all([
-    loadAttendanceReport(prisma, range, listParams),
+    loadAttendanceReport(prisma, range, listParams, employeeScope(gate.ctx)),
     listParams.type
       ? prisma.employmentType.findUnique({ where: { id: listParams.type }, select: { name: true } })
       : null,

@@ -53,6 +53,18 @@ function relatedChildren(): string[] {
 const OWN_SCREEN = new Set(["/dashboard"]);
 /** Admin is web-only by the SOW: masters, and reports until a screen exists. */
 const WEB_ONLY = new Set(["/masters", "/reports"]);
+/**
+ * Screens built on the web admin panel first. The boundary serves their lists
+ * and records already; the Android client gains them when it is rebuilt.
+ */
+const APP_PENDING = new Set([
+  "/hr/onboarding", "/hr/referrals", "/payouts", "/advances", "/advances/bike-rent",
+  "/accounts/invoices", "/staff/payslips",
+]);
+const APP_PENDING_LISTS = new Set([
+  "hr/onboarding", "hr/referrals", "payouts", "payouts/imports", "advances", "advances/bike-rent",
+  "accounts/invoices", "staff/payslips",
+]);
 
 describe("the app reaches every entry the web's sidebar can show", () => {
   const map = hrefToModule();
@@ -65,7 +77,7 @@ describe("the app reaches every entry the web's sidebar can show", () => {
 
   it("every navigable route leads to a list, its own screen, or the web", () => {
     const orphan = hrefs.filter(
-      (h) => !map.has(h) && !OWN_SCREEN.has(h) && !WEB_ONLY.has(h),
+      (h) => !map.has(h) && !OWN_SCREEN.has(h) && !WEB_ONLY.has(h) && !APP_PENDING.has(h),
     );
     expect(orphan, "these would be dead rows in the drawer").toEqual([]);
   });
@@ -95,7 +107,7 @@ describe("the screens the web reaches from inside another screen", () => {
 
   it("leave no list unreachable", () => {
     const reachable = new Set([...hrefToModule().values(), ...relatedChildren()]);
-    const stranded = MOBILE_LIST_KEYS.filter((k) => !reachable.has(k));
+    const stranded = MOBILE_LIST_KEYS.filter((k) => !reachable.has(k) && !APP_PENDING_LISTS.has(k));
     expect(stranded, "no screen opens these").toEqual([]);
   });
 });

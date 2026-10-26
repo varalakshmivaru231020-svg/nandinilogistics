@@ -1,4 +1,13 @@
-# Release checklist — NN Infra ERP
+# Release checklist — Nandini Logistics Rider CRM
+
+> **Scope change, 26–27 Oct 2026.** The construction ERP modules were removed
+> and the platform reshaped for the Rider CRM SOW (`docs/SCOPE_MAPPING_RIDER_CRM.md`).
+> The two migrations `20261026000000_rider_crm_scope` and
+> `20261027000000_rider_onboarding_payouts` **drop every construction table**
+> and their data. Take a backup first, as section D says, and expect the
+> release history below this note to describe screens that no longer exist.
+> The seeded roles are now ADMIN, TEAM_LEADER, TELE_CALLER and RIDER; the old
+> roles stay in the database until removed from Administration → Roles.
 
 Every item here was run before this document was written, and every one passed.
 The results column is that run, on 09 Oct 2026, against commit `af96d8c`.

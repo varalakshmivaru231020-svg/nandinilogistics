@@ -129,7 +129,31 @@ export const ROLES: RoleSeed[] = [
       "task.task.comment",
       "task.task.export",
 
+      // Onboarding review for own team, the rider record and its ID card.
+      "hr.employee.create",
+      "hr.employee.update",
+      "hr.employee.viewIdentity",
+      "hr.employee.submitOnboarding",
+      "hr.employee.acceptOnboarding",
+      "hr.employee.rejectOnboarding",
+      "hr.employee.offerLetter",
+      "hr.employee.idCard",
+      "hr.employee.manageCompanies",
+      "hr.referral.view",
+
+      // The team's payouts, read-only; advance approval; bike rent on view.
+      "payout.payout.view",
+      "payout.payout.export",
+      "advance.advance.view",
+      "advance.advance.create",
+      "advance.advance.approve",
+      "advance.advance.export",
+      "advance.bikeRent.view",
+
       "masters.company.view",
+      "masters.company.viewRateCard",
+      "reports.teamLeader.view",
+      "reports.teamLeader.export",
     ],
   },
   {
@@ -146,13 +170,22 @@ export const ROLES: RoleSeed[] = [
       "sales.lead.receiveAssignment",
       "sales.lead.assign",
 
-      // The riders they onboard.
+      // The riders they onboard: the form, the Rider ID, submission for review.
       "hr.employee.view",
       "hr.employee.create",
       "hr.employee.update",
       "hr.employee.tabStaff",
+      "hr.employee.viewIdentity",
+      "hr.employee.submitOnboarding",
+      "hr.employee.idCard",
+      "hr.employee.manageCompanies",
+
+      // Payout status of the riders they onboarded, read-only.
+      "payout.payout.view",
 
       "masters.company.view",
+      "reports.teleCallerDaily.view",
+      "reports.teleCallerDaily.export",
     ],
   },
   {
@@ -165,6 +198,15 @@ export const ROLES: RoleSeed[] = [
       "dashboard.rider.view",
       // Refer a prospective rider; the lead is auto-assigned to a tele-caller.
       "sales.lead.create",
+      // Their own record, ID card, referrals, weekly payout and advances.
+      "hr.employee.view",
+      "hr.employee.idCard",
+      "hr.referral.view",
+      "payout.payout.view",
+      "advance.advance.view",
+      "advance.advance.create",
+      "hr.attendance.view",
+      "hr.attendance.mark",
     ],
   },
 ];

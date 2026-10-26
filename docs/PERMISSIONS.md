@@ -23,10 +23,10 @@ The database is a *projection*. If the two disagree, the registry wins and
 Always three parts: `module.resource.action`
 
 ```
-masters.item.create          → the "New item" button on the item master
-material.indent.approvePm    → the PM-level approval step on an indent
-sales.lead.viewContact       → whether phone numbers are shown or masked
-project.project.tabDocuments → the Documents tab on a project
+masters.company.create        → the "New company" button on the company master
+hr.employee.acceptOnboarding  → the Accept step on a rider's onboarding form
+sales.lead.viewContact        → whether phone numbers are shown or masked
+sales.lead.tabFollowUps       → the Follow-ups tab on a lead
 ```
 
 ## The six kinds
@@ -54,29 +54,26 @@ project.project.tabDocuments → the Documents tab on a project
 **DENY always wins.** It is applied last and is absolute — this is how you take
 one capability away from someone who otherwise needs the whole role.
 
-On top of permissions sit two further constraints:
-
-- **Project scoping** — a user only sees projects mapped to them in
-  `user_projects`, unless they hold `project.project.accessAll`.
-- **Approval ceilings** — `approval_limits` caps what a person may approve, per
-  chain. A personal limit replaces the role limit entirely; otherwise the
-  highest of their roles' limits applies.
+On top of permissions sits **scope**: a Team Leader sees the riders of the
+companies assigned to them, a tele-caller the riders whose lead they own, a
+rider only themselves — unless they hold the module's `viewAll`. The rule is
+`employeeScope(ctx)` in `src/lib/hr/list-filters.ts`.
 
 ## Enforcing it — three places, every time
 
 ```tsx
 // 1. The page (server) — redirects to /forbidden when missing
-const ctx = await requirePermission(PERM.masters.item.view);
+const ctx = await requirePermission(PERM.masters.company.view);
 
 // 2. The control (client) — a courtesy, never the boundary
-<Can I={PERM.masters.item.create}>
-  <Button>New item</Button>
+<Can I={PERM.masters.company.create}>
+  <Button>New company</Button>
 </Can>
 
 // 3. The server action — the actual security boundary
-export async function createItemAction(formData: FormData) {
+export async function createCompanyAction(formData: FormData) {
   return runAction(async () => {
-    const ctx = await authorize(PERM.masters.item.create);
+    const ctx = await authorize(PERM.masters.company.create);
     ...
   });
 }
@@ -100,8 +97,8 @@ For sensitive values use `<Sensitive>` or a column's `visible` flag:
 3. **Guard the page** with `requirePermission(...)`.
 4. **Guard each control** with `<Can I={...}>`.
 5. **Guard each server action** with `authorize(...)`.
-6. **Add to the default matrix** in `prisma/seed.ts` for the roles that should
-   get it by default, then `pnpm db:seed`.
+6. **Add to the default matrix** in `prisma/role-matrix.ts` for the roles that
+   should get it by default, then `pnpm perms:grants`.
 7. **Add the nav entry** in `src/lib/navigation.ts` with its `permission`.
 
 Skipping step 1 is the only way to get this wrong. The `crud()` helper in the
@@ -114,18 +111,18 @@ The seed's grant rules accept `*` as a whole segment or as a partial:
 
 ```ts
 "masters.*.view"          // every master's view permission
-"material.indent.*"       // every indent action
-"material.indent.tab*"    // tabItems, tabApprovals, tabLinkedPo
-"*"                       // everything (Owner / Admin)
+"sales.lead.*"            // every lead action
+"sales.lead.tab*"         // tabTimeline, tabFollowUps, tabNotes…
+"*"                       // everything (Admin)
 ```
 
 `deny` is applied after `grant`, so a role can be given a broad grant and then
-have specific capabilities carved out — which is how Store Manager gets the
-whole material module except PO approval and invoice approval.
+have specific capabilities carved out — which is how Admin holds everything
+except `admin.mobile.use` (web only, by the SOW) and the two lead duties.
 
 ## Current catalogue
 
-468 permissions across 11 modules and 21 groups. Browse them at
+`src/lib/permissions/codes.ts` states the count in its header. Browse them at
 `/admin/permissions`, or run:
 
 ```bash

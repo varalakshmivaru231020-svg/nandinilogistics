@@ -6,6 +6,10 @@ import type { RecordView } from "./shared";
 import { taskRecord } from "./task";
 import { leadRecord } from "./lead";
 import { employeeRecord } from "./employee";
+import { payoutLineRecord } from "./payout";
+import { advanceRecord, bikeRentRecord } from "./advance";
+import { invoiceRecord } from "./invoice";
+import { payslipRecord } from "./payslip";
 
 /**
  * Which modules can hand over a whole record, and the permission to ask.
@@ -57,6 +61,41 @@ export const RECORDS: Record<string, RecordDef> = {
     key: "sales/leads",
     permission: PERM.sales.lead.view,
     load: leadRecord,
+  },
+  "hr/onboarding": {
+    key: "hr/onboarding",
+    permission: PERM.hr.employee.view,
+    load: employeeRecord,
+  },
+  "hr/referrals": {
+    key: "hr/referrals",
+    permission: PERM.hr.referral.view,
+    load: employeeRecord,
+  },
+  "payouts": {
+    key: "payouts",
+    permission: PERM.payout.payout.view,
+    load: payoutLineRecord,
+  },
+  "advances": {
+    key: "advances",
+    permission: PERM.advance.advance.view,
+    load: advanceRecord,
+  },
+  "advances/bike-rent": {
+    key: "advances/bike-rent",
+    permission: PERM.advance.bikeRent.view,
+    load: bikeRentRecord,
+  },
+  "accounts/invoices": {
+    key: "accounts/invoices",
+    permission: PERM.accounts.invoice.view,
+    load: invoiceRecord,
+  },
+  "staff/payslips": {
+    key: "staff/payslips",
+    permission: PERM.staff.payslip.view,
+    load: payslipRecord,
   },
 };
 

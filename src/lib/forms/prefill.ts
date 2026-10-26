@@ -86,7 +86,7 @@ export async function prefillFor(
 
     /* -------------------------------------------------------------- people */
     case "hr/employees:edit": {
-      const e = await prisma.employee.findUnique({ where: { id } });
+      const e = await prisma.employee.findUnique({ where: { id }, include: { companies: { select: { companyId: true } } } });
       if (!e) return null;
       const identity = ctx.has(PERM.hr.employee.viewIdentity);
       return {
@@ -99,9 +99,21 @@ export async function prefillFor(
           address: txt(e.address),
           employmentTypeId: e.employmentTypeId,
           designationId: txt(e.designationId),
+          joinedOn: e.joinedOn ? e.joinedOn.toISOString().slice(0, 10) : "",
+          drivingLicence: identity ? txt(e.drivingLicence) : "",
+          pfNumber: txt(e.pfNumber),
+          insuranceNumber: txt(e.insuranceNumber),
+          monthlySalary: e.monthlySalary === null ? "" : Number(e.monthlySalary),
+          emergencyMobileFamily: txt(e.emergencyMobileFamily),
+          emergencyMobileFriend: txt(e.emergencyMobileFriend),
+          bankAccountNo: identity ? txt(e.bankAccountNo) : "",
+          bankHolderName: txt(e.bankHolderName),
+          bankIfsc: identity ? txt(e.bankIfsc) : "",
+          bankName: txt(e.bankName),
+          companyIds: e.companies.map((c) => c.companyId),
         },
         // Masked without the identity permission, so not editable either.
-        locked: identity ? [] : ["aadhaar", "pan"],
+        locked: identity ? [] : ["aadhaar", "pan", "drivingLicence", "bankAccountNo", "bankIfsc"],
       };
     }
 

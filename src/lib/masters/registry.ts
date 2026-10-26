@@ -226,6 +226,7 @@ export const MASTERS: MasterDef[] = [
           { value: "RIDER", label: "Rider ID" },
           { value: "LEAD", label: "Lead" },
           { value: "TASK", label: "Task" },
+          { value: "INVOICE", label: "Vendor invoice" },
         ],
       },
       { name: "prefix", label: "Prefix", type: "text", required: true, inList: true, uppercase: true },

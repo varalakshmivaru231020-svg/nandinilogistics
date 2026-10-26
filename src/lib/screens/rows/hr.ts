@@ -3,16 +3,15 @@ import "server-only";
 import type { RecordAction } from "@/lib/records/types";
 import type { ScreenRow } from "@/lib/screens/rows";
 import { asRowActions } from "@/lib/screens/rows/row-actions";
+import { ONBOARDING_LABEL, ONBOARDING_TONE, type OnboardingStatus } from "@/lib/riders/onboarding";
+import type { ReferralStatus } from "@/lib/riders/referrals";
 
 export { ATTENDANCE_EMPTY, EMPLOYEE_EMPTY } from "@/lib/hr/list-display";
 
 /**
- * Two rows from the HR module, as `hr-screen.tsx` draws them: an employee on
- * the Employees tab, and an attendance total on the Attendance tab.
- *
- * The attendance list the app is sent is the **report** — present, half day,
- * absent, payable days and overtime over the range — which is the table the
- * web shows and the file exports. Marking is a form, not a list.
+ * The rows of the Riders & Staff module, as the web draws them: a person on
+ * the Riders & Staff tab, an onboarding form in the queue, a referral in the
+ * history, and an attendance total on the report.
  */
 
 export interface EmployeeRowInput {
@@ -27,6 +26,8 @@ export interface EmployeeRowInput {
   pan: string | null;
   address: string | null;
   status: string;
+  onboardingStatus: OnboardingStatus;
+  companies: string[];
 }
 
 export function employeeScreenRow(
@@ -40,11 +41,13 @@ export function employeeScreenRow(
     title: e.name,
     chips: [
       { text: e.employmentType, tone: "draft" },
+      { text: ONBOARDING_LABEL[e.onboardingStatus], tone: ONBOARDING_TONE[e.onboardingStatus] },
       ...(inactive ? [{ text: "Left", tone: "draft" as const }] : []),
     ],
-    meta: `📞 ${e.mobile}`,
+    meta: `📞 ${e.mobile} · ${e.code}`,
     lines: [
       { value: `${e.designation ?? "—"} · alt ${e.altContact ?? "—"}` },
+      { label: "Companies", value: e.companies.join(", ") || "—" },
       { label: "Aadhaar · PAN", value: `${e.aadhaar ?? "—"} · ${e.pan ?? "—"}` },
       { label: "Address", value: e.address ?? "—" },
     ],
@@ -60,7 +63,66 @@ export function employeeScreenRow(
   };
 }
 
+/* ---------------------------------------------------------- onboarding */
 
+export interface OnboardingRowInput {
+  id: string;
+  name: string;
+  code: string;
+  mobile: string;
+  employmentType: string;
+  companies: string[];
+  onboardingStatus: OnboardingStatus;
+  submittedAt: string | null;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  leadNo: string | null;
+}
+
+export function onboardingScreenRow(r: OnboardingRowInput, actions: RecordAction[] = []): ScreenRow {
+  return {
+    id: r.id,
+    title: r.name,
+    meta: `${r.code} · 📞 ${r.mobile}`,
+    chips: [{ text: r.employmentType, tone: "draft" }],
+    lines: [
+      { label: "Companies", value: r.companies.join(", ") || "—" },
+      { label: "Submitted", value: r.submittedAt ?? "—" },
+      { label: "Decided", value: r.decidedAt ? `${r.decidedAt}${r.decidedBy ? ` · ${r.decidedBy}` : ""}` : "—" },
+      ...(r.leadNo ? [{ label: "From lead", value: r.leadNo }] : []),
+    ],
+    status: { label: ONBOARDING_LABEL[r.onboardingStatus], tone: ONBOARDING_TONE[r.onboardingStatus] },
+    actions: asRowActions(actions, { submit: "Submit", accept: "Accept", reject: "Reject" }),
+  };
+}
+
+/* ------------------------------------------------------------ referrals */
+
+export interface ReferralRowInput {
+  id: string;
+  referrer: string;
+  referrerCode: string;
+  referred: string;
+  referredCode: string;
+  referredOn: string;
+  joinedOn: string | null;
+  status: ReferralStatus;
+}
+
+export function referralScreenRow(r: ReferralRowInput): ScreenRow {
+  const tone = r.status.state === "VALID" ? "good" : r.status.state === "PENDING" ? "warn" : r.status.state === "LEFT" ? "bad" : "draft";
+  return {
+    id: r.id,
+    title: r.referred,
+    meta: `${r.referredCode} · referred by ${r.referrer} (${r.referrerCode})`,
+    lines: [
+      { label: "Referred on", value: r.referredOn },
+      { label: "Joined", value: r.joinedOn ?? "—" },
+      { label: "Eligible", value: r.status.eligible ? "Yes" : "No" },
+    ],
+    status: { label: r.status.label, tone },
+  };
+}
 
 /* ----------------------------------------------------------- attendance */
 
@@ -96,5 +158,3 @@ export function attendanceScreenRow(r: AttendanceRowInput): ScreenRow {
     trailing: { value: String(r.payable), label: "Payable days" },
   };
 }
-
-

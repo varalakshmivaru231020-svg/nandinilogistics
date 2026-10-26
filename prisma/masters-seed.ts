@@ -130,6 +130,7 @@ export const NUMBERING = [
   { documentKey: "RIDER", prefix: "NL", padding: 3 },
   { documentKey: "LEAD", prefix: "LD", padding: 5 },
   { documentKey: "TASK", prefix: "TSK", padding: 4 },
+  { documentKey: "INVOICE", prefix: "NLI", padding: 4 },
 ];
 
 // ---------------------------------------------------------------------------

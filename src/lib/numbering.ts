@@ -16,6 +16,7 @@ const SERIES_ROWS: Record<string, { model: string; field: string }> = {
   LEAD: { model: "lead", field: "leadNo" },
   TASK: { model: "task", field: "taskNo" },
   RIDER: { model: "employee", field: "employeeCode" },
+  INVOICE: { model: "clientInvoice", field: "invoiceNo" },
 };
 
 /** How far the counter may be wound forward before we stop trying. */

@@ -15,10 +15,15 @@
  */
 import "server-only";
 
-import * as a0 from "@/app/(app)/hr/actions";
-import * as a1 from "@/app/(app)/notifications/actions";
-import * as a2 from "@/app/(app)/sales/leads/actions";
-import * as a3 from "@/app/(app)/tasks/actions";
+import * as a0 from "@/app/(app)/accounts/invoices/actions";
+import * as a1 from "@/app/(app)/advances/actions";
+import * as a2 from "@/app/(app)/companies/actions";
+import * as a3 from "@/app/(app)/hr/actions";
+import * as a4 from "@/app/(app)/notifications/actions";
+import * as a5 from "@/app/(app)/payouts/actions";
+import * as a6 from "@/app/(app)/sales/leads/actions";
+import * as a7 from "@/app/(app)/staff/payslips/actions";
+import * as a8 from "@/app/(app)/tasks/actions";
 
 export type MobileArgKind =
   | "text" | "ids" | "form" | "bool" | "num" | "enum" | "json";
@@ -45,100 +50,244 @@ export interface MobileActionDef {
 }
 
 export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
+  "accounts/invoices/createInvoice": {
+    fn: a0.createInvoiceAction as MobileAction,
+    args: [{ name: "formData", kind: "form" }],
+  },
+  "accounts/invoices/deleteInvoice": {
+    fn: a0.deleteInvoiceAction as MobileAction,
+    args: [{ name: "id", kind: "text" }],
+  },
+  "accounts/invoices/markInvoiceSent": {
+    fn: a0.markInvoiceSentAction as MobileAction,
+    args: [{ name: "id", kind: "text" }],
+  },
+  "accounts/invoices/recordInvoicePayment": {
+    fn: a0.recordInvoicePaymentAction as MobileAction,
+    args: [{ name: "id", kind: "text" }, { name: "formData", kind: "form" }],
+  },
+  "accounts/invoices/updateInvoice": {
+    fn: a0.updateInvoiceAction as MobileAction,
+    args: [{ name: "id", kind: "text" }, { name: "formData", kind: "form" }],
+  },
+  "advances/createAdvance": {
+    fn: a1.createAdvanceAction as MobileAction,
+    args: [{ name: "formData", kind: "form" }],
+  },
+  "advances/createBikeRent": {
+    fn: a1.createBikeRentAction as MobileAction,
+    args: [{ name: "formData", kind: "form" }],
+  },
+  "advances/decideAdvance": {
+    fn: a1.decideAdvanceAction as MobileAction,
+    args: [{ name: "id", kind: "text" }, { name: "decision", kind: "enum", values: ["APPROVED", "REJECTED"] }, { name: "remarks", kind: "text" }, { name: "recoveryPerPeriod", kind: "num", optional: true, nullable: true }],
+  },
+  "advances/deleteAdvance": {
+    fn: a1.deleteAdvanceAction as MobileAction,
+    args: [{ name: "id", kind: "text" }],
+  },
+  "advances/deleteBikeRent": {
+    fn: a1.deleteBikeRentAction as MobileAction,
+    args: [{ name: "id", kind: "text" }],
+  },
+  "advances/endBikeRent": {
+    fn: a1.endBikeRentAction as MobileAction,
+    args: [{ name: "id", kind: "text" }, { name: "endDate", kind: "text" }],
+  },
+  "advances/updateBikeRent": {
+    fn: a1.updateBikeRentAction as MobileAction,
+    args: [{ name: "id", kind: "text" }, { name: "formData", kind: "form" }],
+  },
+  "companies/addCompanyLocation": {
+    fn: a2.addCompanyLocationAction as MobileAction,
+    args: [{ name: "companyId", kind: "text" }, { name: "formData", kind: "form" }],
+  },
+  "companies/setCompanyOfferTemplates": {
+    fn: a2.setCompanyOfferTemplatesAction as MobileAction,
+    args: [{ name: "companyId", kind: "text" }, { name: "internalId", kind: "text", nullable: true }, { name: "vendorId", kind: "text", nullable: true }],
+  },
+  "companies/setCompanyTeamLeaders": {
+    fn: a2.setCompanyTeamLeadersAction as MobileAction,
+    args: [{ name: "companyId", kind: "text" }, { name: "userIds", kind: "ids" }],
+  },
+  "companies/setPayoutColumnMap": {
+    fn: a2.setPayoutColumnMapAction as MobileAction,
+    args: [{ name: "companyId", kind: "text" }, { name: "formData", kind: "form" }],
+  },
+  "companies/toggleCompanyLocation": {
+    fn: a2.toggleCompanyLocationAction as MobileAction,
+    args: [{ name: "id", kind: "text" }],
+  },
+  "companies/updateCompanyLocation": {
+    fn: a2.updateCompanyLocationAction as MobileAction,
+    args: [{ name: "id", kind: "text" }, { name: "formData", kind: "form" }],
+  },
+  "companies/uploadRateCard": {
+    fn: a2.uploadRateCardAction as MobileAction,
+    args: [{ name: "companyId", kind: "text" }, { name: "formData", kind: "form" }],
+  },
+  "hr/acceptOnboarding": {
+    fn: a3.acceptOnboardingAction as MobileAction,
+    args: [{ name: "id", kind: "text" }],
+  },
   "hr/createEmployee": {
-    fn: a0.createEmployeeAction as MobileAction,
+    fn: a3.createEmployeeAction as MobileAction,
     args: [{ name: "formData", kind: "form" }],
   },
   "hr/createEmploymentType": {
-    fn: a0.createEmploymentTypeAction as MobileAction,
+    fn: a3.createEmploymentTypeAction as MobileAction,
     args: [{ name: "name", kind: "text" }],
   },
   "hr/deleteEmployee": {
-    fn: a0.deleteEmployeeAction as MobileAction,
+    fn: a3.deleteEmployeeAction as MobileAction,
     args: [{ name: "id", kind: "text" }],
   },
   "hr/deleteEmploymentType": {
-    fn: a0.deleteEmploymentTypeAction as MobileAction,
+    fn: a3.deleteEmploymentTypeAction as MobileAction,
     args: [{ name: "id", kind: "text" }],
   },
   "hr/markAttendance": {
-    fn: a0.markAttendanceAction as MobileAction,
+    fn: a3.markAttendanceAction as MobileAction,
     args: [{ name: "attendanceOn", kind: "text" }, { name: "marks", kind: "json", optional: true }],
   },
+  "hr/regenerateOfferLetter": {
+    fn: a3.regenerateOfferLetterAction as MobileAction,
+    args: [{ name: "id", kind: "text" }],
+  },
+  "hr/rejectOnboarding": {
+    fn: a3.rejectOnboardingAction as MobileAction,
+    args: [{ name: "id", kind: "text" }, { name: "reason", kind: "text" }],
+  },
+  "hr/sendOfferLetterWhatsApp": {
+    fn: a3.sendOfferLetterWhatsAppAction as MobileAction,
+    args: [{ name: "id", kind: "text" }],
+  },
   "hr/setEmployeeStatus": {
-    fn: a0.setEmployeeStatusAction as MobileAction,
+    fn: a3.setEmployeeStatusAction as MobileAction,
     args: [{ name: "id", kind: "text" }, { name: "status", kind: "text" }, { name: "reason", kind: "text" }],
   },
+  "hr/setRiderPin": {
+    fn: a3.setRiderPinAction as MobileAction,
+    args: [{ name: "id", kind: "text" }, { name: "pin", kind: "text" }],
+  },
+  "hr/startOnboardingFromLead": {
+    fn: a3.startOnboardingFromLeadAction as MobileAction,
+    args: [{ name: "leadId", kind: "text" }],
+  },
+  "hr/submitOnboarding": {
+    fn: a3.submitOnboardingAction as MobileAction,
+    args: [{ name: "id", kind: "text" }],
+  },
   "hr/updateEmployee": {
-    fn: a0.updateEmployeeAction as MobileAction,
+    fn: a3.updateEmployeeAction as MobileAction,
     args: [{ name: "id", kind: "text" }, { name: "formData", kind: "form" }],
   },
   "notifications/markAllNotificationsRead": {
-    fn: a1.markAllNotificationsReadAction as MobileAction,
+    fn: a4.markAllNotificationsReadAction as MobileAction,
     args: [],
   },
   "notifications/markNotificationRead": {
-    fn: a1.markNotificationReadAction as MobileAction,
+    fn: a4.markNotificationReadAction as MobileAction,
     args: [{ name: "id", kind: "text" }],
   },
+  "payouts/correctPayoutLine": {
+    fn: a5.correctPayoutLineAction as MobileAction,
+    args: [{ name: "lineId", kind: "text" }, { name: "employeeId", kind: "text" }],
+  },
+  "payouts/createPayoutImport": {
+    fn: a5.createPayoutImportAction as MobileAction,
+    args: [{ name: "formData", kind: "form" }],
+  },
+  "payouts/deletePayoutImport": {
+    fn: a5.deletePayoutImportAction as MobileAction,
+    args: [{ name: "id", kind: "text" }],
+  },
+  "payouts/holdPayoutLine": {
+    fn: a5.holdPayoutLineAction as MobileAction,
+    args: [{ name: "lineId", kind: "text" }, { name: "reason", kind: "text" }],
+  },
+  "payouts/postPayoutImport": {
+    fn: a5.postPayoutImportAction as MobileAction,
+    args: [{ name: "id", kind: "text" }],
+  },
+  "payouts/previewPayoutImport": {
+    fn: a5.previewPayoutImportAction as MobileAction,
+    args: [{ name: "formData", kind: "form" }],
+  },
+  "payouts/releasePayoutLine": {
+    fn: a5.releasePayoutLineAction as MobileAction,
+    args: [{ name: "lineId", kind: "text" }],
+  },
   "sales/leads/addLeadNote": {
-    fn: a2.addLeadNoteAction as MobileAction,
+    fn: a6.addLeadNoteAction as MobileAction,
     args: [{ name: "leadId", kind: "text" }, { name: "body", kind: "text" }],
   },
   "sales/leads/assignLead": {
-    fn: a2.assignLeadAction as MobileAction,
+    fn: a6.assignLeadAction as MobileAction,
     args: [{ name: "id", kind: "text" }, { name: "ownerId", kind: "text" }],
   },
   "sales/leads/changeLeadStage": {
-    fn: a2.changeLeadStageAction as MobileAction,
+    fn: a6.changeLeadStageAction as MobileAction,
     args: [{ name: "id", kind: "text" }, { name: "stageId", kind: "text" }, { name: "lostReasonId", kind: "text", optional: true }, { name: "notes", kind: "text", optional: true }],
   },
   "sales/leads/createLead": {
-    fn: a2.createLeadAction as MobileAction,
+    fn: a6.createLeadAction as MobileAction,
     args: [{ name: "formData", kind: "form" }],
   },
   "sales/leads/logFollowUp": {
-    fn: a2.logFollowUpAction as MobileAction,
+    fn: a6.logFollowUpAction as MobileAction,
     args: [{ name: "leadId", kind: "text" }, { name: "channel", kind: "text" }, { name: "notes", kind: "text" }, { name: "outcome", kind: "text" }, { name: "nextActionAt", kind: "text" }],
   },
   "sales/leads/updateLead": {
-    fn: a2.updateLeadAction as MobileAction,
+    fn: a6.updateLeadAction as MobileAction,
     args: [{ name: "id", kind: "text" }, { name: "formData", kind: "form" }],
   },
+  "staff/payslips/deletePayslip": {
+    fn: a7.deletePayslipAction as MobileAction,
+    args: [{ name: "id", kind: "text" }],
+  },
+  "staff/payslips/generatePayslip": {
+    fn: a7.generatePayslipAction as MobileAction,
+    args: [{ name: "formData", kind: "form" }],
+  },
+  "staff/payslips/payslipDraft": {
+    fn: a7.payslipDraftAction as MobileAction,
+    args: [{ name: "employeeId", kind: "text" }, { name: "month", kind: "text" }],
+  },
   "tasks/addComment": {
-    fn: a3.addCommentAction as MobileAction,
+    fn: a8.addCommentAction as MobileAction,
     args: [{ name: "taskId", kind: "text" }, { name: "formData", kind: "form" }],
   },
   "tasks/completeTask": {
-    fn: a3.completeTaskAction as MobileAction,
+    fn: a8.completeTaskAction as MobileAction,
     args: [{ name: "id", kind: "text" }, { name: "remark", kind: "text" }],
   },
   "tasks/createTask": {
-    fn: a3.createTaskAction as MobileAction,
+    fn: a8.createTaskAction as MobileAction,
     args: [{ name: "formData", kind: "form" }],
   },
   "tasks/deleteComment": {
-    fn: a3.deleteCommentAction as MobileAction,
+    fn: a8.deleteCommentAction as MobileAction,
     args: [{ name: "commentId", kind: "text" }],
   },
   "tasks/deleteTasks": {
-    fn: a3.deleteTasksAction as MobileAction,
+    fn: a8.deleteTasksAction as MobileAction,
     args: [{ name: "ids", kind: "ids" }],
   },
   "tasks/editComment": {
-    fn: a3.editCommentAction as MobileAction,
+    fn: a8.editCommentAction as MobileAction,
     args: [{ name: "commentId", kind: "text" }, { name: "body", kind: "text" }],
   },
   "tasks/reopenTask": {
-    fn: a3.reopenTaskAction as MobileAction,
+    fn: a8.reopenTaskAction as MobileAction,
     args: [{ name: "id", kind: "text" }, { name: "remark", kind: "text" }],
   },
   "tasks/startTask": {
-    fn: a3.startTaskAction as MobileAction,
+    fn: a8.startTaskAction as MobileAction,
     args: [{ name: "id", kind: "text" }],
   },
   "tasks/updateTask": {
-    fn: a3.updateTaskAction as MobileAction,
+    fn: a8.updateTaskAction as MobileAction,
     args: [{ name: "id", kind: "text" }, { name: "formData", kind: "form" }],
   },
 };

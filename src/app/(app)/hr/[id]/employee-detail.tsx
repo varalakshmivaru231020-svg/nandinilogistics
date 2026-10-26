@@ -42,8 +42,10 @@ const ROW_TONE = {
  * the calendar and the log.
  */
 export function EmployeeDetail({
-  employee, documents, stats, calendar, log, range, can,
+  employee, documents, stats, calendar, log, range, can, extras,
 }: {
+  /** The rider's own cards — onboarding, offer letter, referrals — drawn above the documents. */
+  extras?: React.ReactNode;
   employee: {
     id: string; name: string; initials: string; avatar: string;
     type: string; designation: string;
@@ -88,7 +90,7 @@ export function EmployeeDetail({
           href="/hr"
           className="rounded-[9px] border border-line-400 bg-white px-3.5 py-[9px] text-[12px] font-semibold text-navy-500 transition-colors hover:border-brand-500 hover:text-brand-700"
         >
-          ← All employees
+          ← Riders & staff
         </Link>
         {can.viewAttendance && (
           <>
@@ -182,6 +184,7 @@ export function EmployeeDetail({
         </div>
 
         <div className="space-y-3.5">
+          {extras}
           <div className="rounded-[13px] border border-line-400 bg-white px-5 py-[18px]">
             <div className="mb-3 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
               Documents · {documents.length} {documents.length === 1 ? "document" : "documents"}
@@ -192,7 +195,7 @@ export function EmployeeDetail({
                   key={d.id}
                   className="flex items-center gap-2.5 rounded-[10px] border border-line-300 bg-surface-sunken px-3 py-2.5"
                 >
-                  <span className="rounded-[5px] bg-bad-700 px-1.5 py-1 text-[8px] font-extrabold text-white">PDF</span>
+                  <span className="rounded-[5px] bg-bad-700 px-1.5 py-1 text-[8px] font-extrabold text-white">{d.fileName.toLowerCase().endsWith(".pdf") ? "PDF" : "IMG"}</span>
                   <div className="min-w-0">
                     <div className="text-[12px] font-bold text-navy-900">{d.kind}</div>
                     <div className="text-[11px] font-medium text-muted-400">{d.fileName} · {d.size}</div>
@@ -207,7 +210,7 @@ export function EmployeeDetail({
               ))}
               {documents.length === 0 && (
                 <div className="py-2 text-[12px] font-medium text-muted-400">
-                  No documents on file for this employee.
+                  No KYC documents on file.
                 </div>
               )}
             </div>
