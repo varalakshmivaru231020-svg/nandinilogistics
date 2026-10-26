@@ -24,7 +24,14 @@ export interface ReportFilterSpec {
   date: string | null;
 }
 
-export const REPORT_FILTER_SPEC: Record<string, ReportFilterSpec> = {};
+export const REPORT_FILTER_SPEC: Record<string, ReportFilterSpec> = {
+  teamLeader: { company: true, date: null },
+  ridersByCompany: { company: true, date: "Joining date" },
+  leadConversion: { company: true, date: "Lead captured" },
+  payoutSummary: { company: true, date: "Payout period start" },
+  advanceOutstanding: { company: false, date: "Approved on" },
+  teleCallerDaily: { company: false, date: "Day" },
+};
 
 const NO_FILTERS: ReportFilterSpec = { company: false, date: null };
 

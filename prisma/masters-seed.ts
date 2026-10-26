@@ -51,6 +51,69 @@ const COMPANIES = [
   { code: "INTERNAL", name: "Internal Staff", legalName: "Nandini Logistics — internal staff" },
 ];
 
+const ADVANCE_REASONS = [
+  { code: "MEDICAL", name: "Medical emergency" },
+  { code: "FAMILY", name: "Family need" },
+  { code: "VEHICLE", name: "Vehicle repair" },
+  { code: "RENT", name: "House rent" },
+  { code: "OTHER", name: "Other" },
+];
+
+const OFFER_TEMPLATES = [
+  {
+    code: "VENDOR_STD",
+    name: "Standard offer — vendor rider",
+    audience: "VENDOR" as const,
+    subject: "Offer of engagement as a delivery rider — {{company}}",
+    body: [
+      "Dear {{name}},",
+      "",
+      "We are pleased to engage you as a delivery rider with Nandini Logistics, deployed to {{company}}, from {{joiningDate}}. Your Rider ID is {{riderId}}.",
+      "",
+      "Your payout follows the rate card: {{rateCard}}. Payouts are made weekly after deductions for any advance, bike rent and TDS.",
+      "",
+      "Please keep your ID card with you on duty.",
+      "",
+      "Nandini Logistics",
+    ].join("\n"),
+  },
+  {
+    code: "INTERNAL_STD",
+    name: "Standard offer — internal staff",
+    audience: "INTERNAL" as const,
+    subject: "Offer of employment — Nandini Logistics",
+    body: [
+      "Dear {{name}},",
+      "",
+      "We are pleased to offer you employment with Nandini Logistics from {{joiningDate}}. Your employee ID is {{riderId}}.",
+      "",
+      "Your monthly salary and deductions will be shown on your payslip.",
+      "",
+      "Nandini Logistics",
+    ].join("\n"),
+  },
+];
+
+/** The SOW's one column layout for the four client companies' weekly sheets. */
+export const WEEKLY_COLUMN_MAP = {
+  riderCode: "Rider ID",
+  totalPayout: "Total Payout",
+  advance: "Advance Amount",
+  bikeRental: "Bike Rental",
+  tds: "TDS",
+  finalPayout: "Final Payout",
+};
+
+/** Internal staff arrive monthly with payroll words instead. */
+export const MONTHLY_COLUMN_MAP = {
+  riderCode: "Employee ID",
+  totalPayout: "Gross Salary",
+  advance: "Advance",
+  bikeRental: "",
+  tds: "Deductions",
+  finalPayout: "Net Pay",
+};
+
 const LOST_REASONS = [
   { code: "NOT_INTERESTED", name: "Not interested" },
   { code: "JOINED_ELSEWHERE", name: "Joined elsewhere" },
@@ -100,9 +163,32 @@ export async function seedMasters(prisma: PrismaClient) {
   }
 
   for (const c of COMPANIES) {
-    const data = { ...c, cityId: cityIds.get("Bengaluru") ?? null };
+    const monthly = c.code === "INTERNAL";
+    const data = {
+      ...c,
+      cityId: cityIds.get("Bengaluru") ?? null,
+      payoutCycle: monthly ? ("MONTHLY" as const) : ("WEEKLY" as const),
+      payoutColumnMap: monthly ? MONTHLY_COLUMN_MAP : WEEKLY_COLUMN_MAP,
+    };
     await prisma.company.upsert({ where: { code: c.code }, create: data, update: { name: c.name } });
   }
+
+  for (const r of ADVANCE_REASONS) {
+    await prisma.advanceReason.upsert({ where: { code: r.code }, create: r, update: r });
+  }
+
+  for (const t of OFFER_TEMPLATES) {
+    await prisma.offerLetterTemplate.upsert({ where: { code: t.code }, create: t, update: { name: t.name, audience: t.audience } });
+  }
+  const templates = new Map((await prisma.offerLetterTemplate.findMany()).map((t) => [t.code, t.id]));
+  await prisma.company.updateMany({
+    where: { offerTemplateVendorId: null, code: { not: "INTERNAL" } },
+    data: { offerTemplateVendorId: templates.get("VENDOR_STD") ?? null },
+  });
+  await prisma.company.updateMany({
+    where: { offerTemplateInternalId: null },
+    data: { offerTemplateInternalId: templates.get("INTERNAL_STD") ?? null },
+  });
 
   for (const r of LOST_REASONS) {
     await prisma.lostReason.upsert({ where: { code: r.code }, create: r, update: r });

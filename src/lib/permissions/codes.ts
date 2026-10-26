@@ -3,7 +3,7 @@
  * Source: src/lib/permissions/registry.ts
  * Regenerate: pnpm perms:codegen
  *
- * 152 permission codes.
+ * 224 permission codes.
  */
 
 export const PERM = {
@@ -61,6 +61,18 @@ export const PERM = {
       "viewIdentity": "hr.employee.viewIdentity",
       "uploadDocument": "hr.employee.uploadDocument",
       "tabStaff": "hr.employee.tabStaff",
+      "viewAll": "hr.employee.viewAll",
+      "submitOnboarding": "hr.employee.submitOnboarding",
+      "acceptOnboarding": "hr.employee.acceptOnboarding",
+      "rejectOnboarding": "hr.employee.rejectOnboarding",
+      "offerLetter": "hr.employee.offerLetter",
+      "idCard": "hr.employee.idCard",
+      "manageCompanies": "hr.employee.manageCompanies",
+      "setPin": "hr.employee.setPin",
+    },
+    "referral": {
+      "view": "hr.referral.view",
+      "export": "hr.referral.export",
     },
     "employmentType": {
       "view": "hr.employmentType.view",
@@ -93,6 +105,57 @@ export const PERM = {
       "view": "task.report.view",
     },
   },
+  "payout": {
+    "import": {
+      "view": "payout.import.view",
+      "create": "payout.import.create",
+      "delete": "payout.import.delete",
+      "export": "payout.import.export",
+      "post": "payout.import.post",
+      "correct": "payout.import.correct",
+    },
+    "payout": {
+      "view": "payout.payout.view",
+      "viewAll": "payout.payout.viewAll",
+      "hold": "payout.payout.hold",
+      "export": "payout.payout.export",
+    },
+  },
+  "advance": {
+    "advance": {
+      "view": "advance.advance.view",
+      "create": "advance.advance.create",
+      "delete": "advance.advance.delete",
+      "export": "advance.advance.export",
+      "viewAll": "advance.advance.viewAll",
+      "approve": "advance.advance.approve",
+    },
+    "bikeRent": {
+      "view": "advance.bikeRent.view",
+      "create": "advance.bikeRent.create",
+      "update": "advance.bikeRent.update",
+      "delete": "advance.bikeRent.delete",
+      "export": "advance.bikeRent.export",
+    },
+  },
+  "accounts": {
+    "invoice": {
+      "view": "accounts.invoice.view",
+      "create": "accounts.invoice.create",
+      "update": "accounts.invoice.update",
+      "delete": "accounts.invoice.delete",
+      "export": "accounts.invoice.export",
+      "recordPayment": "accounts.invoice.recordPayment",
+    },
+  },
+  "staff": {
+    "payslip": {
+      "view": "staff.payslip.view",
+      "create": "staff.payslip.create",
+      "delete": "staff.payslip.delete",
+      "export": "staff.payslip.export",
+    },
+  },
   "masters": {
     "company": {
       "view": "masters.company.view",
@@ -102,6 +165,29 @@ export const PERM = {
       "toggleStatus": "masters.company.toggleStatus",
       "export": "masters.company.export",
       "import": "masters.company.import",
+      "manageHubs": "masters.company.manageHubs",
+      "assignTeamLeaders": "masters.company.assignTeamLeaders",
+      "uploadRateCard": "masters.company.uploadRateCard",
+      "viewRateCard": "masters.company.viewRateCard",
+      "mapPayoutColumns": "masters.company.mapPayoutColumns",
+    },
+    "offerLetterTemplate": {
+      "view": "masters.offerLetterTemplate.view",
+      "create": "masters.offerLetterTemplate.create",
+      "update": "masters.offerLetterTemplate.update",
+      "delete": "masters.offerLetterTemplate.delete",
+      "toggleStatus": "masters.offerLetterTemplate.toggleStatus",
+      "export": "masters.offerLetterTemplate.export",
+      "import": "masters.offerLetterTemplate.import",
+    },
+    "advanceReason": {
+      "view": "masters.advanceReason.view",
+      "create": "masters.advanceReason.create",
+      "update": "masters.advanceReason.update",
+      "delete": "masters.advanceReason.delete",
+      "toggleStatus": "masters.advanceReason.toggleStatus",
+      "export": "masters.advanceReason.export",
+      "import": "masters.advanceReason.import",
     },
     "department": {
       "view": "masters.department.view",
@@ -223,6 +309,32 @@ export const PERM = {
     "settings": {
       "view": "admin.settings.view",
       "update": "admin.settings.update",
+    },
+  },
+  "reports": {
+    "teamLeader": {
+      "view": "reports.teamLeader.view",
+      "export": "reports.teamLeader.export",
+    },
+    "ridersByCompany": {
+      "view": "reports.ridersByCompany.view",
+      "export": "reports.ridersByCompany.export",
+    },
+    "leadConversion": {
+      "view": "reports.leadConversion.view",
+      "export": "reports.leadConversion.export",
+    },
+    "payoutSummary": {
+      "view": "reports.payoutSummary.view",
+      "export": "reports.payoutSummary.export",
+    },
+    "advanceOutstanding": {
+      "view": "reports.advanceOutstanding.view",
+      "export": "reports.advanceOutstanding.export",
+    },
+    "teleCallerDaily": {
+      "view": "reports.teleCallerDaily.view",
+      "export": "reports.teleCallerDaily.export",
     },
   },
 } as const;

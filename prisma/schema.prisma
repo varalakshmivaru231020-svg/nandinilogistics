@@ -88,6 +88,8 @@ model User {
   email              String     @unique
   phone              String?
   passwordHash       String
+  /// The 4-digit PIN a rider or Team Leader signs in with from the app, hashed like a password.
+  pinHash            String?
   status             UserStatus @default(ACTIVE)
   /// Bypasses every permission check. Reserved for the platform owner account.
   isSuperAdmin       Boolean    @default(false)
@@ -109,19 +111,26 @@ model User {
   sessions    Session[]
   auditLogs   AuditLog[]
 
-  leadsOwned        Lead[]             @relation("LeadOwner")
-  followUps         LeadFollowUp[]
-  leadNotes         LeadNote[]
-  leadDocuments     LeadDocument[]
-  employeeDocuments EmployeeDocument[]
-  attendanceEntries AttendanceEntry[]
-  settingsUpdated   AppSetting[]       @relation("SettingUpdatedBy")
-  notifications     Notification[]     @relation("NotificationRecipient")
-  tasksAssigned     TaskAssignee[]     @relation("TaskAssigneeUser")
-  tasksCreated      Task[]             @relation("TaskCreatedBy")
-  taskEvents        TaskEvent[]        @relation("TaskEventActor")
-  taskComments      TaskComment[]      @relation("TaskCommentAuthor")
-  taskAttachments   TaskAttachment[]   @relation("TaskAttachmentBy")
+  leadsOwned         Lead[]              @relation("LeadOwner")
+  followUps          LeadFollowUp[]
+  leadNotes          LeadNote[]
+  leadDocuments      LeadDocument[]
+  employeeDocuments  EmployeeDocument[]
+  attendanceEntries  AttendanceEntry[]
+  settingsUpdated    AppSetting[]        @relation("SettingUpdatedBy")
+  notifications      Notification[]      @relation("NotificationRecipient")
+  tasksAssigned      TaskAssignee[]      @relation("TaskAssigneeUser")
+  tasksCreated       Task[]              @relation("TaskCreatedBy")
+  taskEvents         TaskEvent[]         @relation("TaskEventActor")
+  taskComments       TaskComment[]       @relation("TaskCommentAuthor")
+  taskAttachments    TaskAttachment[]    @relation("TaskAttachmentBy")
+  companiesLed       CompanyTeamLeader[] @relation("CompanyTeamLeaderUser")
+  employee           Employee?           @relation("EmployeeLogin")
+  onboardingsDecided Employee[]          @relation("OnboardingDecidedBy")
+  payoutImports      PayoutImport[]      @relation("PayoutImportBy")
+  payoutsPosted      PayoutImport[]      @relation("PayoutPostedBy")
+  advancesDecided    Advance[]           @relation("AdvanceDecidedBy")
+  payslipsGenerated  Payslip[]           @relation("PayslipBy")
 
   @@index([status])
   @@index([departmentId])
@@ -287,14 +296,69 @@ model Company {
   pincode     String?
   phone       String?
   email       String?
+  /// The rate card the company pays riders by — a photo or PDF, viewable by Admin and the assigned Team Leaders.
+  rateCardKey      String?
+  rateCardFileName String?
+  /// How often this company's payout sheet arrives.
+  payoutCycle PayoutCycle @default(WEEKLY)
+  /// Which column of the company's payout sheet feeds each payout field — SOW §3.4.
+  payoutColumnMap Json?
+  /// The offer letter sent to riders this company engages, by kind of rider.
+  offerTemplateInternalId String?
+  offerTemplateVendorId   String?
   status      RecordStatus @default(ACTIVE)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  city  City?         @relation(fields: [cityId], references: [id])
-  leads LeadCompany[]
+  city                  City?                @relation(fields: [cityId], references: [id])
+  offerTemplateInternal OfferLetterTemplate? @relation("CompanyOfferInternal", fields: [offerTemplateInternalId], references: [id])
+  offerTemplateVendor   OfferLetterTemplate? @relation("CompanyOfferVendor", fields: [offerTemplateVendorId], references: [id])
+  leads         LeadCompany[]
+  locations     CompanyLocation[]
+  teamLeaders   CompanyTeamLeader[]
+  riders        RiderCompany[]
+  payoutImports PayoutImport[]
+  invoices      ClientInvoice[]
 
   @@map("m_companies")
+}
+
+enum PayoutCycle {
+  WEEKLY
+  MONTHLY
+}
+
+/// A hub or location of a client company, with where it is on the map.
+model CompanyLocation {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  address   String?
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+  mapsUrl   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("company_locations")
+}
+
+/// The Team Leaders assigned to a company. A TL's team is the riders of the companies they hold.
+model CompanyTeamLeader {
+  companyId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation("CompanyTeamLeaderUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, userId])
+  @@index([userId])
+  @@map("company_team_leaders")
 }
 
 model State {
@@ -495,6 +559,8 @@ model Lead {
   followUps LeadFollowUp[]
   notes     LeadNote[]
   documents LeadDocument[]
+  /// The rider this lead became, once onboarded.
+  rider     Employee?      @relation("LeadRider")
 
   @@index([stageId, ownerId])
   @@index([phone])
@@ -541,31 +607,100 @@ model EmploymentType {
 /// Someone on site or in the office. Distinct from User: a User signs in, an
 /// Employee is a person whose attendance is kept. Most direct labour never
 /// gets a login.
+/// A rider, a Team Leader or an internal staff member — whoever has a Rider
+/// ID, attendance, payouts and a KYC file. Distinct from User: a User signs
+/// in; an Employee is a person whose record is kept. A rider who uses the app
+/// has both, linked by `userId`.
 model Employee {
   id               String    @id @default(cuid())
+  /// The Rider ID — NL001 — from the RIDER numbering series.
   employeeCode     String    @unique
   name             String
   mobile           String
   altContact       String?
-  /// Aadhaar is mandatory in the design's form, alongside name, mobile, photo.
+  /// Emergency contacts, as the onboarding form asks: a parent, and a friend.
+  emergencyMobileFamily String?
+  emergencyMobileFriend String?
+  /// Aadhaar is mandatory, alongside name, mobile and photo.
   aadhaar          String
   pan              String?
   address          String?
+  drivingLicence   String?
+  pfNumber         String?
+  insuranceNumber  String?
+  bankAccountNo    String?
+  bankHolderName   String?
+  bankIfsc         String?
+  bankName         String?
+  /// Internal staff only: the monthly salary the payslip starts from.
+  monthlySalary    Decimal?  @db.Decimal(12, 2)
   employmentTypeId String
   designationId    String?
   photoKey         String?
   status           String    @default("ACTIVE")
   joinedOn         DateTime?
+  leftOn           DateTime?
+
+  /// SOW §3.2: Draft → Submitted → Accepted / Rejected. Acceptance activates the rider.
+  onboardingStatus  OnboardingStatus @default(DRAFT)
+  submittedAt       DateTime?
+  decidedAt         DateTime?
+  decidedById       String?
+  rejectionReason   String?
+  /// The lead this rider was converted from, where there was one.
+  leadId            String?  @unique
+  /// The rider's own code to share, and who referred them.
+  referralCode      String?  @unique
+  referredById      String?
+  /// The generated offer letter, once accepted.
+  offerLetterKey    String?
+  offerLetterAt     DateTime?
+  /// The login this person uses on the app, once they have one.
+  userId            String?  @unique
+
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   employmentType EmploymentType     @relation(fields: [employmentTypeId], references: [id])
   designation    Designation?       @relation(fields: [designationId], references: [id])
+  decidedBy      User?              @relation("OnboardingDecidedBy", fields: [decidedById], references: [id])
+  user           User?              @relation("EmployeeLogin", fields: [userId], references: [id])
+  lead           Lead?              @relation("LeadRider", fields: [leadId], references: [id])
+  referredBy     Employee?          @relation("Referral", fields: [referredById], references: [id])
+  referrals      Employee[]         @relation("Referral")
   documents      EmployeeDocument[]
   attendance     AttendanceEntry[]
+  companies      RiderCompany[]
+  payoutLines    PayoutLine[]
+  advances       Advance[]
+  bikeRents      BikeRent[]
+  payslips       Payslip[]
 
   @@index([employmentTypeId])
+  @@index([onboardingStatus])
+  @@index([referredById])
   @@map("employees")
+}
+
+enum OnboardingStatus {
+  DRAFT
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+}
+
+/// The companies a rider is deployed to — several, as the SOW allows.
+model RiderCompany {
+  employeeId String
+  companyId  String
+  createdAt  DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id])
+
+  @@id([employeeId, companyId])
+  @@index([companyId])
+  @@map("rider_companies")
 }
 
 /// The design gives an employee two document slots: Aadhaar card and PAN card.
@@ -804,3 +939,242 @@ model TaskAttachment {
   @@map("task_attachments")
 }
 
+
+// ---------------------------------------------------------------------------
+// MASTERS — offer letter templates, advance reasons
+// ---------------------------------------------------------------------------
+
+enum OfferAudience {
+  INTERNAL
+  VENDOR
+}
+
+/// An offer letter, as Masters holds it: a body with {{name}}, {{riderId}},
+/// {{company}}, {{joiningDate}} and {{rateCard}} merged in on acceptance.
+model OfferLetterTemplate {
+  id        String        @id @default(cuid())
+  code      String        @unique
+  name      String
+  audience  OfferAudience @default(VENDOR)
+  subject   String
+  body      String
+  status    RecordStatus  @default(ACTIVE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  companiesInternal Company[] @relation("CompanyOfferInternal")
+  companiesVendor   Company[] @relation("CompanyOfferVendor")
+
+  @@map("m_offer_letter_templates")
+}
+
+model AdvanceReason {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  advances Advance[]
+
+  @@map("m_advance_reasons")
+}
+
+// ---------------------------------------------------------------------------
+// PAYOUTS — SOW §3.4
+// ---------------------------------------------------------------------------
+
+enum PayoutImportStatus {
+  DRAFT
+  POSTED
+}
+
+enum PayoutLineStatus {
+  PAID
+  HOLD
+}
+
+/// One payout sheet, imported for one company and one period. Reviewed as a
+/// draft — unmatched rows corrected — then posted, which is when riders and
+/// Team Leaders see it.
+model PayoutImport {
+  id           String             @id @default(cuid())
+  companyId    String
+  periodFrom   DateTime           @db.Date
+  periodTo     DateTime           @db.Date
+  fileName     String
+  status       PayoutImportStatus @default(DRAFT)
+  uploadedById String
+  postedById   String?
+  postedAt     DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  company    Company      @relation(fields: [companyId], references: [id])
+  uploadedBy User         @relation("PayoutImportBy", fields: [uploadedById], references: [id])
+  postedBy   User?        @relation("PayoutPostedBy", fields: [postedById], references: [id])
+  lines      PayoutLine[]
+
+  @@index([companyId, periodFrom])
+  @@map("payout_imports")
+}
+
+/// One rider's line on a payout sheet, as imported and as computed.
+model PayoutLine {
+  id          String           @id @default(cuid())
+  importId    String
+  /// The Rider ID as the sheet wrote it; matched to an employee by code.
+  riderCode   String
+  employeeId  String?
+  totalPayout Decimal          @default(0) @db.Decimal(12, 2)
+  advance     Decimal          @default(0) @db.Decimal(12, 2)
+  bikeRental  Decimal          @default(0) @db.Decimal(12, 2)
+  tds         Decimal          @default(0) @db.Decimal(12, 2)
+  finalPayout Decimal          @default(0) @db.Decimal(12, 2)
+  status      PayoutLineStatus @default(PAID)
+  holdReason  String?
+  /// The row as it arrived, for correction and audit.
+  raw         Json?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  import   PayoutImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  employee Employee?    @relation(fields: [employeeId], references: [id])
+
+  @@index([importId])
+  @@index([employeeId])
+  @@map("payout_lines")
+}
+
+// ---------------------------------------------------------------------------
+// ADVANCES, BIKE RENT — SOW §3.5, §3.6
+// ---------------------------------------------------------------------------
+
+enum AdvancePriority {
+  EMERGENCY
+  LOW
+}
+
+enum AdvanceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// A rider's request for an advance, approved by a Team Leader or Admin and
+/// recovered from payouts on the schedule set at approval.
+model Advance {
+  id                String          @id @default(cuid())
+  employeeId        String
+  amount            Decimal         @db.Decimal(12, 2)
+  priority          AdvancePriority @default(LOW)
+  reasonId          String?
+  remarks           String?
+  status            AdvanceStatus   @default(PENDING)
+  decidedById       String?
+  decidedAt         DateTime?
+  decisionRemarks   String?
+  /// How much comes off each payout until the advance is recovered.
+  recoveryPerPeriod Decimal?        @db.Decimal(12, 2)
+  recoveredAmount   Decimal         @default(0) @db.Decimal(12, 2)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  employee  Employee       @relation(fields: [employeeId], references: [id])
+  reason    AdvanceReason? @relation(fields: [reasonId], references: [id])
+  decidedBy User?          @relation("AdvanceDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([employeeId, status])
+  @@map("advances")
+}
+
+/// A bike assigned to a rider at a weekly rent, deducted from each payout
+/// while the assignment runs.
+model BikeRent {
+  id          String    @id @default(cuid())
+  employeeId  String
+  bikeNumber  String
+  rentPerWeek Decimal   @db.Decimal(10, 2)
+  startDate   DateTime  @db.Date
+  endDate     DateTime? @db.Date
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId])
+  @@map("bike_rents")
+}
+
+// ---------------------------------------------------------------------------
+// ACCOUNTS — invoices raised to client companies (SOW §3.5)
+// ---------------------------------------------------------------------------
+
+enum ClientInvoiceStatus {
+  RAISED
+  SENT
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+}
+
+model ClientInvoice {
+  id          String              @id @default(cuid())
+  invoiceNo   String              @unique
+  companyId   String
+  invoiceDate DateTime            @db.Date
+  dueDate     DateTime?           @db.Date
+  amount      Decimal             @db.Decimal(14, 2)
+  status      ClientInvoiceStatus @default(RAISED)
+  notes       String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  company  Company                @relation(fields: [companyId], references: [id])
+  payments ClientInvoicePayment[]
+
+  @@index([companyId, status])
+  @@map("client_invoices")
+}
+
+model ClientInvoicePayment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  amount    Decimal  @db.Decimal(14, 2)
+  paidOn    DateTime @db.Date
+  reference String?
+  createdAt DateTime @default(now())
+
+  invoice ClientInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("client_invoice_payments")
+}
+
+// ---------------------------------------------------------------------------
+// INTERNAL STAFF PAYSLIPS — SOW §3.8
+// ---------------------------------------------------------------------------
+
+model Payslip {
+  id            String   @id @default(cuid())
+  employeeId    String
+  /// The month, as yyyy-mm.
+  month         String
+  gross         Decimal  @db.Decimal(12, 2)
+  advance       Decimal  @default(0) @db.Decimal(12, 2)
+  deductions    Decimal  @default(0) @db.Decimal(12, 2)
+  netPay        Decimal  @db.Decimal(12, 2)
+  payableDays   Int?
+  notes         String?
+  pdfKey        String?
+  generatedById String
+  createdAt     DateTime @default(now())
+
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  generatedBy User     @relation("PayslipBy", fields: [generatedById], references: [id])
+
+  @@unique([employeeId, month])
+  @@map("payslips")
+}

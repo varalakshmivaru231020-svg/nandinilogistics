@@ -19,7 +19,7 @@ export interface NavItem {
   anyPermission?: string[];
   /** Key into the design's icon set — see components/shell/nav-icons.tsx. */
   icon?: string;
-  badge?: "followUpDue" | "tasks";
+  badge?: "followUpDue" | "tasks" | "onboarding" | "advances";
 }
 
 export interface NavSection {
@@ -52,10 +52,22 @@ export const NAVIGATION: NavSection[] = [
     ],
   },
   {
-    label: "People",
+    label: "Riders",
     items: [
       { label: "Riders & Staff", href: "/hr", icon: "hr", permission: PERM.hr.employee.view },
+      { label: "Onboarding", href: "/hr/onboarding", icon: "hr", permission: PERM.hr.employee.view, badge: "onboarding" },
+      { label: "Referrals", href: "/hr/referrals", icon: "followups", permission: PERM.hr.referral.view },
       { label: "Tasks", href: "/tasks", icon: "tasks", permission: PERM.task.task.view, badge: "tasks" },
+    ],
+  },
+  {
+    label: "Money",
+    items: [
+      { label: "Payouts", href: "/payouts", icon: "reports", permission: PERM.payout.payout.view },
+      { label: "Advances", href: "/advances", icon: "reports", permission: PERM.advance.advance.view, badge: "advances" },
+      { label: "Bike Rent", href: "/advances/bike-rent", icon: "reports", permission: PERM.advance.bikeRent.view },
+      { label: "Vendor Invoices", href: "/accounts/invoices", icon: "reports", permission: PERM.accounts.invoice.view },
+      { label: "Payslips", href: "/staff/payslips", icon: "reports", permission: PERM.staff.payslip.view },
     ],
   },
   {
@@ -99,6 +111,7 @@ const BELONGS_TO: ReadonlyArray<[prefix: string, href: string]> = [
   ["/admin/sessions", "/masters"],
   ["/admin/audit", "/masters"],
   ["/admin/settings", "/masters"],
+  ["/companies", "/masters"],
 ];
 
 /**

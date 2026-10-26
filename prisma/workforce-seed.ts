@@ -43,8 +43,11 @@ export async function seedWorkforce(prisma: PrismaClient) {
         aadhaar,
         employmentTypeId: typeIds.get(type)!,
         designationId: desigIds.get(designation) ?? null,
+        onboardingStatus: "ACCEPTED",
+        joinedOn: new Date("2026-09-01T00:00:00.000Z"),
+        referralCode: `REF-${employeeCode}`,
       },
-      update: { name, mobile, employmentTypeId: typeIds.get(type)! },
+      update: { name, mobile, employmentTypeId: typeIds.get(type)!, onboardingStatus: "ACCEPTED" },
     });
   }
 

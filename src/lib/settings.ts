@@ -15,6 +15,29 @@ type Db = PrismaClient | Prisma.TransactionClient;
  * settings page yet.
  */
 export const SETTINGS = {
+  /**
+   * SOW §3.4: Final Payout = Total Payout − Advance − Bike Rental − TDS, with
+   * the formula editable in Masters. Each term is a sign on a named column, so
+   * Admin can switch a deduction off or make it an addition without the system
+   * evaluating free-text arithmetic.
+   */
+  "payout.formula": {
+    schema: z.object({
+      advance: z.enum(["subtract", "add", "ignore"]),
+      bikeRental: z.enum(["subtract", "add", "ignore"]),
+      tds: z.enum(["subtract", "add", "ignore"]),
+      /** Advances approved in the system are deducted even when the sheet has no advance column. */
+      pullAdvancesFromSystem: z.boolean(),
+      pullBikeRentFromSystem: z.boolean(),
+    }),
+    default: {
+      advance: "subtract" as const,
+      bikeRental: "subtract" as const,
+      tds: "subtract" as const,
+      pullAdvancesFromSystem: true,
+      pullBikeRentFromSystem: true,
+    },
+  },
   "sales.followUpEscalation": {
     schema: z.object({ afterHours: z.number().int().min(1).max(24 * 30) }),
     default: { afterHours: DEFAULT_ESCALATION_HOURS },

@@ -160,6 +160,49 @@ export const MASTERS: MasterDef[] = [
     fields: [CODE, NAME],
   },
 
+  {
+    key: "offer-letter-templates",
+    resource: "offerLetterTemplate",
+    model: "offerLetterTemplate",
+    label: "Offer Letter Templates",
+    singular: "offer letter template",
+    description: "Per company, for internal staff and for outsourced vendor riders. {{name}}, {{riderId}}, {{company}}, {{joiningDate}} and {{rateCard}} are merged in on acceptance.",
+    group: "Companies",
+    icon: "FileText",
+    searchFields: ["code", "name", "subject"],
+    fields: [
+      CODE,
+      NAME,
+      {
+        name: "audience",
+        label: "For",
+        type: "select",
+        required: true,
+        inList: true,
+        options: [
+          { value: "INTERNAL", label: "Internal staff" },
+          { value: "VENDOR", label: "Outsourced vendor riders" },
+        ],
+      },
+      { name: "subject", label: "Subject", type: "text", required: true, colSpan: 2, placeholder: "Offer of engagement as a delivery rider" },
+      { name: "body", label: "Letter body", type: "textarea", required: true, colSpan: 2, hint: "Use {{name}}, {{riderId}}, {{company}}, {{joiningDate}} and {{rateCard}} where the rider's details go." },
+    ],
+  },
+
+  // -------------------------------- Advances ------------------------------
+  {
+    key: "advance-reasons",
+    resource: "advanceReason",
+    model: "advanceReason",
+    label: "Advance Reasons",
+    singular: "advance reason",
+    description: "The reasons a rider may pick when requesting an advance.",
+    group: "Advances",
+    icon: "Wallet",
+    searchFields: ["code", "name"],
+    fields: [CODE, NAME],
+  },
+
   // -------------------------------- System --------------------------------
   {
     key: "numbering-series",

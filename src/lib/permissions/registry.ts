@@ -24,6 +24,10 @@ export const MODULES: ModuleDef[] = [
   { key: "sales", label: "Leads · CRM", sortOrder: 20 },
   { key: "hr", label: "Riders & Attendance", sortOrder: 30 },
   { key: "task", label: "Task Management", sortOrder: 40 },
+  { key: "payout", label: "Payouts", sortOrder: 50 },
+  { key: "advance", label: "Advances & Bike Rent", sortOrder: 60 },
+  { key: "accounts", label: "Accounts", sortOrder: 70 },
+  { key: "staff", label: "Internal Staff", sortOrder: 80 },
   { key: "masters", label: "Masters", sortOrder: 90 },
   { key: "admin", label: "Administration", sortOrder: 100 },
   { key: "reports", label: "Reports", sortOrder: 110 },
@@ -181,8 +185,19 @@ crud({
     ["viewIdentity", "See Aadhaar, PAN and bank details", "FIELD", "Identity numbers are masked without it."],
     ["uploadDocument", "Attach a KYC document", "BUTTON"],
     ["tabStaff", "Workforce tab — People", "TAB"],
+    ["viewAll", "See every rider, not only the team's", "ACTION", "A Team Leader sees the riders of the companies assigned to them; a tele-caller those they onboarded."],
+    ["submitOnboarding", "Submit an onboarding form for review", "BUTTON"],
+    ["acceptOnboarding", "Accept an onboarding form", "BUTTON", "Acceptance activates the rider and generates the ID card and offer letter."],
+    ["rejectOnboarding", "Reject an onboarding form with a reason", "BUTTON"],
+    ["offerLetter", "Generate, download or send the offer letter", "BUTTON"],
+    ["idCard", "View the digital ID card", "BUTTON"],
+    ["manageCompanies", "Change the companies a rider is deployed to", "BUTTON"],
+    ["setPin", "Set or reset a rider's app PIN", "BUTTON", "The PIN is stored hashed; nobody can read it back."],
   ],
 });
+
+perm("hr", "referral", "view", "Referral history", G_HR, "PAGE", "Who referred whom, joining date, 25-day validity and eligibility.");
+perm("hr", "referral", "export", "Export referral history", G_HR, "BUTTON");
 
 crud({
   module: "hr",
@@ -221,11 +236,91 @@ crud({
 perm("task", "report", "view", "Task summary per Team Leader", G_TASK, "TAB", "Open, overdue and done per TL.");
 
 // ===========================================================================
+// PAYOUTS (SOW §3.4) — Admin imports, reviews and posts; everyone else reads
+// ===========================================================================
+
+const G_PAYOUT = "Payouts";
+
+crud({
+  module: "payout",
+  resource: "import",
+  entity: "payout import",
+  group: G_PAYOUT,
+  update: false,
+  extra: [
+    ["post", "Post a reviewed payout sheet", "BUTTON", "Posting is what makes the payout visible to riders and Team Leaders."],
+    ["correct", "Match an unmatched row to a rider", "BUTTON"],
+  ],
+});
+
+perm("payout", "payout", "view", "Payouts", G_PAYOUT, "PAGE", "A rider sees their own; a Team Leader their team's; a tele-caller the riders they onboarded.");
+perm("payout", "payout", "viewAll", "See every rider's payout", G_PAYOUT, "ACTION");
+perm("payout", "payout", "hold", "Hold or release a rider's payout", G_PAYOUT, "BUTTON", "A hold carries a reason.");
+perm("payout", "payout", "export", "Export payouts", G_PAYOUT, "BUTTON");
+
+// ===========================================================================
+// ADVANCES & BIKE RENT (SOW §3.5, §3.6)
+// ===========================================================================
+
+const G_ADVANCE = "Advances & Bike Rent";
+
+crud({
+  module: "advance",
+  resource: "advance",
+  entity: "advance request",
+  group: G_ADVANCE,
+  update: false,
+  extra: [
+    ["viewAll", "See every rider's advances, not only the team's", "ACTION"],
+    ["approve", "Approve or reject an advance request", "BUTTON", "Approval sets the recovery schedule; the deduction follows in the payout."],
+  ],
+});
+
+crud({
+  module: "advance",
+  resource: "bikeRent",
+  entity: "bike rent assignment",
+  group: G_ADVANCE,
+});
+
+// ===========================================================================
+// ACCOUNTS — invoices raised to client companies (SOW §3.5)
+// ===========================================================================
+
+const G_ACCOUNTS = "Accounts · Vendor Invoices";
+
+crud({
+  module: "accounts",
+  resource: "invoice",
+  entity: "client invoice",
+  group: G_ACCOUNTS,
+  extra: [
+    ["recordPayment", "Record a payment received against an invoice", "BUTTON"],
+  ],
+});
+
+// ===========================================================================
+// INTERNAL STAFF — payslips (SOW §3.8)
+// ===========================================================================
+
+const G_STAFF = "Internal Staff";
+
+crud({
+  module: "staff",
+  resource: "payslip",
+  entity: "payslip",
+  group: G_STAFF,
+  update: false,
+});
+
+// ===========================================================================
 // MASTERS — one CRUD block per registry master
 // ===========================================================================
 
 const MASTER_RESOURCES: Array<[resource: string, entity: string, group: string]> = [
   ["company", "client company", "Masters · Companies"],
+  ["offerLetterTemplate", "offer letter template", "Masters · Companies"],
+  ["advanceReason", "advance reason", "Masters · Advances"],
   ["department", "department", "Masters · Organisation"],
   ["designation", "designation", "Masters · Organisation"],
   ["state", "state", "Masters · Geography"],
@@ -246,6 +341,14 @@ for (const [resource, entity, group] of MASTER_RESOURCES) {
     importable: true,
   });
 }
+
+// The company has a screen of its own beyond the master list: its hubs, its
+// Team Leaders, its rate card and its payout sheet mapping.
+perm("masters", "company", "manageHubs", "Add or change a company's hubs", "Masters · Companies", "BUTTON");
+perm("masters", "company", "assignTeamLeaders", "Assign Team Leaders to a company", "Masters · Companies", "BUTTON");
+perm("masters", "company", "uploadRateCard", "Upload the company's rate card", "Masters · Companies", "BUTTON");
+perm("masters", "company", "viewRateCard", "See the company's rate card", "Masters · Companies", "FIELD", "Admin and the assigned Team Leaders.");
+perm("masters", "company", "mapPayoutColumns", "Map the company's payout sheet columns", "Masters · Companies", "BUTTON");
 
 // ===========================================================================
 // ADMINISTRATION — users, roles, permissions, audit
@@ -313,7 +416,14 @@ perm("admin", "settings", "update", "Change platform settings", G_ADMIN_SYS, "BU
 
 const G_REP = "Reports";
 
-const REPORTS: Array<[key: string, label: string]> = [];
+const REPORTS: Array<[key: string, label: string]> = [
+  ["teamLeader", "TL report — active riders per Team Leader"],
+  ["ridersByCompany", "Riders by company"],
+  ["leadConversion", "Lead conversion"],
+  ["payoutSummary", "Payout summary"],
+  ["advanceOutstanding", "Advance outstanding"],
+  ["teleCallerDaily", "Tele-caller daily summary"],
+];
 
 for (const [key, label] of REPORTS) {
   perm("reports", key, "view", label, G_REP, "REPORT");

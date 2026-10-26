@@ -42,6 +42,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     });
   }
 
+  // Onboarding forms waiting for a decision, for whoever may decide.
+  if (ctx.has(PERM.hr.employee.acceptOnboarding)) {
+    badges.onboarding = await prisma.employee.count({ where: { onboardingStatus: "SUBMITTED" } });
+  }
+
+  // Advance requests waiting for a decision, for whoever may approve.
+  if (ctx.has(PERM.advance.advance.approve)) {
+    badges.advances = await prisma.advance.count({ where: { status: "PENDING" } });
+  }
+
   if (ctx.has(PERM.sales.followUp.view)) {
     badges.followUpDue = await prisma.lead.count({
       where: {
