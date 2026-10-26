@@ -1,3 +1,4 @@
+import "dotenv/config";
 /**
  * Syncs the permission catalogue in the database with the registry.
  *

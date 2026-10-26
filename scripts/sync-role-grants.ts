@@ -1,3 +1,4 @@
+import "dotenv/config";
 /**
  * Brings the roles in the database into line with the matrix in
  * prisma/role-matrix.ts, and touches nothing else.

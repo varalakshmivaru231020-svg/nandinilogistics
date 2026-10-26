@@ -1,3 +1,4 @@
+import "dotenv/config";
 /**
  * Dev helper: mints a valid session cookie for a seeded user so the running
  * app can be exercised from the command line. Development only.

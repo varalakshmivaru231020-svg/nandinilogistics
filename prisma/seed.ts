@@ -1,3 +1,4 @@
+import "dotenv/config";
 /**
  * Seeds the platform: permission catalogue, roles with their default access
  * matrix, master data, lead stages and demo users.

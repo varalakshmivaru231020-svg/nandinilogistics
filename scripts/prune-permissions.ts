@@ -1,3 +1,4 @@
+import "dotenv/config";
 /**
  * Removes permissions the registry no longer has — and only when nobody holds
  * them.

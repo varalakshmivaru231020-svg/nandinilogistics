@@ -1,3 +1,4 @@
+import "dotenv/config";
 /**
  * Applies every piece of reference data the platform needs, and nothing else.
  *

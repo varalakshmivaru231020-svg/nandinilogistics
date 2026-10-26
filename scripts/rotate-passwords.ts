@@ -1,3 +1,4 @@
+import "dotenv/config";
 /**
  * Rotates account passwords and signs everyone out.
  *
