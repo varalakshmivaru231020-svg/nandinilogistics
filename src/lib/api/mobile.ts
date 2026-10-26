@@ -64,12 +64,6 @@ export function statusForError(err: unknown): { status: number; error: string; c
   return { status: 500, error: "Something went wrong." };
 }
 
-/** The project the app says it is looking at, or null for all of them. */
-export function requestedProject(req: Request): string | null {
-  const header = req.headers.get("x-project")?.trim();
-  return header && header.length > 0 ? header : null;
-}
-
 /**
  * Resolves the actor from the Authorization header.
  *
@@ -80,7 +74,7 @@ export function requestedProject(req: Request): string | null {
 export async function mobileActor(req: Request): Promise<AuthContext | null> {
   const token = bearerToken(req.headers.get("authorization"));
   if (!token) return null;
-  return getAuthContextFromToken(token, requestedProject(req));
+  return getAuthContextFromToken(token);
 }
 
 export type MobileHandler = (
@@ -145,9 +139,5 @@ export function actorPayload(actor: AuthContext) {
      * answering true for everything — which is why that flag is sent too.
      */
     permissions: [...actor.permissions].sort(),
-    projectIds: actor.projectIds,
-    canAccessAllProjects: actor.canAccessAllProjects,
-    workspaceProjectId: actor.workspaceProjectId,
-    approvalLimits: actor.approvalLimits,
   };
 }

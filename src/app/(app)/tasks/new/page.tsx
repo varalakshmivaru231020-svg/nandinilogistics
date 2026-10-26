@@ -1,59 +1,33 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
+import { usersHolding } from "@/lib/rbac/holders";
 import { NewTaskForm } from "./new-task-form";
 
 export const metadata = { title: "New task" };
 
-export default async function NewTaskPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ project?: string }>;
-}) {
-  const ctx = await requirePermission(PERM.task.task.create);
-  // Raised from a project's own Tasks tab, the project is already known.
-  const { project: fromProject } = await searchParams;
+export default async function NewTaskPage() {
+  await requirePermission(PERM.task.task.create);
 
-  const [projects, people, checklists] = await Promise.all([
-    prisma.project.findMany({
-      where: ctx.canAccessAllProjects ? { status: "ACTIVE" } : { status: "ACTIVE", id: { in: ctx.projectIds } },
-      orderBy: { name: "asc" },
-      select: { id: true, code: true, name: true },
-    }),
-    prisma.user.findMany({
-      where: { status: "ACTIVE" },
-      orderBy: { name: "asc" },
-      select: {
-        id: true, name: true, employeeCode: true, phone: true,
-        roles: { select: { role: { select: { name: true } } }, take: 1 },
-      },
-    }),
-    prisma.checklist.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: {
-        id: true, name: true,
-        category: { select: { name: true } },
-        _count: { select: { checkpoints: true } },
-      },
-    }),
-  ]);
+  // Whoever may work a task is a Team Leader, by their grant — the same pool
+  // the mobile form's "teamLeaders" source lists.
+  const leaderIds = await usersHolding(prisma, PERM.task.task.start);
+  const people = await prisma.user.findMany({
+    where: { id: { in: leaderIds }, status: "ACTIVE" },
+    orderBy: { name: "asc" },
+    select: {
+      id: true, name: true, employeeCode: true, phone: true,
+      roles: { select: { role: { select: { name: true } } }, take: 1 },
+    },
+  });
 
   return (
     <NewTaskForm
-      projects={projects}
-      startWithProjectId={fromProject && projects.some((p) => p.id === fromProject) ? fromProject : ""}
       people={people.map((p) => ({
         id: p.id,
         name: p.name,
         hint: [p.employeeCode, p.roles[0]?.role.name].filter(Boolean).join(" · "),
         keywords: p.phone ?? "",
-      }))}
-      checklists={checklists.map((c) => ({
-        id: c.id,
-        name: c.name,
-        category: c.category.name,
-        points: c._count.checkpoints,
       }))}
     />
   );

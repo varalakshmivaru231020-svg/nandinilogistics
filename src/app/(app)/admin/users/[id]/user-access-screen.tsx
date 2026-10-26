@@ -7,7 +7,7 @@ import { Ban, Check, Save, Search, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, Badge, Card, CardBody, CardHeader, CardTitle, Input } from "@/components/ui/primitives";
 import { cn, formatDateTime } from "@/lib/utils";
-import { setUserPermissionsAction, setUserProjectsAction, setUserRolesAction } from "../../actions";
+import { setUserPermissionsAction, setUserRolesAction } from "../../actions";
 
 type Effect = "ALLOW" | "DENY";
 
@@ -17,8 +17,6 @@ interface Props {
   isSuperAdmin: boolean;
   roles: Array<{ id: string; name: string; code: string; status: string; permissionCount: number }>;
   assignedRoleIds: string[];
-  projects: Array<{ id: string; name: string; code: string; status: string }>;
-  assignedProjectIds: string[];
   overrides: Array<{ code: string; effect: Effect }>;
   fromRoles: string[];
   effective: string[];
@@ -27,7 +25,7 @@ interface Props {
   can: Record<string, boolean>;
 }
 
-type TabKey = "roles" | "permissions" | "projects" | "activity";
+type TabKey = "roles" | "permissions" | "activity";
 
 export function UserAccessScreen(props: Props) {
   const { can } = props;
@@ -37,7 +35,6 @@ export function UserAccessScreen(props: Props) {
     [
       { key: "roles" as const, label: "Roles", show: can.tabRoles },
       { key: "permissions" as const, label: "Direct permissions", show: can.tabPermissions },
-      { key: "projects" as const, label: "Project access", show: can.tabProjects },
       { key: "activity" as const, label: "Activity", show: can.tabActivity },
     ] satisfies Array<{ key: TabKey; label: string; show: boolean }>
   ).filter((t) => t.show);
@@ -81,7 +78,6 @@ export function UserAccessScreen(props: Props) {
 
       {tab === "roles" && <RolesTab {...props} />}
       {tab === "permissions" && <PermissionsTab {...props} />}
-      {tab === "projects" && <ProjectsTab {...props} />}
       {tab === "activity" && <ActivityTab {...props} />}
     </div>
   );
@@ -319,88 +315,6 @@ function PermissionsTab({ userId, permissions, overrides, fromRoles, effective, 
               Showing the first 300 of {filtered.length} matches — narrow the search to see the rest.
             </p>
           )}
-        </CardBody>
-      </Card>
-    </div>
-  );
-}
-
-/* -------------------------------- Projects -------------------------------- */
-
-function ProjectsTab({ userId, projects, assignedProjectIds, can, effective }: Props) {
-  const router = useRouter();
-  const [selected, setSelected] = React.useState(new Set(assignedProjectIds));
-  const [busy, setBusy] = React.useState(false);
-  const [msg, setMsg] = React.useState<{ tone: "success" | "error"; text: string } | null>(null);
-
-  const seesAll = effective.includes("project.project.accessAll");
-  const dirty =
-    selected.size !== assignedProjectIds.length ||
-    assignedProjectIds.some((id) => !selected.has(id));
-
-  async function save() {
-    setBusy(true);
-    setMsg(null);
-    const res = await setUserProjectsAction(userId, [...selected]);
-    setBusy(false);
-    if (!res.ok) setMsg({ tone: "error", text: res.error });
-    else { setMsg({ tone: "success", text: "Project access updated." }); router.refresh(); }
-  }
-
-  return (
-    <div className="space-y-3">
-      {msg && <Alert tone={msg.tone === "success" ? "success" : "error"}>{msg.text}</Alert>}
-
-      {seesAll && (
-        <Alert tone="warn" title="This user can access every project">
-          They hold <code>project.project.accessAll</code>, so the mapping below does not restrict
-          them. Remove that permission to scope them to specific projects.
-        </Alert>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Project mapping</CardTitle>
-          {can.assignProjects && (
-            <Button size="sm" onClick={save} loading={busy} disabled={!dirty}>
-              <Save className="h-3.5 w-3.5" />
-              Save mapping
-            </Button>
-          )}
-        </CardHeader>
-        <CardBody className="p-0">
-          <ul className="divide-y divide-line-200">
-            {projects.map((p) => (
-              <li
-                key={p.id}
-                className={cn("flex items-center gap-3 px-4 py-2.5", can.assignProjects && "cursor-pointer hover:bg-surface-hover")}
-                onClick={() => {
-                  if (!can.assignProjects) return;
-                  setSelected((s) => {
-                    const next = new Set(s);
-                    if (next.has(p.id)) next.delete(p.id); else next.add(p.id);
-                    return next;
-                  });
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.has(p.id)}
-                  disabled={!can.assignProjects}
-                  onChange={() => {}}
-                  className="h-4 w-4 rounded border-line-400 text-brand-600 focus:ring-brand-500"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-navy-900">{p.name}</p>
-                  <code className="text-xs text-muted-400">{p.code}</code>
-                </div>
-                <Badge tone={p.status === "ACTIVE" ? "good" : "slate"}>{p.status}</Badge>
-              </li>
-            ))}
-            {projects.length === 0 && (
-              <li className="px-4 py-10 text-center text-sm text-muted-500">No projects created yet.</li>
-            )}
-          </ul>
         </CardBody>
       </Card>
     </div>

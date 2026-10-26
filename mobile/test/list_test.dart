@@ -111,7 +111,6 @@ Future<Boundary> pumpList(WidgetTester tester, Map<String, Object> routes) async
       moduleKey: 'tasks',
       onBack: () {},
       bottom: const SizedBox.shrink(),
-      onPickProject: () {},
       onOpenRelated: (_) {},
     ),
   ));
@@ -126,7 +125,7 @@ void main() {
       final b = await pumpList(tester, listOf(120));
 
       // The count is what matches, not what has been fetched.
-      expect(find.text('120 tasks · All projects'), findsOneWidget);
+      expect(find.text('120 tasks'), findsOneWidget);
       expect(b.gets.any((g) => g == '/list/tasks?page=1&pageSize=50'), isTrue);
 
       // The foot of the list says how far it has read. A long list builds
@@ -154,7 +153,7 @@ void main() {
     testWidgets('no more to load, no button', (tester) async {
       await pumpList(tester, listOf(12));
       expect(find.byKey(const Key('load-more')), findsNothing);
-      expect(find.text('12 tasks · All projects'), findsOneWidget);
+      expect(find.text('12 tasks'), findsOneWidget);
     });
   });
 

@@ -26,7 +26,7 @@ export default async function UsersPage({
         roles: { include: { role: { select: { id: true, name: true } } } },
         department: { select: { name: true } },
         designation: { select: { name: true } },
-        _count: { select: { projectAccess: true, permissions: true } },
+        _count: { select: { permissions: true } },
       },
     }),
     prisma.role.findMany({ where: { status: "ACTIVE" }, orderBy: { level: "asc" }, select: { id: true, name: true } }),
@@ -38,7 +38,7 @@ export default async function UsersPage({
     <div>
       <PageHeader
         title="Users"
-        description="Platform accounts, the roles they hold, and the projects their data is scoped to."
+        description="Platform accounts and the roles they hold."
       />
 
       <UsersScreen
@@ -57,7 +57,6 @@ export default async function UsersPage({
           departmentId: u.departmentId,
           designationId: u.designationId,
           roles: u.roles.map((r) => ({ id: r.role.id, name: r.role.name })),
-          projectCount: u._count.projectAccess,
           overrideCount: u._count.permissions,
         }))}
         roles={roles}

@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { alertsDue, type SweepTask } from "@/lib/tasks/overdue-sweep";
 
-const NOW = Date.parse("2026-09-30T12:00:00.000Z");
+const NOW = Date.parse("2026-10-26T12:00:00.000Z");
 const DAY = 86_400_000;
 
 function task(over: Partial<SweepTask> = {}): SweepTask {
   return {
-    id: "t1", taskNo: "T-1001", title: "Slab shuttering", status: "STARTED",
+    id: "t1", taskNo: "TSK0001", title: "Collect KYC", status: "IN_PROGRESS",
     dueAt: new Date(NOW + 2 * DAY).toISOString(),
-    assigneeId: "assignee", createdById: "assigner", lastAlertAt: null,
+    assigneeIds: ["tl-1"], createdById: "admin", lastAlertAt: null,
     ...over,
   };
 }
@@ -52,14 +52,12 @@ describe("which tasks get an alert", () => {
   });
 
   it("says nothing about work that is already done", () => {
-    for (const status of ["COMPLETED", "CLOSED", "UNDER_REVIEW", "UNDER_APPROVAL"]) {
-      const t = task({ status, dueAt: new Date(NOW - 3 * DAY).toISOString() });
-      expect(alertsDue([t], NOW), status).toEqual([]);
-    }
+    const t = task({ status: "DONE", dueAt: new Date(NOW - 3 * DAY).toISOString() });
+    expect(alertsDue([t], NOW)).toEqual([]);
   });
 
-  it("still chases a task sent back for rework", () => {
-    const t = task({ status: "REWORK", dueAt: new Date(NOW - DAY).toISOString() });
+  it("chases an open task as well as one in progress", () => {
+    const t = task({ status: "OPEN", dueAt: new Date(NOW - DAY).toISOString() });
     expect(alertsDue([t], NOW)).toHaveLength(1);
   });
 

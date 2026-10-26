@@ -90,7 +90,7 @@ export interface FormFieldDef {
    */
   hidden?: boolean;
   /** Where the web pre-fills it with something other than empty. */
-  initial?: string | number | boolean;
+  initial?: string | number | boolean | string[];
   /**
    * What this field becomes while another one is ticked. The calendar's
    * "Starts" is "First day" and takes a date rather than an instant once

@@ -386,34 +386,18 @@ void main() {
 
   group('a web link names the record behind it', () {
     /*
-     * This is what makes the calendar and the approvals queue tappable: both
-     * carry the route the web would open, and that is what names the module
+     * This is what makes a notification tappable: it carries the route the
+     * web would open, and that is what names the module
      * and the id.
      */
-    test('an indent link', () {
-      final t = recordFor('/material/indents/cmtr7prug000xpp1oac25rzum');
-      expect(t?.module, 'material/indents');
+    test('a lead link', () {
+      final t = recordFor('/sales/leads/cmtr7prug000xpp1oac25rzum');
+      expect(t?.module, 'sales/leads');
       expect(t?.id, 'cmtr7prug000xpp1oac25rzum');
     });
 
     test('a task link', () {
       expect(recordFor('/tasks/cmusd9imz0001ppo2vxu2h45l')?.module, 'tasks');
-    });
-
-    /// A calendar task links back to the calendar carrying its own id.
-    test('a calendar task', () {
-      final t = recordFor('/calendar?event=cmv52ylbd0009pp7a4iyl2y5p');
-      expect(t?.module, 'calendar');
-      expect(t?.id, 'cmv52ylbd0009pp7a4iyl2y5p');
-    });
-
-    /// A schedule activity: the web's plan is one page per project, so the
-    /// activity's own id rides in the link for a client that has a screen for
-    /// one activity.
-    test('a schedule activity', () {
-      final t = recordFor('/schedule?project=cmtr6p586018ipp8x2ks2u7lt&activity=cmtscddly000nppou8uoy6i51');
-      expect(t?.module, 'schedule/activities');
-      expect(t?.id, 'cmtscddly000nppou8uoy6i51');
     });
 
     /// Where the web's route and the record's module are not the same words.
@@ -422,16 +406,11 @@ void main() {
       expect(t?.module, 'hr/employees');
     });
 
-    test('a project', () {
-      expect(recordFor('/projects/cmtr6p586018ipp8x2ks2u7lt')?.module, 'projects/projects');
-    });
-
     /// A list route is not a record, and neither is a word like "reports".
     test('and nothing where there is no record', () {
       expect(recordFor('/tasks'), isNull);
-      expect(recordFor('/tasks/reports'), isNull);
-      expect(recordFor('/schedule?tab=extensions'), isNull);
-      expect(recordFor('/material/indents/new'), isNull);
+      expect(recordFor('/tasks/new'), isNull);
+      expect(recordFor('/sales/leads?stage=new'), isNull);
       expect(recordFor(''), isNull);
     });
   });

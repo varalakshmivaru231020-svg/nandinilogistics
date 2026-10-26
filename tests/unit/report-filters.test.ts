@@ -6,31 +6,27 @@ import {
   parseReportFilters, REPORT_FILTER_SPEC,
 } from "@/lib/reports/filters";
 
-const both = { project: true, date: "Booking date" };
+const both = { company: true, date: "Payout period" };
 
 describe("report filter catalogue", () => {
   it("declares the filters for every report, and no report that does not exist", () => {
     expect(Object.keys(REPORT_FILTER_SPEC).sort()).toEqual(REPORTS.map((r) => r.key).sort());
   });
 
-  it("filters every report by project", () => {
-    expect(REPORTS.every((r) => filterSpecFor(r.key).project)).toBe(true);
-  });
-
   it("offers nothing for an unknown report", () => {
-    expect(filterSpecFor("nope")).toEqual({ project: false, date: null });
+    expect(filterSpecFor("nope")).toEqual({ company: false, date: null });
   });
 });
 
 describe("parseReportFilters", () => {
-  it("reads project and range from a query string", () => {
-    const params = new URLSearchParams("project=p1&from=2026-04-01&to=2026-06-30");
-    expect(parseReportFilters(params, both)).toEqual({ projectId: "p1", from: "2026-04-01", to: "2026-06-30" });
+  it("reads company and range from a query string", () => {
+    const params = new URLSearchParams("company=c1&from=2026-04-01&to=2026-06-30");
+    expect(parseReportFilters(params, both)).toEqual({ companyId: "c1", from: "2026-04-01", to: "2026-06-30" });
   });
 
   it("reads Next's searchParams object, taking the first of repeated values", () => {
-    expect(parseReportFilters({ project: ["p1", "p2"], from: "2026-04-01" }, both))
-      .toEqual({ projectId: "p1", from: "2026-04-01" });
+    expect(parseReportFilters({ company: ["c1", "c2"], from: "2026-04-01" }, both))
+      .toEqual({ companyId: "c1", from: "2026-04-01" });
   });
 
   it("drops dates that are malformed or do not exist", () => {
@@ -43,12 +39,12 @@ describe("parseReportFilters", () => {
   });
 
   it("ignores a date range on a report that is a position at a moment", () => {
-    expect(parseReportFilters({ project: "p1", from: "2026-04-01" }, { project: true, date: null }))
-      .toEqual({ projectId: "p1" });
+    expect(parseReportFilters({ company: "c1", from: "2026-04-01" }, { company: true, date: null }))
+      .toEqual({ companyId: "c1" });
   });
 
-  it("ignores a project id that could not be one", () => {
-    expect(parseReportFilters({ project: "p1' OR 1=1" }, both)).toEqual({});
+  it("ignores a company id that could not be one", () => {
+    expect(parseReportFilters({ company: "c1' OR 1=1" }, both)).toEqual({});
   });
 
   it("knows when anything is filtered", () => {
@@ -59,7 +55,7 @@ describe("parseReportFilters", () => {
 
 describe("dateCondition", () => {
   it("is absent without a range", () => {
-    expect(dateCondition({ projectId: "p1" })).toBeUndefined();
+    expect(dateCondition({ companyId: "c1" })).toBeUndefined();
   });
 
   it("includes the whole of the last day", () => {
@@ -75,15 +71,15 @@ describe("dateCondition", () => {
 
 describe("query string and description", () => {
   it("round-trips through the URL", () => {
-    const f = { projectId: "p1", from: "2026-04-01", to: "2026-06-30" };
+    const f = { companyId: "c1", from: "2026-04-01", to: "2026-06-30" };
     expect(parseReportFilters(new URLSearchParams(filterQueryString(f)), both)).toEqual(f);
     expect(filterQueryString({})).toBe("");
   });
 
   it("describes the filters in words", () => {
-    expect(describeFilters({}, null)).toBe("All accessible projects · All dates");
-    expect(describeFilters({ projectId: "p1", from: "2026-04-01", to: "2026-06-30" }, "NN Skyline"))
-      .toBe("NN Skyline · 01 Apr 2026 – 30 Jun 2026");
+    expect(describeFilters({}, null)).toBe("All companies · All dates");
+    expect(describeFilters({ companyId: "c1", from: "2026-04-01", to: "2026-06-30" }, "Peeko"))
+      .toBe("Peeko · 01 Apr 2026 – 30 Jun 2026");
     expect(describeFilters({ from: "2026-04-01" }, null)).toContain("From 01 Apr 2026");
   });
 });

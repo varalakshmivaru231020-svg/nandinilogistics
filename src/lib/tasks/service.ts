@@ -1,64 +1,31 @@
 import type { Prisma, PrismaClient, TaskStatus } from "@prisma/client";
 
-import { effectiveDueAt } from "./performance";
-import { STATUS_LABEL, type TaskShape } from "./lifecycle";
+import { isOverdue, STATUS_LABEL, type TaskShape } from "./lifecycle";
 
 type Tx = Prisma.TransactionClient | PrismaClient;
 
 /**
  * The writes behind a task's lifecycle.
  *
- * Takes its transaction client, so the arithmetic that matters — what an
- * extension does to the date performance is measured against, which level acts
- * next — is testable without a request, and an action stays a permission check
- * and a state check.
+ * Takes its transaction client, so the arithmetic — who may act, what the
+ * summary per Team Leader comes to — is testable without a request, and an
+ * action stays a permission check and a state check.
  */
 
-/**
- * The task as the lifecycle rules need to see it.
- *
- * The checklist points come with it, because on a checklist task who may judge
- * what is a question about the points rather than about the task: each one
- * stands in front of its own level.
- */
+/** The task as the lifecycle rules need to see it. */
 export async function shapeOf(tx: Tx, taskId: string): Promise<TaskShape & { id: string }> {
   const t = await tx.task.findUniqueOrThrow({
     where: { id: taskId },
     select: {
-      id: true, kind: true, status: true, round: true, assigneeId: true, createdById: true,
-      levels: { select: { kind: true, level: true, userId: true } },
-      checklists: {
-        select: {
-          items: {
-            select: {
-              id: true, round: true,
-              reviews: {
-                select: {
-                  round: true, verdict: true,
-                  level: { select: { kind: true, level: true } },
-                },
-              },
-            },
-          },
-        },
-      },
+      id: true, status: true, createdById: true,
+      assignees: { select: { userId: true } },
     },
   });
-
   return {
-    ...t,
-    items: t.checklists.flatMap((c) =>
-      c.items.map((i) => ({
-        id: i.id,
-        round: i.round,
-        verdicts: i.reviews.map((r) => ({
-          kind: r.level.kind,
-          level: r.level.level,
-          round: r.round,
-          verdict: r.verdict as "PASS" | "FAIL",
-        })),
-      })),
-    ),
+    id: t.id,
+    status: t.status,
+    createdById: t.createdById,
+    assigneeIds: t.assignees.map((a) => a.userId),
   };
 }
 
@@ -120,120 +87,61 @@ export async function moveStatus(
   });
 }
 
-/**
- * Applies an Assigner's decision on an extension.
- *
- * The revised date moves what the Assignee works to; the effective date moves
- * only when the delay was outside their control, and is recomputed from every
- * approved extension rather than adjusted, so it cannot drift.
- */
-export async function applyExtensionDecision(
-  tx: Tx,
-  input: {
-    extensionId: string;
-    actorId: string;
-    approve: boolean;
-    remark: string;
-    control?: "CONTROLLABLE" | "UNCONTROLLABLE";
-    revisedDueAt?: Date;
-  },
-): Promise<{ taskId: string; status: TaskStatus }> {
-  const ext = await tx.taskExtension.findUniqueOrThrow({
-    where: { id: input.extensionId },
-    select: {
-      id: true, taskId: true, status: true, isHoldRequest: true, proposedDueAt: true,
-      task: { select: { status: true, originalDueAt: true, dueAt: true } },
-    },
-  });
-  if (ext.status !== "REQUESTED") throw new Error("This request has already been decided.");
+export interface TeamLeaderTaskSummary {
+  userId: string;
+  name: string;
+  open: number;
+  inProgress: number;
+  overdue: number;
+  done: number;
+}
 
-  if (!input.approve) {
-    await tx.taskExtension.update({
-      where: { id: ext.id },
-      data: {
-        status: "REJECTED",
-        decidedById: input.actorId,
-        decidedAt: new Date(),
-        decisionRemark: input.remark,
-      },
-    });
-    await logTaskEvent(tx, {
-      taskId: ext.taskId, actorId: input.actorId, kind: "EXTENSION",
-      summary: "Extension rejected", remark: input.remark,
-    });
-    // A rejected request changes nothing: the task keeps its status and date.
-    return { taskId: ext.taskId, status: ext.task.status };
+/**
+ * The counts per Team Leader behind the Admin dashboard's task card —
+ * open, in progress, overdue and done, with overdue counted on top of
+ * whichever open status the task is in.
+ */
+export function summariseByAssignee(
+  rows: Array<{
+    status: TaskStatus;
+    dueAt: Date | string;
+    assignees: Array<{ userId: string; name: string }>;
+  }>,
+  nowMs: number,
+): TeamLeaderTaskSummary[] {
+  const by = new Map<string, TeamLeaderTaskSummary>();
+  for (const t of rows) {
+    for (const a of t.assignees) {
+      const s = by.get(a.userId) ?? {
+        userId: a.userId, name: a.name, open: 0, inProgress: 0, overdue: 0, done: 0,
+      };
+      if (t.status === "DONE") s.done += 1;
+      else if (t.status === "IN_PROGRESS") s.inProgress += 1;
+      else s.open += 1;
+      if (isOverdue(t, nowMs)) s.overdue += 1;
+      by.set(a.userId, s);
+    }
   }
+  return [...by.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
 
-  if (!input.control) throw new Error("Classify the delay as controllable or uncontrollable.");
-  const revised = input.revisedDueAt ?? ext.proposedDueAt;
-
-  await tx.taskExtension.update({
-    where: { id: ext.id },
-    data: {
-      status: "APPROVED",
-      decidedById: input.actorId,
-      decidedAt: new Date(),
-      decisionRemark: input.remark,
-      control: input.control,
-      revisedDueAt: revised,
+/** Reads every task and sums it per Team Leader, for the Admin dashboard. */
+export async function taskSummaryByTeamLeader(
+  db: Tx,
+  nowMs: number,
+): Promise<TeamLeaderTaskSummary[]> {
+  const rows = await db.task.findMany({
+    select: {
+      status: true, dueAt: true,
+      assignees: { select: { userId: true, user: { select: { name: true } } } },
     },
   });
-
-  const approved = await tx.taskExtension.findMany({
-    where: { taskId: ext.taskId, status: "APPROVED" },
-    select: { control: true, previousDueAt: true, revisedDueAt: true },
-    orderBy: { decidedAt: "asc" },
-  });
-  const effective = effectiveDueAt(ext.task.originalDueAt, approved);
-
-  // An approved hold request is what actually pauses the task; a plain
-  // extension leaves the status where it was.
-  const status: TaskStatus = ext.isHoldRequest ? "HOLD" : ext.task.status;
-
-  await tx.task.update({
-    where: { id: ext.taskId },
-    data: { dueAt: revised, effectiveDueAt: effective, status },
-  });
-
-  await logTaskEvent(tx, {
-    taskId: ext.taskId,
-    actorId: input.actorId,
-    kind: "EXTENSION",
-    summary:
-      `Extension approved — due ${revised.toISOString().slice(0, 10)}, ` +
-      `${input.control === "CONTROLLABLE" ? "controllable" : "uncontrollable"}`,
-    remark: input.remark,
-    fromStatus: ext.task.status,
-    toStatus: status,
-  });
-
-  return { taskId: ext.taskId, status };
-}
-
-/**
- * Whether every point on a task's checklists has been marked done.
- *
- * The assignee works through the list and ticks each line off; the task cannot
- * be called complete until the list is. Every point counts — a checklist with
- * optional lines is a checklist nobody finishes.
- */
-export async function checklistAllMarked(tx: Tx, taskId: string): Promise<boolean> {
-  const items = await tx.taskChecklistItem.findMany({
-    where: { taskChecklist: { taskId } },
-    select: { answeredAt: true },
-  });
-  return items.length > 0 && items.every((i) => i.answeredAt !== null);
-}
-
-/** How far through the list the assignee has got. */
-export async function checklistProgress(
-  tx: Tx,
-  taskId: string,
-): Promise<{ done: number; total: number }> {
-  const items = await tx.taskChecklistItem.findMany({
-    where: { taskChecklist: { taskId } },
-    select: { answeredAt: true },
-  });
-  return { done: items.filter((i) => i.answeredAt !== null).length, total: items.length };
+  return summariseByAssignee(
+    rows.map((t) => ({
+      status: t.status,
+      dueAt: t.dueAt,
+      assignees: t.assignees.map((a) => ({ userId: a.userId, name: a.user.name })),
+    })),
+    nowMs,
+  );
 }

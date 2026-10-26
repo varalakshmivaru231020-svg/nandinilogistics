@@ -3,7 +3,7 @@ import "server-only";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 
-import { ASSIGNMENT_MODES, DEFAULT_ESCALATION_HOURS } from "./sales/assignment";
+import { DEFAULT_ESCALATION_HOURS } from "./sales/assignment";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -15,10 +15,6 @@ type Db = PrismaClient | Prisma.TransactionClient;
  * settings page yet.
  */
 export const SETTINGS = {
-  "sales.leadAssignment": {
-    schema: z.object({ mode: z.enum(ASSIGNMENT_MODES) }),
-    default: { mode: "MANUAL" as const },
-  },
   "sales.followUpEscalation": {
     schema: z.object({ afterHours: z.number().int().min(1).max(24 * 30) }),
     default: { afterHours: DEFAULT_ESCALATION_HOURS },

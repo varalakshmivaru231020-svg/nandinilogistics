@@ -15,16 +15,16 @@ describe("exactly one navigation entry is ever active", () => {
   // The design's menu has no parent/child pair, so the rule is checked against
   // a menu of its own: whatever the entries, the longest match must win.
   it("picks the child, not the parent, when both are listed", () => {
-    const sections = [{ items: [{ href: "/projects" }, { href: "/projects/progress" }] }];
-    expect(activeNavHref("/projects/progress", sections)).toBe("/projects/progress");
+    const sections = [{ items: [{ href: "/sales" }, { href: "/sales/leads" }] }];
+    expect(activeNavHref("/sales/leads", sections)).toBe("/sales/leads");
   });
 
   it("lights the entry a screen opened from inside another belongs to", () => {
-    expect(activeNavHref("/material/indents/abc123", NAVIGATION)).toBe("/material/indents");
+    expect(activeNavHref("/sales/leads/abc123", NAVIGATION)).toBe("/sales/leads");
   });
 
   it("picks the parent for a route the navigation does not list", () => {
-    expect(activeNavHref("/projects/abc123", NAVIGATION)).toBe("/projects");
+    expect(activeNavHref("/hr/abc123", NAVIGATION)).toBe("/hr");
   });
 
   it("never returns a parent when a longer entry also matches", () => {
@@ -39,7 +39,7 @@ describe("exactly one navigation entry is ever active", () => {
   });
 
   it("does not let /dashboard swallow every path", () => {
-    expect(activeNavHref("/kb", NAVIGATION)).toBe("/kb");
+    expect(activeNavHref("/tasks", NAVIGATION)).toBe("/tasks");
   });
 });
 

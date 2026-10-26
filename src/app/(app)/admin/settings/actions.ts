@@ -7,25 +7,6 @@ import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
 import { getSetting, setSetting } from "@/lib/settings";
-import { isAssignmentMode } from "@/lib/sales/assignment";
-
-export async function updateLeadAssignmentModeAction(mode: string): Promise<ActionResult<null>> {
-  return runAction(async () => {
-    const ctx = await authorize(PERM.admin.settings.update);
-    if (!isAssignmentMode(mode)) throw new Error("Choose how new leads are assigned.");
-
-    const before = await getSetting(prisma, "sales.leadAssignment");
-    await setSetting(prisma, "sales.leadAssignment", { mode }, ctx.id);
-    await recordAudit({
-      action: "UPDATE", entity: "AppSetting", entityId: "sales.leadAssignment", userId: ctx.id,
-      summary: `Lead assignment changed from ${before.mode} to ${mode}`,
-      changes: { mode: { from: before.mode, to: mode } },
-    });
-
-    revalidatePath("/admin/settings");
-    return null;
-  });
-}
 
 export async function updateEscalationHoursAction(hours: number): Promise<ActionResult<null>> {
   return runAction(async () => {

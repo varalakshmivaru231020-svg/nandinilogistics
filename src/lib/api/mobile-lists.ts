@@ -16,70 +16,20 @@
  */
 import "server-only";
 
-import { GET as l0 } from "@/app/api/approvals/export/route";
-import { GET as l1 } from "@/app/api/checklists/export/route";
-import { GET as l2 } from "@/app/api/hr/attendance/export/route";
-import { GET as l3 } from "@/app/api/hr/employees/export/route";
-import { GET as l4 } from "@/app/api/kb/export/route";
-import { GET as l5 } from "@/app/api/material/grn/export/route";
-import { GET as l6 } from "@/app/api/material/indents/export/route";
-import { GET as l7 } from "@/app/api/material/invoices/export/route";
-import { GET as l8 } from "@/app/api/material/issues/export/route";
-import { GET as l9 } from "@/app/api/material/payments/export/route";
-import { GET as l10 } from "@/app/api/material/purchase-orders/export/route";
-import { GET as l11 } from "@/app/api/material/reorder/export/route";
-import { GET as l12 } from "@/app/api/material/returns/export/route";
-import { GET as l13 } from "@/app/api/material/stock/export/route";
-import { GET as l14 } from "@/app/api/material/transfers/export/route";
-import { GET as l15 } from "@/app/api/material/vendors/export/route";
-import { GET as l16 } from "@/app/api/projects/progress/export/route";
-import { GET as l17 } from "@/app/api/projects/projects/export/route";
-import { GET as l18 } from "@/app/api/sales/bookings/export/route";
-import { GET as l19 } from "@/app/api/sales/cost-sheets/export/route";
-import { GET as l20 } from "@/app/api/sales/customers/export/route";
-import { GET as l21 } from "@/app/api/sales/follow-ups/export/route";
-import { GET as l22 } from "@/app/api/sales/leads/export/route";
-import { GET as l23 } from "@/app/api/sales/receipts/export/route";
-import { GET as l24 } from "@/app/api/sales/site-visits/export/route";
-import { GET as l25 } from "@/app/api/schedule/activities/export/route";
-import { GET as l26 } from "@/app/api/tasks/export/route";
-import { GET as l27 } from "@/app/api/tasks/reports/export/route";
-import { GET as l28 } from "@/app/api/units/export/route";
-import { GET as l29 } from "@/app/api/units/price-lists/export/route";
+import { GET as l0 } from "@/app/api/hr/attendance/export/route";
+import { GET as l1 } from "@/app/api/hr/employees/export/route";
+import { GET as l2 } from "@/app/api/sales/follow-ups/export/route";
+import { GET as l3 } from "@/app/api/sales/leads/export/route";
+import { GET as l4 } from "@/app/api/tasks/export/route";
 
 export type ListHandler = (request: Request) => Promise<Response>;
 
 export const MOBILE_LISTS: Record<string, ListHandler> = {
-  "approvals": l0,
-  "checklists": l1,
-  "hr/attendance": l2,
-  "hr/employees": l3,
-  "kb": l4,
-  "material/grn": l5,
-  "material/indents": l6,
-  "material/invoices": l7,
-  "material/issues": l8,
-  "material/payments": l9,
-  "material/purchase-orders": l10,
-  "material/reorder": l11,
-  "material/returns": l12,
-  "material/stock": l13,
-  "material/transfers": l14,
-  "material/vendors": l15,
-  "projects/progress": l16,
-  "projects/projects": l17,
-  "sales/bookings": l18,
-  "sales/cost-sheets": l19,
-  "sales/customers": l20,
-  "sales/follow-ups": l21,
-  "sales/leads": l22,
-  "sales/receipts": l23,
-  "sales/site-visits": l24,
-  "schedule/activities": l25,
-  "tasks": l26,
-  "tasks/reports": l27,
-  "units": l28,
-  "units/price-lists": l29,
+  "hr/attendance": l0,
+  "hr/employees": l1,
+  "sales/follow-ups": l2,
+  "sales/leads": l3,
+  "tasks": l4,
 };
 
 export const MOBILE_LIST_KEYS = Object.keys(MOBILE_LISTS).sort();

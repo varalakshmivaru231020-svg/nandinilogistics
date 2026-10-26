@@ -14,7 +14,8 @@ import { phoneKey } from "./lead-schema";
 /**
  * The database side of editing a lead. The rules are pure, in ./lead-edit.ts;
  * this loads the lead, applies them, and writes — inside the caller's
- * transaction, so the edit and any re-pointed duplicate links land together.
+ * transaction, so the edit, the company tags and any re-pointed duplicate
+ * links land together.
  */
 
 export interface LeadEditOutcome {
@@ -49,7 +50,7 @@ export async function applyLeadEdit(
 ): Promise<LeadEditOutcome> {
   const lead = await tx.lead.findUnique({
     where: { id: leadId },
-    include: { _count: { select: { bookings: true } } },
+    include: { stage: { select: { kind: true } }, companies: { select: { companyId: true } } },
   });
   if (!lead) throw new LeadEditError("not-found", "Lead not found.");
 
@@ -63,9 +64,8 @@ export async function applyLeadEdit(
   const { before, after, changed } = planLeadEdit(
     {
       ...lead,
-      hasBooking: lead._count.bookings > 0,
-      budgetMin: lead.budgetMin === null ? null : Number(lead.budgetMin),
-      budgetMax: lead.budgetMax === null ? null : Number(lead.budgetMax),
+      stageKind: lead.stage.kind,
+      companyIds: lead.companies.map((c) => c.companyId),
     },
     actor,
     form,
@@ -75,17 +75,11 @@ export async function applyLeadEdit(
     return { leadNo: lead.leadNo, updated: false, changes: null, summary: "", repointed: [] };
   }
 
-  // References must exist — a clear message rather than a foreign-key failure.
-  const [source, project, unitType] = await Promise.all([
-    changed.includes("sourceId") ? tx.leadSource.findUnique({ where: { id: after.sourceId }, select: { id: true } }) : true,
-    changed.includes("projectId") && after.projectId
-      ? tx.project.findUnique({ where: { id: after.projectId }, select: { id: true } }) : true,
-    changed.includes("unitTypeId") && after.unitTypeId
-      ? tx.unitType.findUnique({ where: { id: after.unitTypeId }, select: { id: true } }) : true,
-  ]);
-  if (!source) throw new LeadEditError("invalid", "That lead source no longer exists.");
-  if (!project) throw new LeadEditError("invalid", "That project no longer exists.");
-  if (!unitType) throw new LeadEditError("invalid", "That unit type no longer exists.");
+  // Companies must exist — a clear message rather than a foreign-key failure.
+  if (changed.includes("companyIds") && after.companyIds.length) {
+    const found = await tx.company.count({ where: { id: { in: after.companyIds } } });
+    if (found !== after.companyIds.length) throw new LeadEditError("invalid", "One of those companies no longer exists.");
+  }
 
   // A changed number is a different person to match. Formatting alone
   // ("+91 98450 12345" for "9845012345") keeps the links as they are.
@@ -105,8 +99,9 @@ export async function applyLeadEdit(
     repoint = plan.repoint;
   }
 
+  const { companyIds, ...columns } = after;
   const data = {
-    ...after,
+    ...columns,
     duplicateOfId,
     // A new next action is a new lapse: clearing escalatedAt lets it escalate
     // again if this one is missed too — as logging a follow-up does.
@@ -118,6 +113,13 @@ export async function applyLeadEdit(
   const { count } = await tx.lead.updateMany({ where: { id: leadId, updatedAt: lead.updatedAt }, data });
   if (count === 0) throw new LeadEditError("stale", STALE_MESSAGE);
 
+  if (changed.includes("companyIds")) {
+    await tx.leadCompany.deleteMany({ where: { leadId } });
+    if (companyIds.length) {
+      await tx.leadCompany.createMany({ data: companyIds.map((companyId) => ({ leadId, companyId })) });
+    }
+  }
+
   const repointed: LeadEditOutcome["repointed"] = [];
   for (const r of repoint) {
     const row = await tx.lead.update({
@@ -128,8 +130,12 @@ export async function applyLeadEdit(
     repointed.push(row);
   }
 
-  const auditBefore: Record<string, unknown> = { ...before, nextActionAt: before.nextActionAt?.toISOString() ?? null };
-  const auditAfter: Record<string, unknown> = { ...after, nextActionAt: after.nextActionAt?.toISOString() ?? null };
+  const auditBefore: Record<string, unknown> = {
+    ...before, nextActionAt: before.nextActionAt?.toISOString() ?? null, companyIds: before.companyIds.join(","),
+  };
+  const auditAfter: Record<string, unknown> = {
+    ...after, nextActionAt: after.nextActionAt?.toISOString() ?? null, companyIds: after.companyIds.join(","),
+  };
   if (duplicateOfId !== lead.duplicateOfId) {
     auditBefore.duplicateOfId = lead.duplicateOfId;
     auditAfter.duplicateOfId = duplicateOfId;

@@ -20,9 +20,7 @@ class DashboardScreen extends StatefulWidget {
     required this.onNotifications,
     this.unread,
     required this.onOpen,
-    this.onPickProject,
     required this.bottom,
-    this.onApprovalCount,
   });
 
   final Api api;
@@ -36,11 +34,7 @@ class DashboardScreen extends StatefulWidget {
   final int? unread;
   final void Function(String moduleKey) onOpen;
 
-  /// The chooser, for a module that cannot answer without a project — the
-  /// schedule is one project's Gantt, not three.
-  final Future<void> Function()? onPickProject;
   final Widget bottom;
-  final void Function(int)? onApprovalCount;
 
   @override
   State<DashboardScreen> createState() => DashboardScreenState();
@@ -59,15 +53,10 @@ class _Health {
   String? rightLabel;
   Tone? rightTone;
   bool failed = false;
-
-  /// It answered, and asked for a project first. Not a fault — the schedule
-  /// belongs to one project, and the server says so in those words.
-  bool needsProject = false;
 }
 
 class DashboardScreenState extends State<DashboardScreen> {
   bool _loading = true;
-  int _approvals = 0;
   int _tasksOverdue = 0;
   final _health = <_Health>[];
 
@@ -85,28 +74,20 @@ class DashboardScreenState extends State<DashboardScreen> {
     // query its screen runs — so the dashboard cannot disagree with the module.
     final wanted = <_Health>[
       if (can('task.task.view'))
-        _Health('tasks', 'Task Management', Icons.check_box_outlined, Tone.info),
-      if (can('material.indent.view'))
-        _Health('material/indents', 'Requirement Indents', Icons.description_outlined, Tone.warn),
-      if (can('schedule.activity.view'))
-        _Health('schedule/activities', 'Project Schedule', Icons.view_timeline_outlined, Tone.good),
-      if (can('unit.unit.view'))
-        _Health('units', 'Available Flats', Icons.apartment_outlined, Tone.plum),
+        _Health('tasks', 'Tasks', Icons.check_box_outlined, Tone.info),
+      if (can('sales.lead.view'))
+        _Health('sales/leads', 'Leads', Icons.person_search_outlined, Tone.plum),
+      if (can('sales.followUp.view'))
+        _Health('sales/follow-ups', 'Follow-ups', Icons.phone_forwarded_outlined, Tone.warn),
+      if (can('hr.employee.view'))
+        _Health('hr/employees', 'Riders & Staff', Icons.badge_outlined, Tone.good),
     ];
 
     final jobs = <Future<void>>[
-      if (can('approvals.queue.view'))
-        widget.api.get('/list/approvals').then((r) {
-          if (r.ok) _approvals = ListPage.from(r.data!).rows.length;
-        }),
       for (final h in wanted)
         widget.api.get('/list/${h.key}').then((r) {
           if (!r.ok) {
-            // The boundary's own code, so the row can say which of the two
-            // this is rather than printing "could not be read" at somebody who
-            // has simply not chosen a project.
-            h.needsProject = r.code == 'project-required';
-            h.failed = !h.needsProject;
+            h.failed = true;
             return;
           }
           _fill(h, ListPage.from(r.data!));
@@ -121,8 +102,10 @@ class DashboardScreenState extends State<DashboardScreen> {
         ..clear()
         ..addAll(wanted);
     });
-    widget.onApprovalCount?.call(_approvals);
   }
+
+  /// Whether a task's status, as the row carries it, means it is done.
+  static bool _done(String status) => status.toUpperCase().replaceAll(' ', '_') == 'DONE';
 
   /// Turns a list into the one line a health row shows.
   void _fill(_Health h, ListPage page) {
@@ -133,12 +116,11 @@ class DashboardScreenState extends State<DashboardScreen> {
 
     switch (h.key) {
       case 'tasks':
-        final open = rows.where((r) => !['CLOSED', 'COMPLETED'].contains(of(r, 'status').toUpperCase().replaceAll(' ', '_'))).length;
+        final open = rows.where((r) => !_done(of(r, 'status'))).length;
         final overdue = rows.where((r) {
           final due = DateTime.tryParse(of(r, 'dueAt'));
           if (due == null) return false;
-          final done = ['CLOSED', 'COMPLETED'].contains(of(r, 'status').toUpperCase().replaceAll(' ', '_'));
-          return !done && due.millisecondsSinceEpoch < page.serverTime;
+          return !_done(of(r, 'status')) && due.millisecondsSinceEpoch < page.serverTime;
         }).length;
         _tasksOverdue = overdue;
         h.detail = '$open open · $overdue overdue';
@@ -146,25 +128,25 @@ class DashboardScreenState extends State<DashboardScreen> {
         h.right = onTime == null ? '—' : '$onTime%';
         h.rightLabel = 'on time';
         h.rightTone = onTime == null || onTime >= 90 ? Tone.good : (onTime >= 70 ? Tone.warn : Tone.bad);
-      case 'material/indents':
-        final awaiting = rows
-            .where((r) => of(r, 'status').toUpperCase().contains('SUBMITTED') ||
-                of(r, 'status').toUpperCase().contains('PM APPROVED'))
-            .length;
-        h.detail = '${h.total} raised · $awaiting awaiting';
-        h.right = '$awaiting';
-        h.rightLabel = 'awaiting';
-        h.rightTone = awaiting > 0 ? Tone.warn : Tone.good;
-      case 'schedule/activities':
-        h.detail = '${h.total} ${h.total == 1 ? "activity" : "activities"}';
+      case 'sales/leads':
+        h.detail = '${h.total} ${h.total == 1 ? "lead" : "leads"}';
         h.right = '${h.total}';
-        h.rightLabel = 'planned';
-      case 'units':
-        final available = rows.where((r) => of(r, 'status').toUpperCase() == 'AVAILABLE').length;
-        h.detail = '${h.total} flats · $available available';
-        final sold = h.total == 0 ? 0 : (((h.total - available) / h.total) * 100).round();
-        h.right = '$sold%';
-        h.rightLabel = 'taken';
+        h.rightLabel = 'in pipeline';
+      case 'sales/follow-ups':
+        final overdue = rows.where((r) {
+          final raw = of(r, 'nextActionAt').isEmpty ? of(r, 'dueAt') : of(r, 'nextActionAt');
+          final due = DateTime.tryParse(raw);
+          return due != null && due.millisecondsSinceEpoch < page.serverTime;
+        }).length;
+        h.detail = '${h.total} open · $overdue overdue';
+        h.right = '$overdue';
+        h.rightLabel = 'overdue';
+        h.rightTone = overdue > 0 ? Tone.bad : Tone.good;
+      case 'hr/employees':
+        final active = rows.where((r) => of(r, 'status').toUpperCase() == 'ACTIVE').length;
+        h.detail = '$active active';
+        h.right = '$active';
+        h.rightLabel = 'active';
       default:
         h.detail = '${h.total} rows';
     }
@@ -178,7 +160,7 @@ class DashboardScreenState extends State<DashboardScreen> {
       body: Column(children: [
         Bar(
           title: 'Dashboard',
-          subtitle: s.project?.label ?? 'All projects',
+          subtitle: s.roleNames.isEmpty ? (s.isSuperAdmin ? 'Super admin' : 'No role') : s.roleNames.first,
           onMenu: widget.onMenu,
           actions: [
             // The web carries a bell in its top bar, on every screen, with the
@@ -200,32 +182,19 @@ class DashboardScreenState extends State<DashboardScreen> {
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(T.gutter, 14, T.gutter, 24),
                     children: [
-                      if (s.can('approvals.queue.view') || s.can('task.task.view')) ...[
+                      if (s.can('task.task.view')) ...[
                         const Overline('Waiting on you'),
                         const SizedBox(height: 8),
                         Row(children: [
-                          if (s.can('approvals.queue.view'))
-                            Expanded(
-                              child: _Waiting(
-                                value: '$_approvals',
-                                label: 'Approvals',
-                                tone: Tone.warn,
-                                onTap: () => widget.onOpen('approvals'),
-                              ),
+                          Expanded(
+                            child: _Waiting(
+                              value: '$_tasksOverdue',
+                              label: 'Tasks overdue',
+                              tone: _tasksOverdue > 0 ? Tone.bad : Tone.good,
+                              // It counts tasks; it opens them.
+                              onTap: () => widget.onOpen('tasks'),
                             ),
-                          if (s.can('approvals.queue.view') && s.can('task.task.view'))
-                            const SizedBox(width: 9),
-                          if (s.can('task.task.view'))
-                            Expanded(
-                              child: _Waiting(
-                                value: '$_tasksOverdue',
-                                label: 'Tasks overdue',
-                                tone: _tasksOverdue > 0 ? Tone.bad : Tone.good,
-                                // It counts tasks; it opens them. It used to
-                                // count them and do nothing.
-                                onTap: () => widget.onOpen('tasks'),
-                              ),
-                            ),
+                          ),
                         ]),
                         const SizedBox(height: 18),
                       ],
@@ -241,21 +210,14 @@ class DashboardScreenState extends State<DashboardScreen> {
                         for (final h in _health) ...[
                           _HealthRow(
                             health: h,
-                            /*
-                             * A module waiting for a project opens the
-                             * chooser; anything else opens the module, where
-                             * the menu can reach it.
-                             */
-                            onTap: h.needsProject && widget.onPickProject != null
-                                ? () => widget.onPickProject!().then((_) => _load())
-                                : hrefToModule.containsValue(h.key)
-                                    ? () => widget.onOpen(h.key)
-                                    : null,
+                            onTap: hrefToModule.containsValue(h.key)
+                                ? () => widget.onOpen(h.key)
+                                : null,
                           ),
                           const SizedBox(height: 8),
                         ],
                       ],
-                      if (_health.isEmpty && !s.can('approvals.queue.view'))
+                      if (_health.isEmpty)
                         const Empty('Nothing is assigned to you yet',
                             detail: 'Your administrator decides what you can open.'),
                     ],
@@ -268,7 +230,7 @@ class DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-/// One of the two things that are actually on this person right now.
+/// The one thing that is actually on this person right now.
 class _Waiting extends StatelessWidget {
   const _Waiting({required this.value, required this.label, required this.tone, this.onTap});
 
@@ -320,22 +282,12 @@ class _HealthRow extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(health.label, style: T.body(weight: FontWeight.w700)),
             const SizedBox(height: 2),
-            Text(
-                health.needsProject
-                    ? 'Choose a project to see it'
-                    : health.failed
-                        ? 'Could not be read'
-                        : health.detail,
-                style: T.caption(
-                        color: health.failed
-                            ? T.badInk
-                            : health.needsProject
-                                ? T.warnInk
-                                : T.muted)
+            Text(health.failed ? 'Could not be read' : health.detail,
+                style: T.caption(color: health.failed ? T.badInk : T.muted)
                     .copyWith(fontSize: 12, fontWeight: FontWeight.w500)),
           ]),
         ),
-        if (health.right != null && !health.failed && !health.needsProject)
+        if (health.right != null && !health.failed)
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(health.right!, style: T.metric(19, color: right?.ink ?? T.navy950)),
             Text(health.rightLabel ?? '', style: T.overline().copyWith(fontSize: 10.5)),

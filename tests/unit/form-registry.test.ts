@@ -26,49 +26,13 @@ const ROOT = join(__dirname, "..", "..");
 
 /** The screen that renders each form. */
 const SOURCE: Record<string, string> = {
-  "calendar:create": "calendar/calendar-screen.tsx",
   "tasks:create": "tasks/new/new-task-form.tsx",
-  "sales/customers:create": "sales/customers/customers-screen.tsx",
-  "sales/leads:create": "sales/leads/leads-screen.tsx",
-  "material/indents:create": "material/indents/new/indent-form.tsx",
-  "material/vendors:create": "material/vendors/vendor-form.tsx",
-  "hr/attendance:mark": "hr/hr-screen.tsx",
-  "projects/progress:create": "projects/progress/progress-screen.tsx",
-  "units/price-lists:create": "units/price-lists/price-lists-screen.tsx",
-  "kb:create": "kb/kb-screen.tsx",
-  "material/transfers:create": "material/transfers/transfers-screen.tsx",
-  "checklists:create": "checklists/checklists-screen.tsx",
-  // The edits. The web uses one component for both in every case but the
-  // lead, whose edit drawer is its own.
-  "calendar:edit": "calendar/calendar-screen.tsx",
   "tasks:edit": "tasks/new/new-task-form.tsx",
-  "material/vendors:edit": "material/vendors/vendor-form.tsx",
-  "kb:edit": "kb/kb-screen.tsx",
+  "sales/leads:create": "sales/leads/leads-screen.tsx",
   "sales/leads:edit": "sales/leads/[id]/lead-edit-modal.tsx",
-  "hr/employees:edit": "hr/hr-screen.tsx",
-  "schedule/activities:edit": "schedule/schedule-screen.tsx",
-  "units:edit": "units/unit-manager.tsx",
-  "units:create": "units/unit-manager.tsx",
-  "units:generate": "units/board/unit-setup.tsx",
-  "material/indents:edit": "material/indents/new/indent-form.tsx",
-  "material/purchase-orders:edit": "material/purchase-orders/new/po-form.tsx",
-  "material/grn:edit": "material/grn/[id]/edit/grn-edit-form.tsx",
-  "projects/projects:create": "projects/new-project-button.tsx",
-  "projects/projects:edit": "projects/[id]/edit-project-button.tsx",
-  "schedule/activities:addCategory": "schedule/schedule-screen.tsx",
-  "schedule/activities:addActivity": "schedule/schedule-screen.tsx",
-  // The two creates the app was missing: the item master's own form, and the
-  // first step of a goods receipt.
-  "material/stock:create": "material/stock/item-form.tsx",
-  "material/grn:create": "material/grn/new/po-picker.tsx",
-  // The forms that carry a file, which were web-only while the boundary could
-  // not: the employee drawer, the receipt's attachments card and the project
-  // document repository.
+  "hr/attendance:mark": "hr/hr-screen.tsx",
   "hr/employees:create": "hr/hr-screen.tsx",
-  "material/grn:attach": "material/grn/[id]/grn-detail.tsx",
-  "projects/projects:uploadDocument": "projects/[id]/documents/documents-tab.tsx",
-  "projects/projects:newDocumentVersion": "projects/[id]/documents/documents-tab.tsx",
-  "projects/projects:editDocument": "projects/[id]/documents/documents-tab.tsx",
+  "hr/employees:edit": "hr/hr-screen.tsx",
 };
 
 /**
@@ -103,91 +67,12 @@ function labelled(src: string, label: string): boolean {
  */
 const OURS = new Set([
   /*
-   * The editor prints this through `ACCEPTED_LABEL` — "Drop files here —
-   * {ACCEPTED_LABEL}" — so the sentence is shared rather than repeated in the
-   * source this test reads.
-   */
-  "kb:create → PDF, Word, Excel, images, DWG or plain text — up to 25 MB",
-  "kb:edit → PDF, Word, Excel, images, DWG or plain text — up to 25 MB",
-  // One field on the phone, two hidden inputs on the web — see above.
-  "projects/progress:create → Location",
-  "projects/progress:create → Taken from this phone, as the web takes it from the browser.",
-  // The web's first step of a goods receipt is a list of links, not a form, so
-  // its button is the phone's own word for following one.
-  "material/grn:create → Open the order",
-  "material/grn:create → Approved POs only — material can only be received against an approved order.",
-  // The web adds a unit of measure in place, beside the picker. Masters are
-  // web-only by the brief, so the phone says where it is done.
-  "material/stock:create → A new unit of measure is added on the web.",
-  "material/indents:create → Item",
-  // The vendor form's category picker is a list of chips with an "add a new
-  // category" box rather than a labelled field.
-  "material/vendors:create → Supply categories",
-  // The checklist's category is the tab you are standing on when you add one,
-  // not a field on its form.
-  "checklists:create → Category",
-  // The transfer modal has no heading over its lines; a phone's rows need one.
-  "material/transfers:create → Items",
-  // As on the create form: the web picks the item in a search pane, so the
-  // line has no labelled item field.
-  "material/indents:edit → Item",
-  "material/purchase-orders:edit → Item",
-  // The web's own title carries the activity's code — "Edit EXC" — which a
-  // registry entry cannot know. The goods receipt's edit page does the same
-  // with its number.
-  "schedule/activities:edit → Edit activity",
-  "material/grn:edit → Edit goods receipt",
-  /*
-   * The web's schedule takes the project from the screen's own chooser and the
-   * main category from the row whose "+ Sub-activity" you pressed. A form has
-   * to name both.
-   */
-  "schedule/activities:addCategory → Project",
-  "schedule/activities:addActivity → Project",
-  "schedule/activities:addActivity → Under which main category",
-  // The unit form's project and block come from the row on the web's manager.
-  "units:create → Project",
-  "units:create → Block",
-  /*
-   * The Create-units screen's own controls are steppers with aria-labels
-   * rather than labelled fields, and its project comes from the board behind
-   * it. A form has to name all four.
-   */
-  "units:generate → Project",
-  "units:generate → Tower or block",
-  "units:generate → Floors",
-  "units:generate → Flats per floor",
-  "units:generate → Unit type",
-  "units:generate → Create units",
-  // Its own button counts the flats — "Generate 32 units" — which a registry
-  // entry cannot know.
-  "units:generate → Generate units",
-  /*
-   * The web explains the numbering by laying every floor out on screen; a
-   * phone has no grid, so it says it in a line instead.
-   */
-  "units:generate → Floor 1 flat 1 is numbered 101.",
-  // And the line saying where a single flat is renumbered, which is the web.
-  "units:generate → One tower, its floors and the flats on each. Renumbering a single flat is done on the web.",
-  /*
    * The web's photograph is a square you press, labelled from inside — "Upload
    * photo", then "✓ Photo added", then "Change" over the picture on file. A
    * field needs one name for all three states.
    */
   "hr/employees:create → Photo",
   "hr/employees:edit → Photo",
-  /*
-   * The receipt's attachments card has one unlabelled box with a placeholder —
-   * "Challan, slip, photo…" — beside a Choose files button that submits as
-   * soon as a file is picked. A form needs a name over the box and a word on
-   * the button.
-   */
-  "material/grn:attach → Label",
-  "material/grn:attach → Files",
-  "material/grn:attach → Attach",
-  // The web's own title carries the document's name — Edit "Tower B drawing"
-  // — which a registry entry cannot know, as with Edit activity.
-  "projects/projects:editDocument → Edit document",
 ]);
 
 /**
@@ -195,12 +80,9 @@ const OURS = new Set([
  * anywhere: the checklist's category is the tab you are standing on.
  */
 const OUTSIDE_THE_FORM = new Set([
-  "checklists:create → categoryId",
   /*
    * The web writes these two as one input per kind — `name={`doc:${kind}`}`
    * over `["Aadhaar card", "PAN card"]` — so the literal name appears nowhere.
-   * `saveFiles()` reads exactly these, and the integration test
-   * `uploads-from-phone` posts them.
    */
   "hr/employees:create → doc:Aadhaar card",
   "hr/employees:create → doc:PAN card",
@@ -208,22 +90,6 @@ const OUTSIDE_THE_FORM = new Set([
   "hr/employees:edit → doc:PAN card",
   // The stale guard the lead's edit drawer posts as a hidden input.
   "sales/leads:edit → updatedAt",
-  // The goods receipt's edit passes it as the action's third argument rather
-  // than as a field.
-  "material/grn:edit → expectedUpdatedAt",
-  /*
-   * The web's first step of a goods receipt is a list of links — each PO is an
-   * anchor to the next screen, not an input — so there is no submitted name to
-   * compare. The field is the phone's way of asking the same question.
-   */
-  "material/grn:create → poId",
-  /*
-   * The web posts two hidden inputs, `latitude` and `longitude`, filled from
-   * the browser's geolocation. The phone asks once, as one field, and sends
-   * the same two names — so there is no `position` in the web's source to
-   * compare, and its label and note are the phone's own.
-   */
-  "projects/progress:create → position",
 ]);
 
 /**
@@ -231,7 +97,7 @@ const OUTSIDE_THE_FORM = new Set([
  * screen that calls it. Both are written down in docs/MOBILE_PARITY.md; there
  * is nothing on the web to copy, so there is nothing to compare against.
  */
-const NO_WEB_SCREEN = new Set(["calendar:edit", "tasks:edit"]);
+const NO_WEB_SCREEN = new Set(["tasks:edit"]);
 
 function source(key: string): string {
   return readFileSync(join(ROOT, "src", "app", "(app)", SOURCE[key]), "utf8");
@@ -297,10 +163,7 @@ describe("the lead form's mapping, against the drawer that does the same", () =>
   const src = source("sales/leads:create");
 
   it("posts under the names the drawer posts under", () => {
-    for (const name of [
-      "name", "phone", "email", "sourceId", "projectId", "unitTypeId",
-      "budgetMax", "requirement", "siteVisitPlanned",
-    ]) {
+    for (const name of ["name", "phone", "email", "location", "companyIds", "requirement"]) {
       expect(src.includes(`name="${name}"`), `lead field ${name}`).toBe(true);
     }
     // A field the master owns rather than the lead record posts under its id.
@@ -308,14 +171,11 @@ describe("the lead form's mapping, against the drawer that does the same", () =>
   });
 
   it("uses the design's own placeholders", () => {
-    for (const p of ["98765 43210 (without country code)", "e.g. 85,00,000", "dd-mm-yyyy", "Type here"]) {
+    for (const p of ["98765 43210 (without country code)", "dd-mm-yyyy", "Type here"]) {
       expect(src.includes(p), `lead placeholder ${p}`).toBe(true);
     }
   });
 
-  it("calls the nothing-chosen option what the drawer calls it", () => {
-    expect(src.includes("Select…")).toBe(true);
-  });
 });
 
 /**

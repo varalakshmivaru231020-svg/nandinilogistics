@@ -16,7 +16,7 @@ import "server-only";
  */
 
 export type ParityReason =
-  /** Masters & Users is web-only — the brief's §12, and the project's own instruction. */
+  /** Admin is web-only by the SOW (§2): masters, users, payout import, company creation. */
   | "brief:web-only"
   /** Needs a file to be uploaded or downloaded; the boundary carries neither. */
   | "no-file-transfer"
@@ -35,18 +35,6 @@ export interface ParityExemption {
 export const PARITY: Record<string, ParityExemption> = {
   /* ------------------------------------------- masters, which stay on the web */
 
-  "material/stock/updateItem": {
-    reason: "brief:web-only",
-    note: "The item master.",
-  },
-  "material/stock/addUom": {
-    reason: "brief:web-only",
-    note: "The UOM master.",
-  },
-  "material/vendors/addItemCategory": {
-    reason: "brief:web-only",
-    note: "The item-category master.",
-  },
   "hr/createEmploymentType": {
     reason: "brief:web-only",
     note: "The employment-type master.",
@@ -55,95 +43,4 @@ export const PARITY: Record<string, ParityExemption> = {
     reason: "brief:web-only",
     note: "The employment-type master.",
   },
-  "checklists/saveCategory": {
-    reason: "brief:web-only",
-    note: "The checklist-category master.",
-  },
-  "checklists/deleteCategory": {
-    reason: "brief:web-only",
-    note: "The checklist-category master.",
-  },
-
-  /* ------------------------------------------------- files, which cannot move */
-  /*
-   * This list was written when the boundary carried no file at all. It carries
-   * them now — a `files` field travels as multipart and the action reads it as
-   * it reads the browser's — so a document, a challan, a photograph and an
-   * identity copy are all the app's own. What is left here is the bulk import
-   * of a spreadsheet, which is not a file the phone has.
-   */
-
-  "sales/leads/importLeads": {
-    reason: "no-file-transfer",
-    note: "A portal export is a .csv or .xlsx — picked, mapped and previewed at a desk.",
-  },
-  "sales/leads/previewLeadImport": {
-    reason: "no-file-transfer",
-    note: "The dry run of that import, whose mapping screen is the desk's.",
-  },
-  "units/importUnits": {
-    reason: "no-file-transfer",
-    note: "A unit sheet, mapped column by column before it is accepted.",
-  },
-  "units/previewUnitImport": {
-    reason: "no-file-transfer",
-    note: "The dry run of that import.",
-  },
-  "schedule/importActivities": {
-    reason: "no-file-transfer",
-    note: "A programme sheet, with its own mapping and dependency screen.",
-  },
-  "schedule/previewActivityImport": {
-    reason: "no-file-transfer",
-    note: "The dry run of that import.",
-  },
-  /* --------------------------------------------- nothing on the web either */
-
-  "material/grn/inspectGrn": {
-    reason: "no-web-ui",
-    note: "No web screen calls it; a receipt is inspected as it is created.",
-  },
-  /*
-   * The schedule's templates and dependencies: five actions, no screen on the
-   * web that calls any of them. Links arrive with the programme import, and
-   * templates have no UI at all. The phone shows what the data holds — an
-   * activity's predecessors are drawn read-only — and offers none of these,
-   * because inventing a destructive control the desk does not have is not
-   * parity.
-   */
-  "schedule/addDependency": {
-    reason: "no-web-ui",
-    note: "No web screen links two activities; links come in with the import.",
-  },
-  "schedule/removeDependency": {
-    reason: "no-web-ui",
-    note: "The same — the phone draws the links read-only.",
-  },
-  "schedule/applyTemplate": {
-    reason: "no-web-ui",
-    note: "No web screen applies a schedule template.",
-  },
-  "schedule/saveScheduleAsTemplate": {
-    reason: "no-web-ui",
-    note: "No web screen saves one.",
-  },
-  "schedule/deleteTemplate": {
-    reason: "no-web-ui",
-    note: "No web screen deletes one.",
-  },
-
-  /* ------------------------------------------------- done another way */
-
-  "workspace/setWorkspace": {
-    reason: "equivalent",
-    note: "The app sends the chosen project as the `x-project` header instead of a cookie; the chooser is in its shell.",
-  },
-
-  /* ----------------------------------------------- still to build (todo) */
-
-
-
-
-
-
 };

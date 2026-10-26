@@ -1,5 +1,5 @@
 /**
- * Report filters — project and date range — as they travel in the URL.
+ * Report filters — company and date range — as they travel in the URL.
  *
  * Pure and Prisma-free: the report page, the export route and the filter bar
  * all read and write filters through here, so a link copied from the screen
@@ -7,7 +7,7 @@
  */
 
 export interface ReportFilters {
-  projectId?: string;
+  companyId?: string;
   /** Inclusive, as yyyy-mm-dd. */
   from?: string;
   /** Inclusive, as yyyy-mm-dd. */
@@ -15,33 +15,18 @@ export interface ReportFilters {
 }
 
 export interface ReportFilterSpec {
-  /** Whether the report can be narrowed to one project. */
-  project: boolean;
+  /** Whether the report can be narrowed to one client company. */
+  company: boolean;
   /**
    * What the date range is measured against, in words, or null when the report
-   * is a position at a moment (stock on hand, units available) and a range
-   * would mean nothing.
+   * is a position at a moment and a range would mean nothing.
    */
   date: string | null;
 }
 
-export const REPORT_FILTER_SPEC: Record<string, ReportFilterSpec> = {
-  budgetVsActual: { project: true, date: "PO and issue date" },
-  scheduleVariance: { project: true, date: "Planned finish" },
-  projectProgress: { project: true, date: null },
-  consumptionVsIndent: { project: true, date: "Indent, PO and issue date" },
-  stockValuation: { project: true, date: null },
-  openPurchaseOrders: { project: true, date: "PO date" },
-  vendorOutstanding: { project: true, date: "Invoice date" },
-  indentAgeing: { project: true, date: "Raised on" },
-  salesFunnel: { project: true, date: "Lead captured" },
-  leadPerformance: { project: true, date: "Lead captured" },
-  collections: { project: true, date: "Booking date" },
-  unitAvailability: { project: true, date: null },
-  bookingRegister: { project: true, date: "Booking date" },
-};
+export const REPORT_FILTER_SPEC: Record<string, ReportFilterSpec> = {};
 
-const NO_FILTERS: ReportFilterSpec = { project: false, date: null };
+const NO_FILTERS: ReportFilterSpec = { company: false, date: null };
 
 export function filterSpecFor(key: string): ReportFilterSpec {
   return REPORT_FILTER_SPEC[key] ?? NO_FILTERS;
@@ -74,8 +59,8 @@ function read(source: ParamSource, name: string): string | undefined {
 export function parseReportFilters(source: ParamSource, spec: ReportFilterSpec): ReportFilters {
   const filters: ReportFilters = {};
 
-  const projectId = read(source, "project");
-  if (spec.project && projectId && /^[A-Za-z0-9_-]{1,64}$/.test(projectId)) filters.projectId = projectId;
+  const companyId = read(source, "company");
+  if (spec.company && companyId && /^[A-Za-z0-9_-]{1,64}$/.test(companyId)) filters.companyId = companyId;
 
   if (spec.date) {
     const from = read(source, "from");
@@ -90,7 +75,7 @@ export function parseReportFilters(source: ParamSource, spec: ReportFilterSpec):
 }
 
 export function hasFilters(filters: ReportFilters): boolean {
-  return Boolean(filters.projectId || filters.from || filters.to);
+  return Boolean(filters.companyId || filters.from || filters.to);
 }
 
 /** The range as a Prisma date condition: from the start of `from` to the end of `to`. */
@@ -108,7 +93,7 @@ export function dateCondition(filters: ReportFilters): { gte?: Date; lt?: Date }
 
 export function filterQueryString(filters: ReportFilters): string {
   const params = new URLSearchParams();
-  if (filters.projectId) params.set("project", filters.projectId);
+  if (filters.companyId) params.set("company", filters.companyId);
   if (filters.from) params.set("from", filters.from);
   if (filters.to) params.set("to", filters.to);
   return params.toString();
@@ -121,8 +106,8 @@ function day(value: string): string {
 }
 
 /** The filters in words, for the heading of an export. */
-export function describeFilters(filters: ReportFilters, projectLabel: string | null): string {
-  const parts = [projectLabel ?? "All accessible projects"];
+export function describeFilters(filters: ReportFilters, companyLabel: string | null): string {
+  const parts = [companyLabel ?? "All companies"];
   if (filters.from && filters.to) parts.push(`${day(filters.from)} – ${day(filters.to)}`);
   else if (filters.from) parts.push(`From ${day(filters.from)}`);
   else if (filters.to) parts.push(`Up to ${day(filters.to)}`);

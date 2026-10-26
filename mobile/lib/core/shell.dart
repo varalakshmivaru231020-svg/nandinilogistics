@@ -5,7 +5,7 @@ import '../design/tokens.dart';
 import 'nav.dart';
 import 'session.dart';
 
-/// The four tabs, as the design draws them: Home, Approvals, Tasks, More.
+/// The three tabs: Home, the module you are in (Tasks by default), More.
 ///
 /// The third tab takes the name of whatever module is open, which is how the
 /// design shows it on the indent list — the tab is "where you are", not a
@@ -15,22 +15,18 @@ class BottomBar extends StatelessWidget {
     super.key,
     required this.current,
     required this.onHome,
-    required this.onApprovals,
     required this.onMore,
     this.thirdLabel = 'Tasks',
     this.thirdIcon = Icons.check_box_outlined,
     this.onThird,
-    this.approvalsBadge,
   });
 
   final String current;
   final VoidCallback onHome;
-  final VoidCallback onApprovals;
   final VoidCallback onMore;
   final String thirdLabel;
   final IconData thirdIcon;
   final VoidCallback? onThird;
-  final int? approvalsBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -44,8 +40,6 @@ class BottomBar extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(12, 8, 12, MediaQuery.of(context).padding.bottom + 10),
       child: Row(children: [
         _tab('Home', Icons.grid_view_rounded, current == 'dashboard', onHome),
-        _tab('Approvals', Icons.fact_check_outlined, current == 'approvals', onApprovals,
-            badge: approvalsBadge),
         _tab(thirdLabel, thirdIcon, current == 'third', onThird),
         _tab('More', Icons.menu_rounded, false, onMore),
       ]),
@@ -119,8 +113,7 @@ class BottomBar extends StatelessWidget {
   }
 }
 
-/// The drawer: navy, full height, with the account at the top, the workspace
-/// under it, and the menu built from what the viewer may actually open.
+/// The drawer: navy, full height, with the account at the top and the menu built from what the viewer may actually open.
 class NavDrawer extends StatelessWidget {
   const NavDrawer({
     super.key,
@@ -128,7 +121,6 @@ class NavDrawer extends StatelessWidget {
     required this.current,
     required this.sections,
     required this.onPick,
-    required this.onProject,
     required this.onSignOut,
     this.badges = const {},
   });
@@ -142,7 +134,6 @@ class NavDrawer extends StatelessWidget {
   final List<NavSection> sections;
 
   final void Function(NavItem) onPick;
-  final VoidCallback onProject;
   final VoidCallback onSignOut;
   final Map<String, int> badges;
 
@@ -192,37 +183,6 @@ class NavDrawer extends StatelessWidget {
               ]),
             ),
           ]),
-        ),
-
-        // workspace
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-          child: Material(
-            color: Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(11),
-            child: InkWell(
-              onTap: onProject,
-              borderRadius: BorderRadius.circular(11),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-                constraints: const BoxConstraints(minHeight: T.target),
-                child: Row(children: [
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Overline('Workspace', color: T.onNavySecondary),
-                      const SizedBox(height: 2),
-                      Text(session.project?.label ?? 'All projects',
-                          style: T.body(color: Colors.white, weight: FontWeight.w700)
-                              .copyWith(fontSize: 13.5),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                    ]),
-                  ),
-                  const Icon(Icons.expand_more_rounded, size: 18, color: T.onNavySecondary),
-                ]),
-              ),
-            ),
-          ),
         ),
 
         // menu

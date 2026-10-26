@@ -153,15 +153,13 @@ describe("navigation is a projection of the permission set", () => {
   });
 });
 
-describe("tasks and checklists", () => {
+describe("tasks", () => {
   it("registers their permissions", () => {
     expect(permissionsByModule("task").length).toBeGreaterThan(0);
-    expect(permissionsByModule("checklist").length).toBeGreaterThan(0);
   });
 
-  it("keeps them in the navigation, where the design draws them", () => {
+  it("keeps them in the navigation", () => {
     const hrefs = visibleNavigation(() => true).flatMap((s) => s.items.map((i) => i.href));
     expect(hrefs).toContain("/tasks");
-    expect(hrefs).toContain("/checklists");
   });
 });

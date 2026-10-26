@@ -4,15 +4,17 @@ import { MASTERS, getMaster, masterGroups } from "@/lib/masters/registry";
 import { buildSchema, toPrismaData, defaultOrderBy, searchFilter, listInclude, recordLabel } from "@/lib/masters/schema";
 import type { MasterDef } from "@/lib/masters/types";
 
-const items = getMaster("items")!;
+const companies = getMaster("companies")!;
+const designations = getMaster("designations")!;
+const stages = getMaster("lead-stages")!;
 const numbering = getMaster("numbering-series")!;
 const cities = getMaster("cities")!;
 
 describe("master registry", () => {
-  it("registers all 23 masters with unique keys and models", () => {
-    expect(MASTERS).toHaveLength(23);
-    expect(new Set(MASTERS.map((m) => m.key)).size).toBe(23);
-    expect(new Set(MASTERS.map((m) => m.model)).size).toBe(23);
+  it("registers every master with unique keys and models", () => {
+    expect(MASTERS.length).toBeGreaterThan(5);
+    expect(new Set(MASTERS.map((m) => m.key)).size).toBe(MASTERS.length);
+    expect(new Set(MASTERS.map((m) => m.model)).size).toBe(MASTERS.length);
   });
 
   it("gives every master at least one searchable field", () => {
@@ -43,56 +45,42 @@ describe("master registry", () => {
 
 describe("schema building", () => {
   it("requires the fields marked required", () => {
-    const result = buildSchema(items).safeParse({ code: "", name: "", categoryId: "", uomId: "" });
-    expect(result.success).toBe(false);
+    expect(buildSchema(stages).safeParse({ code: "", name: "", kind: "" }).success).toBe(false);
+    expect(buildSchema(cities).safeParse({ name: "Mysuru", stateId: "" }).success).toBe(false);
   });
 
   it("accepts a complete record", () => {
-    const result = buildSchema(items).safeParse({
-      code: "CEM-01", name: "Cement", categoryId: "c1", uomId: "u1",
-      hsnCode: "2523", taxRateId: "t1", reorderLevel: 100, standardRate: 410,
-      isAsset: false, description: "",
-    });
+    const result = buildSchema(stages).safeParse({ code: "TRAINING", name: "Training", kind: "OPEN", sortOrder: 3 });
     expect(result.success).toBe(true);
   });
 
   it("coerces numeric strings coming off a form", () => {
-    const parsed = buildSchema(items).safeParse({
-      code: "X", name: "Y", categoryId: "c", uomId: "u", reorderLevel: "12.5", standardRate: "410",
-    });
+    const parsed = buildSchema(stages).safeParse({ code: "X", name: "X", kind: "OPEN", sortOrder: "7" });
     expect(parsed.success).toBe(true);
-    if (parsed.success) expect(parsed.data.reorderLevel).toBe(12.5);
+    if (parsed.success) expect(parsed.data.sortOrder).toBe(7);
   });
 
   it("rejects a value below a field's minimum", () => {
-    const result = buildSchema(items).safeParse({
-      code: "X", name: "Y", categoryId: "c", uomId: "u", reorderLevel: -5,
-    });
+    const result = buildSchema(numbering).safeParse({ documentKey: "LEAD", prefix: "LD", padding: 0 });
     expect(result.success).toBe(false);
   });
 
   it("rejects a malformed email", () => {
-    const vendors = getMaster("vendors")!;
-    const result = buildSchema(vendors).safeParse({ code: "V", name: "V", email: "not-an-email" });
+    const result = buildSchema(companies).safeParse({ code: "C", name: "C", email: "not-an-email" });
     expect(result.success).toBe(false);
   });
 });
 
 describe("value coercion", () => {
   it("uppercases fields flagged uppercase", () => {
-    const data = toPrismaData(items, { code: "cem-01", name: "Cement", categoryId: "c", uomId: "u" });
-    expect(data.code).toBe("CEM-01");
-    expect(data.name).toBe("Cement");
+    const data = toPrismaData(companies, { code: "peeko", name: "Peeko" });
+    expect(data.code).toBe("PEEKO");
+    expect(data.name).toBe("Peeko");
   });
 
   it("turns a blank optional into null rather than an empty string", () => {
-    const data = toPrismaData(items, { code: "X", name: "Y", categoryId: "c", uomId: "u", hsnCode: "" });
-    expect(data.hsnCode).toBeNull();
-  });
-
-  it("always produces a boolean for a checkbox", () => {
-    expect(toPrismaData(items, { isAsset: undefined }).isAsset).toBe(false);
-    expect(toPrismaData(items, { isAsset: true }).isAsset).toBe(true);
+    const data = toPrismaData(companies, { code: "X", name: "Y", gstin: "" });
+    expect(data.gstin).toBeNull();
   });
 });
 
@@ -100,8 +88,9 @@ describe("query shaping", () => {
   it("falls back to a column the master actually has", () => {
     // Numbering series has no `code` column — ordering by it would 500.
     expect(Object.keys(defaultOrderBy(numbering))[0]).not.toBe("code");
-    expect(Object.keys(defaultOrderBy(items))[0]).toBe("code");
+    expect(Object.keys(defaultOrderBy(companies))[0]).toBe("code");
     expect(Object.keys(defaultOrderBy(cities))[0]).toBe("name");
+    expect(Object.keys(defaultOrderBy(stages))[0]).toBe("sortOrder");
   });
 
   it("never orders a master by a field it does not define", () => {
@@ -113,31 +102,28 @@ describe("query shaping", () => {
   });
 
   it("searches every configured field, case-insensitively", () => {
-    const filter = searchFilter(items, "cement") as { OR: Array<Record<string, unknown>> };
-    expect(filter.OR).toHaveLength(items.searchFields.length);
-    expect(filter.OR[0]).toMatchObject({ [items.searchFields[0]]: { mode: "insensitive" } });
+    const filter = searchFilter(companies, "peeko") as { OR: Array<Record<string, unknown>> };
+    expect(filter.OR).toHaveLength(companies.searchFields.length);
+    expect(filter.OR[0]).toMatchObject({ [companies.searchFields[0]]: { mode: "insensitive" } });
   });
 
   it("returns an empty filter for a blank search", () => {
-    expect(searchFilter(items, "   ")).toEqual({});
+    expect(searchFilter(companies, "   ")).toEqual({});
   });
 
   it("includes only the relations the list actually shows", () => {
-    expect(listInclude(items)).toEqual({
-      category: { select: { name: true } },
-      uom: { select: { code: true } },
-    });
+    expect(listInclude(designations)).toEqual({ department: { select: { name: true } } });
     expect(listInclude(getMaster("departments")!)).toBeUndefined();
   });
 });
 
 describe("audit labels", () => {
   it("prefers code and name together", () => {
-    expect(recordLabel(items, { code: "CEM-01", name: "Cement" })).toBe("CEM-01 — Cement");
+    expect(recordLabel(companies, { code: "PEEKO", name: "Peeko" })).toBe("PEEKO — Peeko");
   });
 
   it("falls back for a master with no code", () => {
-    expect(recordLabel(numbering, { documentKey: "INDENT", prefix: "IND" })).toBe("IND");
+    expect(recordLabel(numbering, { documentKey: "RIDER", prefix: "NL" })).toBe("NL");
   });
 });
 

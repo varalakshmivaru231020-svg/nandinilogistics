@@ -12,7 +12,7 @@ import { actorPayload, apiFail, apiOk } from "@/lib/api/mobile";
  * Signing in from a device.
  *
  * Deliberately not the web login action: that one sets a cookie and redirects
- * to the project chooser. This returns the token in the body and the whole
+ * to the dashboard. This returns the token in the body and the whole
  * resolved permission set with it, so the app can draw its first screen without
  * a second round trip — and knows immediately which of its twenty modules it is
  * allowed to show at all.
@@ -91,10 +91,9 @@ export async function POST(req: Request): Promise<Response> {
    * revoked, which is the record that this account tried to sign in from a
    * phone and was not allowed to.
    */
-  const actor = await buildAuthContext(
-    { userId: user.id, tokenId, email: user.email, name: user.name, isSuperAdmin: user.isSuperAdmin },
-    null,
-  );
+  const actor = await buildAuthContext({
+    userId: user.id, tokenId, email: user.email, name: user.name, isSuperAdmin: user.isSuperAdmin,
+  });
 
   if (!actor || !actor.has(PERM.admin.mobile.use)) {
     await revokeSessionToken(tokenId);

@@ -34,16 +34,14 @@ bindCookieBox(cookieBox);
  */
 describe("every form resolves against the database", () => {
   it("resolves, with each of its choosers a list", async () => {
-    await actAs("owner@nninfra.example");
+    await actAs("admin@nandini.example");
     const ctx = (await getAuthContext())!;
 
     // An id for the edit forms, which start as the record stands.
     const ids: Record<string, string | undefined> = {
-      "units:edit": (await prisma.unit.findFirst({ select: { id: true } }))?.id,
       "hr/employees:edit": (await prisma.employee.findFirst({ select: { id: true } }))?.id,
-      "projects/projects:editDocument": (
-        await prisma.projectDocument.findFirst({ select: { id: true } })
-      )?.id,
+      "sales/leads:edit": (await prisma.lead.findFirst({ select: { id: true } }))?.id,
+      "tasks:edit": (await prisma.task.findFirst({ select: { id: true } }))?.id,
     };
 
     const empty: string[] = [];
@@ -72,12 +70,12 @@ describe("every form resolves against the database", () => {
   });
 
   /*
-   * The three forms whose fields the app had to grow a `files` kind for, with
+   * The form whose fields the app had to grow a `files` kind for, with
    * the attributes the phone draws them from: one photograph with a camera,
-   * two identity copies, and the document's single file.
+   * two identity copies.
    */
   it("sends the file fields with the web's own accept", async () => {
-    await actAs("owner@nninfra.example");
+    await actAs("admin@nandini.example");
     const ctx = (await getAuthContext())!;
 
     const employee = await resolveForm(ctx, "hr/employees:create");
@@ -87,13 +85,6 @@ describe("every form resolves against the database", () => {
       expect(files.map((f) => f.name)).toEqual(["photo", "doc:Aadhaar card", "doc:PAN card"]);
       expect(files[0].accept).toBe("image/*");
       expect(files[0].maxFiles).toBe(1);
-    }
-
-    const document = await resolveForm(ctx, "projects/projects:uploadDocument");
-    if (typeof document !== "string" && "fields" in document) {
-      const file = document.fields.find((f) => f.kind === "files");
-      expect(file?.name).toBe("file");
-      expect(file?.maxFiles).toBe(1);
     }
 
     await cleanupActionSessions();

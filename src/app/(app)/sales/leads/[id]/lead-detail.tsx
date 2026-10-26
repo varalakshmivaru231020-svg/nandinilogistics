@@ -3,60 +3,44 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { ArrowLeft, Upload, X } from "lucide-react";
+import { ArrowLeft, Upload } from "lucide-react";
 
-import { Alert, Badge, Card, Field, Input, Select } from "@/components/ui/primitives";
+import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { cn, formatDate, money, phone } from "@/lib/utils";
-import {
-  addLeadNoteAction, blockUnitForLeadAction, changeLeadStageAction, releaseUnitForLeadAction,
-} from "../actions";
-import { logFollowUpAction } from "../actions";
+import { cn, formatDate } from "@/lib/utils";
+import { CHANNELS, CHANNEL_ICON, CHANNEL_LABEL } from "@/lib/sales/follow-up-display";
+import { addLeadNoteAction, changeLeadStageAction, logFollowUpAction } from "../actions";
+import { PhoneLink } from "../leads-screen";
 import { EditLeadModal, type EditLeadValues } from "./lead-edit-modal";
 import { AssignModal } from "../assign-modal";
 
 /* --------------------------------- Types --------------------------------- */
 
 interface Lead {
-  id: string; leadNo: string; name: string; phone: string; email: string | null;
-  sourceName: string; projectName: string | null; ownerName: string | null; ownerId: string | null;
+  id: string; leadNo: string; name: string; phone: string; canCall: boolean; email: string | null;
+  location: string | null; companies: string[];
+  ownerName: string | null; ownerId: string | null;
   firstResponseMins: number | null;
-  state: string; requirement: string | null;
-  unitTypeName: string | null;
-  /** "Yes · 12 Sep 2026" when a site visit is on the calendar. */
-  siteVisitPlanned: string | null;
+  stageName: string; stageKind: string; requirement: string | null;
   /** Whatever Lead Settings adds to the form, in the order it asks. */
   customFields: Array<{ label: string; value: string }>;
-  budgetMin: number | null; budgetMax: number | null;
   nextActionAt: string | null; lostReason: string | null; lostNotes: string | null;
   createdAt: string;
 }
-interface Step { key: string; name: string; hasLine: boolean; done: boolean; current: boolean }
+interface Step { id: string; name: string; kind: string; hasLine: boolean; done: boolean; current: boolean }
 interface TimelineRow { id: string; text: string; by: string; at: string; action: string }
-interface FollowUpRow { id: string; channel: string; notes: string; outcome: string | null; by: string; at: string; nextActionAt: string | null }
+interface FollowUpRow { id: string; channel: string; stage: string | null; notes: string; outcome: string | null; by: string; at: string; nextActionAt: string | null }
 interface NoteRow { id: string; body: string; by: string; at: string }
 interface StageRow { id: string; from: string; to: string; by: string; at: string }
 interface FileRow { id: string; title: string; fileName: string; fileSize: number; at: string }
-interface BlockedRow { id: string; kind: "hold" | "booking"; unitNumber: string; plan: string; expiresAt: string | null }
-interface AvailRow { id: string; unitNumber: string; plan: string; blockName: string | null }
-
-/** Follow-up channels, as the design's chip row. */
-const CHANNELS = [
-  { key: "CALL", label: "Call" },
-  { key: "SITE_VISIT", label: "Site Visit Scheduled" },
-];
-
-const CHANNEL_ICON: Record<string, string> = {
-  CALL: "📞", WHATSAPP: "💬", EMAIL: "✉", MEETING: "🤝", SITE_VISIT: "🏗",
-};
 
 export function LeadDetail({
-  lead, stepper, timeline, followUps, notes, stageHistory, files, blocked, available,
-  towers, tower, tab, projectName, edit, can, nowMs, lostReasons, owners,
+  lead, stepper, timeline, followUps, notes, stageHistory, files,
+  tab, edit, can, nowMs, lostReasons, owners,
 }: {
-  /** The people this lead can be handed to. */
+  /** The tele-callers this lead can be handed to. */
   owners: Array<{ id: string; name: string }>;
   lead: Lead;
   stepper: Step[];
@@ -65,38 +49,29 @@ export function LeadDetail({
   notes: NoteRow[];
   stageHistory: StageRow[];
   files: FileRow[];
-  blocked: BlockedRow[];
-  available: AvailRow[];
-  towers: Array<{ id: string; name: string }>;
   /** The configured reasons a lead may be marked lost with. */
   lostReasons: Array<{ id: string; name: string }>;
-  tower: string;
   tab: string;
-  projectName: string | null;
   /** The edit form's values and lookups; null when the viewer may not edit this lead. */
   edit: {
     lead: EditLeadValues;
-    sources: Array<{ id: string; name: string }>;
-    projects: Array<{ id: string; name: string }>;
-    unitTypes: Array<{ id: string; name: string }>;
+    companies: Array<{ id: string; name: string }>;
   } | null;
   /*
    * Named, not Record<string, boolean>: a missing key used to read as
-   * `undefined` and quietly disable the control it guarded — which is how the
-   * stepper stopped moving leads at all.
+   * `undefined` and quietly disable the control it guarded.
    */
   can: {
     tabTimeline: boolean; tabFollowUps: boolean; tabNotes: boolean;
-    tabStageHistory: boolean; tabFiles: boolean; tabFlats: boolean;
+    tabStageHistory: boolean; tabFiles: boolean;
     changeStage: boolean; markLost: boolean; edit: boolean;
     logFollowUp: boolean; note: boolean; uploadFile: boolean; assign: boolean;
-    block: boolean; release: boolean;
   };
   nowMs: number;
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState(false);
-  const [losing, setLosing] = React.useState(false);
+  const [losing, setLosing] = React.useState<Step | null>(null);
   const [assigning, setAssigning] = React.useState(false);
   const [moving, setMoving] = React.useState<string | null>(null);
   const pathname = usePathname();
@@ -104,15 +79,15 @@ export function LeadDetail({
   const toast = useToast();
   const setError = React.useCallback((m: string) => toast(m, "bad"), [toast]);
 
-  /** The design moves a lead by clicking a stage; Lost asks for its reason. */
-  async function moveTo(state: string) {
-    if (!can.changeStage) return;
-    if (state === "LOST") { setLosing(true); return; }
-    setMoving(state);
-    const res = await changeLeadStageAction(lead.id, state as never);
+  /** The design moves a lead by clicking a stage; a Lost stage asks for its reason. */
+  async function moveTo(step: Step) {
+    if (!can.changeStage && !(step.kind === "LOST" && can.markLost)) return;
+    if (step.kind === "LOST") { setLosing(step); return; }
+    setMoving(step.id);
+    const res = await changeLeadStageAction(lead.id, step.id);
     setMoving(null);
     if (!res.ok) { setError(res.error); return; }
-    toast(`${lead.name} moved to ${state.replace(/_/g, " ").toLowerCase()}.`);
+    toast(`${lead.name} moved to ${step.name}.`);
     router.refresh();
   }
 
@@ -130,30 +105,22 @@ export function LeadDetail({
     { key: "notes", label: "Notes", show: can.tabNotes },
     { key: "stage", label: "Stage History", show: can.tabStageHistory },
     { key: "files", label: "Files", show: can.tabFiles },
-    { key: "flats", label: "Flats", show: can.tabFlats },
   ].filter((t) => t.show);
 
   const active = TABS.some((t) => t.key === tab) ? tab : (TABS[0]?.key ?? "timeline");
-  const stageName = stepper.find((s) => s.current)?.name ?? lead.state;
   const nextFu = lead.nextActionAt ? new Date(lead.nextActionAt) : null;
   const overdue = nextFu ? nextFu.getTime() < nowMs : false;
 
   // The design's details list, in its order and its words.
-  const fields: Array<[string, string]> = [
+  const fields: Array<[string, React.ReactNode]> = [
     ["Name", lead.name],
-    ["Mobile number", phone(lead.phone)],
-    ["Source", lead.sourceName],
+    ["Mobile number", <PhoneLink key="phone" phone={lead.phone} visible={lead.canCall} />],
     ["Email", lead.email || "—"],
-    // Captured as one figure, so it reads as one; a range only when both are set.
-    ["Budget", lead.budgetMin && lead.budgetMax
-      ? `${money(lead.budgetMin)} – ${money(lead.budgetMax)}`
-      : lead.budgetMax || lead.budgetMin
-        ? money(lead.budgetMax ?? lead.budgetMin ?? 0)
-        : "—"],
-    ["Interested in", lead.unitTypeName ?? "—"],
-    ["Preferred project", lead.projectName ?? "—"],
-    ["Requirement notes", lead.requirement || "—"],
-    ["Site visit planned?", lead.siteVisitPlanned ?? "—"],
+    ["Companies", lead.companies.join(", ") || "—"],
+    ["Location", lead.location || "—"],
+    ["Tele-caller", lead.ownerName ?? "Unassigned"],
+    ["Notes", lead.requirement || "—"],
+    ["Captured", formatDate(lead.createdAt)],
     ...lead.customFields.map((f) => [f.label, f.value] as [string, string]),
   ];
 
@@ -171,14 +138,16 @@ export function LeadDetail({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-display text-[19px] font-bold tracking-[-.01em] text-navy-950">{lead.name}</span>
-            <span className="num text-[13px] font-semibold text-brand-700">📞 {phone(lead.phone)}</span>
-            <span className="rounded-full bg-brand-100 px-[10px] py-[5px] text-[10px] font-bold text-brand-700">
-              {lead.sourceName}
+            <span className="num text-[13px] font-semibold text-brand-700">
+              <PhoneLink phone={lead.phone} visible={lead.canCall} />
+            </span>
+            <span className="num rounded-full bg-brand-100 px-[10px] py-[5px] text-[10px] font-bold text-brand-700">
+              {lead.leadNo}
             </span>
           </div>
           <p className="mt-0.5 text-[12px] font-medium text-muted-600">
-            {lead.requirement || "No requirement captured"} · current stage:{" "}
-            <span className="font-bold text-navy-900">{stageName}</span>
+            {[lead.companies.join(", "), lead.location].filter(Boolean).join(" · ") || "No company tagged"} · current stage:{" "}
+            <span className="font-bold text-navy-900">{lead.stageName}</span>
           </p>
         </div>
 
@@ -206,50 +175,50 @@ export function LeadDetail({
       {editing && edit && (
         <EditLeadModal
           lead={edit.lead}
-          sources={edit.sources}
-          projects={edit.projects}
-          unitTypes={edit.unitTypes}
+          companies={edit.companies}
           onClose={() => setEditing(false)}
           onSaved={(m) => { setEditing(false); toast(m); router.refresh(); }}
         />
       )}
 
-
       {/* ------------------------------ Stepper ------------------------------- */}
       <div className="mb-3.5 flex items-center overflow-x-auto rounded-[13px] border border-line-400 bg-white px-4 py-3">
-        {stepper.map((s, i) => (
-          <React.Fragment key={s.key}>
-            {s.hasLine && <span className="mx-1.5 h-[2px] min-w-[18px] flex-1 bg-line-400" />}
-            <button
-              type="button"
-              disabled={!can.changeStage || s.current || moving !== null}
-              onClick={() => moveTo(s.key)}
-              className={cn(
-                "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full py-[7px] pl-2 pr-3.5 text-[12.5px] transition-opacity",
-                can.changeStage && !s.current ? "cursor-pointer hover:opacity-85" : "cursor-default",
-                s.current
-                  ? cn("font-bold text-white", s.key === "LOST" ? "bg-bad-600" : "bg-navy-950")
-                  : s.done
-                    ? "font-semibold text-good-700"
-                    : "font-semibold text-muted-600",
-              )}
-            >
-              <span
+        {stepper.map((s, i) => {
+          const allowed = s.kind === "LOST" ? can.markLost : can.changeStage;
+          return (
+            <React.Fragment key={s.id}>
+              {s.hasLine && <span className="mx-1.5 h-[2px] min-w-[18px] flex-1 bg-line-400" />}
+              <button
+                type="button"
+                disabled={!allowed || s.current || moving !== null}
+                onClick={() => moveTo(s)}
                 className={cn(
-                  "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-[10.5px] font-bold",
-                  s.done
-                    ? "bg-good-050 text-good-700"
-                    : s.current
-                      ? "bg-white/25 text-white"
-                      : "bg-slate-050 text-muted-500",
+                  "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full py-[7px] pl-2 pr-3.5 text-[12.5px] transition-opacity",
+                  allowed && !s.current ? "cursor-pointer hover:opacity-85" : "cursor-default",
+                  s.current
+                    ? cn("font-bold text-white", s.kind === "LOST" ? "bg-bad-600" : "bg-navy-950")
+                    : s.done
+                      ? "font-semibold text-good-700"
+                      : "font-semibold text-muted-600",
                 )}
               >
-                {s.done ? "✓" : String(i + 1)}
-              </span>
-              {s.name}
-            </button>
-          </React.Fragment>
-        ))}
+                <span
+                  className={cn(
+                    "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-[10.5px] font-bold",
+                    s.done
+                      ? "bg-good-050 text-good-700"
+                      : s.current
+                        ? "bg-white/25 text-white"
+                        : "bg-slate-050 text-muted-500",
+                  )}
+                >
+                  {s.done ? "✓" : String(i + 1)}
+                </span>
+                {s.name}
+              </button>
+            </React.Fragment>
+          );
+        })}
       </div>
 
       {assigning && (
@@ -267,9 +236,10 @@ export function LeadDetail({
         <LostModal
           leadId={lead.id}
           leadName={lead.name}
+          stage={losing}
           reasons={lostReasons}
-          onClose={() => setLosing(false)}
-          onSaved={(m: string) => { setLosing(false); toast(m); router.refresh(); }}
+          onClose={() => setLosing(null)}
+          onSaved={(m: string) => { setLosing(null); toast(m); router.refresh(); }}
         />
       )}
 
@@ -303,11 +273,20 @@ export function LeadDetail({
             </dl>
           </Card>
 
-          {lead.state === "LOST" && (
+          {lead.stageKind === "LOST" && (
             <div className="rounded-[13px] border border-bad-100 bg-bad-050 px-4 py-3.5">
-              <p className="text-[11px] font-bold uppercase tracking-[.1em] text-bad-700">Lost</p>
+              <p className="text-[11px] font-bold uppercase tracking-[.1em] text-bad-700">{lead.stageName}</p>
               <p className="mt-[5px] text-[13px] font-semibold text-bad-700">{lead.lostReason ?? "No reason recorded"}</p>
               <p className="mt-[3px] text-[12px] font-medium text-bad-700/80">{lead.lostNotes || "—"}</p>
+            </div>
+          )}
+
+          {lead.stageKind === "ONBOARDING" && (
+            <div className="rounded-[13px] border border-good-050 bg-good-050 px-4 py-3.5">
+              <p className="text-[11px] font-bold uppercase tracking-[.1em] text-good-700">{lead.stageName}</p>
+              <p className="mt-[5px] text-[12px] font-medium text-good-700">
+                This lead is ready to be onboarded as a rider — fill the onboarding form from Riders &amp; Staff.
+              </p>
             </div>
           )}
         </div>
@@ -354,20 +333,6 @@ export function LeadDetail({
             )}
             {active === "stage" && <StageHistory rows={stageHistory} />}
             {active === "files" && <Files rows={files} canUpload={can.uploadFile} />}
-            {active === "flats" && (
-              <Flats
-                leadId={lead.id}
-                blocked={blocked}
-                available={available}
-                towers={towers}
-                tower={tower}
-                projectName={projectName}
-                can={can}
-                onTower={(t) => setParam({ tower: t === "all" ? undefined : t })}
-                onDone={(m) => { toast(m); router.refresh(); }}
-                onError={setError}
-              />
-            )}
           </div>
         </Card>
       </div>
@@ -408,66 +373,70 @@ function Timeline({ rows }: { rows: TimelineRow[] }) {
 
 /* ------------------------------- Follow-ups ------------------------------- */
 
+/**
+ * The SOW's follow-up log: date, stage, remarks and the next follow-up date.
+ * The stage is stamped by the action from where the lead stands.
+ */
 function FollowUps({
   rows, leadId, canLog, onDone, onError,
 }: {
   rows: FollowUpRow[]; leadId: string; canLog: boolean;
   onDone: (m: string) => void; onError: (m: string) => void;
 }) {
-  const [channel, setChannel] = React.useState("CALL");
+  const [channel, setChannel] = React.useState<string>("CALL");
+  const [notes, setNotes] = React.useState("");
+  const [outcome, setOutcome] = React.useState("");
   const [date, setDate] = React.useState("");
   const [time, setTime] = React.useState("");
-  const [remarks, setRemarks] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
-  async function schedule() {
+  async function log() {
     setBusy(true);
     const nextAt = date ? `${date}T${time || "09:00"}` : "";
-    const res = await logFollowUpAction(leadId, channel, remarks || "Follow-up scheduled", "", nextAt);
+    const res = await logFollowUpAction(leadId, channel, notes, outcome, nextAt);
     setBusy(false);
     if (!res.ok) { onError(res.error); return; }
-    setRemarks(""); setDate(""); setTime("");
-    onDone("Follow-up scheduled.");
+    setNotes(""); setOutcome(""); setDate(""); setTime("");
+    onDone("Follow-up logged.");
   }
 
   return (
     <div>
       {canLog && (
         <div className="mb-4 rounded-[11px] border border-line-400 bg-surface-sunken px-3.5 py-3">
-          <p className="text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">Follow-up type</p>
+          <p className="text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">Log a follow-up</p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {CHANNELS.map((c) => (
               <button
-                key={c.key}
+                key={c}
                 type="button"
-                onClick={() => setChannel(c.key)}
+                onClick={() => setChannel(c)}
                 className={cn(
                   "rounded-[8px] border px-3 py-1.5 text-[11.5px] font-bold transition-colors",
-                  channel === c.key
+                  channel === c
                     ? "border-brand-500 bg-brand-100 text-brand-700"
                     : "border-line-400 bg-white text-muted-600 hover:bg-surface-hover",
                 )}
               >
-                {c.label}
+                {CHANNEL_ICON[c]} {CHANNEL_LABEL[c]}
               </button>
             ))}
           </div>
 
-          <div className="mt-3 grid items-end gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(140px,1fr))]">
-            <Field label="Date" required>
+          <div className="mt-3 grid items-end gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+            <Field label="Remarks" required className="[grid-column:1/-1]">
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="What was discussed" />
+            </Field>
+            <Field label="Outcome">
+              <Input value={outcome} onChange={(e) => setOutcome(e.target.value)} placeholder="Interested / Call back / Not reachable" />
+            </Field>
+            <Field label="Next follow-up date">
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </Field>
-            <Field label="Time" required>
+            <Field label="Time">
               <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
             </Field>
-            <Field label="Remarks">
-              <Input
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="e.g. discuss parking & payment plan"
-              />
-            </Field>
-            <Button size="md" onClick={schedule} loading={busy} disabled={!date}>+ Schedule</Button>
+            <Button size="md" onClick={log} loading={busy} disabled={!notes.trim()}>+ Log</Button>
           </div>
         </div>
       )}
@@ -482,8 +451,9 @@ function FollowUps({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[12.5px] font-bold text-navy-950">
-                    {CHANNELS.find((c) => c.key === f.channel)?.label ?? f.channel}
+                    {CHANNEL_LABEL[f.channel] ?? f.channel}
                   </span>
+                  {f.stage && <Badge tone="muted">{f.stage}</Badge>}
                   {f.outcome && <Badge tone="slate">{f.outcome}</Badge>}
                 </div>
                 <p className="mt-0.5 text-[11.5px] font-medium text-muted-600">{f.notes}</p>
@@ -578,8 +548,8 @@ function StageHistory({ rows }: { rows: StageRow[] }) {
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className="border-b border-line-200 last:border-0">
-              <td className="px-3 py-2.5 text-[12px] font-medium capitalize text-muted-600">{r.from.toLowerCase()}</td>
-              <td className="px-3 py-2.5 text-[12px] font-bold capitalize text-navy-950">{r.to.toLowerCase()}</td>
+              <td className="px-3 py-2.5 text-[12px] font-medium text-muted-600">{r.from}</td>
+              <td className="px-3 py-2.5 text-[12px] font-bold text-navy-950">{r.to}</td>
               <td className="px-3 py-2.5">
                 <span className="inline-flex items-center gap-1.5">
                   <span className="grid h-[20px] w-[20px] place-items-center rounded-full bg-surface-field text-[9px] font-extrabold text-navy-600">
@@ -604,10 +574,10 @@ function Files({ rows, canUpload }: { rows: FileRow[]; canUpload: boolean }) {
     return (
       <div className="px-2 py-10 text-center">
         <p className="text-[12.5px] font-semibold text-navy-900">
-          No files yet — KYC documents and brochures live here
+          No files yet — documents collected before onboarding live here
         </p>
         {canUpload && (
-          <Button size="md" variant="secondary" className="mt-3" disabled title="Attach from the customer record once the lead is booked">
+          <Button size="md" variant="secondary" className="mt-3" disabled title="KYC documents are attached on the rider's onboarding form">
             <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload file
           </Button>
         )}
@@ -629,134 +599,15 @@ function Files({ rows, canUpload }: { rows: FileRow[]; canUpload: boolean }) {
   );
 }
 
-/* ---------------------------------- Flats --------------------------------- */
-
-function Flats({
-  leadId, blocked, available, towers, tower, projectName, can, onTower, onDone, onError,
-}: {
-  leadId: string;
-  blocked: BlockedRow[];
-  available: AvailRow[];
-  towers: Array<{ id: string; name: string }>;
-  tower: string;
-  projectName: string | null;
-  can: Record<string, boolean>;
-  onTower: (t: string) => void;
-  onDone: (m: string) => void;
-  onError: (m: string) => void;
-}) {
-  const [busy, setBusy] = React.useState<string | null>(null);
-
-  async function block(unitId: string) {
-    setBusy(unitId);
-    const res = await blockUnitForLeadAction(leadId, unitId);
-    setBusy(null);
-    if (!res.ok) { onError(res.error); return; }
-    onDone("Unit blocked — the Available Flats board is updated.");
-  }
-
-  async function release(holdId: string) {
-    setBusy(holdId);
-    const res = await releaseUnitForLeadAction(leadId, holdId);
-    setBusy(null);
-    if (!res.ok) { onError(res.error); return; }
-    onDone("Hold released.");
-  }
-
-  return (
-    <div>
-      <p className="text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">Booked for this lead</p>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {blocked.length === 0 ? (
-          <span className="text-[11.5px] font-medium text-muted-500">
-            None yet — pick from the available units below · multiple units can be booked
-          </span>
-        ) : (
-          blocked.map((b) => (
-            <span
-              key={b.id}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-bold",
-                b.kind === "booking" ? "bg-navy-950 text-brand-300" : "bg-warn-050 text-warn-700",
-              )}
-            >
-              {b.unitNumber} · {b.plan}
-              {b.kind === "hold" && can.release && (
-                <button
-                  type="button"
-                  onClick={() => release(b.id)}
-                  disabled={busy === b.id}
-                  title="Release hold"
-                  className="grid h-[16px] w-[16px] place-items-center rounded-full bg-white/70 text-[9px] text-warn-700 transition-opacity hover:opacity-70 disabled:opacity-40"
-                >
-                  <X className="h-2.5 w-2.5" />
-                </button>
-              )}
-            </span>
-          ))
-        )}
-      </div>
-
-      {can.block && (
-        <>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <span className="text-[10.5px] font-bold uppercase tracking-[.1em] text-muted-400">
-              Available units{projectName ? ` · ${projectName}` : ""}
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {[{ id: "all", name: "All" }, ...towers].map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => onTower(t.id)}
-                  className={cn(
-                    "rounded-[7px] border px-2.5 py-1 text-[11px] font-bold transition-colors",
-                    tower === t.id
-                      ? "border-brand-500 bg-brand-100 text-brand-700"
-                      : "border-line-400 bg-white text-muted-600 hover:bg-surface-hover",
-                  )}
-                >
-                  {t.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {available.length === 0 ? (
-              <span className="text-[11.5px] font-medium text-muted-500">No available units in this selection.</span>
-            ) : (
-              available.map((u) => (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => block(u.id)}
-                  disabled={busy === u.id}
-                  className="rounded-[8px] border border-good-050 bg-good-050 px-3 py-1.5 text-[11.5px] font-bold text-good-700 transition-colors hover:brightness-95 disabled:opacity-50"
-                >
-                  {u.unitNumber} · {u.plan}
-                </button>
-              ))
-            )}
-          </div>
-
-          <p className="mt-3 text-[11px] font-medium text-muted-500">
-            Booking or releasing here updates the Available Flats board instantly.
-          </p>
-        </>
-      )}
-    </div>
-  );
-}
-
 /* -------------------------------- Lost ----------------------------------- */
 
-/** The design asks for a reason before a lead may sit on Lost. */
+/** The design asks for a reason before a lead may sit on a Lost stage. */
 function LostModal({
-  leadId, leadName, reasons, onClose, onSaved,
+  leadId, leadName, stage, reasons, onClose, onSaved,
 }: {
   leadId: string;
   leadName: string;
+  stage: Step;
   reasons: Array<{ id: string; name: string }>;
   onClose: () => void;
   onSaved: (message: string) => void;
@@ -769,17 +620,17 @@ function LostModal({
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await changeLeadStageAction(leadId, "LOST" as never, reasonId, remarks);
+    const res = await changeLeadStageAction(leadId, stage.id, reasonId, remarks);
     setBusy(false);
     if (!res.ok) setError(res.error);
-    else onSaved(`${leadName} marked lost.`);
+    else onSaved(`${leadName} marked ${stage.name.toLowerCase()}.`);
   }
 
   return (
     <Modal
       open
       onClose={onClose}
-      title={`Mark ${leadName} lost`}
+      title={`Mark ${leadName} as ${stage.name}`}
       description="A reason is mandatory, and stays on the lead's stage history."
       size="sm"
       footer={

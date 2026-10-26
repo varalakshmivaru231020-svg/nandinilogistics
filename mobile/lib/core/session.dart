@@ -17,8 +17,6 @@ class Session {
     required this.isSuperAdmin,
     required this.permissions,
     required this.roleNames,
-    required this.projects,
-    this.projectId,
   });
 
   final String token;
@@ -28,8 +26,6 @@ class Session {
   final bool isSuperAdmin;
   final Set<String> permissions;
   final List<String> roleNames;
-  final List<Project> projects;
-  final String? projectId;
 
   bool can(String code) => isSuperAdmin || permissions.contains(code);
   bool canAny(Iterable<String> codes) => codes.any(can);
@@ -52,16 +48,7 @@ class Session {
     return '$roles · $n permissions';
   }
 
-  Project? get project =>
-      projectId == null ? null : projects.where((p) => p.id == projectId).firstOrNull;
-
-  Session withProject(String? id) => Session(
-        token: token, id: this.id, name: name, email: email,
-        isSuperAdmin: isSuperAdmin, permissions: permissions, roleNames: roleNames,
-        projects: projects, projectId: id,
-      );
-
-  static Session fromPayload(String token, Map<String, dynamic> user, List<dynamic> projects) =>
+  static Session fromPayload(String token, Map<String, dynamic> user) =>
       Session(
         token: token,
         id: user['id'] as String,
@@ -72,23 +59,7 @@ class Session {
         roleNames: ((user['roles'] as List?) ?? const [])
             .map((r) => (r as Map)['name'] as String)
             .toList(),
-        projects: projects
-            .map((p) => Project(
-                  id: (p as Map)['id'] as String,
-                  code: p['code'] as String,
-                  name: p['name'] as String,
-                ))
-            .toList(),
-        projectId: user['workspaceProjectId'] as String?,
       );
-}
-
-class Project {
-  const Project({required this.id, required this.code, required this.name});
-  final String id;
-  final String code;
-  final String name;
-  String get label => '$code — $name';
 }
 
 /// The token, kept across launches. Nothing else is cached: the permission set
@@ -156,12 +127,7 @@ class Auth {
     final me = await api.get('/me');
     if (!me.ok) return Res.fail(me.status, me.error!, me.code);
     try {
-      final s = Session.fromPayload(
-        token,
-        me.data!['user'] as Map<String, dynamic>,
-        (me.data!['projects'] as List?) ?? const [],
-      );
-      api.projectId = s.projectId;
+      final s = Session.fromPayload(token, me.data!['user'] as Map<String, dynamic>);
       return Res.ok(s);
     } catch (_) {
       return Res.fail(

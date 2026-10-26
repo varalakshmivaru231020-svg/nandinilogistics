@@ -6,13 +6,21 @@
  * built on the server, and both read these.
  */
 
+/** How a tele-caller reaches a prospective rider, per the SOW. */
+export const CHANNELS = ["CALL", "WHATSAPP", "MEETING"] as const;
+export type Channel = (typeof CHANNELS)[number];
+
 export const CHANNEL_ICON: Record<string, string> = {
-  CALL: "📞", WHATSAPP: "💬", EMAIL: "✉️", MEETING: "🤝", SITE_VISIT: "📍",
+  CALL: "📞", WHATSAPP: "💬", MEETING: "🤝",
 };
 
 export const CHANNEL_LABEL: Record<string, string> = {
-  CALL: "Call", WHATSAPP: "WhatsApp", EMAIL: "Email", MEETING: "Meeting", SITE_VISIT: "Site visit",
+  CALL: "Call", WHATSAPP: "WhatsApp", MEETING: "Meeting",
 };
+
+export function isChannel(value: string): value is Channel {
+  return (CHANNELS as readonly string[]).includes(value);
+}
 
 const DAY = 86_400_000;
 

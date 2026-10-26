@@ -2,8 +2,7 @@ import { requireAuth } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/permissions/registry";
 import { Badge, Card, CardBody, CardHeader, CardTitle, PageHeader } from "@/components/ui/primitives";
-import { formatDateTime, money } from "@/lib/utils";
-import { projectScopeFilter } from "@/lib/rbac/context";
+import { formatDateTime } from "@/lib/utils";
 
 export const metadata = { title: "My Account" };
 
@@ -14,21 +13,14 @@ export const metadata = { title: "My Account" };
 export default async function AccountPage() {
   const ctx = await requireAuth();
 
-  const [user, projects] = await Promise.all([
-    prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
       where: { id: ctx.id },
       include: {
         department: { select: { name: true } },
         designation: { select: { name: true } },
         permissions: { include: { permission: { select: { code: true, label: true } } } },
       },
-    }),
-    prisma.project.findMany({
-      where: projectScopeFilter(ctx, "id"),
-      select: { id: true, code: true, name: true, status: true },
-      orderBy: { name: "asc" },
-    }),
-  ]);
+    });
 
   const byGroup = new Map<string, number>();
   for (const p of PERMISSIONS) {
@@ -86,19 +78,6 @@ export default async function AccountPage() {
               {ctx.isSuperAdmin && <Badge tone="navy">Super administrator</Badge>}
             </div>
 
-            {Object.keys(ctx.approvalLimits).length > 0 && (
-              <div className="border-t border-line-200 pt-2">
-                <p className="mb-1 text-xs text-muted-500">Your approval ceilings</p>
-                <ul className="space-y-0.5">
-                  {Object.entries(ctx.approvalLimits).map(([scope, value]) => (
-                    <li key={scope} className="flex justify-between text-xs">
-                      <span className="text-muted-600">{scope}</span>
-                      <span className="num font-medium text-navy-900">{money(value)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </CardBody>
         </Card>
       </div>
@@ -126,32 +105,6 @@ export default async function AccountPage() {
           </CardBody>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Your projects</CardTitle>
-            <span className="text-xs text-muted-500">
-              {ctx.canAccessAllProjects ? "You can access every project" : "Data is scoped to these"}
-            </span>
-          </CardHeader>
-          <CardBody className="p-0">
-            <ul className="divide-y divide-line-200">
-              {projects.map((p) => (
-                <li key={p.id} className="flex items-center justify-between px-4 py-2">
-                  <div>
-                    <p className="text-sm text-navy-900">{p.name}</p>
-                    <code className="text-xs text-muted-400">{p.code}</code>
-                  </div>
-                  <Badge tone={p.status === "ACTIVE" ? "good" : "slate"}>{p.status}</Badge>
-                </li>
-              ))}
-              {projects.length === 0 && (
-                <li className="px-4 py-8 text-center text-sm text-muted-500">
-                  You are not mapped to any project.
-                </li>
-              )}
-            </ul>
-          </CardBody>
-        </Card>
       </div>
 
       {user && user.permissions.length > 0 && (

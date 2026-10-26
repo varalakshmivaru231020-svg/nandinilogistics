@@ -3,44 +3,27 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import type { AuthContext } from "@/lib/rbac/context";
+import { usersHolding } from "@/lib/rbac/holders";
+import { CHANNEL_LABEL, CHANNELS } from "@/lib/sales/follow-up-display";
 import { editRefusal } from "@/lib/sales/lead-edit";
 import { maskPhone } from "@/lib/utils";
 
-import { money, toneOf, words, type RecordAction, type RecordView } from "./shared";
+import { webTone, type RecordAction, type RecordView } from "./shared";
+import { stageTone } from "@/lib/sales/lead-display";
 
 /**
- * One lead, with everything a sales executive does to it from a site.
- *
- * This is the module where a phone matters most and where the app did least:
- * the list showed a name and a stage, and there was no way to log the call you
- * had just made, move the stage, set the next action, hand it to somebody else
- * or book a visit. All of that is here, and all of it under the same rules the
- * web screen and the actions enforce — the contact number is masked for
- * anybody without `viewContact`, and a lead that is not yours is 404 unless
- * you may see every lead.
+ * One lead, with everything a tele-caller does to it from a phone: log the
+ * call just made, move the stage, set the next follow-up, hand it to a
+ * colleague, mark it lost. All of it under the same rules the web screen and
+ * the actions enforce — the contact number is masked for anybody without
+ * `viewContact`, and a lead that is not yours is 404 unless you may see
+ * every lead.
  */
-
-/** The six stages the design draws, Lost included. */
-const STAGES = [
-  { key: "NEW", name: "New" },
-  { key: "CONTACTED", name: "Contacted" },
-  { key: "SITE_VISIT_SCHEDULED", name: "Site Visit" },
-  { key: "NEGOTIATION", name: "Negotiation" },
-  { key: "BOOKED", name: "Booked" },
-  { key: "LOST", name: "Lost" },
-] as const;
-
-/** A visit already done still sits on the Site Visit stage, as on the board. */
-function stageIndex(state: string): number {
-  if (state === "VISIT_DONE") return 2;
-  const i = STAGES.findIndex((s) => s.key === state);
-  return i === -1 ? 0 : i;
-}
 
 /**
  * Logging a follow-up — the one thing a phone is for, and the dialog the web's
  * follow-up row opens when it is tapped. Shared, so the row and the record ask
- * for the same five things.
+ * for the same things.
  */
 export function logFollowUpDecision(
   leadId: string,
@@ -61,9 +44,9 @@ export function logFollowUpDecision(
         kind: "select",
         required: true,
         initial: "CALL",
-        options: Object.entries(CHANNEL_LABEL).map(([value, label]) => ({ value, label })),
+        options: CHANNELS.map((value) => ({ value, label: CHANNEL_LABEL[value] })),
       },
-      { name: "notes", label: "What happened", kind: "textarea", required: true, wide: true },
+      { name: "notes", label: "Remarks", kind: "textarea", required: true, wide: true },
       {
         name: "outcome",
         label: "Outcome",
@@ -72,54 +55,32 @@ export function logFollowUpDecision(
       },
       {
         name: "nextActionAt",
-        label: "Next action on",
+        label: "Next follow-up on",
         kind: "date",
         hint: "Leaving this blank drops the lead off the follow-up list.",
       },
     ],
-    confirm: "It goes on the lead's timeline, and the next action moves with it.",
+    confirm: "It goes on the lead's timeline, and the next follow-up moves with it.",
   }];
 }
-
-/** The channels a follow-up is logged against, in the web's own words. */
-const CHANNEL_LABEL: Record<string, string> = {
-  CALL: "Call",
-  WHATSAPP: "WhatsApp",
-  EMAIL: "Email",
-  MEETING: "Meeting",
-  SITE_VISIT: "Site visit",
-};
 
 export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordView | null> {
   const lead = await prisma.lead.findUnique({
     where: { id },
     include: {
-      source: { select: { name: true } },
-      project: { select: { id: true, code: true, name: true } },
+      stage: true,
       owner: { select: { id: true, name: true } },
       lostReason: { select: { name: true } },
-      unitType: { select: { name: true } },
+      companies: { select: { company: { select: { name: true } } } },
       followUps: {
         orderBy: { completedAt: "desc" },
         take: 20,
-        include: { user: { select: { name: true } } },
+        include: { user: { select: { name: true } }, stage: { select: { name: true } } },
       },
       notes: {
         orderBy: { createdAt: "desc" },
         take: 20,
         include: { user: { select: { name: true } } },
-      },
-      holds: {
-        where: { isActive: true },
-        include: { unit: { select: { unitNumber: true, unitType: { select: { name: true } } } } },
-      },
-      siteVisits: {
-        orderBy: { scheduledAt: "desc" },
-        take: 10,
-        select: {
-          id: true, scheduledAt: true, visitedAt: true, feedback: true, rating: true,
-          conductedBy: { select: { name: true } },
-        },
       },
     },
   });
@@ -133,9 +94,14 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
   const mayEdit =
     ctx.has(PERM.sales.lead.update) &&
     editRefusal({ id: ctx.id, canViewAll: seesAll, canViewContact: canContact }, lead) === null;
-  const closed = lead.state === "BOOKED" || lead.state === "LOST";
+  const closed = lead.stage.kind === "LOST";
 
-  const stage = STAGES[stageIndex(lead.state)];
+  const stages = await prisma.leadStage.findMany({
+    where: { OR: [{ status: "ACTIVE" }, { id: lead.stageId }] },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true, name: true, kind: true },
+  });
+  const current = stages.findIndex((s) => s.id === lead.stageId);
 
   /* ------------------------------------------------------------- actions */
 
@@ -146,42 +112,31 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
   );
 
   if (!closed && ctx.has(PERM.sales.lead.changeStage)) {
-    // Forward, one stage at a time, as the rail moves it.
-    const next = STAGES[stageIndex(lead.state) + 1];
-    if (next && next.key !== "LOST" && next.key !== "BOOKED") {
+    // Any other open stage, as the web's rail offers them; Lost is its own button.
+    const choices = stages.filter((s) => s.id !== lead.stageId && s.kind !== "LOST");
+    const next = stages[current + 1];
+    if (choices.length) {
       actions.push({
-        key: "advance",
-        label: `Move to ${next.name}`,
+        key: "moveStage",
+        label: next && next.kind !== "LOST" ? `Move to ${next.name}` : "Move stage",
         emphasis: "approve",
         action: "sales/leads/changeLeadStage",
-        args: [id, next.key, "", "$notes"],
+        args: [id, "$stageId", "", "$notes"],
         remark: "none",
-        fields: [{ name: "notes", label: "Notes", kind: "textarea", wide: true }],
-        confirm: `The lead moves to ${next.name}. Touching it at all counts as a response.`,
+        fields: [
+          {
+            name: "stageId",
+            label: "Stage",
+            kind: "select",
+            required: true,
+            initial: next && next.kind !== "LOST" ? next.id : choices[0].id,
+            options: choices.map((s) => ({ value: s.id, label: s.name })),
+          },
+          { name: "notes", label: "Notes", kind: "textarea", wide: true },
+        ],
+        confirm: "Touching the lead at all counts as a response.",
       });
     }
-  }
-
-  if (ctx.has(PERM.sales.siteVisit.schedule) && !closed) {
-    actions.push({
-      key: "scheduleVisit",
-      label: "Schedule a site visit",
-      emphasis: "outline",
-      action: "sales/site-visits/scheduleSiteVisit",
-      args: [id, "$scheduledAt", "$projectId"],
-      remark: "none",
-      fields: [
-        { name: "scheduledAt", label: "When", kind: "datetime", required: true },
-        {
-          name: "projectId",
-          label: "Project",
-          kind: "select",
-          emptyLabel: "— From the lead —",
-          options: await projectOptions(ctx),
-        },
-      ],
-      confirm: "The lead moves to Site Visit Scheduled and the next-action date is set.",
-    });
   }
 
   if (ctx.has(PERM.sales.lead.note)) {
@@ -206,7 +161,7 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
       args: [],
       remark: "none",
       form: "sales/leads:edit",
-      confirm: "A booked lead's name and phone are fixed — corrected on the customer.",
+      confirm: "Changing the mobile number re-runs duplicate detection.",
     });
   }
 
@@ -221,74 +176,25 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
       fields: [
         {
           name: "ownerId",
-          label: "Owner",
+          label: "Tele-caller",
           kind: "lookup",
           required: true,
-          placeholder: "Search people…",
+          placeholder: "Search tele-callers…",
           options: await ownerOptions(),
         },
       ],
-      confirm: "It moves to their pipeline, and they are told.",
+      confirm: "It moves to their pipeline.",
     });
   }
 
-  /*
-   * The Flats tab: holding an available flat for this lead, and releasing one
-   * it already holds. The available list is the lead's own project where it
-   * has one, which is what the web's tower filter narrows.
-   */
-  if (!closed && ctx.has(PERM.unit.hold.create)) {
-    const available = await prisma.unit.findMany({
-      where: {
-        status: "AVAILABLE",
-        ...(lead.projectId ? { projectId: lead.projectId } : {}),
-      },
-      orderBy: [{ floorNumber: "asc" }, { unitNumber: "asc" }],
-      take: 120,
-      select: {
-        id: true,
-        unitNumber: true,
-        floorNumber: true,
-        block: { select: { name: true } },
-        unitType: { select: { name: true } },
-      },
-    });
-    if (available.length > 0) {
-      actions.push({
-        key: "blockUnit",
-        label: "Hold a flat",
-        emphasis: "outline",
-        action: "sales/leads/blockUnitForLead",
-        args: [id, "$unitId"],
-        remark: "none",
-        fields: [
-          {
-            name: "unitId",
-            label: "Available units",
-            kind: "lookup",
-            required: true,
-            placeholder: "Search flats…",
-            options: available.map((u) => ({
-              value: u.id,
-              label: u.unitNumber,
-              hint: [u.block?.name, `floor ${u.floorNumber}`, u.unitType?.name]
-                .filter(Boolean)
-                .join(" · "),
-            })),
-          },
-        ],
-        confirm: "It comes off the availability board while the hold stands.",
-      });
-    }
-  }
-
-  if (!closed && ctx.has(PERM.sales.lead.markLost)) {
+  const lostStage = stages.find((s) => s.kind === "LOST");
+  if (!closed && lostStage && ctx.has(PERM.sales.lead.markLost)) {
     actions.push({
       key: "markLost",
-      label: "Mark lost",
+      label: `Mark ${lostStage.name.toLowerCase()}`,
       emphasis: "reject",
       action: "sales/leads/changeLeadStage",
-      args: [id, "LOST", "$lostReasonId", "$notes"],
+      args: [id, lostStage.id, "$lostReasonId", "$notes"],
       remark: "none",
       fields: [
         {
@@ -307,28 +213,30 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
 
   /* ------------------------------------------------------------ the record */
 
+  const companies = lead.companies.map((c) => c.company.name).join(", ");
+
   return {
     key: "sales/leads",
     id: lead.id,
     title: lead.name,
     subtitle: [
       lead.leadNo,
-      lead.source.name,
+      companies || null,
       lead.owner ? `with ${lead.owner.name}` : "unassigned",
-    ].join(" · "),
+    ].filter(Boolean).join(" · "),
     pills: [
-      { label: words(lead.state), tone: toneOf(lead.state) },
+      { label: lead.stage.name, tone: webTone(stageTone(lead.stage.kind)) },
       ...(lead.nextActionAt && lead.nextActionAt.getTime() < Date.now() && !closed
         ? [{ label: "Follow-up overdue", tone: "bad" as const }]
         : []),
     ],
     // The design's stage rail: done, where it stands, still to come.
-    chain: STAGES.filter((s) => s.key !== "LOST" || lead.state === "LOST").map((s, i) => ({
+    chain: stages.filter((s) => s.kind !== "LOST" || closed).map((s, i) => ({
       initials: s.name.slice(0, 2).toUpperCase(),
       state:
-        lead.state !== "LOST" && stageIndex(lead.state) > i
+        !closed && current > i
           ? ("done" as const)
-          : stageIndex(lead.state) === i
+          : current === i
             ? ("current" as const)
             : ("pending" as const),
     })),
@@ -337,35 +245,20 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
         label: "The lead",
         fields: [
           { label: "Lead no.", value: lead.leadNo },
-          { label: "Stage", value: stage.name },
+          { label: "Stage", value: lead.stage.name },
           // Masked for anybody without the contact permission, as on the web.
-          { label: "Phone", value: canContact ? lead.phone : maskPhone(lead.phone) },
+          { label: "Mobile number", value: canContact ? lead.phone : maskPhone(lead.phone) },
+          { label: "Alternate number", value: canContact ? lead.altPhone : null },
           { label: "Email", value: canContact ? lead.email : null },
-          { label: "Source", value: lead.source.name },
-          { label: "Owner", value: lead.owner?.name ?? null },
-          { label: "Next action", value: lead.nextActionAt?.toISOString() ?? null, format: "date" },
+          { label: "Companies", value: companies || null },
+          { label: "Location", value: lead.location },
+          { label: "Tele-caller", value: lead.owner?.name ?? null },
+          { label: "Next follow-up", value: lead.nextActionAt?.toISOString() ?? null, format: "date" },
           {
             label: "First response",
             value: lead.firstResponseMins === null ? null : `${lead.firstResponseMins} min`,
           },
-        ],
-      },
-      {
-        label: "What they want",
-        fields: [
-          {
-            label: "Project",
-            value: lead.project ? `${lead.project.code} — ${lead.project.name}` : null,
-          },
-          { label: "Interested in", value: lead.unitType?.name ?? null },
-          {
-            label: "Budget",
-            value:
-              lead.budgetMax === null
-                ? null
-                : `${lead.budgetMin ? `${money(Number(lead.budgetMin))} – ` : ""}${money(Number(lead.budgetMax))}`,
-          },
-          { label: "Requirement", value: lead.requirement, wide: true },
+          { label: "Notes", value: lead.requirement, wide: true },
           { label: "Lost reason", value: lead.lostReason?.name ?? null },
           { label: "Lost notes", value: lead.lostNotes, wide: true },
           // Says plainly why the edit button is not there.
@@ -381,8 +274,8 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
         label: `Follow-ups · ${lead.followUps.length}`,
         rows: lead.followUps.map((f) => ({
           id: f.id,
-          title: CHANNEL_LABEL[f.channel] ?? words(f.channel),
-          subtitle: f.user ? `${f.user.name}${f.outcome ? ` — ${f.outcome}` : ""}` : f.outcome,
+          title: CHANNEL_LABEL[f.channel] ?? f.channel,
+          subtitle: [f.user?.name, f.stage?.name, f.outcome].filter(Boolean).join(" — ") || null,
           body: f.notes,
           trailing: f.completedAt.toISOString().slice(0, 10),
           // Where it left a next action, that is what the lead is waiting on.
@@ -391,21 +284,6 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
             : [],
         })),
         emptyMessage: "Nothing has been logged against this lead yet.",
-      },
-      {
-        key: `visits:${id}`,
-        label: `Site visits · ${lead.siteVisits.length}`,
-        rows: lead.siteVisits.map((v) => ({
-          id: v.id,
-          title: v.scheduledAt.toISOString().slice(0, 10),
-          subtitle: [v.conductedBy?.name, v.feedback].filter(Boolean).join(" — ") || null,
-          trailing: v.rating === null ? null : `${v.rating}/5`,
-          // A visit is done when it was visited; until then it is booked.
-          pills: v.visitedAt
-            ? [{ label: "Visit done", tone: "good" as const }]
-            : [{ label: "Scheduled", tone: "info" as const }],
-        })),
-        emptyMessage: "No visit has been booked.",
       },
       {
         key: `notes:${id}`,
@@ -418,30 +296,6 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
         })),
         emptyMessage: "No notes.",
       },
-      {
-        key: `holds:${id}`,
-        label: `Flats held · ${lead.holds.length}`,
-        rows: lead.holds.map((h) => ({
-          id: h.id,
-          title: h.unit.unitNumber,
-          subtitle: h.unit.unitType?.name ?? null,
-          pills: [{ label: "On hold", tone: "warn" as const }],
-          actions: ctx.has(PERM.unit.hold.release)
-            ? [
-                {
-                  key: `release:${h.id}`,
-                  label: "Release hold",
-                  emphasis: "reject" as const,
-                  action: "sales/leads/releaseUnitForLead",
-                  args: [id, h.id],
-                  remark: "none" as const,
-                  confirm: "The flat goes back on the board as available.",
-                },
-              ]
-            : [],
-        })),
-        emptyMessage: "Nothing is held for this lead.",
-      },
     ],
     actions,
     serverTime: new Date().toISOString(),
@@ -450,25 +304,11 @@ export async function leadRecord(ctx: AuthContext, id: string): Promise<RecordVi
 
 /* -------------------------------- lookups -------------------------------- */
 
-async function projectOptions(ctx: AuthContext) {
-  const rows = await prisma.project.findMany({
-    where: { status: "ACTIVE" },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
-  void ctx;
-  return rows.map((p) => ({ value: p.id, label: p.name }));
-}
-
-/** Who a lead can be handed to — the people whose role lets them work one. */
+/** Who a lead can be handed to — whoever holds the duty to receive one. */
 async function ownerOptions() {
+  const ids = await usersHolding(prisma, PERM.sales.lead.receiveAssignment);
   const rows = await prisma.user.findMany({
-    where: {
-      status: "ACTIVE",
-      roles: {
-        some: { role: { permissions: { some: { permission: { code: PERM.sales.lead.view } } } } },
-      },
-    },
+    where: { id: { in: ids }, status: "ACTIVE" },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });

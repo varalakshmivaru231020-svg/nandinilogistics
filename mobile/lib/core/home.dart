@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../design/components.dart';
 import '../design/tokens.dart';
-import '../modules/approvals.dart';
-import '../modules/calendar.dart';
 import '../modules/dashboard.dart';
 import '../modules/module_screen.dart';
 import '../modules/notifications.dart';
@@ -52,7 +50,6 @@ class HomeState extends State<Home> {
   void initState() {
     super.initState();
     _session = widget.session;
-    widget.api.projectId = _session.projectId;
     _loadNav();
     _countUnread();
   }
@@ -90,8 +87,8 @@ class HomeState extends State<Home> {
       .where((i) => i.href == _current)
       .firstOrNull;
 
-  /// The third tab takes the name of wherever you are, as the design shows on
-  /// the indent list — it is "where you are", not a fixed destination.
+  /// The third tab takes the name of wherever you are — it is "where you
+  /// are", not a fixed destination.
   (String, IconData) get _third {
     if (_related != null) {
       // The label the web's own link carries, which is how you got here.
@@ -103,7 +100,7 @@ class HomeState extends State<Home> {
       return (label ?? 'Open', Icons.chevron_right_rounded);
     }
     final i = _item;
-    if (i == null || i.href == '/dashboard' || i.href == '/approvals') {
+    if (i == null || i.href == '/dashboard') {
       return ('Tasks', Icons.check_box_outlined);
     }
     return (i.label, i.icon);
@@ -112,21 +109,11 @@ class HomeState extends State<Home> {
   Widget get _bottom {
     final (label, icon) = _third;
     return BottomBar(
-      current: _related == null && _current == '/dashboard'
-          ? 'dashboard'
-          : _related == null && _current == '/approvals'
-              ? 'approvals'
-              : 'third',
+      current: _related == null && _current == '/dashboard' ? 'dashboard' : 'third',
       thirdLabel: label,
       thirdIcon: icon,
-      approvalsBadge: _badges['/approvals'],
       onHome: () => _open('/dashboard'),
-      onApprovals: () => _session.can('approvals.queue.view')
-          ? _open('/approvals')
-          : notify(context, 'You do not have the approvals queue.'),
-      onThird: _related == null && (_current == '/dashboard' || _current == '/approvals')
-          ? () => _open('/tasks')
-          : null,
+      onThird: _related == null && _current == '/dashboard' ? () => _open('/tasks') : null,
       onMore: () => _drawer.currentState?.openDrawer(),
     );
   }
@@ -144,13 +131,13 @@ class HomeState extends State<Home> {
         badges: _badges,
         onPick: (m) {
           Navigator.pop(context);
-          if (m.href == '/masters') {
-            notify(context, 'Masters & Users is managed on the web.');
+          final notice = webOnly[m.href];
+          if (notice != null) {
+            notify(context, notice);
             return;
           }
           _open(m.href);
         },
-        onProject: _pickProject,
         onSignOut: () async {
           Navigator.pop(context);
           await widget.auth.signOut();
@@ -163,16 +150,6 @@ class HomeState extends State<Home> {
 
   Widget _module() {
     switch (_related == null ? _current : '') {
-      case '/approvals':
-        return ApprovalsScreen(
-          api: widget.api,
-          session: _session,
-          bottom: _bottom,
-          onBack: () => _open('/dashboard'),
-          onCount: (n) {
-            if (_badges['/approvals'] != n) setState(() => _badges['/approvals'] = n);
-          },
-        );
       case '/notifications':
         return NotificationsScreen(
           api: widget.api,
@@ -183,13 +160,6 @@ class HomeState extends State<Home> {
               setState(() => _badges['/notifications'] = n);
             }
           },
-        );
-      case '/calendar':
-        return CalendarScreen(
-          api: widget.api,
-          session: _session,
-          bottom: _bottom,
-          onBack: () => _open('/dashboard'),
         );
       default:
         // Every list module is the same pattern, and the server describes it:
@@ -202,7 +172,6 @@ class HomeState extends State<Home> {
             moduleKey: moduleKey,
             bottom: _bottom,
             onBack: () => _related != null ? _open(_current) : _open('/dashboard'),
-            onPickProject: _pickProjectFromModule,
             onOpenRelated: (key) => setState(() => _related = key),
           );
         }
@@ -224,71 +193,7 @@ class HomeState extends State<Home> {
               setState(() => _related = moduleKey);
             }
           },
-          onPickProject: _pickProjectFromModule,
-          onApprovalCount: (n) {
-            if (_badges['/approvals'] != n) setState(() => _badges['/approvals'] = n);
-          },
         );
     }
-  }
-
-  /// The chooser, reached from a module that cannot answer without a project
-  /// rather than from the drawer.
-  Future<void> _pickProjectFromModule() => _choose();
-
-  Future<void> _pickProject() async {
-    Navigator.pop(context);
-    await _choose();
-  }
-
-  Future<void> _choose() async {
-    final chosen = await sheet<String>(
-      context,
-      title: 'Project',
-      explain: 'A view filter, not access. Only the projects mapped to you are offered, '
-          'and choosing one narrows what every screen shows.',
-      body: (ctx) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        _projectTile(ctx, null, 'All projects', Icons.all_inclusive_rounded),
-        for (final p in _session.projects)
-          _projectTile(ctx, p.id, p.label, Icons.home_work_outlined),
-      ]),
-    );
-    if (chosen == null || !mounted) return;
-    final id = chosen.isEmpty ? null : chosen;
-    setState(() {
-      _session = _session.withProject(id);
-      widget.api.projectId = id;
-      // Re-enter the module so it re-reads under the new scope.
-      final was = _current;
-      _current = '/dashboard';
-      if (was != '/dashboard') _current = was;
-    });
-  }
-
-  Widget _projectTile(BuildContext ctx, String? id, String label, IconData icon) {
-    final selected = id == _session.projectId;
-    return Material(
-      color: selected ? T.brand100 : Colors.transparent,
-      borderRadius: BorderRadius.circular(T.rControl),
-      child: InkWell(
-        onTap: () => Navigator.pop(ctx, id ?? ''),
-        borderRadius: BorderRadius.circular(T.rControl),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: T.target),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(children: [
-            Icon(icon, size: 20, color: selected ? T.brand700 : T.muted),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(label,
-                  style: T.body(
-                      color: selected ? T.brand700 : T.ink,
-                      weight: selected ? FontWeight.w700 : FontWeight.w600)),
-            ),
-            if (selected) const Icon(Icons.check_rounded, size: 20, color: T.brand700),
-          ]),
-        ),
-      ),
-    );
   }
 }

@@ -85,7 +85,6 @@ Future<Boundary> _leads(WidgetTester tester) async {
       moduleKey: 'sales/leads',
       onBack: () {},
       bottom: const SizedBox.shrink(),
-      onPickProject: () {},
       onOpenRelated: (_) {},
     ),
   ));
@@ -172,38 +171,21 @@ void main() {
   });
 
   group('the dashboard', () {
-    testWidgets('opens the tasks it says are overdue, and asks for a project',
-        (tester) async {
+    testWidgets('opens the tasks it says are overdue', (tester) async {
       useEmptyPrefs();
       final opened = <String>[];
-      var chooserOpened = false;
       final b = Boundary({
-        '/list/approvals': _emptyList('Approvals'),
         '/list/tasks': _taskList(),
-        '/list/material/indents': _emptyList('Indents'),
-        // The schedule belongs to one project, and none is chosen.
-        '/list/schedule/activities': const Fail(
-          400,
-          'Choose a project first — a schedule belongs to one project.',
-          'project-required',
-        ),
-        '/list/units': _emptyList('Units'),
+        '/list/sales/leads': _emptyList('Leads'),
       });
       await tester.pumpWidget(MaterialApp(
         theme: T.theme,
         home: DashboardScreen(
           api: b.api,
-          session: sessionWith(const [
-            'approvals.queue.view',
-            'task.task.view',
-            'material.indent.view',
-            'schedule.activity.view',
-            'unit.unit.view',
-          ]),
+          session: sessionWith(const ['task.task.view', 'sales.lead.view']),
           onMenu: () {},
           onNotifications: () {},
           onOpen: opened.add,
-          onPickProject: () async => chooserOpened = true,
           bottom: const SizedBox.shrink(),
         ),
       ));
@@ -218,16 +200,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(opened, ['tasks']);
 
-      /*
-       * And the schedule says what it needs rather than reporting a fault:
-       * the boundary answered "project-required", which is an instruction,
-       * not a breakage.
-       */
+      // A module the person may see is a row, read from its own list.
+      expect(find.text('Leads'), findsOneWidget);
       expect(find.text('Could not be read'), findsNothing);
-      expect(find.text('Choose a project to see it'), findsOneWidget);
-      await tester.tap(find.text('Project Schedule'));
-      await tester.pumpAndSettle();
-      expect(chooserOpened, isTrue);
     });
   });
 
@@ -244,37 +219,27 @@ void main() {
           bottomNavigationBar: BottomBar(
             current: 'third',
             onHome: () {},
-            onApprovals: () {},
             onMore: () {},
             thirdLabel: 'Leads · CRM',
-            approvalsBadge: 3,
           ),
         ),
       ));
       await tester.pumpAndSettle();
 
       // Every tab is drawn, including the long one.
-      for (final label in ['Home', 'Approvals', 'Leads · CRM', 'More']) {
+      for (final label in ['Home', 'Leads · CRM', 'More']) {
         expect(find.text(label), findsOneWidget);
       }
-
-      // The badge sits on the Approvals icon rather than adrift in its cell.
-      final icon = tester.getCenter(find.byIcon(Icons.fact_check_outlined));
-      final badge = tester.getCenter(find.text('3'));
-      expect((badge.dx - icon.dx).abs(), lessThan(24));
-      expect((badge.dy - icon.dy).abs(), lessThan(24));
 
       // Each tab's icon sits on the same line as every other's.
       final tops = [
         Icons.grid_view_rounded,
-        Icons.fact_check_outlined,
         Icons.menu_rounded,
       ].map((i) => tester.getCenter(find.byIcon(i)).dy).toSet();
       expect(tops.length, 1, reason: 'the icons are not on one line');
     });
   });
 }
-
 /// The dashboard's counts, and what they do when tapped.
 Map<String, Object> _emptyList(String title) => {
       'title': title,
@@ -291,8 +256,8 @@ Map<String, Object> _emptyList(String title) => {
 Map<String, Object> _taskList() => {
       ..._emptyList('Tasks'),
       'rows': const [
-        {'id': 't1', 'status': 'Started', 'dueAt': '2026-10-01T06:00:00.000Z'},
-        {'id': 't2', 'status': 'Started', 'dueAt': '2026-10-02T06:00:00.000Z'},
+        {'id': 't1', 'status': 'In progress', 'dueAt': '2026-10-01T06:00:00.000Z'},
+        {'id': 't2', 'status': 'Open', 'dueAt': '2026-10-02T06:00:00.000Z'},
       ],
       'total': 2,
     };

@@ -84,7 +84,6 @@ Future<Boundary> _pump(WidgetTester tester, Map<String, Object> routes) async {
       moduleKey: 'material/indents',
       onBack: () {},
       bottom: const SizedBox.shrink(),
-      onPickProject: () {},
       onOpenRelated: (_) {},
     ),
   ));

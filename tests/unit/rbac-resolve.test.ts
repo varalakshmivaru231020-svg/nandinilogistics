@@ -5,7 +5,7 @@ import { resolveEffectivePermissions, type RoleInput } from "@/lib/rbac/resolve"
 function role(over: Partial<RoleInput> = {}): RoleInput {
   return {
     id: "r1", code: "ROLE", name: "Role", level: 100, status: "ACTIVE",
-    permissionCodes: [], approvalLimits: [], ...over,
+    permissionCodes: [], ...over,
   };
 }
 
@@ -76,44 +76,3 @@ describe("permission resolution", () => {
   });
 });
 
-describe("approval ceilings", () => {
-  it("takes the most generous ceiling across roles", () => {
-    const { approvalLimits } = resolveEffectivePermissions(
-      [
-        role({ id: "a", approvalLimits: [{ scope: "material.indent", maxValue: 200_000 }] }),
-        role({ id: "b", approvalLimits: [{ scope: "material.indent", maxValue: 500_000 }] }),
-      ],
-      [],
-    );
-    expect(approvalLimits["material.indent"]).toBe(500_000);
-  });
-
-  it("lets a personal limit replace the role ceiling, even downwards", () => {
-    const { approvalLimits } = resolveEffectivePermissions(
-      [role({ approvalLimits: [{ scope: "material.indent", maxValue: 500_000 }] })],
-      [],
-      [{ scope: "material.indent", maxValue: 100_000 }],
-    );
-    expect(approvalLimits["material.indent"]).toBe(100_000);
-  });
-
-  it("ignores a ceiling attached to an inactive role", () => {
-    const { approvalLimits } = resolveEffectivePermissions(
-      [role({ status: "INACTIVE", approvalLimits: [{ scope: "material.po", maxValue: 999 }] })],
-      [],
-    );
-    expect(approvalLimits["material.po"]).toBeUndefined();
-  });
-
-  it("keeps ceilings for different chains apart", () => {
-    const { approvalLimits } = resolveEffectivePermissions(
-      [role({ approvalLimits: [
-        { scope: "material.indent", maxValue: 500_000 },
-        { scope: "sales.discount", maxValue: 200_000 },
-      ] })],
-      [],
-    );
-    expect(approvalLimits["material.indent"]).toBe(500_000);
-    expect(approvalLimits["sales.discount"]).toBe(200_000);
-  });
-});

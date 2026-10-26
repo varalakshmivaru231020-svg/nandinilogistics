@@ -61,7 +61,7 @@ describe("hr: employee status and edit audit", () => {
 
   beforeAll(async () => {
     typeId = (await prisma.employmentType.create({ data: { name: `Test type ${S}` } })).id;
-    await actAs("owner@nninfra.example");
+    await actAs("admin@nandini.example");
   });
 
   afterAll(async () => {

@@ -2,11 +2,8 @@ import { describe, expect, it } from "vitest";
 import { ZodError, z } from "zod";
 
 import { bearerToken } from "@/lib/auth/session";
-import { requestedProject, statusForError } from "@/lib/api/mobile";
+import { statusForError } from "@/lib/api/mobile";
 import { AuthRequiredError, PermissionError } from "@/lib/rbac/guard";
-
-const req = (headers: Record<string, string>) =>
-  new Request("https://nninfra.test/api/mobile/v1/me", { headers });
 
 describe("reading the bearer token", () => {
   it("takes the token out of a well-formed header", () => {
@@ -41,17 +38,6 @@ describe("reading the bearer token", () => {
   });
 });
 
-describe("the project the app says it is looking at", () => {
-  it("reads the header", () => {
-    expect(requestedProject(req({ "x-project": "prj_1" }))).toBe("prj_1");
-  });
-
-  it("is null when absent or blank", () => {
-    expect(requestedProject(req({}))).toBeNull();
-    expect(requestedProject(req({ "x-project": "   " }))).toBeNull();
-  });
-});
-
 describe("what status a failure deserves", () => {
   /*
    * 401 against 403 is the distinction the app acts on: the first means sign in
@@ -61,9 +47,9 @@ describe("what status a failure deserves", () => {
   it("separates not signed in from not allowed", () => {
     expect(statusForError(new AuthRequiredError()).status).toBe(401);
 
-    const denied = statusForError(new PermissionError("material.indent.approvePm"));
+    const denied = statusForError(new PermissionError("task.task.complete"));
     expect(denied.status).toBe(403);
-    expect(denied.code).toBe("material.indent.approvePm");
+    expect(denied.code).toBe("task.task.complete");
   });
 
   it("reports a validation failure as the first readable complaint", () => {
@@ -85,9 +71,9 @@ describe("what status a failure deserves", () => {
   });
 
   it("passes an ordinary Error through as a bad request", () => {
-    expect(statusForError(new Error("Indent is already approved."))).toEqual({
+    expect(statusForError(new Error("Task is already done."))).toEqual({
       status: 400,
-      error: "Indent is already approved.",
+      error: "Task is already done.",
     });
   });
 });

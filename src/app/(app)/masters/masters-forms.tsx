@@ -12,7 +12,7 @@ import {
   addLeadFieldAction, createMasterAction, deleteLeadFieldAction, deleteMasterAction,
   updateLeadFieldAction,
 } from "./actions";
-import { createUserAction, upsertApprovalLimitAction } from "@/app/(app)/admin/actions";
+import { createUserAction } from "@/app/(app)/admin/actions";
 import { createEmploymentTypeAction, deleteEmploymentTypeAction } from "@/app/(app)/hr/actions";
 
 /** The design's blue button at the head of a masters section. */
@@ -125,62 +125,6 @@ export function NewUser({ roles }: { roles: Array<{ id: string; name: string }> 
               </Select>
             </Field>
             <Field label="Password" required><Input name="password" type="password" required /></Field>
-          </form>
-        </Modal>
-      )}
-    </>
-  );
-}
-
-export function NewApprovalLimit({ roles }: { roles: Array<{ id: string; name: string }> }) {
-  const [open, setOpen] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const router = useRouter();
-  const toast = useToast();
-
-  async function submit(fd: FormData) {
-    setBusy(true);
-    setError(null);
-    const res = await upsertApprovalLimitAction(fd);
-    setBusy(false);
-    if (!res.ok) { setError(res.error); return; }
-    setOpen(false);
-    toast("Limit saved.");
-    router.refresh();
-  }
-
-  return (
-    <>
-      <AddButton label="+ New limit" onClick={() => setOpen(true)} />
-      {open && (
-        <Modal
-          open onClose={() => setOpen(false)} title="New approval limit" size="sm"
-          footer={
-            <>
-              <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit" form="new-limit" loading={busy}>Save</Button>
-            </>
-          }
-        >
-          <form id="new-limit" action={submit} className="space-y-3">
-            {error && <Alert tone="error">{error}</Alert>}
-            <Field label="Document" required>
-              <Select name="scope" required defaultValue="">
-                <option value="" disabled>Select…</option>
-                <option value="material.indent">Indent</option>
-                <option value="material.po">Purchase order</option>
-              </Select>
-            </Field>
-            <Field label="Role" required>
-              <Select name="roleId" required defaultValue="">
-                <option value="" disabled>Select…</option>
-                {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </Select>
-            </Field>
-            <Field label="Approves up to" required>
-              <Input name="maxValue" type="number" min={1} required />
-            </Field>
           </form>
         </Modal>
       )}

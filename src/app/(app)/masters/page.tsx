@@ -4,45 +4,25 @@ import { PERM } from "@/lib/permissions/codes";
 import { LIVE_PERMISSIONS } from "@/lib/permissions/registry";
 import { MASTERS, masterPerm } from "@/lib/masters/registry";
 import { Card, EmptyState } from "@/components/ui/primitives";
-import { cn, moneyShort } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { ListNote } from "@/components/list/list-note";
 import Link from "next/link";
 
-import { ChipEditor, LeadFieldEditor, NewApprovalLimit, NewMasterRecord, NewUser } from "./masters-forms";
+import { ChipEditor, LeadFieldEditor, NewMasterRecord, NewUser } from "./masters-forms";
 
 export const metadata = { title: "Masters & Users" };
 
 /**
- * The design's Masters screen: a 230px rail of six sections, and the chosen
- * section beside it. Users & Roles, Approval Limits, Lead Settings and
- * Workforce Setup live here, as the design draws them — not on screens of
- * their own.
+ * The Masters screen: a 230px rail of sections, and the chosen section beside
+ * it. Users & Roles, Lead Settings, Workforce Setup and the Companies live
+ * here, as the SOW's Masters area lists them — not on screens of their own.
  */
 const SECTIONS = [
-  { key: "stores", label: "Store Master", add: "+ New store" },
-  { key: "tax", label: "Tax & UOM", add: "+ New unit" },
+  { key: "companies", label: "Companies", add: "+ New company" },
   { key: "users", label: "Users & Roles", add: "+ New user" },
-  { key: "limits", label: "Approval Limits", add: "+ New limit" },
   { key: "leadcfg", label: "Lead Settings", add: null },
   { key: "workforce", label: "Workforce Setup", add: null },
-  /*
-   * Every registry master — cities, document types, delay reasons, print
-   * contacts and the rest — had a working screen at /masters/<key> and nothing
-   * anywhere that linked to it. They were reachable only by typing the URL,
-   * which is the same as not being reachable.
-   */
   { key: "reference", label: "Reference Data", add: null },
-] as const;
-
-/** The stages the pipeline moves through, in order. */
-const STAGES = [
-  ["NEW", "New", true],
-  ["CONTACTED", "Contacted", false],
-  ["SITE_VISIT_SCHEDULED", "Site visit scheduled", false],
-  ["VISIT_DONE", "Visit done", false],
-  ["NEGOTIATION", "Negotiation", false],
-  ["BOOKED", "Booked", true],
-  ["LOST", "Lost", true],
 ] as const;
 
 export default async function MastersPage({
@@ -54,11 +34,9 @@ export default async function MastersPage({
   const { section, tab } = await searchParams;
 
   const may: Record<string, boolean> = {
-    stores: ctx.has(PERM.masters.store.view),
-    tax: ctx.has(PERM.masters.taxRate.view) || ctx.has(PERM.masters.uom.view),
+    companies: ctx.has(PERM.masters.company.view),
     users: ctx.has(PERM.admin.user.view),
-    limits: ctx.has(PERM.admin.approvalLimit.view),
-    leadcfg: ctx.has(PERM.masters.lostReason.view),
+    leadcfg: ctx.has(PERM.masters.lostReason.view) || ctx.has(PERM.masters.leadStage.view),
     workforce: ctx.has(PERM.masters.designation.view),
     reference: MASTERS.some((m) => ctx.has(masterPerm(m, "view"))),
   };
@@ -78,7 +56,7 @@ export default async function MastersPage({
   }
 
   const roles =
-    active.key === "users" || active.key === "limits"
+    active.key === "users"
       ? await prisma.role.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } })
       : [];
 
@@ -113,22 +91,14 @@ export default async function MastersPage({
       <div className="min-w-0">
         <div className="mb-[13px] flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-display text-[15px] font-bold text-navy-950">{active.label}</h2>
-          {active.key === "stores" && ctx.has(PERM.masters.store.create) && (
-            <NewMasterRecord masterKey="stores" label="+ New store" title="New store" />
-          )}
-          {active.key === "tax" && ctx.has(PERM.masters.uom.create) && (
-            <NewMasterRecord masterKey="uoms" label="+ New unit" title="New unit of measure" />
+          {active.key === "companies" && ctx.has(PERM.masters.company.create) && (
+            <NewMasterRecord masterKey="companies" label="+ New company" title="New company" />
           )}
           {active.key === "users" && ctx.has(PERM.admin.user.create) && <NewUser roles={roles} />}
-          {active.key === "limits" && ctx.has(PERM.admin.approvalLimit.create) && (
-            <NewApprovalLimit roles={roles} />
-          )}
         </div>
 
-        {active.key === "stores" && <Stores />}
-        {active.key === "tax" && <TaxAndUom />}
+        {active.key === "companies" && <Companies />}
         {active.key === "users" && <Users />}
-        {active.key === "limits" && <Limits />}
         {active.key === "leadcfg" && (
           <LeadSettings
             tab={tab ?? "fields"}
@@ -137,6 +107,7 @@ export default async function MastersPage({
             canEditFields={ctx.has(PERM.masters.leadField.update)}
             canAddField={ctx.has(PERM.masters.leadField.create)}
             canDeleteField={ctx.has(PERM.masters.leadField.delete)}
+            canSeeStages={ctx.has(PERM.masters.leadStage.view)}
           />
         )}
         {active.key === "workforce" && (
@@ -159,8 +130,7 @@ export default async function MastersPage({
  * The registry masters, grouped the way the registry groups them.
  *
  * Each one is a link to the screen the registry already generates — the list,
- * the form, search, import, export and the status toggle all exist; what was
- * missing was any way to get to them.
+ * the form, search, import, export and the status toggle all exist.
  */
 function ReferenceData({ visible }: { visible: typeof MASTERS }) {
   const groups = [...new Set(visible.map((m) => m.group))];
@@ -199,93 +169,72 @@ function ReferenceData({ visible }: { visible: typeof MASTERS }) {
   );
 }
 
-/* -------------------------------- Stores --------------------------------- */
+/* ------------------------------- Companies -------------------------------- */
 
-async function Stores() {
-  const stores = await prisma.store.findMany({
-    where: { status: "ACTIVE" },
+/**
+ * The client companies riders are deployed to. Each card opens the company's
+ * full record on the registry screen, where hubs, rate cards and Team Leader
+ * assignment live.
+ */
+async function Companies() {
+  const companies = await prisma.company.findMany({
     orderBy: { name: "asc" },
     select: {
-      id: true, name: true, addressLine: true,
-      project: { select: { name: true } },
-      stockBalances: { select: { value: true } },
+      id: true, code: true, name: true, status: true, addressLine: true,
+      city: { select: { name: true } },
+      _count: { select: { leads: true } },
     },
   });
 
   return (
-    <div className="grid gap-3 [grid-template-columns:repeat(3,1fr)] max-md:[grid-template-columns:1fr]">
-      {stores.map((s) => {
-        const value = s.stockBalances.reduce((n, b) => n + Number(b.value), 0);
-        return (
-          <div key={s.id} className="rounded-[13px] border border-line-400 bg-white px-[18px] py-[17px]">
-            <p className="font-display text-[13.5px] font-bold text-navy-950">{s.name}</p>
+    <>
+      <div className="grid gap-3 [grid-template-columns:repeat(3,1fr)] max-md:[grid-template-columns:1fr]">
+        {companies.map((c) => (
+          <Link key={c.id} href={`/masters/companies?q=${encodeURIComponent(c.code)}`} className="rounded-[13px] border border-line-400 bg-white px-[18px] py-[17px] transition-colors hover:border-brand-500">
+            <div className="flex items-start justify-between gap-2">
+              <p className="font-display text-[13.5px] font-bold text-navy-950">{c.name}</p>
+              <span
+                className={cn(
+                  "rounded-full px-2.5 py-[5px] text-[10.5px] font-bold",
+                  c.status === "ACTIVE" ? "bg-good-050 text-good-700" : "bg-warn-050 text-warn-700",
+                )}
+              >
+                {c.status === "ACTIVE" ? "Active" : "Inactive"}
+              </span>
+            </div>
             <p className="mt-[3px] text-[11.5px] font-medium text-muted-400">
-              {s.project?.name ?? "Central"}{s.addressLine ? ` · ${s.addressLine}` : ""}
+              {c.code}{c.city ? ` · ${c.city.name}` : ""}{c.addressLine ? ` · ${c.addressLine}` : ""}
             </p>
             <div className="mt-[13px] flex gap-3.5">
               <div>
-                <p className="num font-display text-[16px] font-extrabold text-brand-500">
-                  {s.stockBalances.length}
-                </p>
-                <p className="text-[10px] font-semibold text-muted-400">SKUs</p>
-              </div>
-              <div>
-                <p className="num font-display text-[16px] font-extrabold text-brand-500">
-                  {moneyShort(value)}
-                </p>
-                <p className="text-[10px] font-semibold text-muted-400">Valuation</p>
+                <p className="num font-display text-[16px] font-extrabold text-brand-500">{c._count.leads}</p>
+                <p className="text-[10px] font-semibold text-muted-400">Leads tagged</p>
               </div>
             </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ------------------------------ Tax and UOM ------------------------------- */
-
-async function TaxAndUom() {
-  const [taxes, uoms] = await Promise.all([
-    prisma.taxRate.findMany({ where: { status: "ACTIVE" }, orderBy: { percentage: "asc" }, select: { id: true, name: true, percentage: true } }),
-    prisma.uom.findMany({ where: { status: "ACTIVE" }, orderBy: { code: "asc" }, select: { id: true, code: true } }),
-  ]);
-
-  return (
-    <div className="grid items-start gap-3.5 [grid-template-columns:1fr_1fr] max-md:[grid-template-columns:1fr]">
-      <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
-        <p className="mb-[11px] font-display text-[13px] font-bold text-navy-950">GST slabs</p>
-        {taxes.map((t) => (
-          <div key={t.id} className="flex justify-between border-b border-line-200 py-2 text-[12.5px] font-medium text-navy-500 last:border-0">
-            <span>{t.name}</span>
-            <span className="num font-bold text-navy-950">{Number(t.percentage)}%</span>
-          </div>
+          </Link>
         ))}
       </div>
-      <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
-        <p className="mb-[11px] font-display text-[13px] font-bold text-navy-950">Units of measure</p>
-        <div className="flex flex-wrap gap-[7px]">
-          {uoms.map((u) => (
-            <span key={u.id} className="rounded-full border border-line-400 bg-surface-field px-3 py-1.5 text-[11.5px] font-semibold text-navy-600">
-              {u.code}
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
+      {companies.length === 0 && (
+        <Card className="mt-3">
+          <EmptyState title="No companies yet" description="Create the client companies riders are deployed to." />
+        </Card>
+      )}
+      <ListNote>
+        Open the full list under Reference Data → Companies to edit, deactivate, import or export.
+      </ListNote>
+    </>
   );
 }
 
 /* --------------------------------- Users ---------------------------------- */
 
-/** The design gives each role its own colour, with the owner on navy. */
+/** Each role has its own colour, with Admin on navy. */
 function rolePill(role: string | undefined): string {
   const name = (role ?? "").toLowerCase();
-  if (name.includes("owner") || name.includes("admin")) return "bg-navy-950 text-white";
-  if (name.includes("project manager")) return "bg-brand-100 text-brand-700";
-  if (name.includes("supervisor")) return "bg-good-050 text-good-700";
-  if (name.includes("store")) return "bg-warn-050 text-warn-700";
-  if (name.includes("sales")) return "bg-plum-050 text-plum-600";
+  if (name.includes("admin")) return "bg-navy-950 text-white";
+  if (name.includes("team leader")) return "bg-brand-100 text-brand-700";
+  if (name.includes("tele")) return "bg-plum-050 text-plum-600";
+  if (name.includes("rider")) return "bg-good-050 text-good-700";
   return "bg-surface-field text-navy-500";
 }
 
@@ -294,9 +243,8 @@ async function Users() {
   const users = await prisma.user.findMany({
     orderBy: { name: "asc" },
     select: {
-      id: true, name: true, email: true, status: true,
+      id: true, name: true, email: true, phone: true, status: true,
       roles: { select: { role: { select: { name: true } } } },
-      projectAccess: { select: { project: { select: { name: true } } } },
     },
   });
 
@@ -324,11 +272,7 @@ async function Users() {
             <span className={cn("block rounded-full px-2.5 py-[5px] text-[10.5px] font-bold", rolePill(u.roles[0]?.role.name))}>
               {u.roles[0]?.role.name ?? "No role"}
             </span>
-            <p className="text-[11.5px] font-medium text-navy-500">
-              {u.projectAccess.length === 0
-                ? "All projects"
-                : u.projectAccess.map((p) => p.project.name).join(" · ")}
-            </p>
+            <p className="num text-[11.5px] font-medium text-navy-500">{u.phone ?? "—"}</p>
             <span
               className={cn(
                 "block rounded-full px-2.5 py-[5px] text-[10.5px] font-bold",
@@ -341,8 +285,7 @@ async function Users() {
         ))}
       </div>
       <ListNote>
-        Open a person to change their roles, grant a permission on top of them, or map the projects
-        they can reach.
+        Open a person to change their roles or grant a permission on top of them.
       </ListNote>
 
       {ctx.has(PERM.admin.role.view) && <Roles />}
@@ -409,63 +352,6 @@ async function Roles() {
   );
 }
 
-/* -------------------------------- Limits ---------------------------------- */
-
-/** The design names each limit in words, not by its scope key. */
-const LIMIT_DOC: Record<string, string> = {
-  "material.indent": "Requirement Indent",
-  "material.po": "Purchase Order",
-  "material.vendorPayment": "Vendor Payment",
-  "sales.discount": "Sales Discount",
-  "sales.bookingCancellation": "Booking Cancellation",
-};
-
-async function Limits() {
-  const limits = await prisma.approvalLimit.findMany({
-    orderBy: { scope: "asc" },
-    select: {
-      id: true, scope: true, maxValue: true,
-      role: { select: { name: true } },
-      user: { select: { name: true } },
-    },
-  });
-
-  return (
-    <>
-      <div className="overflow-x-auto rounded-[13px] border border-line-400 bg-white">
-        {limits.map((l) => (
-          <div
-            key={l.id}
-            className="grid items-center gap-3 border-b border-line-200 px-[18px] py-[14px] last:border-0 [grid-template-columns:1.2fr_1fr_1fr]"
-          >
-            <p className="text-[13px] font-semibold text-navy-900">{LIMIT_DOC[l.scope] ?? l.scope}</p>
-            <p className="text-[12.5px] font-medium text-navy-500">
-              {l.role?.name ?? l.user?.name} approves up to {moneyShort(Number(l.maxValue))}
-            </p>
-            <p className="text-[12.5px] font-bold text-navy-950">Above → Owner / Admin</p>
-          </div>
-        ))}
-      </div>
-      <div className="mt-3 rounded-[11px] border border-line-350 bg-surface-hover px-4 py-3 text-[12px] font-semibold text-navy-800">
-        Below the configured limit the second approval level is skipped automatically. Limits are
-        editable here without code changes.
-      </div>
-    </>
-  );
-}
-
-/**
- * The design colours an employment type wherever it appears — here and on the
- * employee list.
- */
-const TYPE_PILL: Record<string, string> = {
-  "company staff": "border-line-350 bg-surface-hover text-navy-800",
-  "contract role": "border-plum-050 bg-plum-050 text-plum-700",
-  "direct labour": "border-good-200 bg-good-050 text-good-700",
-};
-
-const typePill = (name: string) => TYPE_PILL[name.trim().toLowerCase()];
-
 /* ----------------------------- Lead settings ------------------------------ */
 
 const LEAD_TABS = [
@@ -474,11 +360,18 @@ const LEAD_TABS = [
   { key: "reasons", label: "Lost Reasons" },
 ];
 
+const KIND_LABEL: Record<string, string> = {
+  NEW: "Start",
+  OPEN: "",
+  ONBOARDING: "Opens onboarding",
+  LOST: "Closes the lead",
+};
+
 async function LeadSettings({
-  tab, canEdit, canDelete, canEditFields, canAddField, canDeleteField,
+  tab, canEdit, canDelete, canEditFields, canAddField, canDeleteField, canSeeStages,
 }: {
   tab: string; canEdit: boolean; canDelete: boolean;
-  canEditFields: boolean; canAddField: boolean; canDeleteField: boolean;
+  canEditFields: boolean; canAddField: boolean; canDeleteField: boolean; canSeeStages: boolean;
 }) {
   const reasons =
     tab === "reasons"
@@ -489,25 +382,24 @@ async function LeadSettings({
         })
       : [];
 
-  // The design shows what a dropdown will offer, so the list reads as the form
-  // will: the sources, the unit types and the projects it is built from.
-  const [fields, sources, unitTypes, projects] = tab === "fields"
+  const stages =
+    tab === "stages" && canSeeStages
+      ? await prisma.leadStage.findMany({
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, name: true, kind: true, status: true, _count: { select: { leads: true } } },
+        })
+      : [];
+
+  // The list reads as the form will: the companies the company picker offers.
+  const [fields, companies] = tab === "fields"
     ? await Promise.all([
         prisma.leadFormField.findMany({ orderBy: { sortOrder: "asc" } }),
-        prisma.leadSource.findMany({ where: { status: "ACTIVE" }, select: { name: true }, orderBy: { name: "asc" } }),
-        prisma.unitType.findMany({ where: { status: "ACTIVE" }, select: { name: true }, orderBy: { name: "asc" } }),
-        prisma.project.findMany({ select: { name: true }, orderBy: { name: "asc" } }),
+        prisma.company.findMany({ where: { status: "ACTIVE" }, select: { name: true }, orderBy: { name: "asc" } }),
       ])
-    : [[], [], [], []];
+    : [[], []];
 
   const optionsFor = (key: string) =>
-    key === "sourceId"
-      ? sources.map((o) => o.name).join(", ")
-      : key === "unitTypeId"
-        ? unitTypes.map((o) => o.name).join(", ")
-        : key === "projectId"
-          ? projects.map((o) => o.name).join(", ")
-          : null;
+    key === "companyIds" ? companies.map((o) => o.name).join(", ") : null;
 
   return (
     <div>
@@ -554,22 +446,33 @@ async function LeadSettings({
 
       {tab === "stages" && (
         <div className="rounded-[13px] border border-line-400 bg-white px-[18px] py-4">
-          <p className="mb-[5px] text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
-            Pipeline stages
-          </p>
+          <div className="mb-[5px] flex items-center justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">
+              Pipeline stages
+            </p>
+            {canSeeStages && (
+              <Link href="/masters/lead-stages" className="text-[12px] font-bold text-brand-700 hover:underline">
+                Add, rename, reorder or disable →
+              </Link>
+            )}
+          </div>
           <p className="mb-2.5 text-[11.5px] font-medium text-muted-400">
-            New, Booked and Lost are defaults · custom stages sit between New and Booked
+            In the order a lead moves through them · the Onboarding stage opens the onboarding form
           </p>
-          {STAGES.map(([key, label, fixed]) => (
-            <div key={key} className="flex items-center gap-[9px] border-b border-line-200 py-[7px] last:border-0">
-              <span className="w-[210px] text-[12.5px] font-semibold text-navy-900">{label}</span>
-              {fixed && (
+          {stages.map((s) => (
+            <div key={s.id} className="flex items-center gap-[9px] border-b border-line-200 py-[7px] last:border-0">
+              <span className={cn("w-[210px] text-[12.5px] font-semibold", s.status === "ACTIVE" ? "text-navy-900" : "text-muted-400 line-through")}>{s.name}</span>
+              {KIND_LABEL[s.kind] && (
                 <span className="rounded-full bg-surface-hover px-2 py-[3px] text-[8.5px] font-bold tracking-[.07em] text-navy-800">
-                  DEFAULT
+                  {KIND_LABEL[s.kind].toUpperCase()}
                 </span>
               )}
+              <span className="num ml-auto text-[11px] font-medium text-muted-400">{s._count.leads} lead{s._count.leads === 1 ? "" : "s"}</span>
             </div>
           ))}
+          {stages.length === 0 && (
+            <p className="py-3 text-[12px] text-muted-500">No stages yet — run the reference seed or add them from the Lead Stages master.</p>
+          )}
         </div>
       )}
 
@@ -594,6 +497,15 @@ async function LeadSettings({
 
 /* ------------------------------- Workforce -------------------------------- */
 
+/** An employment type is coloured wherever it appears — here and on the list. */
+const TYPE_PILL: Record<string, string> = {
+  "rider": "border-good-200 bg-good-050 text-good-700",
+  "internal staff": "border-line-350 bg-surface-hover text-navy-800",
+  "team leader": "border-plum-050 bg-plum-050 text-plum-700",
+};
+
+const typePill = (name: string) => TYPE_PILL[name.trim().toLowerCase()];
+
 async function Workforce({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean }) {
   const [types, designations] = await Promise.all([
     prisma.employmentType.findMany({
@@ -615,7 +527,7 @@ async function Workforce({ canEdit, canDelete }: { canEdit: boolean; canDelete: 
           Employment types
         </p>
         <p className="mb-[11px] text-[11.5px] font-medium text-muted-400">
-          Used on every employee record · a type in use cannot be removed
+          Rider, Internal Staff, Team Leader · a type in use cannot be removed
         </p>
         <ChipEditor
           kind={{ employmentType: true }}
@@ -625,7 +537,6 @@ async function Workforce({ canEdit, canDelete }: { canEdit: boolean; canDelete: 
           addLabel="+ Add type"
           chips={types.map((t) => ({
             id: t.id, label: t.name, count: t._count.employees, canDelete: t._count.employees === 0,
-            // The design colours a type the way the employee list colours it.
             tone: typePill(t.name),
           }))}
         />
@@ -636,7 +547,7 @@ async function Workforce({ canEdit, canDelete }: { canEdit: boolean; canDelete: 
           Designations
         </p>
         <p className="mb-[11px] text-[11.5px] font-medium text-muted-400">
-          Feeds the Designation dropdown on the employee form
+          Feeds the Designation dropdown on the person form
         </p>
         <ChipEditor
           kind={{ master: "designations" }}

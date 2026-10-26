@@ -8,7 +8,6 @@ import { prisma } from "@/lib/db";
 import { verifyPassword } from "@/lib/auth/password";
 import { createSession, destroySession } from "@/lib/auth/session";
 import { recordAudit } from "@/lib/audit";
-import { workspaceAsked } from "@/lib/workspace";
 
 const LoginSchema = z.object({
   email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
@@ -86,10 +85,8 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
     summary: `${user.name} signed in`,
   });
 
-  // Signing in offers the project chooser once. Answering it — including by
-  // skipping — is remembered, so it is never in the way again.
   if (next && next.startsWith("/")) redirect(next);
-  redirect((await workspaceAsked()) ? "/dashboard" : "/workspace");
+  redirect("/dashboard");
 }
 
 export async function logoutAction(): Promise<void> {

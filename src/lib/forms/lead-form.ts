@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
+import { PERM } from "@/lib/permissions/codes";
 import type { AuthContext } from "@/lib/rbac/context";
 import { loadOptions } from "@/lib/screens/resolve";
 
@@ -9,28 +10,28 @@ import type { FormFieldDef, ResolvedField } from "./types";
 /**
  * The capture-lead form, which is whatever Masters → Lead Settings says it is.
  *
- * This one cannot be written down. The web drawer says so on its own face —
- * "Form is built from Masters → Lead Settings" — and it reads the rows of
- * `LeadFormField` in their sort order, so a field added or renamed or made
- * mandatory in the master changes the form. A copy of it in a registry would
- * be a different form the day anybody edited the master.
+ * The web drawer says so on its own face — "Form is built from Masters → Lead
+ * Settings" — and it reads the rows of `LeadFormField` in their sort order, so
+ * a field added or renamed or made mandatory in the master changes the form.
  *
  * So the rows are read here, and mapped the way the drawer maps them: a system
  * field posts under the name the lead schema knows, a custom one posts under
  * `custom:<id>`, and the placeholder for each kind is the design's own.
+ *
+ * Who the lead is assigned to is the SOW's rule, not the master's: somebody
+ * holding `sales.lead.assign` (Admin, a Team Leader) is asked for the
+ * tele-caller and must answer; a tele-caller keeps the lead; a rider's lead
+ * is handed round-robin, so the field is not drawn for them.
  */
 
 /** What the design puts in an empty box, by the kind of thing it asks for. */
 const PLACEHOLDER: Record<string, string> = {
   PHONE: "98765 43210 (without country code)",
-  NUMBER: "e.g. 85,00,000",
+  NUMBER: "e.g. 25",
   DATE: "dd-mm-yyyy",
 };
 
 const placeholderFor = (type: string) => PLACEHOLDER[type] ?? "Type here";
-
-/** What the drawer's dropdowns call the nothing-chosen option. */
-const EMPTY = "Select…";
 
 /** A custom field's kind, as the drawer picks its input type. */
 function customKind(type: string): FormFieldDef["kind"] {
@@ -53,11 +54,11 @@ function customKind(type: string): FormFieldDef["kind"] {
 }
 
 export async function leadFormFields(ctx: AuthContext): Promise<ResolvedField[]> {
-  const [rows, sources, projects, unitTypes] = await Promise.all([
+  const canAssign = ctx.has(PERM.sales.lead.assign);
+  const [rows, companies, teleCallers] = await Promise.all([
     prisma.leadFormField.findMany({ orderBy: { sortOrder: "asc" } }),
-    loadOptions("leadSources", ctx),
-    loadOptions("projects", ctx),
-    loadOptions("unitTypes", ctx),
+    loadOptions("companies", ctx),
+    canAssign ? loadOptions("teleCallers", ctx) : Promise.resolve([]),
   ]);
 
   const fields: ResolvedField[] = [];
@@ -81,31 +82,37 @@ export async function leadFormFields(ctx: AuthContext): Promise<ResolvedField[]>
         fields.push({ ...base, name: "name", kind: "text", placeholder: "Type here" });
         break;
       case "phone":
-        fields.push({
-          ...base,
-          name: "phone",
-          kind: "phone",
-          placeholder: placeholderFor("PHONE"),
-        });
+        fields.push({ ...base, name: "phone", kind: "phone", placeholder: placeholderFor("PHONE") });
+        break;
+      case "altPhone":
+        fields.push({ ...base, name: "altPhone", kind: "phone", placeholder: placeholderFor("PHONE") });
         break;
       case "email":
         fields.push({ ...base, name: "email", kind: "email", placeholder: "Type here" });
         break;
-      case "sourceId":
-        fields.push({ ...base, name: "sourceId", kind: "select", options: sources, emptyLabel: EMPTY });
+      case "location":
+        fields.push({ ...base, name: "location", kind: "text", placeholder: "Area or hub" });
         break;
-      case "projectId":
-        fields.push({ ...base, name: "projectId", kind: "select", options: projects, emptyLabel: EMPTY });
-        break;
-      case "unitTypeId":
-        fields.push({ ...base, name: "unitTypeId", kind: "select", options: unitTypes, emptyLabel: EMPTY });
-        break;
-      case "budgetMax":
+      case "companyIds":
         fields.push({
           ...base,
-          name: "budgetMax",
-          kind: "money",
-          placeholder: placeholderFor("NUMBER"),
+          name: "companyIds",
+          kind: "multi",
+          options: companies,
+          placeholder: "Search companies…",
+          wide: true,
+        });
+        break;
+      case "ownerId":
+        if (!canAssign) break;
+        fields.push({
+          ...base,
+          name: "ownerId",
+          kind: "lookup",
+          required: true,
+          options: teleCallers,
+          placeholder: "Search tele-callers…",
+          hint: "Assignment is mandatory when you create a lead.",
         });
         break;
       case "requirement":
@@ -117,8 +124,8 @@ export async function leadFormFields(ctx: AuthContext): Promise<ResolvedField[]>
           wide: true,
         });
         break;
-      case "siteVisitPlanned":
-        fields.push({ ...base, name: "siteVisitPlanned", kind: "checkbox", wide: true });
+      case "nextActionAt":
+        fields.push({ ...base, name: "nextActionAt", kind: "date", placeholder: placeholderFor("DATE") });
         break;
       // A system field the drawer draws nothing for is drawn nothing here.
       default:
@@ -130,7 +137,7 @@ export async function leadFormFields(ctx: AuthContext): Promise<ResolvedField[]>
 }
 
 /**
- * The attendance sheet: one line per active worker, pre-filled with whatever
+ * The attendance sheet: one line per active person, pre-filled with whatever
  * is already marked for the day.
  *
  * This cannot be written down either — the lines are the workforce. The web
@@ -178,7 +185,7 @@ export async function attendanceSheetFields(ctx: AuthContext): Promise<ResolvedF
         };
       }),
       row: [
-        { name: "employeeId", label: "Worker", kind: "text", hidden: true },
+        { name: "employeeId", label: "Person", kind: "text", hidden: true },
         {
           name: "status",
           label: "Attendance",

@@ -9,7 +9,6 @@ import '../core/row.dart';
 import '../core/session.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
-import 'board.dart';
 import 'form_screen.dart';
 import 'record_screen.dart';
 
@@ -30,7 +29,6 @@ class ModuleScreen extends StatefulWidget {
     required this.moduleKey,
     required this.onBack,
     required this.bottom,
-    required this.onPickProject,
     required this.onOpenRelated,
   });
 
@@ -43,9 +41,6 @@ class ModuleScreen extends StatefulWidget {
   final String moduleKey;
   final VoidCallback onBack;
   final Widget bottom;
-
-  /// Opens the workspace chooser, for a module that needs one.
-  final VoidCallback onPickProject;
 
   /// Opens a screen the web reaches from inside this one.
   final void Function(String moduleKey) onOpenRelated;
@@ -63,9 +58,6 @@ class ModuleScreenState extends State<ModuleScreen> {
   /// boundary rather than written here, so a label cannot differ from the web's.
   ScreenDef? _screen;
 
-  /// The server asked for a project before it will answer. A schedule belongs
-  /// to one project, so this is a prompt rather than a failure.
-  bool _needsProject = false;
   ListPage? _page;
   final Map<String, String> _query = {};
   bool _searching = false;
@@ -124,14 +116,13 @@ class ModuleScreenState extends State<ModuleScreen> {
     if (!mounted) return;
     setState(() {
       _loading = false;
-      _needsProject = res.code == 'project-required';
       if (res.ok) {
         _page = ListPage.from(res.data!);
         _rows = _page!.rows;
         _drawn = _page!.screen?.rows ?? const [];
         _more = _page!.hasMore;
       } else {
-        _error = _needsProject ? null : res.error;
+        _error = res.error;
         _page = null;
       }
     });
@@ -236,8 +227,7 @@ class ModuleScreenState extends State<ModuleScreen> {
               ? 'Loading…'
               // "12 indents", in the web's own noun — not "12 records".
               // What matches, not what has been fetched so far.
-              : '${_page?.total ?? rows.length} ${_noun(_page?.total ?? rows.length)} · '
-                  '${widget.session.project?.code ?? "All projects"}',
+              : '${_page?.total ?? rows.length} ${_noun(_page?.total ?? rows.length)}',
           onBack: widget.onBack,
           actions: [
             // The web's "New …" button, where this person may use it.
@@ -291,11 +281,9 @@ class ModuleScreenState extends State<ModuleScreen> {
             ),
           ),
         // The web's own band, read over every row in scope rather than the page
-        // on screen — which is what the web's second query is for. A board has
-        // its own figures, beside its own chips.
+        // on screen — which is what the web's second query is for.
         if (!_loading &&
             _error == null &&
-            _page?.screen?.board == null &&
             (_page?.screen?.band ?? const []).isNotEmpty)
           Band(_page!.screen!.band),
         /*
@@ -346,34 +334,6 @@ class ModuleScreenState extends State<ModuleScreen> {
 
   Widget _body(List<Map<String, dynamic>> rows, int now) {
     if (_loading) return const Center(child: CircularProgressIndicator());
-
-    // Available Flats is a board, not a list — the web's own screen for this
-    // key is `/units/board`, and the server sends the board itself.
-    final board = _page?.screen?.board;
-    if (board != null) {
-      return BoardScreen(
-        api: widget.api,
-        board: board,
-        forms: _screen?.forms ?? const [],
-        onChanged: _load,
-      );
-    }
-
-    if (_needsProject) {
-      return ListView(padding: const EdgeInsets.all(T.gutter), children: [
-        const Alert(
-          'Choose a project first — a schedule belongs to one project, not to all '
-          'of them at once.',
-          tone: Tone.info,
-        ),
-        const SizedBox(height: 12),
-        Btn('Choose a project',
-            icon: Icons.home_work_outlined,
-            emphasis: Emphasis.outline,
-            expand: true,
-            onPressed: widget.onPickProject),
-      ]);
-    }
 
     if (_error != null) {
       return ListView(padding: const EdgeInsets.all(T.gutter), children: [

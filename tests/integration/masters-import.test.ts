@@ -13,7 +13,7 @@ import { prisma } from "./helpers";
 
 const TAG = `IMP${Date.now().toString(36).toUpperCase()}`;
 const departments = getMaster("departments")!;
-const items = getMaster("items")!;
+const designations = getMaster("designations")!;
 
 async function existingCodes(def: typeof departments) {
   const rows: Array<{ code: string | null }> = await delegate(def).findMany({ select: { code: true } });
@@ -26,23 +26,20 @@ afterAll(async () => {
 });
 
 describe("masters import against the database", () => {
-  it("resolves real category and unit-of-measure names to their ids", async () => {
-    const [category, uom] = await Promise.all([
-      prisma.itemCategory.findFirst({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
-      prisma.uom.findFirst({ where: { status: "ACTIVE" }, select: { id: true, name: true } }),
-    ]);
-    expect(category && uom, "reference data has an active category and UOM").toBeTruthy();
+  it("resolves a real department name to its id", async () => {
+    const department = await prisma.department.findFirst({ where: { status: "ACTIVE" }, select: { id: true, name: true } });
+    expect(department, "reference data has an active department").toBeTruthy();
 
-    const headers = ["Code", "Name", "Category", "Unit of measure"];
+    const headers = ["Code", "Name", "Department"];
     const plan = planMasterImport(
-      items,
-      { headers, rows: [{ Code: `${TAG}-ITEM`, Name: "Imported item", Category: category!.name.toUpperCase(), "Unit of measure": uom!.name }] },
-      await loadOptions(items),
-      await existingCodes(items),
+      designations,
+      { headers, rows: [{ Code: `-DESIG`, Name: "Imported designation", Department: department!.name.toUpperCase() }] },
+      await loadOptions(designations),
+      await existingCodes(designations),
     );
 
     expect(plan.rows[0].errors).toEqual([]);
-    expect(plan.rows[0].data).toMatchObject({ categoryId: category!.id, uomId: uom!.id });
+    expect(plan.rows[0].data).toMatchObject({ departmentId: department!.id });
   });
 
   it("writes the planned rows as they are, then refuses the same file a second time", async () => {

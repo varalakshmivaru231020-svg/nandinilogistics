@@ -39,16 +39,16 @@ function render(value: unknown, format?: string): React.ReactNode {
 }
 
 /**
- * The project and date filters live in the URL and are applied on the server,
+ * The company and date filters live in the URL and are applied on the server,
  * so the export route — which reads the same URL — produces exactly these
  * rows. The search box only narrows what is already on screen.
  */
 function FilterBar({
-  spec, filters, projects,
+  spec, filters, companies,
 }: {
   spec: ReportFilterSpec;
   filters: ReportFilters;
-  projects: Array<{ id: string; label: string }>;
+  companies: Array<{ id: string; label: string }>;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -63,22 +63,22 @@ function FilterBar({
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const value = (name: string) => String(data.get(name) ?? "") || undefined;
-    apply({ projectId: value("project"), from: value("from"), to: value("to") });
+    apply({ companyId: value("company"), from: value("from"), to: value("to") });
   }
 
-  if (!spec.project && !spec.date) return null;
+  if (!spec.company && !spec.date) return null;
 
   return (
     <Card>
       <CardBody className="py-3">
         {/* Keyed on the applied filters so the inputs reset when the URL changes. */}
         <form key={filterQueryString(filters)} onSubmit={submit} className="flex flex-wrap items-end gap-3">
-          {spec.project && (
+          {spec.company && (
             <label className="grid gap-1 text-xs text-muted-500">
-              Project
-              <Select name="project" defaultValue={filters.projectId ?? ""} className="min-w-52">
-                <option value="">All accessible projects</option>
-                {projects.map((p) => (
+              Company
+              <Select name="company" defaultValue={filters.companyId ?? ""} className="min-w-52">
+                <option value="">All accessible companies</option>
+                {companies.map((p) => (
                   <option key={p.id} value={p.id}>{p.label}</option>
                 ))}
               </Select>
@@ -114,7 +114,7 @@ function FilterBar({
 }
 
 export function ReportView({
-  reportKey, columns, rows, summary, emptyMessage, canExport, spec, filters, projects,
+  reportKey, columns, rows, summary, emptyMessage, canExport, spec, filters, companies,
 }: {
   reportKey: string;
   columns: ReportColumn[];
@@ -124,7 +124,7 @@ export function ReportView({
   canExport: boolean;
   spec: ReportFilterSpec;
   filters: ReportFilters;
-  projects: Array<{ id: string; label: string }>;
+  companies: Array<{ id: string; label: string }>;
 }) {
   const [search, setSearch] = React.useState("");
 
@@ -163,7 +163,7 @@ export function ReportView({
 
   return (
     <div className="space-y-3">
-      <FilterBar spec={spec} filters={filters} projects={projects} />
+      <FilterBar spec={spec} filters={filters} companies={companies} />
 
       {summary && summary.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-3">

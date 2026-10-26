@@ -17,7 +17,6 @@ export interface RoleInput {
   level: number;
   status: string;
   permissionCodes: string[];
-  approvalLimits: Array<{ scope: string; maxValue: number }>;
 }
 
 export interface OverrideInput {
@@ -28,13 +27,11 @@ export interface OverrideInput {
 export interface ResolvedAccess {
   granted: Set<string>;
   roles: Array<{ id: string; code: string; name: string; level: number }>;
-  approvalLimits: Record<string, number>;
 }
 
 export function resolveEffectivePermissions(
   roles: RoleInput[],
   overrides: OverrideInput[],
-  userLimits: Array<{ scope: string; maxValue: number }> = [],
 ): ResolvedAccess {
   const activeRoles = roles.filter((r) => r.status === "ACTIVE");
 
@@ -51,20 +48,8 @@ export function resolveEffectivePermissions(
     if (o.effect === "DENY") granted.delete(o.code);
   }
 
-  // The most generous role ceiling applies, unless a personal limit replaces it.
-  const approvalLimits: Record<string, number> = {};
-  for (const role of activeRoles) {
-    for (const limit of role.approvalLimits) {
-      approvalLimits[limit.scope] = Math.max(approvalLimits[limit.scope] ?? 0, limit.maxValue);
-    }
-  }
-  for (const limit of userLimits) {
-    approvalLimits[limit.scope] = limit.maxValue;
-  }
-
   return {
     granted,
     roles: activeRoles.map((r) => ({ id: r.id, code: r.code, name: r.name, level: r.level })),
-    approvalLimits,
   };
 }

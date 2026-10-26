@@ -453,29 +453,6 @@ export async function setUserPermissionsAction(
   });
 }
 
-export async function setUserProjectsAction(userId: string, projectIds: string[]): Promise<ActionResult<null>> {
-  return runAction(async () => {
-    const ctx = await authorize(PERM.admin.user.assignProjects);
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new Error("User not found.");
-
-    await prisma.$transaction([
-      prisma.userProject.deleteMany({ where: { userId } }),
-      prisma.userProject.createMany({
-        data: projectIds.map((projectId) => ({ userId, projectId })),
-        skipDuplicates: true,
-      }),
-    ]);
-
-    await recordAudit({
-      action: "ASSIGN", entity: "User", entityId: userId, userId: ctx.id,
-      summary: `Mapped ${user.name} to ${projectIds.length} project(s)`,
-    });
-    revalidatePath("/admin/users");
-    return null;
-  });
-}
-
 export async function revokeSessionAction(sessionId: string): Promise<ActionResult<null>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.admin.session.revoke);
@@ -495,51 +472,3 @@ export async function revokeSessionAction(sessionId: string): Promise<ActionResu
   });
 }
 
-/* ========================================================================== */
-/* Approval limits                                                             */
-/* ========================================================================== */
-
-export async function upsertApprovalLimitAction(formData: FormData): Promise<ActionResult<null>> {
-  return runAction(async () => {
-    const ctx = await authorize(PERM.admin.approvalLimit.create);
-    const scope = String(formData.get("scope") ?? "").trim();
-    const roleId = String(formData.get("roleId") ?? "") || null;
-    const userId = String(formData.get("userId") ?? "") || null;
-    const maxValue = Number(formData.get("maxValue") ?? 0);
-
-    if (!scope) throw new Error("Approval scope is required.");
-    if (!roleId && !userId) throw new Error("Choose either a role or a specific user.");
-    if (roleId && userId) throw new Error("Set the limit on a role or on a user, not both.");
-    if (!(maxValue > 0)) throw new Error("Enter a limit greater than zero.");
-
-    const existing = await prisma.approvalLimit.findFirst({ where: { scope, roleId, userId } });
-    if (existing) {
-      await prisma.approvalLimit.update({ where: { id: existing.id }, data: { maxValue } });
-    } else {
-      await prisma.approvalLimit.create({ data: { scope, roleId, userId, maxValue } });
-    }
-
-    await recordAudit({
-      action: "UPDATE", entity: "ApprovalLimit", userId: ctx.id,
-      summary: `Set ${scope} approval limit to ₹${maxValue.toLocaleString("en-IN")}`,
-    });
-    revalidatePath("/admin/approval-limits");
-    return null;
-  });
-}
-
-export async function deleteApprovalLimitAction(id: string): Promise<ActionResult<null>> {
-  return runAction(async () => {
-    const ctx = await authorize(PERM.admin.approvalLimit.delete);
-    const limit = await prisma.approvalLimit.findUnique({ where: { id } });
-    if (!limit) throw new Error("Approval limit not found.");
-
-    await prisma.approvalLimit.delete({ where: { id } });
-    await recordAudit({
-      action: "DELETE", entity: "ApprovalLimit", entityId: id, userId: ctx.id,
-      summary: `Removed the ${limit.scope} approval limit`,
-    });
-    revalidatePath("/admin/approval-limits");
-    return null;
-  });
-}

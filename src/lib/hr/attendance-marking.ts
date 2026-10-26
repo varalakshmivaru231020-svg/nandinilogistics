@@ -22,9 +22,9 @@ export interface MarkInput {
  */
 export async function markAttendance(
   tx: Prisma.TransactionClient,
-  input: { date: Date; marks: MarkInput[]; projectId: string | null; markedById: string },
+  input: { date: Date; marks: MarkInput[]; markedById: string },
 ): Promise<number> {
-  const { date, marks, projectId, markedById } = input;
+  const { date, marks, markedById } = input;
   if (!marks.length) throw new Error("Nothing to mark.");
 
   const byEmployee = new Map<string, MarkInput>();
@@ -53,9 +53,9 @@ export async function markAttendance(
       where: { employeeId_attendanceOn: { employeeId: m.employeeId, attendanceOn: date } },
       create: {
         employeeId: m.employeeId, attendanceOn: date, status,
-        overtimeHours: m.overtimeHours ?? 0, projectId, markedById,
+        overtimeHours: m.overtimeHours ?? 0, markedById,
       },
-      update: { status, overtimeHours: m.overtimeHours ?? 0, projectId, markedById },
+      update: { status, overtimeHours: m.overtimeHours ?? 0, markedById },
     });
   }
   return byEmployee.size;

@@ -132,13 +132,13 @@ const found: Found[] = [];
 const skipped: string[] = [];
 
 for (const file of walk(APP)) {
-  const rel = relative(ROOT, file);
+  const rel = relative(ROOT, file).split("\\").join("/");
   if (webOnly(rel)) continue;
   const src = readFileSync(file, "utf8");
   if (!src.includes("use server")) continue;
 
   // The module key is the route folder the action serves, route groups removed.
-  const dir = relative(join(APP), file).replace(/\/[^/]+$/, "");
+  const dir = relative(join(APP), file).split("\\").join("/").replace(/\/[^/]+$/, "");
   const moduleKey = dir.replace(/\([a-z-]+\)\/?/g, "").replace(/\/$/, "");
 
   const re = /export async function ([a-zA-Z0-9_]+)Action\s*\(/g;
@@ -289,7 +289,7 @@ const API = join(ROOT, "src", "app", "api");
 
 const lists: Array<{ key: string; file: string }> = [];
 for (const file of walk(API)) {
-  const rel = relative(ROOT, file);
+  const rel = relative(ROOT, file).split("\\").join("/");
   if (!rel.endsWith("/export/route.ts")) continue;
   if (webOnly(rel)) continue;
   const key = rel

@@ -13,16 +13,8 @@ const LABEL = "route-smoke";
  * (200), or is refused by the permission model (307 to /forbidden) — anything
  * else, and a 500 in particular, is a screen that does not work.
  *
- * Dynamic segments are skipped here; the flow tests cover those with real ids.
- *
- * A few screens are only reachable from a record and send you back when opened
- * bare — issuing material needs the indent it is issued against. Those are
- * listed below with where they go, so "sends you somewhere sensible" stays
- * asserted rather than merely tolerated.
+ * Dynamic segments are skipped here; `detail-smoke` covers those with real ids.
  */
-const REDIRECTS_WHEN_BARE: Record<string, string> = {
-  "/material/issues/new": "/material/indents",
-};
 const APP_DIR = join(__dirname, "..", "..", "src", "app", "(app)");
 
 function routes(dir = APP_DIR, prefix = ""): string[] {
@@ -40,12 +32,17 @@ function routes(dir = APP_DIR, prefix = ""): string[] {
 
 const up = await serverIsUp();
 const suite = up ? describe : describe.skip;
-const ROLES = ["owner", "pm", "supervisor", "store", "sales", "saleshead"];
+const ROLES: Record<string, string> = {
+  admin: "admin@nandini.example",
+  tl: "tl@nandini.example",
+  telecaller: "telecaller@nandini.example",
+  rider: "rider@nandini.example",
+};
 const tokens: Record<string, string> = {};
 
 suite("every route renders or is refused, for every role", () => {
   beforeAll(async () => {
-    for (const role of ROLES) tokens[role] = await sessionFor(`${role}@nninfra.example`, LABEL);
+    for (const [role, email] of Object.entries(ROLES)) tokens[role] = await sessionFor(email, LABEL);
   });
 
   afterAll(async () => {
@@ -56,20 +53,16 @@ suite("every route renders or is refused, for every role", () => {
   const all = routes();
 
   it("found the whole route table", () => {
-    expect(all.length).toBeGreaterThan(30);
+    expect(all.length).toBeGreaterThan(10);
   });
 
-  for (const role of ROLES) {
+  for (const role of Object.keys(ROLES)) {
     it(`serves every route to ${role} without breaking`, async () => {
       const broken: string[] = [];
       for (const route of all) {
         const res = await visit(route, tokens[role]);
         const refused = res.status === 307 && (res.location ?? "").includes("/forbidden");
-        const sentBack =
-          res.status === 307 &&
-          REDIRECTS_WHEN_BARE[route] !== undefined &&
-          (res.location ?? "").includes(REDIRECTS_WHEN_BARE[route]);
-        if (res.status === 200 || refused || sentBack) continue;
+        if (res.status === 200 || refused) continue;
         broken.push(`${route} → ${res.status} ${res.location ?? ""}`);
       }
       expect(broken).toEqual([]);

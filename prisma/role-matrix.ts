@@ -1,11 +1,11 @@
 /**
- * The role access matrix — the proposed default from the scope document.
+ * The role access matrix — the SOW's four roles (§2), as a proposed default.
  *
  * Lives apart from the seed because it has to be appliable on its own: adding a
  * permission puts it in the catalogue, but no role holds it until the grants are
  * recomputed. On a deployed environment re-running the whole seed is not an
- * option — it would reset user passwords and demo data — so `pnpm perms:grants`
- * runs just this part.
+ * option — it would reset user passwords — so `pnpm perms:grants` runs just
+ * this part.
  */
 import type { PrismaClient } from "@prisma/client";
 import { PERMISSIONS } from "../src/lib/permissions/registry";
@@ -13,7 +13,7 @@ import { PERMISSIONS } from "../src/lib/permissions/registry";
 // ---------------------------------------------------------------------------
 // Permission matching — rules use `*` as a segment wildcard.
 //   "masters.*.view"        every master's view permission
-//   "material.indent.*"     every indent action
+//   "sales.lead.*"          every lead action
 //   "*"                     everything
 // ---------------------------------------------------------------------------
 
@@ -43,52 +43,34 @@ export function resolveCodes(grant: string[], deny: string[] = []): string[] {
 
 // ---------------------------------------------------------------------------
 // THE DEFAULT ROLE ACCESS MATRIX
-// The scope document calls this "the proposed default, not a hard-coded rule" —
-// every one of these grants is editable from Administration → Roles.
+// Every one of these grants is editable from Administration → Roles.
 // ---------------------------------------------------------------------------
-
-/**
- * What every working role needs to take part in Task Management.
- *
- * The scope document's Assigner, Assignee, Reviewer and Approver are positions
- * on a particular task, not job titles — anyone may raise a task, be given one,
- * or be named on a review level. So the codes go to every role, and
- * src/lib/tasks/lifecycle.ts decides who may act on the task in front of them.
- *
- * What is NOT here is deliberate: reopening a closed task, reassigning an
- * assignee or a level, seeing everyone's tasks and seeing everyone's score stay
- * with Owner / Admin, which the scope gives full control.
- */
-const TASK_PARTICIPANT = [
-  "task.task.view",
-  "task.task.create",
-  "task.task.update",
-  "task.task.delete",
-  "task.report.view",
-  "dashboard.performance.view",
-  "task.report.export",
-  "task.performance.view",
-  "task.task.accept",
-  "task.task.start",
-  "task.task.complete",
-  "task.task.comment",
-  "task.task.requestExtension",
-  "task.task.approveExtension",
-  "task.task.close",
-  "task.task.sendBack",
-  "task.level.review",
-  "task.level.approve",
-  "checklist.checklist.view",
-  "checklist.category.view",
-];
 
 /**
  * The mobile app is a client, not a second system: it carries no permissions of
  * its own, and every endpoint it calls re-checks the same codes the web screen
  * does. This one code is what an administrator takes away to stop a role
- * signing in from a phone, without touching what they may do at a desk.
+ * signing in from a phone. Admin is web-only by the SOW, so Admin never holds
+ * it; every other role does.
  */
 const MOBILE_APP = ["admin.mobile.use"];
+
+/** Everything a person does on a lead once it is theirs to work. */
+const WORK_A_LEAD = [
+  "sales.lead.view",
+  "sales.lead.create",
+  "sales.lead.update",
+  "sales.lead.changeStage",
+  "sales.lead.markLost",
+  "sales.lead.viewContact",
+  "sales.lead.export",
+  "sales.lead.tab*",
+  "sales.lead.note",
+  "sales.lead.uploadFile",
+  "sales.followUp.view",
+  "sales.followUp.create",
+  "sales.followUp.export",
+];
 
 interface RoleSeed {
   code: string;
@@ -101,482 +83,94 @@ interface RoleSeed {
 
 export const ROLES: RoleSeed[] = [
   {
-    code: "OWNER_ADMIN",
-    name: "Owner / Admin",
-    description: "Sees everything, approves what matters, owns masters and users.",
+    code: "ADMIN",
+    name: "Admin",
+    description: "Full system access — masters, riders and Team Leaders, companies, payouts, advances, bike rent, vendor invoices, internal staff, tasks and reports. Web only.",
     level: 10,
     grant: ["*"],
-    // Duties, not access: the owner can open everything, but should not be
-    // handed a share of every new lead or every lapsed follow-up.
-    deny: ["sales.lead.receiveAssignment", "sales.followUp.receiveEscalation"],
+    deny: [
+      // Web only, by the SOW.
+      "admin.mobile.use",
+      // Duties, not access: Admin can open everything, but should not be
+      // handed a share of every new lead or every lapsed follow-up.
+      "sales.lead.receiveAssignment",
+      "sales.followUp.receiveEscalation",
+    ],
   },
   {
-    code: "PROJECT_MANAGER",
-    name: "Project Manager",
-    description: "Runs the project end to end — structure, schedule, first-level approvals.",
+    code: "TEAM_LEADER",
+    name: "Team Leader",
+    description: "Runs a team of riders — creates and assigns leads, reviews onboarding, approves advances, marks attendance, works tasks from Admin.",
     level: 20,
     grant: [
       ...MOBILE_APP,
+      "dashboard.teamLeader.view",
 
-      // A calendar is everybody's: see your own agenda, raise a task, change
-      // or cancel your own, and answer one that was put on you.
-      "calendar.agenda.view",
-      "calendar.event.view",
-      "calendar.event.create",
-      "calendar.event.update",
-      "calendar.event.cancel",
-      "calendar.event.complete",
-      "calendar.event.extend",
-      "calendar.event.respond",
-      "calendar.event.assign",
-      ...TASK_PARTICIPANT,
+      // Leads: create and assign to a tele-caller, re-assign, see the team's.
+      ...WORK_A_LEAD,
+      "sales.lead.viewAll",
+      "sales.lead.assign",
+      "sales.followUp.receiveEscalation",
 
-      "dashboard.projectManager.view",
-      "approvals.queue.view",
-      "approvals.queue.export",
-      "dashboard.widget.viewFinancials",
-      "project.*.*",
-      "schedule.*.*",
-      "hr.*.*",
-      "kb.article.view",
-      "kb.article.create",
-      "kb.article.update",
-      "material.indent.*",
-      "material.purchaseOrder.view",
-      "material.purchaseOrder.approvePm",
-      "material.purchaseOrder.export",
-      "material.purchaseOrder.print",
-      "material.purchaseOrder.viewRate",
-      "material.purchaseOrder.tab*",
-      "material.grn.view",
-      "material.grn.export",
-      "material.stock.view",
-      "material.stock.export",
-      "material.stock.viewValuation",
-      "material.stock.viewLedger",
-      "material.reorder.view",
-      "material.issue.view",
-      "material.issue.export",
-      "masters.*.view",
-      "reports.budgetVsActual.*",
-      "reports.scheduleVariance.*",
-      "reports.projectProgress.*",
-      "reports.consumptionVsIndent.*",
-      "reports.indentAgeing.*",
-      "reports.stockValuation.view",
-    ],
-    deny: [
-      "project.project.delete",
-      "project.project.accessAll",
-      // Approval is the Project Manager's one step; the admin level survives
-      // only to clear indents left by the old two-step chain, and that stays
-      // with Owner / Admin.
-      "material.indent.approveAdmin",
-    ],
-  },
-  {
-    code: "SUPERVISOR",
-    name: "Supervisor",
-    description: "Executes and reports from site — raises indents, receives material, logs progress.",
-    level: 30,
-    grant: [
-      ...MOBILE_APP,
-
-      // A calendar is everybody's: see your own agenda, raise a task, change
-      // or cancel your own, and answer one that was put on you.
-      "calendar.agenda.view",
-      "calendar.event.view",
-      "calendar.event.create",
-      "calendar.event.update",
-      "calendar.event.cancel",
-      "calendar.event.complete",
-      "calendar.event.extend",
-      "calendar.event.respond",
-      ...TASK_PARTICIPANT,
-
-      "dashboard.supervisor.view",
-      "project.project.view",
-      "project.project.tabOverview",
-      "project.project.tabWbs",
-      "project.project.tabProgress",
-      "project.project.tabSchedule",
-      "project.phase.view",
-      "project.workPackage.view",
-      "project.block.view",
-      "project.progressLog.view",
-      "project.progressLog.create",
-      "project.progressLog.update",
-      "project.document.view",
-      "project.document.download",
+      // The team: riders, their attendance, marked or corrected on their behalf.
       "hr.employee.view",
       "hr.employee.tabStaff",
-      "hr.employee.create",
-      "hr.employee.update",
-      "hr.employmentType.view",
+      "hr.employee.export",
       "hr.attendance.view",
       "hr.attendance.mark",
       "hr.attendance.markAll",
-      "kb.article.view",
-      "schedule.activity.view",
-      "schedule.activity.updateProgress",
-      "schedule.activity.start",
-      "schedule.activity.complete",
-      "schedule.gantt.view",
-      "schedule.extension.view",
-      "schedule.extension.request",
-      "material.indent.view",
-      "material.indent.create",
-      "material.indent.update",
-      "material.indent.delete",
-      "material.indent.submit",
-      "material.indent.print",
-      "material.indent.tabItems",
-      "material.indent.tabApprovals",
-      "material.issue.view",
-      "material.issue.acknowledge",
-      "material.return.view",
-      "material.return.create",
-      "material.stock.view",
-      "masters.item.view",
-      "masters.uom.view",
-      "masters.itemCategory.view",
+      "hr.attendance.tabReport",
+      "hr.attendance.export",
+
+      // Tasks Admin assigns: view, start, finish, remark.
+      "task.task.view",
+      "task.task.start",
+      "task.task.complete",
+      "task.task.comment",
+      "task.task.export",
+
+      "masters.company.view",
     ],
   },
   {
-    code: "STORE_MANAGER",
-    name: "Store Manager",
-    description: "Controls material and stock — PO, GRN, issue, return, transfer, vendor payments.",
+    code: "TELE_CALLER",
+    name: "Tele-caller",
+    description: "Works the leads assigned to them — follow-ups, stage changes, onboarding form and Rider ID — and sees the payout status of riders they onboarded.",
     level: 30,
     grant: [
       ...MOBILE_APP,
+      "dashboard.teleCaller.view",
 
-      // A calendar is everybody's: see your own agenda, raise a task, change
-      // or cancel your own, and answer one that was put on you.
-      "calendar.agenda.view",
-      "calendar.event.view",
-      "calendar.event.create",
-      "calendar.event.update",
-      "calendar.event.cancel",
-      "calendar.event.complete",
-      "calendar.event.extend",
-      "calendar.event.respond",
-      ...TASK_PARTICIPANT,
-
-      "material.vendor.manageCategories",
-      "material.vendor.viewPerformance",
-      "material.vendor.view",
-      "kb.article.view",
-      "dashboard.storeManager.view",
-      "approvals.queue.view",
-      "approvals.queue.export",
-      "dashboard.widget.viewFinancials",
-      "project.project.view",
-      "material.indent.view",
-      "material.indent.viewAll",
-      // The store raises indents too, alongside the site and the PM.
-      "material.indent.create",
-      "material.indent.update",
-      "material.indent.submit",
-      "material.indent.stockCheck",
-      "material.indent.print",
-      "material.indent.export",
-      "material.indent.tab*",
-      "material.indent.viewAgeing",
-      "material.purchaseOrder.*",
-      "material.grn.*",
-      "material.vendorInvoice.*",
-      "material.vendorPayment.*",
-      "material.stock.*",
-      "material.reorder.view",
-      "material.issue.*",
-      "material.return.*",
-      "material.transfer.*",
-      "masters.item.*",
-      "masters.itemCategory.*",
-      "masters.uom.view",
-      "masters.vendor.*",
-      "masters.store.view",
-      "masters.taxRate.view",
-      "masters.paymentTerm.view",
-      "reports.stockValuation.*",
-      "reports.openPurchaseOrders.*",
-      "reports.vendorOutstanding.*",
-      "reports.consumptionVsIndent.*",
-    ],
-    deny: [
-      "material.purchaseOrder.approve",
-      "material.vendorInvoice.overrideMismatch",
-      "material.vendorInvoice.approve",
-      "masters.item.delete",
-      "masters.vendor.delete",
-    ],
-  },
-  {
-    code: "SALES_HEAD",
-    name: "Sales Head",
-    description: "Owns the pipeline — assignment, discount approval, pricing and hold extensions.",
-    level: 25,
-    grant: [
-      ...MOBILE_APP,
-
-      // A calendar is everybody's: see your own agenda, raise a task, change
-      // or cancel your own, and answer one that was put on you.
-      "calendar.agenda.view",
-      "calendar.event.view",
-      "calendar.event.create",
-      "calendar.event.update",
-      "calendar.event.cancel",
-      "calendar.event.complete",
-      "calendar.event.extend",
-      "calendar.event.respond",
-      "calendar.event.assign",
-      ...TASK_PARTICIPANT,
-
-      "kb.article.view",
-      "dashboard.sales.view",
-      "dashboard.widget.viewFinancials",
-      "sales.*.*",
-      "unit.*.*",
-      "project.project.view",
-      "masters.leadSource.*",
-      "masters.lostReason.*",
-      "masters.chargeHead.view",
-      "masters.bank.view",
-      "masters.unitType.view",
-      "reports.salesFunnel.*",
-      "reports.leadPerformance.*",
-      "reports.collections.*",
-      "reports.unitAvailability.*",
-      "reports.bookingRegister.*",
-    ],
-    // The head supervises the pipeline and receives escalations; new leads go
-    // to the executives, not into the head's own queue.
-    deny: ["unit.unit.delete", "sales.customer.delete", "sales.lead.receiveAssignment"],
-  },
-  {
-    code: "SALES",
-    name: "Sales Executive",
-    description: "Owns lead to booking — follow-ups, site visits, cost sheets, collections.",
-    level: 30,
-    grant: [
-      ...MOBILE_APP,
-
-      // A calendar is everybody's: see your own agenda, raise a task, change
-      // or cancel your own, and answer one that was put on you.
-      "calendar.agenda.view",
-      "calendar.event.view",
-      "calendar.event.create",
-      "calendar.event.update",
-      "calendar.event.cancel",
-      "calendar.event.complete",
-      "calendar.event.extend",
-      "calendar.event.respond",
-      ...TASK_PARTICIPANT,
-
-      "kb.article.view",
-      "dashboard.sales.view",
-      "sales.lead.view",
-      "sales.lead.create",
+      // Own leads, handed round-robin; may re-assign within permissions.
+      ...WORK_A_LEAD,
       "sales.lead.receiveAssignment",
-      "sales.lead.update",
-      "sales.lead.changeStage",
-      "sales.lead.markLost",
-      "sales.lead.viewContact",
-      "sales.lead.export",
-      "sales.lead.tab*",
-      "sales.lead.note",
-      "sales.lead.uploadFile",
-      "sales.lead.sendMail",
-      "sales.followUp.*",
-      "sales.siteVisit.*",
-      "sales.customer.view",
-      "sales.customer.create",
-      "sales.customer.update",
-      "sales.customer.viewKyc",
-      "sales.costSheet.view",
-      "sales.costSheet.create",
-      "sales.costSheet.update",
-      "sales.costSheet.print",
-      "sales.booking.view",
-      "sales.booking.create",
-      "sales.booking.update",
-      "sales.booking.print",
-      "sales.booking.tab*",
-      "sales.demand.view",
-      "sales.receipt.view",
-      "sales.receipt.create",
-      "sales.receipt.print",
-      "unit.board.view",
-      "unit.unit.view",
-      "unit.unit.viewPrice",
-      "unit.hold.view",
-      "unit.hold.create",
-      "unit.hold.release",
-      "unit.priceList.view",
-      "reports.unitAvailability.view",
-      "reports.salesFunnel.view",
-    ],
-    // sales.followUp.* above would otherwise include the escalation duty, and an
-    // executive should not be the one told that their own follow-up has lapsed.
-    deny: ["sales.costSheet.approveDiscount", "sales.booking.cancel", "sales.followUp.receiveEscalation"],
-  },
-  {
-    code: "PROJECT_ENGINEER",
-    name: "Project Engineer",
-    description: "Runs the work on site — schedule, progress, quality checks and the material it needs.",
-    level: 28,
-    grant: [
-      ...MOBILE_APP,
+      "sales.lead.assign",
 
-      // A calendar is everybody's: see your own agenda, raise a task, change
-      // or cancel your own, and answer one that was put on you.
-      "calendar.agenda.view",
-      "calendar.event.view",
-      "calendar.event.create",
-      "calendar.event.update",
-      "calendar.event.cancel",
-      "calendar.event.complete",
-      "calendar.event.extend",
-      "calendar.event.respond",
-      "calendar.event.assign",
-      ...TASK_PARTICIPANT,
-
-      "dashboard.supervisor.view",
-      "kb.article.view",
-
-      // The project, as something to read and report against.
-      "project.project.view",
-      "project.project.tabOverview",
-      "project.project.tabWbs",
-      "project.project.tabProgress",
-      "project.project.tabSchedule",
-      "project.project.tabTeam",
-      "project.phase.view",
-      "project.workPackage.*",
-      "project.block.view",
-      "project.document.view",
-      "project.document.download",
-      "project.document.upload",
-      "project.progressLog.*",
-      "project.team.view",
-
-      // The schedule is the engineer's instrument, short of setting a baseline.
-      "schedule.*.*",
-
-      // Material: ask for it, receive it, see what is in the store.
-      "material.indent.view",
-      "material.indent.create",
-      "material.indent.update",
-      "material.indent.submit",
-      "material.indent.export",
-      "material.indent.print",
-      "material.grn.view",
-      "material.grn.create",
-      "material.grn.export",
-      "material.issue.view",
-      "material.issue.create",
-      "material.stock.view",
-      "material.stock.export",
-      "material.purchaseOrder.view",
-      "material.reorder.view",
-
-      "checklist.checklist.view",
-      "checklist.category.view",
-      "masters.*.view",
-
-      "reports.projectProgress.*",
-      "reports.scheduleVariance.*",
-      "reports.consumptionVsIndent.*",
-      "reports.indentAgeing.view",
-    ],
-    deny: [
-      // Approving and costing are the manager's, not the engineer's.
-      "material.indent.approvePm",
-      "material.indent.approveAdmin",
-      "schedule.baseline.set",
-      "schedule.extension.approve",
-      "project.project.accessAll",
-      "project.project.delete",
-    ],
-  },
-  {
-    code: "ADMIN_STAFF",
-    name: "Admin Staff",
-    description: "Back office — records, documents, masters and the paperwork that keeps them straight.",
-    level: 40,
-    grant: [
-      ...MOBILE_APP,
-
-      // A calendar is everybody's: see your own agenda, raise a task, change
-      // or cancel your own, and answer one that was put on you.
-      "calendar.agenda.view",
-      "calendar.event.view",
-      "calendar.event.create",
-      "calendar.event.update",
-      "calendar.event.cancel",
-      "calendar.event.complete",
-      "calendar.event.extend",
-      "calendar.event.respond",
-      "calendar.event.assign",
-      ...TASK_PARTICIPANT,
-
-      "dashboard.supervisor.view",
-      "kb.article.*",
-
-      "project.project.view",
-      "project.project.tabOverview",
-      "project.project.tabDocuments",
-      "project.document.*",
-
-      // People and attendance, which is where most of the back office sits.
+      // The riders they onboard.
       "hr.employee.view",
       "hr.employee.create",
       "hr.employee.update",
-      "hr.employee.tab*",
-      "hr.attendance.*",
-      "hr.employmentType.view",
+      "hr.employee.tabStaff",
 
-      // The masters, read and kept, but never deleted.
-      "masters.*.view",
-      "masters.*.create",
-      "masters.*.update",
-      "masters.*.import",
-      "masters.*.export",
-
-      // Documents and registers to read, nothing to approve.
-      "material.indent.view",
-      "material.purchaseOrder.view",
-      "material.purchaseOrder.print",
-      "material.grn.view",
-      "material.vendorInvoice.view",
-      "material.stock.view",
-      "sales.customer.view",
-      "sales.booking.view",
-      "sales.booking.print",
-      "sales.receipt.view",
-      "sales.receipt.print",
-      "unit.unit.view",
-
-      "checklist.checklist.view",
-      "checklist.category.view",
-
-      "reports.bookingRegister.view",
-      "reports.collections.view",
-      "reports.attendanceSummary.*",
+      "masters.company.view",
     ],
-    deny: [
-      // Back office keeps the records; it does not approve money or delete them.
-      "masters.*.delete",
-      "material.*.approve*",
-      "sales.*.approve*",
-      "hr.employee.delete",
-      "project.document.delete",
+  },
+  {
+    code: "RIDER",
+    name: "Rider",
+    description: "A delivery rider — self sign-up and KYC, digital ID card, referrals, weekly payout, advance requests, attendance punch in / out, lead referral.",
+    level: 40,
+    grant: [
+      ...MOBILE_APP,
+      "dashboard.rider.view",
+      // Refer a prospective rider; the lead is auto-assigned to a tele-caller.
+      "sales.lead.create",
     ],
   },
 ];
 
 // ---------------------------------------------------------------------------
-// Master data
+// Apply
 // ---------------------------------------------------------------------------
 
 /**
@@ -638,9 +232,15 @@ export async function applyRoleGrants(
         isSystem: true,
         defaultCodes: codes,
       },
-      update: { name: r.name, description: r.description, level: r.level, defaultCodes: codes },
+      update: {
+        name: r.name,
+        description: r.description,
+        level: r.level,
+        isSystem: true,
+        defaultCodes: codes,
+      },
     });
-    // Replace the grant set wholesale so re-seeding reflects matrix edits here.
+
     await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
     await prisma.rolePermission.createMany({
       data: codes
@@ -652,4 +252,3 @@ export async function applyRoleGrants(
     console.log(`  role ${r.code.padEnd(16)} → ${codes.length} permissions`);
   }
 }
-

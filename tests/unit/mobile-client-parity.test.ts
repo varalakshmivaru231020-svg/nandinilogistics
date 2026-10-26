@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { AGENDA_LABEL } from "@/lib/calendar/agenda";
 import { MOBILE_LIST_KEYS } from "@/lib/api/mobile-lists";
 import { NAVIGATION } from "@/lib/navigation";
 import { SCREENS } from "@/lib/screens/registry";
@@ -10,12 +9,10 @@ import { SCREENS } from "@/lib/screens/registry";
 /**
  * The Android client against the web's own sidebar.
  *
- * The app used to keep its own list of modules, and it drifted: a dozen screens
- * the web reaches from inside other screens had been promoted to top level, so
- * the drawer no longer looked like the panel. The menu now comes from
- * `/api/mobile/v1/screens`, which serves `NAVIGATION` itself — so the only
- * thing the app still says about a route is **which list it reads**, in
- * `hrefToModule`.
+ * The app used to keep its own list of modules, and it drifted. The menu now
+ * comes from `/api/mobile/v1/screens`, which serves `NAVIGATION` itself — so
+ * the only thing the app still says about a route is **which list it reads**,
+ * in `hrefToModule`.
  *
  * This checks that map against the navigation: every entry a person can be
  * shown leads somewhere, and nothing claims a list the server does not serve.
@@ -53,24 +50,17 @@ function relatedChildren(): string[] {
 }
 
 /** Routes with a screen of their own rather than a generic list. */
-const OWN_SCREEN = new Set(["/dashboard", "/calendar", "/approvals", "/dashboard/performance"]);
-
-/**
- * Lists a bespoke screen reads itself. The approvals queue is one: it has its
- * own screen because a row there carries Approve and Reject, which a generic
- * list cannot draw — but it still reads `/list/approvals`.
- */
-const READ_BY_OWN_SCREEN = new Set(["approvals"]);
-/** The Masters & Users module is web-only, by design — brief §12. */
-const WEB_ONLY = new Set(["/masters"]);
+const OWN_SCREEN = new Set(["/dashboard"]);
+/** Admin is web-only by the SOW: masters, and reports until a screen exists. */
+const WEB_ONLY = new Set(["/masters", "/reports"]);
 
 describe("the app reaches every entry the web's sidebar can show", () => {
   const map = hrefToModule();
   const hrefs = NAVIGATION.flatMap((s) => s.items.map((i) => i.href));
 
   it("read both sides", () => {
-    expect(hrefs.length).toBeGreaterThan(15);
-    expect(map.size).toBeGreaterThan(10);
+    expect(hrefs.length).toBeGreaterThan(4);
+    expect(map.size).toBeGreaterThan(2);
   });
 
   it("every navigable route leads to a list, its own screen, or the web", () => {
@@ -85,10 +75,6 @@ describe("the app reaches every entry the web's sidebar can show", () => {
     expect(unknown).toEqual([]);
   });
 
-  /*
-   * A route with a screen of its own must not also claim a list, or the shell
-   * would open the generic list instead of the screen that was designed.
-   */
   it("does not map a route that has its own screen", () => {
     for (const h of OWN_SCREEN) expect(map.has(h), h).toBe(false);
     for (const h of WEB_ONLY) expect(map.has(h), h).toBe(false);
@@ -107,17 +93,8 @@ describe("the screens the web reaches from inside another screen", () => {
     expect(unknown).toEqual([]);
   });
 
-  /*
-   * And between the sidebar and these, nothing the boundary serves is
-   * unreachable. A list the server answers that no screen opens is work that
-   * was done and then lost.
-   */
   it("leave no list unreachable", () => {
-    const reachable = new Set([
-      ...hrefToModule().values(),
-      ...relatedChildren(),
-      ...READ_BY_OWN_SCREEN,
-    ]);
+    const reachable = new Set([...hrefToModule().values(), ...relatedChildren()]);
     const stranded = MOBILE_LIST_KEYS.filter((k) => !reachable.has(k));
     expect(stranded, "no screen opens these").toEqual([]);
   });
@@ -125,61 +102,8 @@ describe("the screens the web reaches from inside another screen", () => {
 
 describe("every screen the app can open is described", () => {
   it("so its filters and labels come from the server", () => {
-    const reachable = [
-      ...hrefToModule().values(),
-      ...relatedChildren(),
-      ...READ_BY_OWN_SCREEN,
-    ];
+    const reachable = [...hrefToModule().values(), ...relatedChildren()];
     const undescribed = reachable.filter((k) => !SCREENS[k]);
     expect(undescribed, "add these to src/lib/screens/registry.ts").toEqual([]);
-  });
-});
-
-/**
- * The calendar's seven words.
- *
- * The app held its own copy of them, so the schedule's items read "Activity"
- * on a phone while the web called them what the navigation calls that module.
- * The boundary sends `kindLabels` now; the app keeps a fallback for an old
- * build against a new server, and even that may not drift.
- */
-describe("what the calendar calls each kind", () => {
-  const calendar = readFileSync(join(ROOT, "mobile", "lib", "modules", "calendar.dart"), "utf8");
-  const route = readFileSync(
-    join(ROOT, "src", "app", "api", "mobile", "v1", "calendar", "route.ts"),
-    "utf8",
-  );
-
-  it("is sent by the boundary, from one list", () => {
-    expect(route.includes("kindLabels: AGENDA_LABEL")).toBe(true);
-  });
-
-  it("is drawn from what was sent, not from the app's own list", () => {
-    expect(calendar.includes("kindLabel['${item[\"kind\"]}']")).toBe(true);
-    expect(
-      calendar.includes("d['kindLabels']"),
-      "the app must read the labels the boundary sends",
-    ).toBe(true);
-  });
-
-  it("names the schedule after the module it comes from", () => {
-    // Every other label names its source; "Activity" read as a synonym for
-    // Task beside the Task items.
-    expect(AGENDA_LABEL.ACTIVITY).toBe("Schedule");
-    const nav = readFileSync(join(ROOT, "src", "lib", "navigation.ts"), "utf8");
-    expect(nav.includes('label: "Schedule"'), "the navigation's own word").toBe(true);
-  });
-
-  it("keeps even the app's fallback in step", () => {
-    const block = calendar.slice(
-      calendar.indexOf("const _kindLabelFallback"),
-      calendar.indexOf("};", calendar.indexOf("const _kindLabelFallback")),
-    );
-    for (const [kind, label] of Object.entries(AGENDA_LABEL)) {
-      expect(
-        block.includes(`'${kind}': '${label}'`),
-        `the app's fallback says something else for ${kind}`,
-      ).toBe(true);
-    }
   });
 });

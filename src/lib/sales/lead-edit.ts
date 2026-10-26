@@ -10,24 +10,21 @@ import { maskPhone } from "@/lib/utils";
 
 import { LeadSchema, phoneKey } from "./lead-schema";
 
-/** A lead as the edit rules see it — Decimals already numbers. */
+/** A lead as the edit rules see it. */
 export interface EditableLead {
   id: string;
   ownerId: string | null;
-  state: string;
-  /** Whether any booking hangs off this lead, whatever its state now says. */
-  hasBooking: boolean;
+  /** What the lead's stage means — NEW, OPEN, ONBOARDING or LOST. */
+  stageKind: string;
   name: string;
   phone: string;
   altPhone: string | null;
   email: string | null;
-  sourceId: string;
-  projectId: string | null;
-  unitTypeId: string | null;
-  budgetMin: number | null;
-  budgetMax: number | null;
+  location: string | null;
   requirement: string | null;
   nextActionAt: Date | null;
+  /** The companies the lead is tagged for, by id, sorted. */
+  companyIds: string[];
 }
 
 export interface LeadEditActor {
@@ -40,20 +37,16 @@ export interface LeadEditActor {
 
 /** The fields this edit writes. Stage, owner, lost reason and follow-ups have their own actions. */
 export const EDITABLE_FIELDS = [
-  "name", "phone", "altPhone", "email", "sourceId", "projectId", "unitTypeId",
-  "budgetMin", "budgetMax", "requirement", "nextActionAt",
+  "name", "phone", "altPhone", "email", "location", "requirement", "nextActionAt", "companyIds",
 ] as const;
 export type EditableField = (typeof EDITABLE_FIELDS)[number];
 
 export const CONTACT_FIELDS: readonly EditableField[] = ["phone", "altPhone", "email"];
-/** Fixed once a booking exists: the customer record and the booking were made from them. */
-export const IDENTITY_FIELDS: readonly EditableField[] = ["name", "phone"];
 
 export const FIELD_LABEL: Record<EditableField, string> = {
-  name: "name", phone: "phone", altPhone: "alternate phone", email: "email",
-  sourceId: "lead source", projectId: "project", unitTypeId: "interested in",
-  budgetMin: "budget from", budgetMax: "budget to", requirement: "requirement",
-  nextActionAt: "next action on",
+  name: "name", phone: "mobile number", altPhone: "alternate number", email: "email",
+  location: "location", requirement: "notes", nextActionAt: "next follow-up on",
+  companyIds: "companies",
 };
 
 export type LeadEditValues = Pick<EditableLead, EditableField>;
@@ -72,9 +65,6 @@ export class LeadEditError extends Error {
 
 export const STALE_MESSAGE = "This lead was changed by someone else — reload it and make your edit again.";
 
-/** Leads that are closed: no new follow-up can be scheduled on them without reopening. */
-const CLOSED_STATES = new Set(["BOOKED", "LOST"]);
-
 /**
  * The ownership rule the lead list uses: without viewAll, only your own leads.
  * Returns the refusal, or null when the actor may edit.
@@ -84,16 +74,6 @@ export function editRefusal(actor: LeadEditActor, lead: Pick<EditableLead, "owne
   return "You can only edit leads assigned to you.";
 }
 
-/** Whether a booked lead's name and phone are fixed. */
-export function identityLocked(lead: Pick<EditableLead, "state" | "hasBooking">): boolean {
-  return lead.state === "BOOKED" || lead.hasBooking;
-}
-
-/**
- * The value a date input is prefilled with, and compared against on save. The
- * UTC day, the same instant `new Date("YYYY-MM-DD")` gives back — so a date
- * left untouched in the form is recognised as unchanged and keeps its time.
- */
 /**
  * A stored instant as the calendar day it falls on in India, for a date input.
  * Reading it by UTC showed a follow-up set for early morning IST (00:00–05:30)
@@ -108,6 +88,12 @@ export function dateInputValue(d: Date | null): string {
 
 const text = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 const orNull = (v: string): string | null => (v === "" ? null : v);
+
+/** A multi-select's value, whichever way the form carried it. */
+function idList(v: unknown): string[] {
+  const raw = Array.isArray(v) ? v : typeof v === "string" ? v.split(",") : [];
+  return [...new Set(raw.map((x) => String(x).trim()).filter(Boolean))].sort();
+}
 
 /**
  * Checks a submitted edit against the lead as stored, and works out what changes.
@@ -129,9 +115,8 @@ export function planLeadEdit(
 
   const before: LeadEditValues = {
     name: lead.name, phone: lead.phone, altPhone: lead.altPhone, email: lead.email,
-    sourceId: lead.sourceId, projectId: lead.projectId, unitTypeId: lead.unitTypeId,
-    budgetMin: lead.budgetMin, budgetMax: lead.budgetMax, requirement: lead.requirement,
-    nextActionAt: lead.nextActionAt,
+    location: lead.location, requirement: lead.requirement, nextActionAt: lead.nextActionAt,
+    companyIds: [...lead.companyIds].sort(),
   };
 
   // Contact fields: someone who sees a masked number cannot overwrite it blind.
@@ -151,17 +136,11 @@ export function planLeadEdit(
     }
   }
 
-  const budget = (k: "budgetMin" | "budgetMax") => {
-    if (!has(k)) return before[k] ?? undefined;
-    const t = text(form[k]);
-    return t === "" ? undefined : t;
-  };
-
   const storedDay = dateInputValue(lead.nextActionAt);
   const nextText = pick("nextActionAt", storedDay);
   if (has("nextActionAt") && nextText !== "" && nextText !== storedDay) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(nextText) || Number.isNaN(new Date(nextText).getTime())) {
-      throw new LeadEditError("invalid", "Next action on must be a date.");
+      throw new LeadEditError("invalid", "Next follow-up on must be a date.");
     }
   }
 
@@ -171,58 +150,32 @@ export function planLeadEdit(
     phone: contact.phone,
     altPhone: contact.altPhone || undefined,
     email: contact.email,
-    sourceId: pick("sourceId", lead.sourceId),
-    projectId: pick("projectId", lead.projectId) || undefined,
+    location: pick("location", lead.location) || undefined,
     requirement: pick("requirement", lead.requirement) || undefined,
-    budgetMin: budget("budgetMin"),
-    budgetMax: budget("budgetMax"),
   });
   if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const field = issue.path[0];
-    throw new LeadEditError(
-      "invalid",
-      field === "budgetMin" || field === "budgetMax"
-        ? `${field === "budgetMin" ? "Budget from" : "Budget to"} must be a number of rupees, not negative.`
-        : issue.message,
-    );
+    throw new LeadEditError("invalid", parsed.error.issues[0].message);
   }
   const v = parsed.data;
-  if (v.budgetMin !== undefined && v.budgetMax !== undefined && v.budgetMin > v.budgetMax) {
-    throw new LeadEditError("invalid", "Budget from is more than budget to.");
-  }
 
   const after: LeadEditValues = {
     name: v.name,
     phone: v.phone,
     altPhone: orNull(v.altPhone ?? ""),
     email: orNull(v.email ?? ""),
-    sourceId: v.sourceId,
-    projectId: orNull(v.projectId ?? ""),
-    unitTypeId: orNull(pick("unitTypeId", lead.unitTypeId)),
-    budgetMin: v.budgetMin ?? null,
-    budgetMax: v.budgetMax ?? null,
+    location: orNull(v.location ?? ""),
     requirement: orNull(v.requirement ?? ""),
     // An untouched date keeps its stored instant, time of day included.
     nextActionAt: nextText === storedDay ? lead.nextActionAt : nextText ? new Date(nextText) : null,
+    companyIds: has("companyIds") ? idList(form.companyIds) : before.companyIds,
   };
 
   const changed = EDITABLE_FIELDS.filter((k) => !sameValue(before[k], after[k]));
 
-  if (identityLocked(lead)) {
-    const locked = changed.filter((k) => IDENTITY_FIELDS.includes(k));
-    if (locked.length) {
-      throw new LeadEditError(
-        "invalid",
-        `This lead has a booking — its ${locked.map((k) => FIELD_LABEL[k]).join(" and ")} cannot change here. Correct them on the customer record.`,
-      );
-    }
-  }
-
-  if (CLOSED_STATES.has(lead.state) && changed.includes("nextActionAt") && after.nextActionAt) {
+  if (lead.stageKind === "LOST" && changed.includes("nextActionAt") && after.nextActionAt) {
     throw new LeadEditError(
       "invalid",
-      `A ${lead.state === "BOOKED" ? "booked" : "lost"} lead has no follow-ups to schedule — move it back to an open stage first.`,
+      "A lost lead has no follow-ups to schedule — move it back to an open stage first.",
     );
   }
 
@@ -232,6 +185,9 @@ export function planLeadEdit(
 function sameValue(a: unknown, b: unknown): boolean {
   if (a instanceof Date || b instanceof Date) {
     return a instanceof Date && b instanceof Date ? a.getTime() === b.getTime() : false;
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i]);
   }
   return a === b;
 }
@@ -245,7 +201,7 @@ export interface PhoneCandidate {
   duplicateOfId: string | null;
 }
 
-/** The shortest phoneKey treated as a real number — the import's threshold. */
+/** The shortest phoneKey treated as a real number. */
 export const MIN_PHONE_KEY = 8;
 
 /**

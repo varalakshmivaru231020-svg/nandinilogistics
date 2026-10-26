@@ -18,7 +18,6 @@ export interface ClientPrincipal {
   isSuperAdmin: boolean;
   roles: Array<{ code: string; name: string }>;
   permissions: string[];
-  canAccessAllProjects: boolean;
 }
 
 interface PermissionContextValue extends ClientPrincipal {

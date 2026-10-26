@@ -42,20 +42,16 @@ export async function GET(
   const filters = parseReportFilters(url.searchParams, filterSpecFor(def.key));
   const result = await runReport(def.key, ctx, filters);
 
-  const accessible = filters.projectId
-    && (ctx.canAccessAllProjects || ctx.projectIds.includes(filters.projectId));
-  let projectLabel: string | null = null;
-  if (filters.projectId) {
-    const project = accessible
-      ? await prisma.project.findUnique({ where: { id: filters.projectId }, select: { code: true, name: true } })
-      : null;
-    projectLabel = project ? `${project.code} — ${project.name}` : "No accessible project";
+  let companyLabel: string | null = null;
+  if (filters.companyId) {
+    const company = await prisma.company.findUnique({ where: { id: filters.companyId }, select: { name: true } });
+    companyLabel = company?.name ?? "Unknown company";
   }
 
   const now = new Date();
   const meta = {
     title: def.label,
-    filters: describeFilters(filters, projectLabel),
+    filters: describeFilters(filters, companyLabel),
     generatedBy: ctx.name,
     generatedAt: now,
   };
@@ -78,7 +74,6 @@ export async function GET(
     entityId: def.key,
     summary: `Exported ${def.label} as ${format.toUpperCase()} — ${result.rows.length} rows (${meta.filters})`,
     userId: ctx.id,
-    projectId: accessible ? filters.projectId : null,
   });
 
   return new NextResponse(new Uint8Array(body), {

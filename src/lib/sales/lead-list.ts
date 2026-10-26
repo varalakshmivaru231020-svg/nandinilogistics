@@ -1,39 +1,57 @@
-import type { LeadState, Prisma } from "@prisma/client";
-
-import { LEAD_PIPELINE } from "./lead-display";
+import type { Prisma } from "@prisma/client";
 
 /**
- * The lead list's filters — search, stage, source, follow-up — as one
- * function, used by the Leads screen and by its export, so a download holds
- * exactly the leads the screen was showing.
+ * The lead list's filters — search, stage, company, tele-caller, follow-up
+ * and the capture date — as one function, used by the Leads screen and by its
+ * export, so a download holds exactly the leads the screen was showing.
+ *
+ * The parameter names are the ones the screen registry sends the phone, so
+ * all three read the same URL.
  */
-
-export const LEAD_STATES = [
-  "NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED", "LOST",
-] as const;
 
 export interface LeadListParams {
   q: string;
-  state: string;
-  source: string;
+  /** A LeadStage id, or "" for every stage. */
+  stage: string;
+  /** A company id, or "". */
+  company: string;
+  /** A tele-caller's user id, or "". */
+  owner: string;
+  /** today | overdue | week | none, or "". */
   fu: string;
-  /**
-   * One column of the pipeline — `new`, `visit`, `lost` — which is how the
-   * phone shows the board: the six columns as tabs, one at a time. "all" is
-   * the web's list view, which shows every stage.
-   */
-  pipeline: string;
+  /** Captured on or after, yyyy-mm-dd. */
+  from: string;
+  /** Captured on or before, yyyy-mm-dd. */
+  to: string;
 }
 
-export function readLeadListParams(params: URLSearchParams): LeadListParams {
+type ParamSource = URLSearchParams | Record<string, string | string[] | undefined>;
+
+const one = (v: string | string[] | undefined | null) => (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const day = (v: string) => {
+  if (!ISO_DAY.test(v)) return "";
+  const d = new Date(`${v}T00:00:00.000Z`);
+  // Rejects 2026-02-31, which Date would otherwise roll into March.
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v ? v : "";
+};
+
+export function readLeadListParams(params: ParamSource): LeadListParams {
+  const read = (key: string) => (params instanceof URLSearchParams ? one(params.get(key)) : one(params[key]));
+  // "all" is what the screens' selects post for the everything-option.
+  const pick = (key: string) => (read(key) === "all" ? "" : read(key));
   return {
-    q: params.get("q") ?? "",
-    state: params.get("state") ?? "all",
-    source: params.get("source") ?? "all",
-    fu: params.get("fu") ?? "all",
-    pipeline: params.get("pipeline") ?? "all",
+    q: read("q"),
+    stage: pick("stage"),
+    company: pick("company"),
+    owner: pick("owner"),
+    fu: pick("fu"),
+    from: day(read("from")),
+    to: day(read("to")),
   };
 }
+
+const FOLLOW_UPS = ["today", "overdue", "week", "none"];
 
 /**
  * @param ownership `{}` for someone who sees every lead, `{ ownerId }` otherwise
@@ -49,10 +67,15 @@ export function leadListWhere(
   const soon = new Date(now.getTime() + 7 * 86_400_000);
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  // A stage that is not a stage (a hand-edited URL) filters nothing rather than
-  // reaching the database as an invalid enum.
-  const state = (LEAD_STATES as readonly string[]).includes(p.state) ? (p.state as LeadState) : null;
-  const column = LEAD_PIPELINE.find((c) => c.key === p.pipeline) ?? null;
+  const fu = FOLLOW_UPS.includes(p.fu) ? p.fu : "";
+
+  const captured: { gte?: Date; lt?: Date } = {};
+  if (p.from) captured.gte = new Date(`${p.from}T00:00:00.000Z`);
+  if (p.to) {
+    const end = new Date(`${p.to}T00:00:00.000Z`);
+    end.setUTCDate(end.getUTCDate() + 1);
+    captured.lt = end;
+  }
 
   return {
     ...ownership,
@@ -62,22 +85,19 @@ export function leadListWhere(
             { name: { contains: q, mode: "insensitive" } },
             { phone: { contains: q } },
             { leadNo: { contains: q, mode: "insensitive" } },
+            { location: { contains: q, mode: "insensitive" } },
           ],
         }
       : {}),
-    ...(state ? { state } : {}),
-    /*
-     * A pipeline column is a set of stages — Site Visit holds two — and it
-     * narrows on top of the stage filter rather than replacing it, exactly as
-     * the web's board is a view of the same filtered leads.
-     */
-    ...(column ? { state: { in: column.stages as LeadState[] } } : {}),
-    ...(p.source !== "all" && p.source ? { sourceId: p.source } : {}),
-    // Follow-up filter, as in the design: overdue / today / this week / none set.
-    ...(p.fu === "overdue" ? { nextActionAt: { lt: now } } : {}),
-    ...(p.fu === "today" ? { nextActionAt: { gte: startOfDay, lt: endOfDay } } : {}),
-    ...(p.fu === "week" ? { nextActionAt: { gte: now, lte: soon } } : {}),
-    ...(p.fu === "none" ? { nextActionAt: null } : {}),
+    ...(p.stage ? { stageId: p.stage } : {}),
+    ...(p.company ? { companies: { some: { companyId: p.company } } } : {}),
+    // The owner filter narrows within the viewer's own scope; it never widens it.
+    ...(p.owner && !ownership.ownerId ? { ownerId: p.owner } : {}),
+    ...(fu === "overdue" ? { nextActionAt: { lt: now } } : {}),
+    ...(fu === "today" ? { nextActionAt: { gte: startOfDay, lt: endOfDay } } : {}),
+    ...(fu === "week" ? { nextActionAt: { gte: now, lte: soon } } : {}),
+    ...(fu === "none" ? { nextActionAt: null } : {}),
+    ...(captured.gte || captured.lt ? { createdAt: captured } : {}),
   };
 }
 
@@ -89,12 +109,17 @@ const FOLLOW_UP_WORDS: Record<string, string> = {
 };
 
 /** The filters in words, for the heading of an export. */
-export function describeLeadFilters(p: LeadListParams, sourceName: string | null): string {
+export function describeLeadFilters(
+  p: LeadListParams,
+  names: { stage?: string | null; company?: string | null; owner?: string | null } = {},
+): string {
   const parts = [
     p.q.trim() ? `Search "${p.q.trim()}"` : null,
-    (LEAD_STATES as readonly string[]).includes(p.state) ? `Stage ${p.state.replace(/_/g, " ").toLowerCase()}` : null,
-    sourceName ? `Source ${sourceName}` : null,
+    names.stage ? `Stage ${names.stage}` : null,
+    names.company ? `Company ${names.company}` : null,
+    names.owner ? `Tele-caller ${names.owner}` : null,
     FOLLOW_UP_WORDS[p.fu] ?? null,
+    p.from || p.to ? `Captured ${p.from || "any"} to ${p.to || "any"}` : null,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : "All leads in view";
 }

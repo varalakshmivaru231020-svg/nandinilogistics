@@ -96,14 +96,12 @@ describe("a list asks for what its own web page asks for", () => {
 });
 
 /*
- * Two of these screens open **another module's** record from their rows, where
- * the web's own row opens nothing at all: a reorder line is an item of the
- * stock master, an attendance line is an employee. They ask for that module's
+ * One of these screens opens **another module's** record from its rows, where
+ * the web's own row opens nothing at all: an attendance line is an employee. They ask for that module's
  * permission, which is the data's own, and the integration test
  * `role-coverage` checks that no role is caught between the two.
  */
 const RECORD_FROM_ANOTHER_LIST: Record<string, string> = {
-  "material/reorder": "A reorder line opens the item of the stock master.",
   "hr/attendance": "An attendance line opens the employee.",
 };
 

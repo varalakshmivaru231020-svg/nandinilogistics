@@ -1,741 +1,231 @@
 import Link from "next/link";
-import {
-  Building2,
-  Clock,
-  IndianRupee,
-  TrendingUp,
-} from "lucide-react";
+import { CheckSquare, PhoneCall, Users, UserPlus } from "lucide-react";
 
 import { requireAuth } from "@/lib/rbac/guard";
-import { projectScopeFilter } from "@/lib/rbac/context";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { Card, CardBody, CardHeader, CardSubtitle, CardTitle, Panel, PanelHeader, StatLabel, StatValue } from "@/components/ui/primitives";
+import { Card, CardBody, CardHeader, CardSubtitle, CardTitle, StatLabel, StatValue } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
-import { cn, formatDate, moneyShort, qty, shortMonth } from "@/lib/utils";
-import { ApprovalQueue, type QueueRow } from "./approval-queue";
+import { cn } from "@/lib/utils";
+import { taskSummaryByTeamLeader } from "@/lib/tasks/service";
 
 export const metadata = { title: "Dashboard" };
 
-const DAY = 86_400_000;
-
-function ageLabel(from: Date, now: number): { text: string; days: number } {
-  const days = Math.floor((now - from.getTime()) / DAY);
-  if (days <= 0) return { text: "today", days: 0 };
-  if (days === 1) return { text: "1 day", days: 1 };
-  return { text: `${days} days`, days };
-}
-
+/**
+ * One dashboard, with the SOW's tiles drawn for whoever is looking: leads by
+ * stage and follow-ups for a tele-caller, the team and its tasks for a Team
+ * Leader, everything for Admin. Each tile is computed only when the viewer
+ * holds the permission of the screen it summarises, so a number is never shown
+ * to somebody who could not open what it counts.
+ *
+ * Payouts, onboarding approvals and advance requests join this page as their
+ * modules land.
+ */
 export default async function DashboardPage() {
   const ctx = await requireAuth();
-  const scope = projectScopeFilter(ctx);
-  const projectScope = projectScopeFilter(ctx, "id");
-  const showMoney = ctx.has(PERM.dashboard.widget.viewFinancials);
-  const nowMs = new Date().getTime();
-  const today = new Date();
-  const hour = today.getHours();
+  const now = new Date();
+  const nowMs = now.getTime();
+  const hour = now.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  /* ------------------------------ KPI strip ------------------------------- */
-
-  /**
-   * The design's four dashboard KPIs, in its order, each with a delta pill
-   * beside the value and a one-line subtitle under it:
-   *
-   *   Active projects     ▲ 1        6 towers · 1,272 units
-   *   Budget vs actual    90.1%      of ₹142.6 Cr sanctioned
-   *   Pending approvals   ₹1.82 Cr   oldest waiting 4 days
-   *   Collections · Sep   ▲ 18%      11 bookings this month
-   */
-  const kpis: Array<{
-    label: string; value: string; delta?: string; sub?: string;
-    icon: React.ReactNode;
-    tone: "brand" | "good" | "warn" | "bad" | "navy";
-    deltaTone: "brand" | "good" | "warn" | "bad" | "navy";
-  }> = [];
-
-  if (ctx.has(PERM.project.project.view)) {
-    const [active, lastMonth, agg, unitCount] = await Promise.all([
-      prisma.project.count({ where: { status: "ACTIVE", ...projectScope } }),
-      prisma.project.count({
-        where: {
-          status: "ACTIVE",
-          ...projectScope,
-          createdAt: { lt: new Date(today.getFullYear(), today.getMonth(), 1) },
-        },
-      }),
-      prisma.project.aggregate({
-        _sum: { totalTowers: true },
-        where: projectScope,
-      }),
-      // Units actually set up (created or imported), not the planning figure
-      // typed on the project form — the same count the Projects page shows.
-      prisma.unit.count({ where: { project: projectScope } }),
-    ]);
-    const added = active - lastMonth;
-    const towers = agg._sum.totalTowers ?? 0;
-    const units = unitCount;
-    kpis.push({
-      label: "Active projects",
-      value: String(active),
-      delta: added > 0 ? `▲ ${added}` : added < 0 ? `▼ ${Math.abs(added)}` : "—",
-      deltaTone: added > 0 ? "good" : added < 0 ? "bad" : "navy",
-      sub: `${towers} tower${towers === 1 ? "" : "s"} · ${units.toLocaleString("en-IN")} units`,
-      icon: <Building2 className="h-3.5 w-3.5" />, tone: "brand",
-    });
-  }
-
-  if (showMoney && ctx.has(PERM.project.project.view)) {
-    const [budget, committed] = await Promise.all([
-      prisma.project.aggregate({ _sum: { budgetAmount: true }, where: projectScope }),
-      prisma.purchaseOrder.aggregate({
-        _sum: { totalAmount: true },
-        where: { ...scope, status: { notIn: ["CANCELLED", "DRAFT"] } },
-      }),
-    ]);
-    const sanctioned = Number(budget._sum.budgetAmount ?? 0);
-    const spent = Number(committed._sum.totalAmount ?? 0);
-    const pct = sanctioned > 0 ? (spent / sanctioned) * 100 : 0;
-    kpis.push({
-      label: "Budget vs actual",
-      value: moneyShort(spent),
-      delta: `${pct.toFixed(1)}%`,
-      deltaTone: pct > 100 ? "bad" : pct > 90 ? "warn" : "navy",
-      sub: `of ${moneyShort(sanctioned)} sanctioned`,
-      icon: <IndianRupee className="h-3.5 w-3.5" />, tone: "navy",
-    });
-  }
-
-  if (ctx.has(PERM.material.indent.view)) {
-    const waiting = await prisma.indent.findMany({
-      where: { ...scope, status: { in: ["SUBMITTED", "PM_APPROVED"] } },
-      select: { raisedAt: true, items: { select: { requestedQty: true, estimatedRate: true } } },
-    });
-    const value = waiting.reduce(
-      (sum, i) => sum + i.items.reduce((s, l) => s + Number(l.requestedQty) * Number(l.estimatedRate), 0),
-      0,
-    );
-    const oldestDays = waiting.length
-      ? Math.max(...waiting.map((i) => Math.floor((today.getTime() - i.raisedAt.getTime()) / 86_400_000)))
-      : 0;
-    kpis.push({
-      label: "Pending approvals",
-      value: String(waiting.length),
-      delta: showMoney ? moneyShort(value) : undefined,
-      deltaTone: "warn",
-      sub: waiting.length
-        ? `oldest waiting ${oldestDays} day${oldestDays === 1 ? "" : "s"}`
-        : "queue is clear",
-      icon: <Clock className="h-3.5 w-3.5" />, 
-      tone: waiting.length > 0 ? "warn" : "good",
-    });
-  }
-
-  if (ctx.has(PERM.sales.receipt.view) && showMoney) {
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    const [thisMonth, lastMonthTotal, bookings] = await Promise.all([
-      prisma.receipt.aggregate({ _sum: { amount: true }, where: { receiptDate: { gte: monthStart } } }),
-      prisma.receipt.aggregate({
-        _sum: { amount: true },
-        where: { receiptDate: { gte: prevStart, lt: monthStart } },
-      }),
-      prisma.booking.count({ where: { ...scope, bookingDate: { gte: monthStart } } }),
-    ]);
-    const now = Number(thisMonth._sum?.amount ?? 0);
-    const prev = Number(lastMonthTotal._sum?.amount ?? 0);
-    const change = prev > 0 ? Math.round(((now - prev) / prev) * 100) : null;
-    kpis.push({
-      label: `Collections · ${shortMonth(today)}`,
-      value: moneyShort(now),
-      delta: change === null ? "—" : change >= 0 ? `▲ ${change}%` : `▼ ${Math.abs(change)}%`,
-      deltaTone: change !== null && change < 0 ? "bad" : "good",
-      sub: `${bookings} booking${bookings === 1 ? "" : "s"} this month`,
-      icon: <TrendingUp className="h-3.5 w-3.5" />, tone: "good",
-    });
-  }
-
-  /* -------------------- Today on site · schedule alerts -------------------- */
-
-  const canSchedule = ctx.has(PERM.schedule.activity.view);
-  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const endOfDay = new Date(startOfDay.getTime() + DAY);
-
-  const [startingToday, dueToday, overdue] = canSchedule
-    ? await Promise.all([
-        prisma.scheduleActivity.findMany({
-          where: { ...scope, plannedStart: { gte: startOfDay, lt: endOfDay } },
-          include: { project: { select: { code: true } } },
-          take: 4,
-        }),
-        prisma.scheduleActivity.findMany({
-          where: { ...scope, plannedEnd: { gte: startOfDay, lt: endOfDay }, status: { not: "COMPLETED" } },
-          include: { project: { select: { code: true } } },
-          take: 4,
-        }),
-        prisma.scheduleActivity.findMany({
-          where: { ...scope, plannedEnd: { lt: startOfDay }, status: { not: "COMPLETED" } },
-          include: { project: { select: { code: true } }, delayReason: { select: { name: true } } },
-          orderBy: { plannedEnd: "asc" },
-          take: 4,
-        }),
-      ])
-    : [[], [], []];
-
-  const schAlertCards = [
-    {
-      label: "To start",
-      count: startingToday.length,
-      items: startingToday.map((a) => ({
-        txt: a.name,
-        meta: `${a.project.code} · ${a.code}`,
-      })),
-    },
-    {
-      label: "Due today",
-      count: dueToday.length,
-      items: dueToday.map((a) => ({
-        txt: a.name,
-        meta: `${a.project.code} · ${a.progressPct}% done`,
-      })),
-    },
-    {
-      label: "Overdue",
-      count: overdue.length,
-      items: overdue.map((a) => ({
-        txt: a.name,
-        meta: `${a.project.code} · ${a.delayReason?.name ?? "no reason captured"}`,
-      })),
-    },
-  ];
-
-  /* --------------------------- Pending approvals --------------------------- */
-
-  const queue: QueueRow[] = [];
-  let queueValue = 0;
-
-  if (ctx.has(PERM.material.indent.view)) {
-    const indents = await prisma.indent.findMany({
-      where: { ...scope, status: { in: ["SUBMITTED", "PM_APPROVED"] } },
-      orderBy: { raisedAt: "asc" },
-      take: 6,
-      include: { project: { select: { code: true } }, raisedBy: { select: { name: true } } },
-    });
-    for (const i of indents) {
-      const age = ageLabel(i.raisedAt, nowMs);
-      const level = i.status === "SUBMITTED" ? ("PM" as const) : ("ADMIN" as const);
-      queueValue += Number(i.estimatedValue);
-      queue.push({
-        id: i.id, kind: "INDENT", type: "Indent",
-        title: i.purpose ?? `Material indent ${i.indentNo}`,
-        ref: i.indentNo, project: i.project.code, by: i.raisedBy.name,
-        value: showMoney ? moneyShort(i.estimatedValue) : "—",
-        age: age.text, ageDays: age.days,
-        href: `/material/indents/${i.id}`, level,
-        canApprove: ctx.has(
-          level === "PM" ? PERM.material.indent.approvePm : PERM.material.indent.approveAdmin,
-        ),
-        canReject: ctx.has(PERM.material.indent.reject),
-      });
-    }
-  }
-
-  if (ctx.has(PERM.material.purchaseOrder.view)) {
-    const pos = await prisma.purchaseOrder.findMany({
-      where: { ...scope, status: { in: ["PENDING_APPROVAL", "PENDING_PM_APPROVAL", "PENDING_ADMIN_APPROVAL"] } },
-      orderBy: { poDate: "asc" },
-      take: 4,
-      include: {
-        project: { select: { code: true } },
-        vendor: { select: { name: true } },
-        createdBy: { select: { name: true } },
-      },
-    });
-    for (const p of pos) {
-      const age = ageLabel(p.poDate, nowMs);
-      queueValue += Number(p.totalAmount);
-      queue.push({
-        id: p.id, kind: "PO", type: "Purchase order",
-        title: `${p.vendor.name} — ${p.poNo}`,
-        ref: p.poNo, project: p.project.code, by: p.createdBy.name,
-        value: showMoney ? moneyShort(p.totalAmount) : "—",
-        age: age.text, ageDays: age.days,
-        href: `/material/purchase-orders/${p.id}`,
-        // Which of the two levels this order is actually waiting on.
-        level: p.status === "PENDING_ADMIN_APPROVAL" ? "ADMIN" : "PM",
-        canApprove:
-          p.status === "PENDING_ADMIN_APPROVAL"
-            ? ctx.has(PERM.material.purchaseOrder.approveAdmin)
-            : ctx.has(PERM.material.purchaseOrder.approvePm),
-        canReject: false,
-      });
-    }
-  }
-
-  queue.sort((a, b) => b.ageDays - a.ageDays);
-
-  /* ---------------------------- Portfolio progress ------------------------- */
-
-  const canProjects = ctx.has(PERM.project.project.view);
-  const progressProjects = canProjects
-    ? await prisma.project.findMany({
-        where: { status: "ACTIVE", ...(projectScopeFilter(ctx, "id")) },
-        take: 3,
-        select: {
-          id: true, name: true, targetDate: true,
-          city: { select: { name: true } },
-          activities: {
-            select: { status: true, baselineEnd: true, plannedEnd: true, actualEnd: true },
-          },
-        },
-      })
-    : [];
-
-  const projectSpend = new Map<string, number>(
-    showMoney && progressProjects.length > 0
-      ? (
-          await prisma.purchaseOrder.groupBy({
-            by: ["projectId"],
-            _sum: { totalAmount: true },
-            where: {
-              projectId: { in: progressProjects.map((p) => p.id) },
-              status: { notIn: ["CANCELLED", "DRAFT"] },
-            },
-          })
-        ).map((r) => [r.projectId, Number(r._sum.totalAmount ?? 0)] as const)
-      : [],
-  );
-
-  const progress = progressProjects.map((p) => {
-    const acts = p.activities;
-    const done = acts.filter((a) => a.status === "COMPLETED").length;
-    const pct = acts.length ? Math.round((done / acts.length) * 100) : 0;
-    // A project is late by its worst-slipping activity — the same measure the
-    // schedule's variance report reads, so the two screens never disagree.
-    const slip = acts.reduce((worst, a) => {
-      const finish = a.actualEnd ?? a.plannedEnd;
-      if (!a.baselineEnd || !finish) return worst;
-      return Math.max(worst, Math.round((finish.getTime() - a.baselineEnd.getTime()) / DAY));
-    }, 0);
-    const finishing = slip <= 0 && pct >= 80;
-    return {
-      name: p.city ? `${p.name} · ${p.city.name}` : p.name,
-      pct,
-      // Blue on track, amber once it slips, green when it is finishing.
-      bar: slip > 0
-        ? "linear-gradient(90deg,#E8A13A,#F2C063)"
-        : finishing
-          ? "linear-gradient(90deg,#1F9D66,#5BC8A2)"
-          : "linear-gradient(90deg,#0089C9,#5BC8F2)",
-      meta: [
-        showMoney ? `${moneyShort(projectSpend.get(p.id) ?? 0)} spent` : null,
-        finishing && p.targetDate
-          ? `finishing · handover ${formatDate(p.targetDate)}`
-          : `${done} of ${acts.length} activities complete`,
-        slip > 0 ? `+${slip} d slip` : finishing ? null : "on track",
-      ]
-        .filter(Boolean)
-        .join(" · "),
-    };
-  });
-
-  /* ------------------------------ Reorder alerts --------------------------- */
-
-  const canReorder = ctx.has(PERM.material.reorder.view);
-  const stockAlerts = canReorder
-    ? await prisma.$queryRaw<Array<{ item: string; store: string; onhand: string; level: string; uom: string }>>`
-        SELECT i.name AS item,
-               COALESCE(s.name, 'No store') AS store,
-               COALESCE(sb.qty, 0)::text AS onhand,
-               i."reorderLevel"::text AS level,
-               u.code AS uom
-        FROM "m_items" i
-        JOIN "m_uoms" u ON u.id = i."uomId"
-        LEFT JOIN (
-          SELECT "itemId", SUM(quantity) AS qty, MIN("storeId") AS store_id
-          FROM "stock_balances" GROUP BY "itemId"
-        ) sb ON sb."itemId" = i.id
-        LEFT JOIN "m_stores" s ON s.id = sb.store_id
-        WHERE i.status = 'ACTIVE' AND i."reorderLevel" > 0
-          AND COALESCE(sb.qty, 0) <= i."reorderLevel"
-        ORDER BY (COALESCE(sb.qty, 0) / NULLIF(i."reorderLevel", 0)) ASC
-        LIMIT 5
-      `
-    : [];
-
-  /* -------------------------------- Funnel -------------------------------- */
-
-  const canFunnel = ctx.has(PERM.sales.lead.view);
-  /**
-   * The design's five funnel stages under its own abbreviations. A visit
-   * scheduled and a visit done are one bar, as they are one column on the
-   * board.
-   */
-  const funnelOrder = [
-    { key: "NEW", label: "New", states: ["NEW"], colour: "#5BC8F2" },
-    { key: "CONTACTED", label: "Contacted", states: ["CONTACTED"], colour: "#0089C9" },
-    { key: "VISIT", label: "Visit", states: ["SITE_VISIT_SCHEDULED", "VISIT_DONE"], colour: "#2F308C" },
-    { key: "NEGOTIATION", label: "Nego.", states: ["NEGOTIATION"], colour: "#191A5C" },
-    { key: "BOOKED", label: "Booked", states: ["BOOKED"], colour: "#1F9D66" },
-  ] as const;
-
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-  const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const canLeads = ctx.has(PERM.sales.lead.view);
+  const canPeople = ctx.has(PERM.hr.employee.view);
+  const canTasks = ctx.has(PERM.task.task.view);
   const mine = ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id };
 
-  // The card says "this month", so the funnel counts the leads that came in
-  // this month — and last month's, to say which way conversion moved.
-  const [grouped, lastMonth] = canFunnel
+  /* ------------------------------ Leads by stage --------------------------- */
+
+  const stages = canLeads
+    ? await prisma.leadStage.findMany({
+        where: { status: "ACTIVE" },
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, name: true, kind: true, _count: { select: { leads: { where: mine } } } },
+      })
+    : [];
+  const leadTotal = stages.reduce((s, st) => s + st._count.leads, 0);
+  const stageMax = Math.max(1, ...stages.map((s) => s._count.leads));
+
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = new Date(startOfToday.getTime() + 86_400_000);
+
+  const [dueToday, overdue] = canLeads
     ? await Promise.all([
-        prisma.lead.groupBy({
-          by: ["state"],
-          where: { ...mine, createdAt: { gte: monthStart } },
-          _count: true,
+        prisma.lead.count({
+          where: { ...mine, stage: { kind: { not: "LOST" } }, nextActionAt: { gte: startOfToday, lt: endOfToday } },
         }),
-        prisma.lead.groupBy({
-          by: ["state"],
-          where: { ...mine, createdAt: { gte: lastMonthStart, lt: monthStart } },
-          _count: true,
+        prisma.lead.count({
+          where: { ...mine, stage: { kind: { not: "LOST" } }, nextActionAt: { lt: startOfToday } },
         }),
       ])
-    : [[], []];
-  const counts = new Map<string, number>(grouped.map((g) => [g.state as string, g._count]));
-  const funnelCount = (stage: (typeof funnelOrder)[number]) =>
-    stage.states.reduce((n, state) => n + (counts.get(state) ?? 0), 0);
-  const funnelMax = Math.max(1, ...funnelOrder.map(funnelCount));
-  const funnelTotal = grouped.reduce((s, g) => s + g._count, 0);
-  const booked = counts.get("BOOKED") ?? 0;
+    : [0, 0];
 
-  const conversion = funnelTotal > 0 ? (booked / funnelTotal) * 100 : null;
-  const lastTotal = lastMonth.reduce((s, g) => s + g._count, 0);
-  const lastBooked = lastMonth.find((g) => g.state === "BOOKED")?._count ?? 0;
-  const conversionDelta =
-    conversion !== null && lastTotal > 0 ? conversion - (lastBooked / lastTotal) * 100 : null;
+  /* ---------------------------------- People ------------------------------- */
 
-  const collections =
-    canFunnel && showMoney
-      ? await prisma.receipt.aggregate({
-          _sum: { amount: true },
-          where: { receiptDate: { gte: new Date(today.getFullYear(), today.getMonth(), 1) } },
-        })
-      : null;
+  const [activePeople, leftPeople] = canPeople
+    ? await Promise.all([
+        prisma.employee.count({ where: { status: "ACTIVE" } }),
+        prisma.employee.count({ where: { status: "INACTIVE" } }),
+      ])
+    : [0, 0];
 
-  /* --------------------------- Execution health ---------------------------- */
+  /* ---------------------------------- Tasks -------------------------------- */
 
-  const health: Array<{ value: string; label: string; tone: string }> = [];
-  const [overdueTasks, closedTasks, withEvidence, runs, openFails] = await Promise.all([
-    ctx.has(PERM.task.task.view)
-      ? prisma.task.count({
-          where: { status: { notIn: ["COMPLETED", "CLOSED", "UNDER_REVIEW", "UNDER_APPROVAL"] }, dueAt: { lt: today } },
-        })
-      : Promise.resolve(0),
-    ctx.has(PERM.task.task.view) ? prisma.task.count({ where: { status: "CLOSED" } }) : Promise.resolve(0),
-    ctx.has(PERM.task.task.view)
-      ? prisma.task.count({ where: { status: "CLOSED", completionRemark: { not: null } } })
-      : Promise.resolve(0),
-    ctx.has(PERM.checklist.checklist.view)
-      ? prisma.checklistRun.findMany({ select: { score: true } })
-      : Promise.resolve([]),
-    ctx.has(PERM.checklist.checklist.view)
-      ? prisma.checklistRun.count({ where: { result: "FAIL", state: "OPEN" } })
-      : Promise.resolve(0),
-  ]);
+  const taskScope = ctx.has(PERM.task.task.viewAll)
+    ? {}
+    : { OR: [{ assignees: { some: { userId: ctx.id } } }, { createdById: ctx.id }] };
+  const [openTasks, overdueTasks, doneTasks] = canTasks
+    ? await Promise.all([
+        prisma.task.count({ where: { ...taskScope, status: { not: "DONE" } } }),
+        prisma.task.count({ where: { ...taskScope, status: { not: "DONE" }, dueAt: { lt: now } } }),
+        prisma.task.count({ where: { ...taskScope, status: "DONE" } }),
+      ])
+    : [0, 0, 0];
 
-  const compliance = runs.length
-    ? Math.round((runs.reduce((n, r) => n + r.score, 0) / runs.length) * 10) / 10
-    : null;
-
-  if (ctx.has(PERM.task.task.view)) {
-    health.push({
-      value: String(overdueTasks),
-      label: "Overdue tasks · escalated",
-      tone: "bad",
+  const kpis: Array<{ label: string; value: string; sub: string; href: string; icon: React.ReactNode; tone: string }> = [];
+  if (canLeads) {
+    kpis.push({
+      label: "Leads in pipeline",
+      value: String(leadTotal),
+      sub: `${stages.filter((s) => s.kind === "NEW").reduce((n, s) => n + s._count.leads, 0)} new`,
+      href: "/sales/leads",
+      icon: <UserPlus className="h-4 w-4" />,
+      tone: "bg-brand-100 text-brand-500",
+    });
+    kpis.push({
+      label: "Follow-ups today",
+      value: String(dueToday),
+      sub: overdue > 0 ? `${overdue} overdue` : "nothing overdue",
+      href: "/sales/follow-ups",
+      icon: <PhoneCall className="h-4 w-4" />,
+      tone: overdue > 0 ? "bg-bad-050 text-bad-700" : "bg-good-050 text-good-700",
     });
   }
-  if (ctx.has(PERM.checklist.checklist.view)) {
-    health.push({
-      value: compliance === null ? "—" : `${compliance}%`,
-      label: "Checklist compliance",
-      tone: "good",
-    });
-    health.push({
-      value: String(openFails),
-      label: "Open snags (NC)",
-      tone: "warn",
+  if (canPeople) {
+    kpis.push({
+      label: "Active riders & staff",
+      value: String(activePeople),
+      sub: `${leftPeople} left`,
+      href: "/hr",
+      icon: <Users className="h-4 w-4" />,
+      tone: "bg-plum-050 text-plum-600",
     });
   }
-  if (ctx.has(PERM.task.task.view)) {
-    health.push({
-      value: closedTasks === 0 ? "—" : `${Math.round((withEvidence / closedTasks) * 100)}%`,
-      label: "Photo evidence on closure",
-      tone: "navy",
+  if (canTasks) {
+    kpis.push({
+      label: "Open tasks",
+      value: String(openTasks),
+      sub: overdueTasks > 0 ? `${overdueTasks} overdue · ${doneTasks} done` : `${doneTasks} done`,
+      href: "/tasks",
+      icon: <CheckSquare className="h-4 w-4" />,
+      tone: overdueTasks > 0 ? "bg-warn-050 text-warn-700" : "bg-brand-100 text-brand-500",
     });
   }
 
-  const healthTone: Record<string, string> = {
-    good: "bg-good-050 text-good-700",
-    bad: "bg-bad-050 text-bad-700",
-    warn: "bg-warn-050 text-warn-700",
-    brand: "bg-brand-100 text-brand-500",
-    navy: "bg-plum-050 text-navy-800",
-  };
-
-  /** The design's delta pill beside each KPI value. */
-  const deltaTone: Record<string, string> = {
-    good: "bg-good-050 text-good-700",
-    bad: "bg-bad-050 text-bad-700",
-    warn: "bg-warn-050 text-warn-700",
-    brand: "bg-brand-100 text-brand-700",
-    navy: "bg-surface-hover text-navy-800",
-  };
-
-  const showApprovals = queue.length > 0 || ctx.has(PERM.material.indent.view);
+  // The SOW's Admin dashboard card: open, overdue and completed tasks per Team Leader.
+  const canTaskReport = ctx.has(PERM.task.report.view);
+  const perTeamLeader = canTaskReport ? await taskSummaryByTeamLeader(prisma, nowMs) : [];
 
   return (
     <div className="animate-fade-up">
-      {/* Greeting line */}
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
         <div className="text-[13px] font-medium text-muted-600">
           {greeting}, {ctx.name.split(" ")[0]} ·{" "}
-          {today.toLocaleDateString("en-IN", {
+          {now.toLocaleDateString("en-IN", {
             weekday: "long", day: "numeric", month: "long", year: "numeric",
           })}
         </div>
-        <div className="text-[11.5px] font-semibold uppercase tracking-[.05em] text-brand-500">
-          Last sync just now
-        </div>
       </div>
 
-      {/* KPI strip */}
-      {kpis.length > 0 && (
+      {kpis.length > 0 ? (
         <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
-          {kpis.map((k) => {
-            const tile = (
-              <div className="flex h-full flex-col gap-[9px] rounded-[13px] border border-line-400 bg-white px-[18px] py-[17px]">
+          {kpis.map((k) => (
+            <Link key={k.label} href={k.href} className="block">
+              <div className="flex h-full flex-col gap-[9px] rounded-[13px] border border-line-400 bg-white px-[18px] py-[17px] transition-colors hover:border-brand-500">
                 <div className="flex items-center justify-between gap-2">
                   <StatLabel>{k.label}</StatLabel>
-                  <span
-                    className={cn(
-                      "grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px]",
-                      healthTone[k.tone] ?? "bg-brand-100 text-brand-500",
-                    )}
-                  >
+                  <span className={cn("grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px]", k.tone)}>
                     {k.icon}
                   </span>
                 </div>
                 <StatValue>{k.value}</StatValue>
-                <div className="flex flex-wrap items-center gap-[7px]">
-                  {k.delta && (
-                    <span
-                      className={cn(
-                        "rounded-full px-[10px] py-[5px] text-[10.5px] font-bold",
-                        deltaTone[k.deltaTone],
-                      )}
-                    >
-                      {k.delta}
-                    </span>
-                  )}
-                  {k.sub && <span className="text-[11.5px] font-medium text-muted-400">{k.sub}</span>}
-                </div>
+                <span className="text-[11.5px] font-medium text-muted-400">{k.sub}</span>
               </div>
-            );
-            return <div key={k.label}>{tile}</div>;
-          })}
-        </div>
-      )}
-
-      {/* Today on site · schedule */}
-      {canSchedule && (
-        <Card className="mt-3.5 overflow-hidden">
-          <CardHeader>
-            <div>
-              <CardTitle>Today on site · schedule</CardTitle>
-              <CardSubtitle>
-                Works that should start, are due, or have run past their approved date
-              </CardSubtitle>
-            </div>
-            <Link href="/schedule">
-              <Button size="sm" variant="secondary">Open schedule →</Button>
             </Link>
-          </CardHeader>
-          <div className="grid gap-3 px-[18px] py-[15px] [grid-template-columns:repeat(auto-fit,minmax(250px,1fr))]">
-            {schAlertCards.map((a) => (
-              <Panel key={a.label}>
-                <PanelHeader>
-                  <span className="text-[12px] font-bold text-navy-600">{a.label}</span>
-                  <span className="num font-display text-[15px] font-extrabold text-navy-950">
-                    {a.count}
-                  </span>
-                </PanelHeader>
-                <div className="px-[13px] pb-[11px] pt-1">
-                  {a.items.map((i, n) => (
-                    <div key={n} className="border-b border-line-100 py-2 last:border-0">
-                      <div className="text-[12px] font-semibold text-navy-900">{i.txt}</div>
-                      <div className="mt-0.5 text-[10.5px] font-medium text-muted-400">{i.meta}</div>
-                    </div>
-                  ))}
-                  {a.items.length === 0 && (
-                    <div className="py-3.5 text-[11.5px] font-medium text-muted-300">
-                      Nothing here today
-                    </div>
-                  )}
-                </div>
-              </Panel>
-            ))}
-          </div>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardBody>
+            <p className="text-sm text-muted-500">Nothing to show yet — your role has no screens with a summary.</p>
+          </CardBody>
         </Card>
       )}
 
-      {/* Approvals + right rail */}
-      <div className="mt-3.5 grid items-start gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(430px,1fr))]">
-        {showApprovals && (
-          <Card className="overflow-hidden">
-            <CardHeader>
-              <CardTitle>Pending approvals</CardTitle>
-              {queue.length > 0 && (
-                <span className="rounded-full bg-warn-050 px-[10px] py-1 text-[11px] font-bold text-warn-700">
-                  {queue.length} waiting{showMoney && ` · ${moneyShort(queueValue)}`}
-                </span>
-              )}
-            </CardHeader>
-            <ApprovalQueue rows={queue} />
-          </Card>
-        )}
-
-        <div className="flex flex-col gap-3.5">
-          {canProjects && progress.length > 0 && (
-            <Card className="px-[18px] py-4">
-              <div className="mb-3 font-display text-[14px] font-bold text-navy-950">
-                Portfolio progress
-              </div>
-              {progress.map((p) => (
-                <div key={p.name} className="mb-3.5 last:mb-0">
-                  <div className="mb-1.5 flex justify-between">
-                    <span className="text-[12.5px] font-semibold text-navy-900">{p.name}</span>
-                    <span className="num text-[12.5px] font-bold text-brand-500">{p.pct}%</span>
-                  </div>
-                  <div className="h-[7px] overflow-hidden rounded-full bg-track">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${p.pct}%`, background: p.bar }}
-                    />
-                  </div>
-                  <div className="mt-1.5 text-[11px] font-medium text-muted-400">{p.meta}</div>
-                </div>
-              ))}
-            </Card>
-          )}
-
-          {canReorder && (
-            <Card className="px-[18px] py-4">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="font-display text-[14px] font-bold text-navy-950">Reorder alerts</div>
-                <span
-                  className={cn(
-                    "rounded-full px-[9px] py-[3px] text-[10.5px] font-bold",
-                    stockAlerts.length > 0 ? "bg-bad-050 text-bad-600" : "bg-good-050 text-good-700",
-                  )}
-                >
-                  {stockAlerts.length > 0 ? `${stockAlerts.length} below level` : "all stocked"}
-                </span>
-              </div>
-              {stockAlerts.map((s, n) => (
-                <div
-                  key={n}
-                  className="flex items-center gap-2.5 border-b border-line-100 py-2 last:border-0"
-                >
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-bad-600" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[12.5px] font-semibold text-navy-900">
-                      {s.item} · {s.uom.toLowerCase()}
-                    </div>
-                    <div className="text-[11px] font-medium text-muted-400">{s.store}</div>
-                  </div>
-                  <div className="num text-[12px] font-bold text-bad-600">
-                    {qty(s.onhand, 2)} / {qty(s.level, 2)}
-                  </div>
-                </div>
-              ))}
-              {stockAlerts.length === 0 && (
-                <p className="py-3 text-[11.5px] font-medium text-muted-300">
-                  Every item with a reorder level is above it.
-                </p>
-              )}
-            </Card>
-          )}
-        </div>
-      </div>
-
-      {/* Funnel + execution health */}
-      <div className="mt-3.5 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(360px,1fr))]">
-        {canFunnel && (
-          <Card className="px-[18px] py-4">
-            <div className="mb-3.5 font-display text-[14px] font-bold text-navy-950">
-              Sales funnel · this month
+      {canTaskReport && perTeamLeader.length > 0 && (
+        <Card className="mt-3.5">
+          <CardHeader>
+            <div>
+              <CardTitle>Tasks per Team Leader</CardTitle>
+              <CardSubtitle>Open, overdue and done</CardSubtitle>
             </div>
-            <div className="flex h-[120px] items-end gap-2.5">
-              {funnelOrder.map((stage) => {
-                const count = funnelCount(stage);
-                const height = Math.max(8, Math.round((count / funnelMax) * 80));
-                return (
-                  <div key={stage.key} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
-                    <div className="num text-[13px] font-bold text-navy-950">{count}</div>
-                    <div
-                      className="w-full rounded-t-[7px] rounded-b-[3px]"
-                      style={{ height: `${height}px`, background: stage.colour }}
-                    />
-                    <div className="text-center text-[10px] font-semibold uppercase tracking-[.03em] text-muted-500">
-                      {stage.label}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-3.5 flex flex-wrap justify-between gap-2 border-t border-line-150 pt-3 text-[12px] font-semibold text-muted-600">
-              <span>
-                Conversion {conversion === null ? "—" : `${conversion.toFixed(1)}%`}
-                {conversionDelta !== null && Math.abs(conversionDelta) >= 0.05 && (
-                  <span className={cn("ml-1", conversionDelta > 0 ? "text-good-700" : "text-bad-600")}>
-                    {conversionDelta > 0 ? "▲" : "▼"} {Math.abs(conversionDelta).toFixed(1)}
-                  </span>
-                )}
-              </span>
-              {collections && (
-                <span>Collections {moneyShort(collections._sum.amount)} this month</span>
-              )}
-            </div>
-          </Card>
-        )}
+            <Link href="/tasks">
+              <Button size="sm" variant="secondary">Open tasks →</Button>
+            </Link>
+          </CardHeader>
+          <CardBody className="p-0">
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="text-left text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-400">
+                  <th className="px-4 py-2">Team Leader</th>
+                  <th className="num px-4 py-2 text-right">Open</th>
+                  <th className="num px-4 py-2 text-right">In progress</th>
+                  <th className="num px-4 py-2 text-right">Overdue</th>
+                  <th className="num px-4 py-2 text-right">Done</th>
+                </tr>
+              </thead>
+              <tbody>
+                {perTeamLeader.map((t) => (
+                  <tr key={t.userId} className="border-t border-line-200">
+                    <td className="px-4 py-2 font-semibold text-navy-900">{t.name}</td>
+                    <td className="num px-4 py-2 text-right">{t.open}</td>
+                    <td className="num px-4 py-2 text-right">{t.inProgress}</td>
+                    <td className={cn("num px-4 py-2 text-right", t.overdue > 0 && "font-bold text-bad-700")}>{t.overdue}</td>
+                    <td className="num px-4 py-2 text-right">{t.done}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardBody>
+        </Card>
+      )}
 
-        {health.length > 0 && (
-          <Card className="px-[18px] py-4">
-            <div className="mb-3.5 font-display text-[14px] font-bold text-navy-950">
-              Execution health
+      {canLeads && stages.length > 0 && (
+        <Card className="mt-3.5">
+          <CardHeader>
+            <div>
+              <CardTitle>Leads by stage</CardTitle>
+              <CardSubtitle>{ctx.has(PERM.sales.lead.viewAll) ? "Every lead in the pipeline" : "Leads assigned to you"}</CardSubtitle>
             </div>
-            <div className="grid grid-cols-2 gap-2.5">
-              {health.map((h) => (
-                <div
-                  key={h.label}
-                  className={cn("rounded-[11px] px-3.5 py-3", healthTone[h.tone])}
-                >
-                  <div className="num font-display text-[21px] font-extrabold tracking-[-.02em]">
-                    {h.value}
-                  </div>
-                  <div className="mt-0.5 text-[11px] font-semibold opacity-75">{h.label}</div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
-      </div>
-
-      {kpis.length === 0 && queue.length === 0 && (
-        <Card>
+            <Link href="/sales/leads">
+              <Button size="sm" variant="secondary">Open leads →</Button>
+            </Link>
+          </CardHeader>
           <CardBody>
-            <p className="text-[12.5px] font-medium text-muted-600">
-              There is nothing on your dashboard yet, because your role does not include view access
-              to any module. An administrator can grant permissions from Administration → Roles.
-            </p>
+            <ul className="space-y-2">
+              {stages.map((s) => (
+                <li key={s.id} className="grid items-center gap-3 [grid-template-columns:160px_1fr_48px]">
+                  <span className="truncate text-[12.5px] font-semibold text-navy-900">{s.name}</span>
+                  <span className="h-2 overflow-hidden rounded-full bg-surface-field">
+                    <span
+                      className={cn("block h-full rounded-full", s.kind === "LOST" ? "bg-bad-600" : s.kind === "ONBOARDING" ? "bg-good-600" : "bg-brand-500")}
+                      style={{ width: `${Math.round((s._count.leads / stageMax) * 100)}%` }}
+                    />
+                  </span>
+                  <span className="num text-right text-[12.5px] font-bold text-navy-950">{s._count.leads}</span>
+                </li>
+              ))}
+            </ul>
           </CardBody>
         </Card>
       )}

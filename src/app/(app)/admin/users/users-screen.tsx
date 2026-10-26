@@ -31,7 +31,6 @@ interface UserRow {
   departmentId: string | null;
   designationId: string | null;
   roles: Array<{ id: string; name: string }>;
-  projectCount: number;
   overrideCount: number;
 }
 
@@ -114,7 +113,6 @@ export function UsersScreen({
       align: "center",
       render: (u) => (
         <div className="num text-xs text-muted-600">
-          <p>{u.projectCount} project(s)</p>
           {u.overrideCount > 0 && <p className="text-warn-700">{u.overrideCount} override(s)</p>}
         </div>
       ),
@@ -137,7 +135,7 @@ export function UsersScreen({
       align: "right",
       render: (u) => (
         <div className="flex items-center justify-end gap-0.5">
-          <Link href={`/admin/users/${u.id}`} className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-600" title="Roles, permissions & projects">
+          <Link href={`/admin/users/${u.id}`} className="rounded p-1.5 text-muted-400 hover:bg-surface-hover hover:text-brand-600" title="Roles & permissions">
             <ShieldCheck className="h-3.5 w-3.5" />
           </Link>
           {can.update && (

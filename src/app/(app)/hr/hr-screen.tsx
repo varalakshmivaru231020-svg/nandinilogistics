@@ -76,7 +76,7 @@ const MARKS = [
 ];
 
 const TABS = [
-  { key: "staff", label: "Employees" },
+  { key: "staff", label: "Riders & Staff" },
   { key: "mark", label: "Mark Attendance" },
   { key: "report", label: "Attendance Report" },
 ];
@@ -633,7 +633,7 @@ function ReportTab({
                 <td className="px-4 py-2.5">
                   <p className="text-[12.5px] font-bold text-navy-950">
                     {r.name}
-                    {isInactive(r.status) && <Badge tone="muted" className="ml-1.5">Inactive</Badge>}
+                    {isInactive(r.status) && <Badge tone="muted" className="ml-1.5">Left</Badge>}
                   </p>
                   <p className="num text-[11px] font-medium text-muted-400">{r.code}</p>
                 </td>

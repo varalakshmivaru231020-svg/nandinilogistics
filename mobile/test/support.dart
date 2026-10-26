@@ -146,58 +146,12 @@ final onePixelPng = base64Decode(
 Session sessionWith(List<String> codes, {bool superAdmin = false}) => Session(
       token: 't',
       id: 'u1',
-      name: 'Anil Deshpande',
-      email: 'pm@nninfra.example',
+      name: 'Manjunath Gowda',
+      email: 'tl@nandini.example',
       isSuperAdmin: superAdmin,
       permissions: codes.toSet(),
-      roleNames: const ['Project Manager'],
-      projects: const [Project(id: 'p1', code: 'NNR', name: 'NN Residency')],
+      roleNames: const ['Team Leader'],
     );
 
 void useEmptyPrefs() => SharedPreferences.setMockInitialValues({});
 
-/// An approvals row, with the decision instruction the server sends.
-Map<String, dynamic> approvalRow({
-  String kind = 'Indent',
-  String reference = 'IND/NNS/2026-27/9001',
-  bool canDecide = true,
-  Map<String, dynamic>? decide = const {
-    'approve': 'material/indents/approveIndent',
-    'approveArgs': ['i1', 'PM'],
-    'reject': 'material/indents/rejectIndent',
-    'rejectArgs': ['i1'],
-    'remarkRequired': false,
-  },
-  num? value = 595000,
-  String waiting = '32 days',
-  String waitingOn = 'Project Manager',
-}) =>
-    {
-      'id': 'i1',
-      'kind': kind,
-      'reference': reference,
-      'title': 'OPC 53 Grade Cement',
-      'raisedBy': 'Ravi Shankar',
-      'project': 'NN Skyline',
-      'waiting': waiting,
-      'waitingOn': waitingOn,
-      'value': value,
-      'yours': canDecide ? 'Yes' : 'No',
-      'canDecide': canDecide,
-      'decide': decide,
-    };
-
-Map<String, Object> approvalsList(List<Map<String, dynamic>> rows) => {
-      '/list/approvals': {
-        'title': 'Approvals',
-        'filters': 'Everything waiting on a decision, oldest first',
-        'columns': const [
-          {'key': 'reference', 'header': 'Reference'},
-          {'key': 'kind', 'header': 'Kind'},
-        ],
-        'rows': rows,
-        'summary': const [],
-        'total': rows.length,
-        'serverTime': '2026-10-14T06:00:00.000Z',
-      },
-    };

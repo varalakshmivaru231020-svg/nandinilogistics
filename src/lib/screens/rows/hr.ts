@@ -40,7 +40,7 @@ export function employeeScreenRow(
     title: e.name,
     chips: [
       { text: e.employmentType, tone: "draft" },
-      ...(inactive ? [{ text: "Inactive", tone: "draft" as const }] : []),
+      ...(inactive ? [{ text: "Left", tone: "draft" as const }] : []),
     ],
     meta: `📞 ${e.mobile}`,
     lines: [
@@ -85,7 +85,7 @@ export function attendanceScreenRow(r: AttendanceRowInput): ScreenRow {
     meta: r.code,
     chips: [
       { text: r.employmentType, tone: "draft" },
-      ...(inactive ? [{ text: "Inactive", tone: "draft" as const }] : []),
+      ...(inactive ? [{ text: "Left", tone: "draft" as const }] : []),
     ],
     lines: [
       { label: "Present", value: String(r.present) },

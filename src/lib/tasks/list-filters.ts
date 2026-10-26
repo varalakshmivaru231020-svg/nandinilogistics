@@ -9,21 +9,15 @@ import { PERM } from "@/lib/permissions/codes";
  * file — or on the phone — is worse than a filter that does not work, since
  * only one of the three is ever checked.
  *
- * Two rules live in here and matter more than the filters:
- *
- *   - Without `task.task.viewAll`, a person sees the tasks they raised, the
- *     tasks they were given, and any they were named to review or approve.
- *     Not the organisation's.
- *   - A project they are not mapped to is not theirs to see — but a task with
- *     no project at all belongs to everybody who can see tasks.
+ * The rule that matters more than the filters: without `task.task.viewAll`, a
+ * person sees the tasks they were given and the tasks they raised. Not the
+ * organisation's.
  */
 
 export interface TaskListParams {
-  mine: string;
+  status: string;
   priority: string;
   assignee: string;
-  assigner: string;
-  has: string;
   from: string;
   to: string;
   q: string;
@@ -38,11 +32,9 @@ export function readTaskListParams(
   const read = (key: string) =>
     params instanceof URLSearchParams ? one(params.get(key)) : one(params[key]);
   return {
-    mine: read("mine"),
+    status: read("status"),
     priority: read("priority"),
     assignee: read("assignee"),
-    assigner: read("assigner"),
-    has: read("has"),
     from: read("from"),
     to: read("to"),
     q: read("q"),
@@ -50,6 +42,7 @@ export function readTaskListParams(
 }
 
 const PRIORITIES = ["HIGH", "MEDIUM", "LOW"];
+const STATUSES = ["OPEN", "IN_PROGRESS", "DONE"];
 
 export function taskListWhere(
   ctx: AuthContext,
@@ -57,21 +50,14 @@ export function taskListWhere(
 ): Record<string, unknown> {
   const seesEverything = ctx.has(PERM.task.task.viewAll);
 
-  // A task with no project is everybody's; one in a project they are not
-  // mapped to is not theirs.
-  const projectScope = ctx.canAccessAllProjects
-    ? {}
-    : { OR: [{ projectId: { in: ctx.projectIds } }, { projectId: null }] };
-
   const ownScope = {
     OR: [
-      { assigneeId: ctx.id },
+      { assignees: { some: { userId: ctx.id } } },
       { createdById: ctx.id },
-      { levels: { some: { userId: ctx.id } } },
     ],
   };
 
-  const { mine, priority, assignee, assigner, has, from, to, q } = params;
+  const { status, priority, assignee, from, to, q } = params;
 
   const dueRange =
     from || to
@@ -86,25 +72,26 @@ export function taskListWhere(
   const search = q.trim();
 
   return {
-    ...(seesEverything ? projectScope : {}),
     ...(seesEverything ? {} : ownScope),
-    ...(mine === "to" ? { assigneeId: ctx.id } : {}),
-    ...(mine === "by" ? { createdById: ctx.id } : {}),
+    ...(status && STATUSES.includes(status)
+      ? { status: status as "OPEN" | "IN_PROGRESS" | "DONE" }
+      : {}),
     ...(priority && PRIORITIES.includes(priority)
       ? { priority: priority as "HIGH" | "MEDIUM" | "LOW" }
       : {}),
-    ...(assignee ? { assigneeId: assignee } : {}),
-    ...(assigner ? { createdById: assigner } : {}),
-    ...(has === "checklist" ? { kind: "CHECKLIST" as const } : {}),
-    ...(has === "plain" ? { kind: "STANDALONE" as const } : {}),
+    ...(assignee ? { assignees: { some: { userId: assignee } } } : {}),
     // Searched by the number on it, its title, or whoever it is for.
     ...(search
       ? {
-          OR: [
-            { taskNo: { contains: search, mode: "insensitive" as const } },
-            { title: { contains: search, mode: "insensitive" as const } },
-            { assignee: { name: { contains: search, mode: "insensitive" as const } } },
-            { createdBy: { name: { contains: search, mode: "insensitive" as const } } },
+          AND: [
+            {
+              OR: [
+                { taskNo: { contains: search, mode: "insensitive" as const } },
+                { title: { contains: search, mode: "insensitive" as const } },
+                { assignees: { some: { user: { name: { contains: search, mode: "insensitive" as const } } } } },
+                { createdBy: { name: { contains: search, mode: "insensitive" as const } } },
+              ],
+            },
           ],
         }
       : {}),
@@ -116,9 +103,8 @@ export function taskListWhere(
 export function describeTaskFilters(params: TaskListParams, seesEverything: boolean): string {
   const parts = [
     params.q.trim() ? `Matching “${params.q.trim()}”` : null,
-    params.mine === "to" ? "Given to you" : params.mine === "by" ? "Raised by you" : null,
+    STATUSES.includes(params.status) ? params.status.replace("_", " ").toLowerCase() : null,
     PRIORITIES.includes(params.priority) ? `${params.priority} priority` : null,
-    params.has === "checklist" ? "Checklist tasks" : params.has === "plain" ? "Plain tasks" : null,
     params.from || params.to
       ? `Due ${params.from || "any"} to ${params.to || "any"}`
       : null,

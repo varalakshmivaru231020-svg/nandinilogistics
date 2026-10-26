@@ -3,68 +3,44 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { maskPhone, formatDate } from "@/lib/utils";
-import { dateInputValue, editRefusal, identityLocked } from "@/lib/sales/lead-edit";
+import { usersHolding } from "@/lib/rbac/holders";
+import { maskPhone } from "@/lib/utils";
+import { dateInputValue, editRefusal } from "@/lib/sales/lead-edit";
 import { LeadDetail } from "./lead-detail";
 
 export const metadata = { title: "Lead" };
-
-/** The six stages the design draws, Lost included. */
-const STEPPER = [
-  { key: "NEW", name: "New" },
-  { key: "CONTACTED", name: "Contacted" },
-  { key: "SITE_VISIT_SCHEDULED", name: "Site Visit" },
-  { key: "NEGOTIATION", name: "Negotiation" },
-  { key: "BOOKED", name: "Booked" },
-  { key: "LOST", name: "Lost" },
-] as const;
-
-/** A visit already done still sits on the Site Visit stage, as on the board. */
-function stageIndex(state: string): number {
-  if (state === "VISIT_DONE") return 2;
-  const i = STEPPER.findIndex((s) => s.key === state);
-  return i === -1 ? 0 : i;
-}
 
 export default async function LeadDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; tower?: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const ctx = await requirePermission(PERM.sales.lead.view);
   // Read the clock once, during fetching — never in a component body.
   const now = new Date();
   const { id } = await params;
-  const { tab = "timeline", tower = "all" } = await searchParams;
+  const { tab = "timeline" } = await searchParams;
 
   const lead = await prisma.lead.findUnique({
     where: { id },
     include: {
-      source: { select: { name: true } },
-      project: { select: { id: true, name: true } },
+      stage: true,
       owner: { select: { id: true, name: true } },
       lostReason: { select: { name: true } },
-      unitType: { select: { name: true } },
+      companies: { select: { company: { select: { id: true, name: true } } } },
       followUps: {
         orderBy: { completedAt: "desc" },
-        include: { user: { select: { name: true } } },
+        include: { user: { select: { name: true } }, stage: { select: { name: true } } },
       },
       notes: { orderBy: { createdAt: "desc" }, include: { user: { select: { name: true } } } },
       documents: { orderBy: { createdAt: "desc" } },
-      holds: {
-        where: { isActive: true },
-        include: { unit: { select: { id: true, unitNumber: true, unitType: { select: { name: true } } } } },
-      },
-      bookings: {
-        include: { unit: { select: { unitNumber: true, unitType: { select: { name: true } } } } },
-      },
     },
   });
   if (!lead) notFound();
 
-  // Row-level scoping: without viewAll a sales user only opens their own leads.
+  // Row-level scoping: without viewAll a tele-caller only opens their own leads.
   if (!ctx.has(PERM.sales.lead.viewAll) && lead.ownerId !== ctx.id) notFound();
 
   const canContact = ctx.has(PERM.sales.lead.viewContact);
@@ -74,24 +50,35 @@ export default async function LeadDetailPage({
     { id: ctx.id, canViewAll: ctx.has(PERM.sales.lead.viewAll), canViewContact: canContact },
     lead,
   ) === null;
-  // Lookups for the edit form. The lead's current choices are kept even if
-  // since deactivated, so opening the form never silently changes them.
-  const [editSources, editProjects, editUnitTypes] = canEdit
-    ? await Promise.all([
-        prisma.leadSource.findMany({
-          where: { OR: [{ status: "ACTIVE" }, { id: lead.sourceId }] },
+
+  const [stages, companies, lostReasons, teleCallerIds] = await Promise.all([
+    // The pipeline, in Masters' order. The lead's own stage is kept even if
+    // since disabled, so the rail still shows where it stands.
+    prisma.leadStage.findMany({
+      where: { OR: [{ status: "ACTIVE" }, { id: lead.stageId }] },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, code: true, name: true, kind: true, sortOrder: true },
+    }),
+    canEdit
+      ? prisma.company.findMany({
+          where: { OR: [{ status: "ACTIVE" }, { id: { in: lead.companies.map((c) => c.company.id) } }] },
           select: { id: true, name: true }, orderBy: { name: "asc" },
-        }),
-        prisma.project.findMany({
-          where: { OR: [{ status: "ACTIVE" }, ...(lead.projectId ? [{ id: lead.projectId }] : [])] },
-          select: { id: true, name: true }, orderBy: { name: "asc" },
-        }),
-        prisma.unitType.findMany({
-          where: { OR: [{ status: "ACTIVE" }, ...(lead.unitTypeId ? [{ id: lead.unitTypeId }] : [])] },
-          select: { id: true, name: true }, orderBy: { name: "asc" },
-        }),
-      ])
-    : [[], [], []];
+        })
+      : [],
+    ctx.has(PERM.sales.lead.markLost)
+      ? prisma.lostReason.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } })
+      : [],
+    ctx.has(PERM.sales.lead.assign) ? usersHolding(prisma, PERM.sales.lead.receiveAssignment) : [],
+  ]);
+
+  // Who a lead can be handed to — whoever holds the duty to receive one.
+  const owners = teleCallerIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: teleCallerIds }, status: "ACTIVE" },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      })
+    : [];
 
   // Whatever Lead Settings added to the form, answered, and in the order the
   // form asks it.
@@ -115,60 +102,15 @@ export default async function LeadDetailPage({
 
   const stageHistory = audit
     .filter((a) => {
-      const c = a.changes as { state?: { from?: string; to?: string } } | null;
-      return Boolean(c?.state?.from && c?.state?.to);
+      const c = a.changes as { stage?: { from?: string; to?: string } } | null;
+      return Boolean(c?.stage?.from && c?.stage?.to);
     })
     .map((a) => {
-      const c = a.changes as { state: { from: string; to: string } };
-      return {
-        id: a.id,
-        from: c.state.from.replace(/_/g, " "),
-        to: c.state.to.replace(/_/g, " "),
-        by: a.user?.name ?? "System",
-        at: a.createdAt.toISOString(),
-      };
+      const c = a.changes as { stage: { from: string; to: string } };
+      return { id: a.id, from: c.stage.from, to: c.stage.to, by: a.user?.name ?? "System", at: a.createdAt.toISOString() };
     });
 
-  // Available units to block, for the Flats tab. Scoped to the lead's project.
-  const availableUnits = lead.projectId
-    ? await prisma.unit.findMany({
-        where: { projectId: lead.projectId, status: "AVAILABLE" },
-        orderBy: [{ floorNumber: "asc" }, { unitNumber: "asc" }],
-        take: 60,
-        select: {
-          id: true,
-          unitNumber: true,
-          floorNumber: true,
-          unitType: { select: { name: true } },
-          block: { select: { id: true, name: true } },
-        },
-      })
-    : [];
-
-  // The configured reasons the stage rail asks for when moving a lead to Lost.
-  const lostReasons = ctx.has(PERM.sales.lead.markLost)
-    ? await prisma.lostReason.findMany({
-        where: { status: "ACTIVE" },
-        select: { id: true, name: true },
-        orderBy: { name: "asc" },
-      })
-    : [];
-
-  const towers = [...new Map(
-    availableUnits.filter((u) => u.block).map((u) => [u.block!.id, u.block!.name]),
-  )].map(([id, name]) => ({ id, name }));
-
-  // Who a lead can be handed to — the people whose role lets them work one.
-  const owners = ctx.has(PERM.sales.lead.assign)
-    ? await prisma.user.findMany({
-        where: {
-          status: "ACTIVE",
-          roles: { some: { role: { permissions: { some: { permission: { code: PERM.sales.lead.view } } } } } },
-        },
-        orderBy: { name: "asc" },
-        select: { id: true, name: true },
-      })
-    : [];
+  const current = stages.findIndex((s) => s.id === lead.stageId);
 
   return (
     <LeadDetail
@@ -178,37 +120,30 @@ export default async function LeadDetailPage({
         leadNo: lead.leadNo,
         name: lead.name,
         phone: canContact ? lead.phone : maskPhone(lead.phone),
+        canCall: canContact,
         email: canContact ? lead.email : null,
-        sourceName: lead.source.name,
-        projectName: lead.project?.name ?? null,
+        location: lead.location,
+        companies: lead.companies.map((c) => c.company.name),
         ownerName: lead.owner?.name ?? null,
         ownerId: lead.owner?.id ?? null,
         firstResponseMins: lead.firstResponseMins,
-        state: lead.state,
+        stageName: lead.stage.name,
+        stageKind: lead.stage.kind,
         requirement: lead.requirement,
-        budgetMin: lead.budgetMin ? Number(lead.budgetMin) : null,
-        budgetMax: lead.budgetMax ? Number(lead.budgetMax) : null,
         nextActionAt: lead.nextActionAt?.toISOString() ?? null,
-        unitTypeName: lead.unitType?.name ?? null,
-        // A site visit is planned when one is on the calendar ahead.
         customFields: customFieldRows,
-        siteVisitPlanned: (() => {
-          const visit = lead.followUps.find(
-            (f) => f.channel === "SITE_VISIT" && f.nextActionAt && f.nextActionAt.getTime() >= now.getTime(),
-          );
-          return visit?.nextActionAt ? `Yes · ${formatDate(visit.nextActionAt)}` : "No";
-        })(),
         lostReason: lead.lostReason?.name ?? null,
         lostNotes: lead.lostNotes,
         createdAt: lead.createdAt.toISOString(),
       }}
       lostReasons={lostReasons}
-      stepper={STEPPER.map((s, i) => ({
-        key: s.key,
+      stepper={stages.map((s, i) => ({
+        id: s.id,
         name: s.name,
+        kind: s.kind,
         hasLine: i > 0,
-        done: lead.state !== "LOST" && stageIndex(lead.state) > i,
-        current: stageIndex(lead.state) === i,
+        done: lead.stage.kind !== "LOST" && current > i,
+        current: current === i,
       }))}
       timeline={[
         ...audit.map((a) => ({
@@ -232,6 +167,7 @@ export default async function LeadDetailPage({
       followUps={lead.followUps.map((f) => ({
         id: f.id,
         channel: f.channel,
+        stage: f.stage?.name ?? null,
         notes: f.notes,
         outcome: f.outcome,
         by: f.user.name,
@@ -252,34 +188,7 @@ export default async function LeadDetailPage({
         fileSize: d.fileSize,
         at: d.createdAt.toISOString(),
       }))}
-      blocked={[
-        ...lead.holds.map((h) => ({
-          id: h.id,
-          kind: "hold" as const,
-          unitNumber: h.unit.unitNumber,
-          plan: h.unit.unitType?.name ?? "—",
-          expiresAt: h.expiresAt.toISOString(),
-        })),
-        ...lead.bookings.map((b) => ({
-          id: b.id,
-          kind: "booking" as const,
-          unitNumber: b.unit.unitNumber,
-          plan: b.unit.unitType?.name ?? "—",
-          expiresAt: null,
-        })),
-      ]}
-      available={availableUnits
-        .filter((u) => tower === "all" || u.block?.id === tower)
-        .map((u) => ({
-          id: u.id,
-          unitNumber: u.unitNumber,
-          plan: u.unitType?.name ?? "—",
-          blockName: u.block?.name ?? null,
-        }))}
-      towers={towers}
-      tower={tower}
       tab={tab}
-      projectName={lead.project?.name ?? null}
       edit={canEdit ? {
         lead: {
           id: lead.id,
@@ -288,20 +197,14 @@ export default async function LeadDetailPage({
             ? { phone: lead.phone, altPhone: lead.altPhone ?? "", email: lead.email ?? "" }
             : null,
           maskedPhone: maskPhone(lead.phone),
-          sourceId: lead.sourceId,
-          projectId: lead.projectId ?? "",
-          unitTypeId: lead.unitTypeId ?? "",
-          budgetMin: lead.budgetMin === null ? "" : String(Number(lead.budgetMin)),
-          budgetMax: lead.budgetMax === null ? "" : String(Number(lead.budgetMax)),
+          location: lead.location ?? "",
+          companyIds: lead.companies.map((c) => c.company.id),
           requirement: lead.requirement ?? "",
           nextActionDay: dateInputValue(lead.nextActionAt),
           updatedAt: lead.updatedAt.toISOString(),
-          identityLocked: identityLocked({ state: lead.state, hasBooking: lead.bookings.length > 0 }),
-          closed: lead.state === "BOOKED" || lead.state === "LOST",
+          closed: lead.stage.kind === "LOST",
         },
-        sources: editSources,
-        projects: editProjects,
-        unitTypes: editUnitTypes,
+        companies,
       } : null}
       can={{
         tabTimeline: ctx.has(PERM.sales.lead.tabTimeline),
@@ -309,7 +212,6 @@ export default async function LeadDetailPage({
         tabNotes: ctx.has(PERM.sales.lead.tabNotes),
         tabStageHistory: ctx.has(PERM.sales.lead.tabStageHistory),
         tabFiles: ctx.has(PERM.sales.lead.tabFiles),
-        tabFlats: ctx.has(PERM.sales.lead.tabFlats),
         edit: canEdit,
         changeStage: ctx.has(PERM.sales.lead.changeStage),
         markLost: ctx.has(PERM.sales.lead.markLost),
@@ -317,8 +219,6 @@ export default async function LeadDetailPage({
         note: ctx.has(PERM.sales.lead.note),
         uploadFile: ctx.has(PERM.sales.lead.uploadFile),
         assign: ctx.has(PERM.sales.lead.assign),
-        block: ctx.has(PERM.unit.hold.create),
-        release: ctx.has(PERM.unit.hold.release),
       }}
       nowMs={now.getTime()}
     />

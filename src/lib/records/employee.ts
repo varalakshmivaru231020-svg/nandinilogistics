@@ -78,7 +78,6 @@ export async function employeeRecord(ctx: AuthContext, id: string): Promise<Reco
         orderBy: { attendanceOn: "desc" },
         take: 31,
         include: {
-          project: { select: { code: true } },
           markedBy: { select: { name: true } },
         },
       },
@@ -114,7 +113,7 @@ export async function employeeRecord(ctx: AuthContext, id: string): Promise<Reco
     ],
     sections: [
       {
-        label: "The worker",
+        label: "The person",
         fields: [
           { label: "Employee code", value: employee.employeeCode },
           { label: "Type of employment", value: employee.employmentType.name },
@@ -142,7 +141,6 @@ export async function employeeRecord(ctx: AuthContext, id: string): Promise<Reco
                 id: a.id,
                 title: a.attendanceOn.toISOString().slice(0, 10),
                 subtitle: [
-                  a.project?.code,
                   Number(a.overtimeHours) > 0 ? `OT ${Number(a.overtimeHours)} h` : null,
                   a.markedBy?.name,
                   a.notes,

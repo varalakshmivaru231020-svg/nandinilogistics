@@ -167,11 +167,11 @@ void main() {
         home: Scaffold(
           body: Column(children: [
             const Spacer(),
-            BottomBar(current: 'dashboard', onHome: () {}, onApprovals: () {}, onMore: () {}),
+            BottomBar(current: 'dashboard', onHome: () {}, onMore: () {}),
           ]),
         ),
       ));
-      for (final label in ['Home', 'Approvals', 'Tasks', 'More']) {
+      for (final label in ['Home', 'Tasks', 'More']) {
         final box = tester.getSize(find.ancestor(
           of: find.text(label),
           matching: find.byType(InkWell),
@@ -182,7 +182,7 @@ void main() {
   });
 
   group('the shell is the one the canvas draws', () {
-    testWidgets('four tabs — Home, Approvals, the module, More', (tester) async {
+    testWidgets('three tabs — Home, the module, More', (tester) async {
       await tester.pumpWidget(MaterialApp(
         theme: T.theme,
         home: Scaffold(
@@ -190,43 +190,38 @@ void main() {
             const Spacer(),
             BottomBar(
               current: 'third',
-              thirdLabel: 'Indents',
-              thirdIcon: Icons.description_outlined,
+              thirdLabel: 'Leads',
+              thirdIcon: Icons.person_search_outlined,
               onHome: () {},
-              onApprovals: () {},
               onMore: () {},
-              approvalsBadge: 6,
             ),
           ]),
         ),
       ));
       expect(find.text('Home'), findsOneWidget);
-      expect(find.text('Approvals'), findsOneWidget);
       // The third tab is "where you are", not a fixed destination.
-      expect(find.text('Indents'), findsOneWidget);
+      expect(find.text('Leads'), findsOneWidget);
       expect(find.text('More'), findsOneWidget);
-      expect(find.text('6'), findsOneWidget);
     });
 
-    testWidgets('the drawer is navy, with the account and the workspace on it',
+    testWidgets('the drawer is navy, with the account on it',
         (tester) async {
       useEmptyPrefs();
       await tester.pumpWidget(MaterialApp(
         theme: T.theme,
         home: Scaffold(
           drawer: NavDrawer(
-            session: sessionWith(const ['approvals.queue.view', 'material.indent.view']),
-            current: '/approvals',
+            session: sessionWith(const ['task.task.view', 'sales.lead.view']),
+            current: '/tasks',
             sections: const [
               NavSection('Overview', [
                 NavItem(href: '/dashboard', label: 'Dashboard'),
-                NavItem(href: '/approvals', label: 'Approvals'),
+                NavItem(href: '/tasks', label: 'Tasks'),
               ]),
             ],
             onPick: (_) {},
-            onProject: () {},
             onSignOut: () {},
-            badges: const {'/approvals': 6},
+            badges: const {'/tasks': 6},
           ),
           body: const SizedBox(),
         ),
@@ -234,10 +229,8 @@ void main() {
       tester.state<ScaffoldState>(find.byType(Scaffold)).openDrawer();
       await tester.pumpAndSettle();
 
-      expect(find.text('Anil Deshpande'), findsOneWidget);
-      expect(find.textContaining('Project Manager'), findsOneWidget);
-      expect(find.text('WORKSPACE'), findsOneWidget);
-      expect(find.text('All projects'), findsOneWidget);
+      expect(find.text('Manjunath Gowda'), findsOneWidget);
+      expect(find.textContaining('Team Leader'), findsOneWidget);
       expect(find.text('Sign out'), findsOneWidget);
       // The count the server sent, on the entry it belongs to.
       expect(find.text('6'), findsOneWidget);
@@ -256,13 +249,14 @@ void main() {
       // `hrefToModule` is the only thing the app says about a route: which
       // list it reads. A route with no entry must be one with a screen of its
       // own, or Masters, which is web-only by design.
-      const ownScreen = {'/dashboard', '/calendar', '/approvals', '/dashboard/performance'};
-      const webOnly = {'/masters'};
+      const ownScreen = {'/dashboard'};
+      const webOnly = {'/masters', '/reports'};
       for (final href in hrefToModule.keys) {
         expect(ownScreen.contains(href), isFalse, reason: href);
       }
-      expect(hrefToModule.containsKey('/masters'), isFalse);
-      expect(webOnly.isNotEmpty, isTrue);
+      for (final href in webOnly) {
+        expect(hrefToModule.containsKey(href), isFalse, reason: href);
+      }
     });
 
     /// The screens the web reaches contextually are offered from their parent,
@@ -284,11 +278,10 @@ void main() {
             sections: const [
               NavSection('Overview', [
                 NavItem(href: '/dashboard', label: 'Dashboard'),
-                NavItem(href: '/approvals', label: 'Approvals'),
+                NavItem(href: '/tasks', label: 'Tasks'),
               ]),
             ],
             onPick: (_) {},
-            onProject: () {},
             onSignOut: () {},
           ),
           body: const SizedBox(),
@@ -299,7 +292,7 @@ void main() {
 
       expect(find.text('OVERVIEW'), findsOneWidget);
       expect(find.text('Dashboard'), findsOneWidget);
-      expect(find.text('Approvals'), findsOneWidget);
+      expect(find.text('Tasks'), findsOneWidget);
     });
   });
 

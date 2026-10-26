@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { LeadEditError, type LeadEditActor } from "@/lib/sales/lead-edit";
 import { applyLeadEdit } from "@/lib/sales/lead-edit-service";
-import { prisma, seededUsers } from "./helpers";
+import { prisma, seededUsers, stageOfKind } from "./helpers";
 
 /**
  * Editing a lead against the database. Every lead here is throwaway: its phone
@@ -14,15 +14,13 @@ const TAG = String(Date.now()).slice(-7);
 const phone = (n: number) => `9${TAG}${String(n).padStart(2, "0")}`;
 
 let actor: LeadEditActor;
-let sourceId: string;
+let stageId: string;
 let seq = 0;
 
 beforeAll(async () => {
-  const { owner } = await seededUsers();
-  actor = { id: owner.id, canViewAll: false, canViewContact: true };
-  const source = await prisma.leadSource.findFirst({ where: { status: "ACTIVE" }, select: { id: true } });
-  expect(source, "reference data has an active lead source").not.toBeNull();
-  sourceId = source!.id;
+  const { teleCaller } = await seededUsers();
+  actor = { id: teleCaller.id, canViewAll: false, canViewContact: true };
+  stageId = (await stageOfKind("OPEN")).id;
 });
 
 afterAll(async () => {
@@ -37,7 +35,7 @@ async function makeLead(n: number, over: Record<string, unknown> = {}) {
       leadNo: `LEDIT-${TAG}-${seq}`,
       name: `Edit test ${n}`,
       phone: phone(n),
-      sourceId,
+      stageId,
       ownerId: actor.id,
       ...over,
     },
@@ -49,24 +47,24 @@ const edit = (id: string, form: Record<string, unknown>, updatedAt: Date) =>
 
 describe("applyLeadEdit", () => {
   it("persists an edit and records a field-level diff with the phone masked", async () => {
-    const lead = await makeLead(1, { budgetMin: 4_000_000, requirement: "2 BHK" });
+    const lead = await makeLead(1, { location: "Koramangala", requirement: "Has a bike" });
 
     const outcome = await edit(lead.id, {
-      name: "Edit test one", phone: phone(1), budgetMin: "4000000", budgetMax: "6500000", requirement: "3 BHK",
+      name: "Edit test one", phone: phone(1), location: "HSR Layout", requirement: "Has a scooter",
     }, lead.updatedAt);
 
     expect(outcome.updated).toBe(true);
     expect(outcome.changes).toEqual({
       name: { from: "Edit test 1", to: "Edit test one" },
-      budgetMax: { from: null, to: 6_500_000 },
-      requirement: { from: "2 BHK", to: "3 BHK" },
+      location: { from: "Koramangala", to: "HSR Layout" },
+      requirement: { from: "Has a bike", to: "Has a scooter" },
     });
-    expect(outcome.summary).toBe(`Edited lead ${lead.leadNo} — name, budget to and requirement`);
+    expect(outcome.summary).toBe(`Edited lead ${lead.leadNo} — name, location and notes`);
 
     const stored = await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } });
     expect(stored.name).toBe("Edit test one");
-    expect(Number(stored.budgetMax)).toBe(6_500_000);
-    expect(stored.requirement).toBe("3 BHK");
+    expect(stored.location).toBe("HSR Layout");
+    expect(stored.requirement).toBe("Has a scooter");
     expect(stored.phone).toBe(phone(1));
     expect(stored.updatedAt.getTime()).toBeGreaterThan(lead.updatedAt.getTime());
 
@@ -145,8 +143,8 @@ describe("applyLeadEdit", () => {
   });
 
   it("refuses someone else's lead without viewAll", async () => {
-    const { sales } = await seededUsers();
-    const lead = await makeLead(50, { ownerId: sales.id });
+    const { teleCaller2 } = await seededUsers();
+    const lead = await makeLead(50, { ownerId: teleCaller2.id });
     const err = await edit(lead.id, { name: "Not mine" }, lead.updatedAt).catch((e) => e);
     expect(err).toBeInstanceOf(LeadEditError);
     expect(err.kind).toBe("forbidden");

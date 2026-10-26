@@ -116,8 +116,7 @@ void main() {
           moduleKey: 'hr/employees',
           onBack: () {},
           bottom: const SizedBox.shrink(),
-          onPickProject: () {},
-          onOpenRelated: (_) {},
+              onOpenRelated: (_) {},
         ),
       ));
       await tester.pumpAndSettle();

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  dateInputValue, editRefusal, editSummary, identityLocked, LeadEditError, maskChanges,
+  dateInputValue, editRefusal, editSummary, LeadEditError, maskChanges,
   planDuplicateRelink, planLeadEdit,
   type EditableLead, type LeadEditActor, type PhoneCandidate,
 } from "@/lib/sales/lead-edit";
@@ -9,24 +9,20 @@ import {
 const lead = (over: Partial<EditableLead> = {}): EditableLead => ({
   id: "L1",
   ownerId: "u-owner",
-  state: "CONTACTED",
-  hasBooking: false,
+  stageKind: "OPEN",
   name: "Asha Rao",
   phone: "9845012345",
   altPhone: null,
   email: "asha@example.com",
-  sourceId: "src-1",
-  projectId: null,
-  unitTypeId: null,
-  budgetMin: 5_000_000,
-  budgetMax: 7_000_000,
-  requirement: "2 BHK",
+  location: "Koramangala",
+  requirement: "Has own bike",
   nextActionAt: new Date("2026-09-20T03:30:00.000Z"),
+  companyIds: ["c-peeko"],
   ...over,
 });
 
 const owner: LeadEditActor = { id: "u-owner", canViewAll: false, canViewContact: true };
-const manager: LeadEditActor = { id: "u-head", canViewAll: true, canViewContact: true };
+const manager: LeadEditActor = { id: "u-tl", canViewAll: true, canViewContact: true };
 
 function refusal(fn: () => unknown): LeadEditError {
   try {
@@ -43,7 +39,6 @@ describe("who may edit", () => {
     expect(editRefusal(owner, lead())).toBeNull();
     expect(editRefusal(manager, lead())).toBeNull();
     expect(editRefusal({ ...owner, id: "u-other" }, lead())).toMatch(/assigned to you/);
-    expect(editRefusal({ ...owner, id: "u-other" }, lead({ ownerId: null }))).not.toBeNull();
 
     const err = refusal(() => planLeadEdit(lead(), { ...owner, id: "u-other" }, { name: "Changed" }));
     expect(err.kind).toBe("forbidden");
@@ -53,43 +48,40 @@ describe("who may edit", () => {
 
 describe("what changes", () => {
   it("reports only the fields that differ, and keeps what the form leaves out", () => {
-    const { changed, after } = planLeadEdit(lead(), owner, { name: "Asha R. Rao", budgetMax: "8000000" });
-    expect(changed).toEqual(["name", "budgetMax"]);
+    const { changed, after } = planLeadEdit(lead(), owner, { name: "Asha R. Rao", location: "HSR Layout" });
+    expect(changed).toEqual(["name", "location"]);
     expect(after.phone).toBe("9845012345");
-    expect(after.email).toBe("asha@example.com");
-    expect(after.budgetMin).toBe(5_000_000);
+    expect(after.companyIds).toEqual(["c-peeko"]);
   });
 
   it("blanks optional fields to null when the form clears them", () => {
-    const { changed, after } = planLeadEdit(lead(), owner, { email: "", requirement: "  ", budgetMin: "", nextActionAt: "" });
+    const { changed, after } = planLeadEdit(lead(), owner, { email: "", requirement: "  ", nextActionAt: "" });
+    expect(changed).toEqual(["email", "requirement", "nextActionAt"]);
     expect(after.email).toBeNull();
     expect(after.requirement).toBeNull();
-    expect(after.budgetMin).toBeNull();
     expect(after.nextActionAt).toBeNull();
-    expect(changed).toEqual(["email", "budgetMin", "requirement", "nextActionAt"]);
   });
 
   it("applies the capture rules", () => {
     expect(refusal(() => planLeadEdit(lead(), owner, { name: "A" })).message).toBe("Name is required");
-    expect(refusal(() => planLeadEdit(lead(), owner, { email: "not-an-email" })).message).toBe("Enter a valid email");
-    expect(refusal(() => planLeadEdit(lead(), owner, { phone: "123" })).message).toMatch(/phone/);
-    expect(refusal(() => planLeadEdit(lead(), owner, { sourceId: "" })).message).toBe("Lead source is required");
-    expect(refusal(() => planLeadEdit(lead(), owner, { budgetMin: "-5" })).message).toMatch(/Budget from/);
+    expect(refusal(() => planLeadEdit(lead(), owner, { email: "not-an-email" })).message).toMatch(/email/i);
+    expect(refusal(() => planLeadEdit(lead(), owner, { phone: "123" })).message).toMatch(/phone|mobile/i);
     expect(refusal(() => planLeadEdit(lead(), owner, { nextActionAt: "next week" })).message).toMatch(/date/);
   });
 
-  it("refuses a budget from above budget to — including against the stored other end", () => {
-    expect(refusal(() => planLeadEdit(lead(), owner, { budgetMin: "9000000", budgetMax: "8000000" })).message)
-      .toBe("Budget from is more than budget to.");
-    expect(refusal(() => planLeadEdit(lead(), owner, { budgetMin: "7500000" })).kind).toBe("invalid");
-    expect(planLeadEdit(lead(), owner, { budgetMin: "7000000" }).changed).toEqual(["budgetMin"]);
+  it("sorts and de-duplicates the companies, whichever way the form carried them", () => {
+    expect(planLeadEdit(lead(), owner, { companyIds: ["c-slikk", "c-peeko", "c-slikk"] }).after.companyIds)
+      .toEqual(["c-peeko", "c-slikk"]);
+    expect(planLeadEdit(lead(), owner, { companyIds: "c-slikk,c-peeko" }).after.companyIds)
+      .toEqual(["c-peeko", "c-slikk"]);
+    expect(planLeadEdit(lead(), owner, { companyIds: ["c-peeko"] }).changed).toEqual([]);
   });
 
   it("keeps an untouched next action date at its stored time, and replaces a changed one", () => {
-    const stored = lead();
+    const stored = lead({ nextActionAt: new Date("2026-09-20T03:30:00.000Z") });
     const same = planLeadEdit(stored, owner, { nextActionAt: dateInputValue(stored.nextActionAt) });
     expect(same.changed).toEqual([]);
-    expect(same.after.nextActionAt).toBe(stored.nextActionAt);
+    expect(same.after.nextActionAt?.toISOString()).toBe("2026-09-20T03:30:00.000Z");
 
     const moved = planLeadEdit(stored, owner, { nextActionAt: "2026-09-25" });
     expect(moved.changed).toEqual(["nextActionAt"]);
@@ -97,15 +89,15 @@ describe("what changes", () => {
   });
 
   it("never touches stage, owner or anything outside the editable fields", () => {
-    const { after } = planLeadEdit(lead(), manager, { state: "BOOKED", ownerId: "u-head", lostReasonId: "x", name: "Asha Rao" });
-    expect(Object.keys(after)).not.toContain("state");
-    expect(Object.keys(after)).not.toContain("ownerId");
-    expect(Object.keys(after)).not.toContain("lostReasonId");
+    const { after } = planLeadEdit(lead(), manager, { stageId: "s-lost", ownerId: "u-head", lostReasonId: "x" });
+    expect(Object.keys(after).sort()).toEqual([
+      "altPhone", "companyIds", "email", "location", "name", "nextActionAt", "phone", "requirement",
+    ]);
   });
 });
 
 describe("contact fields need viewContact", () => {
-  const blind: LeadEditActor = { id: "u-owner", canViewAll: false, canViewContact: false };
+  const blind: LeadEditActor = { ...owner, canViewContact: false };
 
   it("keeps the stored contact details when the form does not send them", () => {
     const { after, changed } = planLeadEdit(lead({ altPhone: "080 2222 3333" }), blind, { name: "Asha Rao K" });
@@ -116,7 +108,7 @@ describe("contact fields need viewContact", () => {
   });
 
   it("refuses any change to phone, alternate phone or email", () => {
-    for (const form of [{ phone: "••••••2345" }, { altPhone: "9000000000" }, { email: "" }]) {
+    for (const form of [{ phone: "9000000001" }, { altPhone: "9000000002" }, { email: "x@y.com" }]) {
       const err = refusal(() => planLeadEdit(lead(), blind, form));
       expect(err.kind).toBe("forbidden");
       expect(err.needs).toBe("viewContact");
@@ -128,32 +120,16 @@ describe("contact fields need viewContact", () => {
   });
 });
 
-describe("booked and lost leads", () => {
-  it("fixes a booked lead's name and phone, whether by stage or by an existing booking", () => {
-    expect(identityLocked({ state: "BOOKED", hasBooking: false })).toBe(true);
-    expect(identityLocked({ state: "NEGOTIATION", hasBooking: true })).toBe(true);
-    expect(identityLocked({ state: "LOST", hasBooking: false })).toBe(false);
-
-    for (const l of [lead({ state: "BOOKED" }), lead({ state: "NEGOTIATION", hasBooking: true })]) {
-      expect(refusal(() => planLeadEdit(l, owner, { name: "Someone else" })).message).toMatch(/booking/);
-      expect(refusal(() => planLeadEdit(l, owner, { phone: "9000000001" })).message).toMatch(/booking/);
-    }
-  });
-
-  it("still lets a booked lead's other details be corrected", () => {
-    const { changed } = planLeadEdit(lead({ state: "BOOKED" }), owner, { email: "asha.rao@example.com", requirement: "3 BHK" });
-    expect(changed).toEqual(["email", "requirement"]);
-  });
-
+describe("lost leads", () => {
   it("lets a lost lead be corrected, name and phone included", () => {
-    expect(planLeadEdit(lead({ state: "LOST" }), owner, { name: "Asha Rao", phone: "9845099999" }).changed).toEqual(["phone"]);
+    expect(planLeadEdit(lead({ stageKind: "LOST" }), owner, { name: "Asha Rao", phone: "9845099999" }).changed)
+      .toEqual(["phone"]);
   });
 
-  it("refuses to schedule a next action on a closed lead, but allows clearing it", () => {
-    for (const state of ["BOOKED", "LOST"]) {
-      expect(refusal(() => planLeadEdit(lead({ state }), owner, { nextActionAt: "2026-10-01" })).message).toMatch(/open stage/);
-      expect(planLeadEdit(lead({ state }), owner, { nextActionAt: "" }).changed).toEqual(["nextActionAt"]);
-    }
+  it("refuses to schedule a next action on a lost lead, but allows clearing it", () => {
+    expect(refusal(() => planLeadEdit(lead({ stageKind: "LOST" }), owner, { nextActionAt: "2026-10-01" })).message)
+      .toMatch(/lost lead/);
+    expect(planLeadEdit(lead({ stageKind: "LOST" }), owner, { nextActionAt: "" }).changed).toEqual(["nextActionAt"]);
   });
 });
 
@@ -181,14 +157,12 @@ describe("duplicate relinking", () => {
   });
 
   it("re-points leads that duplicated the old number, and the edited lead may then link on", () => {
-    // L1 was the original for D1 and D2 (old number 9111111111); it now takes B's number.
     const plan = planDuplicateRelink("L1", "9845012345", [
       c("D2", "9111111111", 9, "L1"),
       c("D1", "9111111111", 4, "L1"),
       c("B", "9845012345", 3),
     ]);
     expect(plan.duplicateOfId).toBe("B");
-    // The earliest remaining becomes the original; the later one points at it.
     expect(plan.repoint).toEqual([
       { id: "D2", duplicateOfId: "D1" },
       { id: "D1", duplicateOfId: null },
@@ -196,7 +170,6 @@ describe("duplicate relinking", () => {
   });
 
   it("keeps a lead that others still point at as an original, so links never chain", () => {
-    // D shares the new number and still points at L1: L1 must not become B's duplicate.
     const plan = planDuplicateRelink("L1", "9845012345", [
       c("D", "9845012345", 6, "L1"),
       c("B", "9845012345", 2),
@@ -205,7 +178,6 @@ describe("duplicate relinking", () => {
   });
 
   it("never links to a lead whose own chain leads back to the edited lead", () => {
-    // A → Q → L1 already (stale data); B is later but safe.
     const plan = planDuplicateRelink("L1", "9845012345", [
       c("A", "9845012345", 1, "Q"),
       c("Q", "9222222222", 2, "Z"),
@@ -238,19 +210,17 @@ describe("audit", () => {
   });
 
   it("names the fields in the summary, never the values", () => {
-    expect(editSummary("LD-0001", ["phone", "budgetMax"], 0)).toBe("Edited lead LD-0001 — phone and budget to");
-    expect(editSummary("LD-0001", ["name"], 2)).toMatch(/2 other leads/);
+    expect(editSummary("LD00001", ["phone", "location"], 0)).toBe("Edited lead LD00001 — mobile number and location");
+    expect(editSummary("LD00001", ["name"], 2)).toMatch(/2 other leads/);
   });
 });
 
 describe("dateInputValue reads the day as it is in India", () => {
   it("shows a follow-up stored for early morning IST on that same day, not the day before", () => {
-    // 00:30 IST on 5 Oct 2026 is 19:00 UTC on 4 Oct.
     expect(dateInputValue(new Date("2026-10-04T19:00:00.000Z"))).toBe("2026-10-05");
   });
 
   it("reads back a date typed in the app unchanged", () => {
-    // A date input stores yyyy-mm-dd as UTC midnight: 05:30 IST the same day.
     expect(dateInputValue(new Date("2026-10-05"))).toBe("2026-10-05");
   });
 

@@ -1,16 +1,13 @@
 import { PERM } from "@/lib/permissions/codes";
 
 /**
- * The sidebar, exactly as drawn in design/NN Infra Admin.dc.html: six groups,
- * sixteen screens, in the design's own order and under its own names.
+ * The sidebar: the SOW's Admin web application areas, in its order, each
+ * revealed by the permission that guards its screen. Screens a role cannot
+ * open are not drawn, so the menu a user sees is a direct projection of what
+ * they are allowed to do.
  *
- * Nothing else belongs here. Screens the design does not draw — vendor
- * invoices, payments, transfers, cost sheets, reports, the administration
- * pages — are reached from within the screen that owns them, not from a menu
- * entry the design never had.
- *
- * Every entry names the permission that reveals it, so the menu a user sees is
- * a direct projection of what they are allowed to open.
+ * Administration pages (roles, users, permissions, sessions, audit) are
+ * reached from Masters, not from a menu entry of their own.
  */
 
 export interface NavItem {
@@ -22,7 +19,7 @@ export interface NavItem {
   anyPermission?: string[];
   /** Key into the design's icon set — see components/shell/nav-icons.tsx. */
   icon?: string;
-  badge?: "indentPending" | "followUpDue" | "reorder" | "tasks" | "approvals";
+  badge?: "followUpDue" | "tasks";
 }
 
 export interface NavSection {
@@ -39,59 +36,32 @@ export const NAVIGATION: NavSection[] = [
         href: "/dashboard",
         icon: "dashboard",
         anyPermission: [
-          PERM.dashboard.owner.view,
-          PERM.dashboard.projectManager.view,
-          PERM.dashboard.supervisor.view,
-          PERM.dashboard.storeManager.view,
-          PERM.dashboard.sales.view,
+          PERM.dashboard.admin.view,
+          PERM.dashboard.teamLeader.view,
+          PERM.dashboard.teleCaller.view,
+          PERM.dashboard.rider.view,
         ],
       },
-      { label: "Calendar", href: "/calendar", icon: "schedule", permission: PERM.calendar.agenda.view },
-      { label: "Approvals", href: "/approvals", icon: "checklists", permission: PERM.approvals.queue.view, badge: "approvals" },
     ],
   },
   {
-    label: "Execution",
+    label: "CRM",
     items: [
-      { label: "Projects", href: "/projects", icon: "projects", permission: PERM.project.project.view },
-      { label: "Tasks", href: "/tasks", icon: "tasks", permission: PERM.task.task.view, badge: "tasks" },
-      { label: "Task Reports", href: "/tasks/reports", icon: "reports", permission: PERM.task.report.view },
-      { label: "Performance", href: "/dashboard/performance", icon: "dashboard", permission: PERM.dashboard.performance.view },
-      { label: "Checklists", href: "/checklists", icon: "checklists", permission: PERM.checklist.checklist.view },
-      { label: "Schedule", href: "/schedule", icon: "schedule", permission: PERM.schedule.activity.view },
-    ],
-  },
-  {
-    label: "Procurement",
-    items: [
-      { label: "Indents", href: "/material/indents", icon: "indents", permission: PERM.material.indent.view, badge: "indentPending" },
-      { label: "Purchase Orders", href: "/material/purchase-orders", icon: "pos", permission: PERM.material.purchaseOrder.view },
-      { label: "Goods Receipt", href: "/material/grn", icon: "grn", permission: PERM.material.grn.view },
-      { label: "Item Master", href: "/material/stock", icon: "items", permission: PERM.material.stock.view },
-      { label: "Vendors", href: "/material/vendors", icon: "vendors", permission: PERM.material.vendor.view },
-    ],
-  },
-  {
-    label: "Sales",
-    items: [
-      { label: "Leads · CRM", href: "/sales/leads", icon: "leads", permission: PERM.sales.lead.view },
+      { label: "Leads", href: "/sales/leads", icon: "leads", permission: PERM.sales.lead.view },
       { label: "Follow-ups", href: "/sales/follow-ups", icon: "followups", permission: PERM.sales.followUp.view, badge: "followUpDue" },
-      // Customers are their own module, not a table under the pipeline: once a
-      // lead has become one, the pipeline is no longer where you look for them.
-      { label: "Customers", href: "/sales/customers", icon: "hr", permission: PERM.sales.customer.view },
-      { label: "Available Flats", href: "/units/board", icon: "flats", permission: PERM.unit.board.view },
     ],
   },
   {
-    label: "Workforce",
+    label: "People",
     items: [
-      { label: "Users & Attendance", href: "/hr", icon: "hr", permission: PERM.hr.employee.view },
+      { label: "Riders & Staff", href: "/hr", icon: "hr", permission: PERM.hr.employee.view },
+      { label: "Tasks", href: "/tasks", icon: "tasks", permission: PERM.task.task.view, badge: "tasks" },
     ],
   },
   {
     label: "Administration",
     items: [
-      { label: "Knowledge Base", href: "/kb", icon: "kb", permission: PERM.kb.article.view },
+      { label: "Reports", href: "/reports", icon: "reports", anyPermission: REPORT_VIEW_CODES() },
       { label: "Masters & Users", href: "/masters", icon: "masters", anyPermission: MASTER_VIEW_CODES() },
     ],
   },
@@ -101,39 +71,42 @@ function MASTER_VIEW_CODES(): string[] {
   return Object.values(PERM.masters).map((r) => (r as { view: string }).view);
 }
 
+function REPORT_VIEW_CODES(): string[] {
+  const reports = (PERM as Record<string, Record<string, Record<string, string>>>).reports ?? {};
+  return Object.values(reports).map((r) => r.view).filter(Boolean);
+}
+
 /** Filters the navigation to what this permission set can actually open. */
 export function visibleNavigation(has: (code: string) => boolean): NavSection[] {
   return NAVIGATION.map((section) => ({
     ...section,
     items: section.items.filter((item) => {
       if (item.permission && !has(item.permission)) return false;
-      if (item.anyPermission?.length && !item.anyPermission.some(has)) return false;
+      if (item.anyPermission && !item.anyPermission.some(has)) return false;
       return true;
     }),
   })).filter((section) => section.items.length > 0);
 }
 
 /**
- * Which navigation entry a URL belongs to.
- *
- * Longest match wins, and exactly one entry can ever be returned, so a screen
- * reached from inside another (a purchase order from an indent, say) lights up
- * the one menu entry it sits under.
- */
-/**
  * Screens that live under a menu entry without sharing its path. Access
  * control is reached from Masters & Users and belongs to it.
  */
 const BELONGS_TO: ReadonlyArray<[prefix: string, href: string]> = [
-  ["/workspace", "/projects"],
   ["/admin/roles", "/masters"],
   ["/admin/users", "/masters"],
   ["/admin/permissions", "/masters"],
-  ["/admin/approval-limits", "/masters"],
   ["/admin/sessions", "/masters"],
   ["/admin/audit", "/masters"],
+  ["/admin/settings", "/masters"],
 ];
 
+/**
+ * Which navigation entry a URL belongs to.
+ *
+ * Longest match wins, and exactly one entry can ever be returned, so a screen
+ * reached from inside another lights up the one menu entry it sits under.
+ */
 export function activeNavHref(
   pathname: string,
   sections: ReadonlyArray<{ items: ReadonlyArray<{ href: string }> }>,

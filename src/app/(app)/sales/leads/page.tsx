@@ -1,81 +1,91 @@
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { leadListWhere } from "@/lib/sales/lead-list";
+import { usersHolding } from "@/lib/rbac/holders";
+import { leadListWhere, readLeadListParams } from "@/lib/sales/lead-list";
 import { ModuleStats } from "@/components/list/module-stats";
 import { leadFigures } from "@/lib/metrics/figures";
 import { LeadsScreen } from "./leads-screen";
 
-export const metadata = { title: "Lead Management · Sales CRM" };
+export const metadata = { title: "Leads · CRM" };
 
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; state?: string; source?: string; fu?: string; view?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const ctx = await requirePermission(PERM.sales.lead.view);
-  const { q = "", state = "all", source = "all", fu = "all", view = "board" } = await searchParams;
+  const raw = await searchParams;
+  const params = readLeadListParams(raw);
+  const view = raw.view === "list" ? "list" : "board";
   const now = new Date();
 
-  // Without viewAll a sales executive sees only their own pipeline.
+  // Without viewAll a tele-caller sees only their own pipeline.
   const ownership = ctx.has(PERM.sales.lead.viewAll) ? {} : { ownerId: ctx.id };
   // Shared with the export, so a download holds exactly what this screen shows.
-  // The web draws every column at once, so it asks for no single one of them.
-  const where = leadListWhere(ownership, { q, state, source, fu, pipeline: "all" }, now);
+  const where = leadListWhere(ownership, params, now);
 
-  const [leads, statRows, stageCounts, sources, lostReasons, projects, unitTypes, formFields] = await Promise.all([
+  const canAssign = ctx.has(PERM.sales.lead.assign);
+  const [leads, stages, statRows, companies, lostReasons, formFields, teleCallerIds] = await Promise.all([
     prisma.lead.findMany({
       where,
       orderBy: [{ nextActionAt: "asc" }, { createdAt: "desc" }],
       take: 300,
       include: {
-        source: { select: { name: true } },
+        stage: { select: { id: true, name: true, kind: true } },
         owner: { select: { id: true, name: true } },
-        project: { select: { name: true } },
         lostReason: { select: { name: true } },
-        _count: { select: { followUps: true, siteVisits: true } },
+        companies: { select: { company: { select: { id: true, name: true } } } },
+        _count: { select: { followUps: true } },
       },
     }),
+    prisma.leadStage.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, code: true, name: true, kind: true, sortOrder: true },
+    }),
     // The band reads the whole pipeline the viewer can see, not the filtered page.
-    prisma.lead.findMany({ where: ownership, select: { state: true, createdAt: true, budgetMax: true } }),
-    prisma.lead.groupBy({ by: ["state"], where: ownership, _count: true }),
-    prisma.leadSource.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.lead.findMany({ where: ownership, select: { createdAt: true, stage: { select: { kind: true } } } }),
+    prisma.company.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.lostReason.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.project.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
-    prisma.unitType.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     // The Capture-lead form is whatever Masters → Lead Settings says it is.
     prisma.leadFormField.findMany({ orderBy: { sortOrder: "asc" } }),
+    // Who may be handed a lead — the same pool round-robin draws from.
+    usersHolding(prisma, PERM.sales.lead.receiveAssignment),
   ]);
 
-  // The design's header counts: how many leads there are in all, and how many
-  // are still open — everything but booked and lost.
-  const totalLeads = stageCounts.reduce((n, s) => n + s._count, 0);
-  const openLeads = stageCounts
-    .filter((s) => s.state !== "BOOKED" && s.state !== "LOST")
-    .reduce((n, s) => n + s._count, 0);
+  const teleCallers = ctx.has(PERM.sales.lead.viewAll) || canAssign
+    ? await prisma.user.findMany({
+        where: { id: { in: teleCallerIds }, status: "ACTIVE" },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
 
+  const totalLeads = statRows.length;
+  const openLeads = statRows.filter((l) => l.stage.kind !== "LOST").length;
 
   return (
     <div>
       <ModuleStats
         figures={leadFigures(
-          statRows.map((l) => ({ stage: l.state, createdAt: l.createdAt, budgetMax: l.budgetMax })),
+          statRows.map((l) => ({ stageKind: l.stage.kind, createdAt: l.createdAt })),
           now.getTime(),
         )}
       />
       <LeadsScreen
         totalLeads={totalLeads}
         openLeads={openLeads}
-        unitTypes={unitTypes}
+        stages={stages}
+        companies={companies}
+        teleCallers={teleCallers}
+        lostReasons={lostReasons}
         formFields={formFields.map((f) => ({
           id: f.id, fieldKey: f.fieldKey, label: f.label,
           type: f.type, required: f.required, isSystem: f.isSystem,
         }))}
-        query={q}
-        stateFilter={state}
-        sourceFilter={source}
-        followUpFilter={fu}
-        view={view === "list" ? "list" : "board"}
+        filters={params}
+        view={view}
         nowMs={now.getTime()}
         leads={leads.map((l) => ({
           id: l.id,
@@ -83,33 +93,28 @@ export default async function LeadsPage({
           name: l.name,
           phone: l.phone,
           email: l.email,
-          state: l.state,
-          source: l.source.name,
+          location: l.location,
+          stageId: l.stage.id,
+          stageName: l.stage.name,
+          stageKind: l.stage.kind,
           ownerId: l.owner?.id ?? null,
           ownerName: l.owner?.name ?? null,
-          projectName: l.project?.name ?? null,
+          companies: l.companies.map((c) => c.company.name),
           requirement: l.requirement,
-          budgetMin: l.budgetMin === null ? null : Number(l.budgetMin),
-          budgetMax: l.budgetMax === null ? null : Number(l.budgetMax),
           nextActionAt: l.nextActionAt ? l.nextActionAt.toISOString() : null,
-          sourceId: l.sourceId,
           lostReason: l.lostReason?.name ?? null,
           followUpCount: l._count.followUps,
-          visitCount: l._count.siteVisits,
           isDuplicate: Boolean(l.duplicateOfId),
         }))}
-        sources={sources}
-        lostReasons={lostReasons}
-        projects={projects}
         can={{
           create: ctx.has(PERM.sales.lead.create),
           changeStage: ctx.has(PERM.sales.lead.changeStage),
           markLost: ctx.has(PERM.sales.lead.markLost),
-          assign: ctx.has(PERM.sales.lead.assign),
+          assign: canAssign,
+          viewAll: ctx.has(PERM.sales.lead.viewAll),
           viewContact: ctx.has(PERM.sales.lead.viewContact),
           followUp: ctx.has(PERM.sales.followUp.create),
           export: ctx.has(PERM.sales.lead.export),
-          import: ctx.has(PERM.sales.lead.import),
         }}
       />
     </div>

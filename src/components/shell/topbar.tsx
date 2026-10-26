@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Building2, ChevronDown, Menu, Search } from "lucide-react";
+import { Bell, ChevronDown, Menu, Search } from "lucide-react";
 
 import { screenTitle } from "@/lib/screen-title";
 import { usePermissions } from "@/components/rbac/permission-provider";
@@ -11,18 +11,15 @@ import { logoutAction } from "@/app/(auth)/login/actions";
 
 /**
  * The design's topbar, in its order: title, the 290px search box, "All
- * projects", the navy role button with its menu, the bell with its badge, and
+ * the navy role button with its menu, the bell with its badge, and
  * a plain gradient avatar circle.
  */
 export function Topbar({
   onOpenMobile,
   notificationCount = 0,
-  workspaceName = null,
 }: {
   onOpenMobile: () => void;
   notificationCount?: number;
-  /** The project being worked in, or null for all of them. */
-  workspaceName?: string | null;
 }) {
   const perms = usePermissions();
   const title = screenTitle(usePathname());
@@ -62,26 +59,11 @@ export function Topbar({
       <div className="ml-2 hidden w-[290px] items-center gap-2 rounded-[9px] border border-line-400 bg-surface-field px-[13px] py-2 xl:flex">
         <Search className="h-3.5 w-3.5 shrink-0 text-muted-500" />
         <span className="truncate text-[12.5px] font-medium text-muted-400">
-          Search projects, indents, leads…
+          Search leads, riders, tasks…
         </span>
       </div>
 
       <div className="flex-1" />
-
-      {/*
-       * The design's chip, unchanged: a 7px/12px pill in #F1F4FB with a 13px
-       * building glyph, reading "All projects". It is a plain div there, so
-       * nothing is added to it here — no chevron, no menu. It carries the name
-       * of the project being worked in and opens the chooser.
-       */}
-      <Link
-        href="/workspace"
-        title="Choose the project to work in"
-        className="hidden items-center gap-[7px] rounded-[9px] border border-line-400 bg-surface-field px-3 py-[7px] text-[12px] font-semibold text-navy-600 transition-colors hover:border-brand-500 md:flex"
-      >
-        <Building2 className="h-[13px] w-[13px] text-brand-500" />
-        <span className="max-w-[170px] truncate">{workspaceName ?? "All projects"}</span>
-      </Link>
 
       <div className="relative hidden sm:block" ref={ref}>
         <button

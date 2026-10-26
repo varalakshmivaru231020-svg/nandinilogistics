@@ -31,77 +31,35 @@ class NavSection {
 }
 
 /// Which list each web route reads. The routes without one have a screen of
-/// their own — a dashboard, a calendar, a queue — or are web-only.
+/// their own — the dashboard — or are web-only (Masters, Reports).
 const hrefToModule = <String, String>{
-  '/projects': 'projects/projects',
   '/tasks': 'tasks',
-  '/tasks/reports': 'tasks/reports',
-  '/checklists': 'checklists',
-  '/schedule': 'schedule/activities',
-  '/material/indents': 'material/indents',
-  '/material/purchase-orders': 'material/purchase-orders',
-  '/material/grn': 'material/grn',
-  '/material/stock': 'material/stock',
-  '/material/vendors': 'material/vendors',
   '/sales/leads': 'sales/leads',
   '/sales/follow-ups': 'sales/follow-ups',
-  '/sales/customers': 'sales/customers',
-  '/units/board': 'units',
   '/hr': 'hr/employees',
-  '/kb': 'kb',
 };
 
 const _icons = <String, IconData>{
   '/dashboard': Icons.grid_view_rounded,
-  '/calendar': Icons.calendar_month_rounded,
-  '/approvals': Icons.fact_check_outlined,
-  '/projects': Icons.home_work_outlined,
   '/tasks': Icons.check_box_outlined,
-  '/tasks/reports': Icons.bar_chart_outlined,
-  '/dashboard/performance': Icons.insights_outlined,
-  '/checklists': Icons.rule_rounded,
-  '/schedule': Icons.view_timeline_outlined,
-  '/material/indents': Icons.description_outlined,
-  '/material/purchase-orders': Icons.receipt_long_outlined,
-  '/material/grn': Icons.local_shipping_outlined,
-  '/material/stock': Icons.inventory_2_outlined,
-  '/material/vendors': Icons.storefront_outlined,
   '/sales/leads': Icons.person_search_outlined,
   '/sales/follow-ups': Icons.phone_forwarded_outlined,
-  '/sales/customers': Icons.people_alt_outlined,
-  '/units/board': Icons.apartment_outlined,
   '/hr': Icons.badge_outlined,
-  '/kb': Icons.menu_book_outlined,
+  '/reports': Icons.bar_chart_outlined,
   '/masters': Icons.settings_outlined,
 };
 
+/// The routes the app shows a notice for rather than a screen: they are the
+/// web's own, by the SOW — Admin is web-only.
+const webOnly = <String, String>{
+  '/masters': 'Masters & Users is managed on the web.',
+  '/reports': 'Reports are on the web.',
+};
+
 /// The screens the web reaches from inside another screen rather than from the
-/// sidebar — a purchase order leads to its receipts, an item to its reorder
-/// list. They are offered the same way here: from the parent's own app bar,
-/// not promoted to the menu.
+/// sidebar — the attendance sheet from the people list. They are offered the
+/// same way here: from the parent's own app bar, not promoted to the menu.
 const relatedScreens = <String, List<(String, String)>>{
-  'material/indents': [('material/issues', 'Issues')],
-  'material/purchase-orders': [
-    ('material/grn', 'Goods Receipt'),
-    ('material/invoices', 'Vendor Invoices'),
-    ('material/payments', 'Payments'),
-  ],
-  'material/grn': [('material/invoices', 'Vendor Invoices')],
-  'material/stock': [
-    ('material/reorder', 'Reorder'),
-    ('material/transfers', 'Transfers'),
-    ('material/returns', 'Material Returns'),
-  ],
-  'sales/leads': [
-    ('sales/site-visits', 'Site Visits'),
-    ('sales/cost-sheets', 'Cost Sheets'),
-  ],
-  'sales/customers': [
-    ('sales/bookings', 'Bookings'),
-    ('sales/receipts', 'Receipts'),
-  ],
-  'units': [('units/price-lists', 'Price Lists')],
-  'projects/projects': [('projects/progress', 'Site Progress')],
   'hr/employees': [('hr/attendance', 'Attendance')],
 };
 
@@ -114,38 +72,23 @@ class RecordTarget {
 
 /// Turns a web route into the record it points at.
 ///
-/// The calendar and the approvals queue both carry an `href` — the route the
-/// web would open — and this is what lets a tap there land on the record rather
-/// than on a message saying it cannot. `/material/indents/abc` is the indent
-/// list plus an id; `/calendar?event=abc` is a calendar task.
+/// A notification carries an `href` — the route the web would open — and this
+/// is what lets a tap there land on the record rather than on a message saying
+/// it cannot. `/tasks/abc` is the task list plus an id.
 RecordTarget? recordFor(String href) {
   if (href.isEmpty) return null;
   final path = href.split('?').first;
-  final query = href.contains('?') ? Uri.splitQueryString(href.split('?')[1]) : const {};
-
-  // A calendar task links back to the calendar with its own id, and a schedule
-  // activity to the plan with its own — the web's schedule is one page per
-  // project, but the app has a screen for one activity.
-  final event = query['event'];
-  if (event != null && event.isNotEmpty) return RecordTarget('calendar', event);
-  final activity = query['activity'];
-  if (activity != null && activity.isNotEmpty) {
-    return RecordTarget('schedule/activities', activity);
-  }
 
   final parts = path.split('/').where((p) => p.isNotEmpty).toList();
   if (parts.length < 2) return null;
   final id = parts.last;
-  // Ids are cuids — a trailing word like "reports" or "new" is not one.
+  // Ids are cuids — a trailing word like "new" is not one.
   if (id.length < 20) return null;
 
   final module = parts.sublist(0, parts.length - 1).join('/');
   // Where the web's route and the record's module are not the same words.
   const alias = {
-    'units': 'units',
-    'projects': 'projects/projects',
     'hr': 'hr/employees',
-    'material/stock': 'material/stock',
   };
   return RecordTarget(alias[module] ?? module, id);
 }

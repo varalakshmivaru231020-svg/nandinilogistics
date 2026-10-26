@@ -12,7 +12,7 @@ describe("password policy", () => {
   });
 
   it("requires an uppercase letter", () => {
-    expect(validatePasswordStrength("nninfra@2026")).toMatch(/uppercase/);
+    expect(validatePasswordStrength("nandini@2026")).toMatch(/uppercase/);
   });
 
   it("requires a lowercase letter", () => {

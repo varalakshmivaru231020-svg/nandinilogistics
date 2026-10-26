@@ -8,8 +8,8 @@ import { usersHolding } from "@/lib/rbac/holders";
 import { getSetting } from "@/lib/settings";
 
 import {
-  isEscalationDue, OPEN_LEAD_STATES, pickAssignee, responseMinutes,
-  type AssignmentMode,
+  assignmentRuleFor, isEscalationDue, OPEN_STAGE_KINDS, pickAssignee, responseMinutes,
+  type AssignmentActor,
 } from "./assignment";
 import type { LeadInput } from "./lead-schema";
 
@@ -20,24 +20,41 @@ import type { LeadInput } from "./lead-schema";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
+/** The stage a new lead opens on — the one master row whose kind is NEW. */
+export async function newStage(db: Db): Promise<{ id: string; name: string }> {
+  const stage = await db.leadStage.findFirst({
+    where: { kind: "NEW", status: "ACTIVE" },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true, name: true },
+  });
+  if (!stage) throw new Error("No active lead stage is marked as New. Add one under Masters → Lead Stages.");
+  return stage;
+}
+
 /**
- * Who a new lead goes to. The mode is passed in rather than read here, so the
- * rule can be exercised without changing the organisation's setting — which
- * every other part of the system is reading at the same time.
+ * Who a new lead goes to, by the SOW's rule for whoever is capturing it.
  *
- * Falls back to whoever captured the lead when the mode is manual, or when
- * nobody holds the duty to receive leads.
+ * Admin and a Team Leader must name a tele-caller; a tele-caller keeps what
+ * they capture; anyone else — a rider referring a friend — has the lead
+ * handed round-robin to the tele-callers. If no tele-caller exists at all the
+ * lead stays with its captor rather than being left unowned.
  */
 export async function chooseLeadOwner(
   db: Db,
-  mode: AssignmentMode,
-  projectId: string | null,
-  capturedBy: string,
+  actor: AssignmentActor & { id: string },
+  chosenOwnerId: string | null,
 ): Promise<{ ownerId: string; auto: boolean }> {
-  if (mode === "MANUAL") return { ownerId: capturedBy, auto: false };
-
+  const rule = assignmentRuleFor(actor);
   const pool = await usersHolding(db, PERM.sales.lead.receiveAssignment);
-  if (pool.length === 0) return { ownerId: capturedBy, auto: false };
+
+  if (rule.kind === "must-choose") {
+    if (!chosenOwnerId) throw new Error("Choose the tele-caller this lead is assigned to.");
+    if (!pool.includes(chosenOwnerId)) throw new Error("That person cannot be handed leads — assign it to a tele-caller.");
+    return { ownerId: chosenOwnerId, auto: false };
+  }
+  if (rule.kind === "self") return { ownerId: actor.id, auto: false };
+
+  if (pool.length === 0) return { ownerId: actor.id, auto: false };
 
   const latest = await db.lead.groupBy({
     by: ["ownerId"],
@@ -47,70 +64,45 @@ export async function chooseLeadOwner(
   const lastAssigned = new Map(
     latest.map((r) => [r.ownerId, r._max.assignedAt?.getTime() ?? null] as const),
   );
-
-  let members: Set<string> | null = null;
-  if (mode === "PROJECT" && projectId) {
-    const mapped = await db.userProject.findMany({
-      where: { projectId, userId: { in: pool } },
-      select: { userId: true },
-    });
-    members = new Set(mapped.map((m) => m.userId));
-  }
-
   const pick = pickAssignee(
-    mode,
+    "ROUND_ROBIN",
     pool.map((userId) => ({ userId, lastAssignedAt: lastAssigned.get(userId) ?? null })),
-    members,
   );
-  return pick ? { ownerId: pick, auto: true } : { ownerId: capturedBy, auto: false };
+  return pick ? { ownerId: pick, auto: true } : { ownerId: actor.id, auto: false };
 }
 
 export interface CaptureLeadInput extends LeadInput {
-  unitTypeId: string | null;
+  /** The client companies the lead is tagged for. */
+  companyIds: string[];
   /** Answers to the custom fields Lead Settings adds to the form, by field id. */
   customFields?: Record<string, string> | null;
-  /** An owner chosen by someone allowed to assign; when absent the assignment rule decides. */
+  /** The tele-caller chosen by someone allowed to assign. */
   ownerId?: string | null;
-  /**
-   * The lead this one duplicates, when the caller has already matched it (the
-   * import matches phones loosely, across +91 and leading zeros). Undefined
-   * looks it up by exact phone, as the New Lead form always has.
-   */
-  duplicateOfId?: string | null;
 }
 
 /**
  * Captures one lead: duplicate check, owner, number, record — the single path
- * for the New Lead form and the import alike, so the two cannot drift apart.
+ * for every way a lead arrives, so they cannot drift apart.
  *
  * Runs inside the caller's transaction. `assignedAt` is passed in rather than
- * read from the clock: an import hands each row a later instant, so
- * round-robin sees every lead it has just given out when it chooses the next
- * owner, instead of a tie it would break the same way every time.
+ * read from the clock so round-robin sees every lead it has just given out.
  */
 export async function captureLead(
   tx: Prisma.TransactionClient,
   input: CaptureLeadInput,
-  capturedBy: string,
-  mode: AssignmentMode,
+  actor: AssignmentActor & { id: string },
   assignedAt: Date,
 ) {
-  let duplicateOf: { id: string; name: string } | null = null;
-  if (input.duplicateOfId === undefined) {
-    duplicateOf = await tx.lead.findFirst({
-      where: { phone: input.phone },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, name: true },
-    });
-  } else if (input.duplicateOfId) {
-    duplicateOf = await tx.lead.findUnique({ where: { id: input.duplicateOfId }, select: { id: true, name: true } });
-  }
+  const duplicateOf = await tx.lead.findFirst({
+    where: { phone: input.phone },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true },
+  });
 
-  const owner = input.ownerId
-    ? { ownerId: input.ownerId, auto: false }
-    : await chooseLeadOwner(tx, mode, input.projectId || null, capturedBy);
+  const owner = await chooseLeadOwner(tx, actor, input.ownerId ?? null);
+  const stage = await newStage(tx);
+  const leadNo = await nextDocumentNumber(tx, "LEAD");
 
-  const leadNo = await nextDocumentNumber(tx, "LEAD", input.projectId || null);
   const lead = await tx.lead.create({
     data: {
       leadNo,
@@ -118,21 +110,19 @@ export async function captureLead(
       phone: input.phone,
       altPhone: input.altPhone || null,
       email: input.email || null,
-      sourceId: input.sourceId,
-      projectId: input.projectId || null,
+      location: input.location || null,
+      stageId: stage.id,
       ownerId: owner.ownerId,
       assignedAt,
       requirement: input.requirement || null,
-      budgetMin: input.budgetMin ?? null,
-      budgetMax: input.budgetMax ?? null,
       nextActionAt: input.nextActionAt ? new Date(input.nextActionAt) : null,
-      unitTypeId: input.unitTypeId,
       customFields: input.customFields && Object.keys(input.customFields).length
         ? input.customFields
         : undefined,
-      // Captured with a visit already planned: the lead opens on that stage.
-      ...(input.siteVisitPlanned ? { state: "SITE_VISIT_SCHEDULED" as const } : {}),
       duplicateOfId: duplicateOf?.id ?? null,
+      companies: input.companyIds.length
+        ? { create: input.companyIds.map((companyId) => ({ companyId })) }
+        : undefined,
     },
     select: { id: true, leadNo: true, name: true },
   });
@@ -184,10 +174,11 @@ export async function escalateOverdueFollowUps(db: Db, now: Date): Promise<numbe
     where: {
       escalatedAt: null,
       nextActionAt: { lt: cutoff },
-      state: { in: [...OPEN_LEAD_STATES] as never },
+      stage: { kind: { in: [...OPEN_STAGE_KINDS] } },
     },
     select: {
-      id: true, leadNo: true, name: true, state: true, nextActionAt: true,
+      id: true, leadNo: true, name: true, nextActionAt: true,
+      stage: { select: { kind: true } },
       owner: { select: { name: true } },
     },
     take: 200,
@@ -197,7 +188,7 @@ export async function escalateOverdueFollowUps(db: Db, now: Date): Promise<numbe
   for (const lead of candidates) {
     // Re-checked against the pure rule, so the query and the rule cannot drift.
     const due = isEscalationDue(
-      { state: lead.state, nextActionAt: lead.nextActionAt?.getTime() ?? null, escalatedAt: null },
+      { stageKind: lead.stage.kind, nextActionAt: lead.nextActionAt?.getTime() ?? null, escalatedAt: null },
       now.getTime(),
       afterHours,
     );

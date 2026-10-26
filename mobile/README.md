@@ -1,4 +1,4 @@
-# NN Infra ERP — Android client
+# Nandini Logistics Rider CRM — Android client
 
 Flutter. Talks to the web app's mobile boundary at `/api/mobile/v1`, which
 dispatches to the web's own server actions — so a refusal on the phone is the
@@ -70,7 +70,6 @@ Four suites, and what each is for:
 | `permissions_test.dart` | `can()` — including a super admin with **no** roles, whose permission array is empty and who may still do everything |
 | `sign_in_test.dart` | The three refusals, and that being barred takes the password field away rather than inviting a retry |
 | `list_screen_test.dart` | One screen rendering whatever columns the server sent; search and filters producing the web's own query parameters |
-| `calendar_test.dart` | Six weeks always; a span on every day it crosses; overdue measured against the **server's** clock |
 | `usability_test.dart` | Contrast against WCAG AA, 44px targets, 200% system font, 320px width, Indian numbering |
 
 ## The shape of it
@@ -83,8 +82,6 @@ Four suites, and what each is for:
   the viewer lacks is not drawn, so nothing in the drawer refuses when tapped.
 - **`list_screen.dart`** — one screen for all 24 lists. The server sends
   `columns` with the rows, so there is nothing per-module here.
-- **`calendar_screen.dart`** — the month grid and the day panel. Nothing in it
-  reads the handset clock.
 
 ## Known
 

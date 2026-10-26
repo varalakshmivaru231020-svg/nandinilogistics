@@ -11,8 +11,8 @@ import { phone as phoneText } from "@/lib/utils";
 
 /**
  * The follow-up row, as the list view of `follow-ups-screen.tsx` draws one: the
- * channel chip, the lead with its number and what it wants, the remark, when it
- * is due with the design's word beside it, and which bucket it falls in.
+ * channel chip, the lead with its number and stage, the remark, when it is
+ * due with the design's word beside it, and which bucket it falls in.
  */
 
 export interface FollowUpRowInput {
@@ -20,7 +20,8 @@ export interface FollowUpRowInput {
   name: string;
   phone: string;
   leadNo: string;
-  requirement: string | null;
+  stageName: string;
+  companies: string[];
   channel: string;
   remarks: string;
   dueAt: Date | string;
@@ -37,6 +38,7 @@ export function followUpScreenRow(
 ): ScreenRow {
   const w = whenLabel(r.dueAt, nowMs);
   const bucket = bucketOf(r.dueAt, nowMs);
+  const dialable = /^[+\d][\d\s-]{6,}$/.test(r.phone.trim()) ? r.phone.trim() : null;
 
   return {
     id: r.id,
@@ -46,14 +48,16 @@ export function followUpScreenRow(
         text: `${CHANNEL_ICON[r.channel] ?? "📞"} ${CHANNEL_LABEL[r.channel] ?? r.channel}`,
         tone: "draft",
       },
+      { text: r.stageName, tone: "draft" },
     ],
-    meta: `📞 ${phoneText(r.phone)}`,
+    meta: r.phone ? `📞 ${phoneText(r.phone)}` : r.leadNo,
     lines: [
-      { value: r.requirement ?? r.leadNo },
+      { value: [r.companies.join(", "), r.leadNo].filter(Boolean).join(" · ") },
       ...(r.remarks ? [{ label: "Remarks", value: r.remarks }] : []),
       { label: "When", value: `${w.text} · ${w.badge}` },
     ],
     status: { label: bucket === "week" ? "This Week" : w.badge, tone: webTone(BUCKET_TONE[bucket]) },
     actions: asRowActions(actions, { logFollowUp: "Log follow-up" }),
+    ...(dialable ? { contact: { phone: dialable } } : {}),
   };
 }

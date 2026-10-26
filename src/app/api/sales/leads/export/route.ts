@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
 import { leadFigures } from "@/lib/metrics/figures";
-import { LEAD_EMPTY, LEAD_NOTE, LEAD_PIPELINE } from "@/lib/sales/lead-display";
+import { LEAD_EMPTY, LEAD_NOTE } from "@/lib/sales/lead-display";
 import { bandOf, type ScreenShell } from "@/lib/screens/rows";
 import { leadScreenRow } from "@/lib/screens/rows/lead";
 import { PERM } from "@/lib/permissions/codes";
@@ -13,23 +13,13 @@ export const dynamic = "force-dynamic";
 
 const MAX_ROWS = 20_000;
 
-const STAGE_LABEL: Record<string, string> = {
-  NEW: "New", CONTACTED: "Contacted", SITE_VISIT_SCHEDULED: "Site visit planned",
-  VISIT_DONE: "Site visit done", NEGOTIATION: "Negotiation", BOOKED: "Booked", LOST: "Lost",
-};
-
 /**
  * Exports the lead list — every lead matching the screen's filters, within the
  * caller's own pipeline unless they may see every lead, with phone numbers
  * masked for anyone who may not see contact details.
  *
- * Headers match the lead import where the values can go back in (Name, Phone,
- * Lead source, Project, Budget from…), so an edited export imports cleanly.
- *
- * It was the one list route that did its own gate and its own file writing,
- * which is why `format=json` did nothing here and the Android client could not
- * read leads at all while every other module worked. It goes through the shared
- * responder now, like the rest.
+ * With `format=json` it is also the list the Android client reads: the same
+ * rows as screen rows, the band, and the pipeline's stages as tabs.
  */
 export async function GET(request: Request) {
   const gate = await exportGate(request, PERM.sales.lead.view, PERM.sales.lead.export);
@@ -46,11 +36,10 @@ export async function GET(request: Request) {
     orderBy: [{ nextActionAt: "asc" }, { createdAt: "desc" }],
     take: MAX_ROWS + 1,
     include: {
-      source: { select: { name: true } },
+      stage: { select: { id: true, name: true, kind: true } },
       owner: { select: { name: true } },
-      project: { select: { code: true } },
-      unitType: { select: { name: true } },
       lostReason: { select: { name: true } },
+      companies: { select: { company: { select: { name: true } } } },
     },
   });
   const { rows: rowsIn, note } = capRows(leads);
@@ -58,117 +47,99 @@ export async function GET(request: Request) {
   const contact = (phone: string | null) => (phone ? (showContact ? phone : maskPhone(phone)) : "");
 
   /*
-   * The screen, for the app: the list view's own row — the source chip, the
-   * stage badge in the screen's words, the budget range and how late the next
-   * follow-up is. The duplicate marker is read for the window being sent, and
-   * the band reads every lead in scope as the web's own query does.
+   * The screen, for the app: the list view's own row and the band, which
+   * reads every lead in scope as the web's own query does. The stages are the
+   * tabs — the web's columns, which a phone shows one at a time.
    */
   let screen: ScreenShell | undefined;
   if (gate.format === "json") {
     const nowMs = now.getTime();
     const { from, to } = listWindow(gate.params, rowsIn.length);
     const window = rowsIn.slice(from, to);
-    const [dupes, statRows, byStage] = await Promise.all([
-      prisma.lead.findMany({
-        where: { id: { in: window.map((l) => l.id) } },
-        select: { id: true, duplicateOfId: true },
+    const [stages, statRows, byStage] = await Promise.all([
+      prisma.leadStage.findMany({
+        where: { status: "ACTIVE" },
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, name: true },
       }),
       prisma.lead.findMany({
-        where: leadListWhere(ownership, { ...params, q: "", state: "all", source: "all", fu: "all" }, now),
-        select: { state: true, createdAt: true, budgetMax: true },
+        where: ownership,
+        select: { createdAt: true, stage: { select: { kind: true } } },
       }),
-      /*
-       * What each pipeline column holds under the filters that are set, with
-       * the column itself left out — so the counts on the tabs do not change
-       * as you move between them, which is how the web's board reads.
-       */
+      // What each stage holds under the filters that are set, with the stage
+      // itself left out — so the counts on the tabs do not change as you move.
       prisma.lead.groupBy({
-        by: ["state"],
-        where: leadListWhere(ownership, { ...params, pipeline: "all" }, now),
+        by: ["stageId"],
+        where: leadListWhere(ownership, { ...params, stage: "" }, now),
         _count: { _all: true },
       }),
     ]);
-    const held = new Map(byStage.map((g) => [g.state as string, g._count._all]));
-    const dupe = new Map(dupes.map((d) => [d.id, Boolean(d.duplicateOfId)]));
+    const held = new Map(byStage.map((g) => [g.stageId, g._count._all]));
     screen = {
       rows: window.map((l) =>
         leadScreenRow(
           {
             id: l.id,
+            leadNo: l.leadNo,
             name: l.name,
             phone: contact(l.phone),
-            source: l.source.name,
-            state: l.state,
-            requirement: l.requirement,
-            budgetMin: l.budgetMin === null ? null : Number(l.budgetMin),
-            budgetMax: l.budgetMax === null ? null : Number(l.budgetMax),
+            stageName: l.stage.name,
+            stageKind: l.stage.kind,
+            companies: l.companies.map((c) => c.company.name),
+            location: l.location,
+            ownerName: l.owner?.name ?? null,
             lostReason: l.lostReason?.name ?? null,
             nextActionAt: l.nextActionAt,
-            isDuplicate: dupe.get(l.id) ?? false,
+            isDuplicate: Boolean(l.duplicateOfId),
           },
           nowMs,
         ),
       ),
       band: bandOf(
         leadFigures(
-          statRows.map((l) => ({ stage: l.state, createdAt: l.createdAt, budgetMax: l.budgetMax })),
+          statRows.map((l) => ({ stageKind: l.stage.kind, createdAt: l.createdAt })),
           nowMs,
         ),
       ),
       empty: LEAD_EMPTY,
       note: LEAD_NOTE,
-      /*
-       * The web's six columns, which a phone shows one at a time. "All" is its
-       * list view — the same screen with no column chosen.
-       */
       tabs: {
-        param: "pipeline",
+        param: "stage",
         options: [
           { key: "all", label: "All", count: [...held.values()].reduce((a, b) => a + b, 0) },
-          ...LEAD_PIPELINE.map((c) => ({
-            key: c.key,
-            label: c.label,
-            count: c.stages.reduce((n, st) => n + (held.get(st) ?? 0), 0),
-          })),
+          ...stages.map((s) => ({ key: s.id, label: s.name, count: held.get(s.id) ?? 0 })),
         ],
       },
     };
   }
 
-
   const result: ReportResult = {
     columns: [
       { key: "leadNo", header: "Lead No" },
       { key: "name", header: "Name" },
-      { key: "phone", header: "Phone" },
-      { key: "altPhone", header: "Alternate phone" },
+      { key: "phone", header: "Mobile" },
+      { key: "altPhone", header: "Alternate number" },
       { key: "email", header: "Email" },
-      { key: "source", header: "Lead source" },
-      { key: "project", header: "Project" },
-      { key: "unitType", header: "Interested in" },
+      { key: "companies", header: "Companies" },
+      { key: "location", header: "Location" },
       { key: "stage", header: "Stage" },
-      { key: "owner", header: "Owned by" },
-      { key: "requirement", header: "Requirement" },
-      { key: "budgetMin", header: "Budget from", align: "right", format: "money" },
-      { key: "budgetMax", header: "Budget to", align: "right", format: "money" },
-      { key: "nextActionAt", header: "Next action on", format: "date" },
+      { key: "owner", header: "Tele-caller" },
+      { key: "requirement", header: "Notes" },
+      { key: "nextActionAt", header: "Next follow-up", format: "date" },
       { key: "createdAt", header: "Captured on", format: "date" },
     ],
     rows: rowsIn.map((l) => ({
-        id: l.id,
+      id: l.id,
       leadNo: l.leadNo,
       name: l.name,
       phone: contact(l.phone),
       altPhone: contact(l.altPhone),
       email: showContact ? (l.email ?? "") : l.email ? "(hidden)" : "",
-      source: l.source.name,
-      project: l.project?.code ?? "",
-      unitType: l.unitType?.name ?? "",
-      stage: (STAGE_LABEL[l.state] ?? l.state) + (l.lostReason ? ` — ${l.lostReason.name}` : ""),
+      companies: l.companies.map((c) => c.company.name).join(", "),
+      location: l.location ?? "",
+      stage: l.stage.name + (l.lostReason ? ` — ${l.lostReason.name}` : ""),
       owner: l.owner?.name ?? "Unassigned",
       requirement: l.requirement ?? "",
-      budgetMin: l.budgetMin === null ? null : Number(l.budgetMin),
-      budgetMax: l.budgetMax === null ? null : Number(l.budgetMax),
       nextActionAt: l.nextActionAt,
       createdAt: l.createdAt,
     })),
@@ -176,10 +147,11 @@ export async function GET(request: Request) {
     emptyMessage: "No leads match these filters.",
   };
 
-  let sourceName: string | null = null;
-  if (params.source !== "all" && params.source) {
-    sourceName = (await prisma.leadSource.findUnique({ where: { id: params.source }, select: { name: true } }))?.name ?? null;
-  }
+  const [stage, company, owner] = await Promise.all([
+    params.stage ? prisma.leadStage.findUnique({ where: { id: params.stage }, select: { name: true } }) : null,
+    params.company ? prisma.company.findUnique({ where: { id: params.company }, select: { name: true } }) : null,
+    params.owner ? prisma.user.findUnique({ where: { id: params.owner }, select: { name: true } }) : null,
+  ]);
 
   return exportResponse({
     ctx,
@@ -189,7 +161,7 @@ export async function GET(request: Request) {
     title: "Leads",
     entity: "Lead",
     filters:
-      describeLeadFilters(params, sourceName) +
+      describeLeadFilters(params, { stage: stage?.name, company: company?.name, owner: owner?.name }) +
       (ownership.ownerId ? " · Your pipeline" : "") +
       (showContact ? "" : " · contacts masked"),
     result,

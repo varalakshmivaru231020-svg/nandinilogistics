@@ -266,7 +266,6 @@ export async function deleteEmploymentTypeAction(id: string): Promise<ActionResu
 export async function markAttendanceAction(
   attendanceOn: string,
   marks: Array<{ employeeId: string; status: string; overtimeHours?: number }>,
-  projectId?: string,
 ): Promise<ActionResult<{ marked: number }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.hr.attendance.mark);
@@ -279,11 +278,11 @@ export async function markAttendanceAction(
     if (!marks.length) throw new Error("Nothing to mark.");
 
     const marked = await prisma.$transaction((tx) =>
-      markAttendance(tx, { date, marks, projectId: projectId || null, markedById: ctx.id }),
+      markAttendance(tx, { date, marks, markedById: ctx.id }),
     );
 
     await recordAudit({
-      action: "UPDATE", entity: "AttendanceEntry", userId: ctx.id, projectId: projectId || undefined,
+      action: "UPDATE", entity: "AttendanceEntry", userId: ctx.id,
       summary: `${marked} marked for ${attendanceOn}`,
     });
     revalidatePath("/hr");

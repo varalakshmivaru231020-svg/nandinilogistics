@@ -8,7 +8,6 @@ import { getReport, runReport } from "@/lib/reports";
 import { filterSpecFor, hasFilters, parseReportFilters } from "@/lib/reports/filters";
 import { Badge, PageHeader } from "@/components/ui/primitives";
 import { ReportView } from "./report-view";
-import { projectScopeFilter } from "@/lib/rbac/context";
 
 export async function generateMetadata({ params }: { params: Promise<{ key: string }> }) {
   const { key } = await params;
@@ -31,13 +30,11 @@ export default async function ReportPage({
   const spec = filterSpecFor(def.key);
   const filters = parseReportFilters(await searchParams, spec);
 
-  const [result, projects] = await Promise.all([
+  const [result, companies] = await Promise.all([
     runReport(def.key, ctx, filters),
-    // Only the projects this user may see are offered. Choosing any other by
-    // editing the URL yields an empty report — runReport never widens scope.
-    spec.project
-      ? prisma.project.findMany({
-          where: projectScopeFilter(ctx, "id"),
+    spec.company
+      ? prisma.company.findMany({
+          where: { status: "ACTIVE" },
           select: { id: true, code: true, name: true },
           orderBy: { name: "asc" },
         })
@@ -71,7 +68,7 @@ export default async function ReportPage({
         canExport={ctx.has(`reports.${def.key}.export`)}
         spec={spec}
         filters={filters}
-        projects={projects.map((p) => ({ id: p.id, label: `${p.code} — ${p.name}` }))}
+        companies={companies.map((c) => ({ id: c.id, label: c.name }))}
       />
     </div>
   );

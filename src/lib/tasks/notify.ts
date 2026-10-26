@@ -3,12 +3,12 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 type Tx = Prisma.TransactionClient | PrismaClient;
 
 /**
- * The scope document's notification table, as one function per event.
+ * The SOW's task notifications, as one function per event: on assignment, on
+ * a status change or a remark, and on the due date.
  *
- * Every one goes in-app, which is what this application has. Email is the other
- * channel the scope asks for and there is no mail transport here yet; when one
- * is added it belongs behind this same call, so the events do not have to be
- * found again.
+ * Every one goes in-app, which is what this application has. Push is the
+ * other channel the SOW asks for; when a sender is added it belongs behind
+ * this same call, so the events do not have to be found again.
  *
  * Nobody is told about their own action: being notified of a thing you just did
  * is noise, and it is how a notification list stops being read.
@@ -17,13 +17,8 @@ export type TaskEventKind =
   | "ASSIGNED"
   | "STATUS_CHANGED"
   | "COMMENTED"
-  | "EXTENSION_REQUESTED"
-  | "EXTENSION_DECIDED"
   | "DUE_SOON"
-  | "OVERDUE"
-  | "LEVEL_ACTIVE"
-  | "CHECKLIST_FAILED"
-  | "CLOSED";
+  | "OVERDUE";
 
 export interface TaskNotice {
   kind: TaskEventKind;
@@ -58,32 +53,21 @@ export async function notifyTask(tx: Tx, notice: TaskNotice): Promise<number> {
 /**
  * Who hears about a change on a task.
  *
- * The scope names the other party on most events: the Assigner hears what the
- * Assignee did and the other way round. Levels hear only when it reaches them,
- * except a failure, which both parties are told about.
+ * The Team Leaders hear they were given it; everybody on it hears about a
+ * status change, a remark, or a due date — minus the actor, which
+ * `notifyTask` removes.
  */
 export function audienceFor(
   kind: TaskEventKind,
-  task: { assigneeId: string; createdById: string },
-  levelUserIds: string[] = [],
+  task: { assigneeIds: string[]; createdById: string },
 ): string[] {
   switch (kind) {
     case "ASSIGNED":
-      return [task.assigneeId];
-    case "EXTENSION_REQUESTED":
-      return [task.createdById];
-    case "EXTENSION_DECIDED":
-    case "CLOSED":
-      return [task.assigneeId];
-    case "LEVEL_ACTIVE":
-      return levelUserIds;
-    case "DUE_SOON":
-    case "OVERDUE":
-    case "CHECKLIST_FAILED":
-      return [task.assigneeId, task.createdById];
+      return [...task.assigneeIds];
     case "STATUS_CHANGED":
     case "COMMENTED":
-      // Both sides, minus the actor, which notifyTask removes.
-      return [task.assigneeId, task.createdById];
+    case "DUE_SOON":
+    case "OVERDUE":
+      return [...task.assigneeIds, task.createdById];
   }
 }

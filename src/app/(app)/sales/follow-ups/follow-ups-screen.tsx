@@ -11,22 +11,34 @@ import { Alert, Card, Field, Input, Select, Textarea } from "@/components/ui/pri
 import {
   BUCKETS, type BucketKey, bucketOf, CHANNEL_ICON, CHANNEL_LABEL, FOLLOW_UP_EMPTY, whenLabel,
 } from "@/lib/sales/follow-up-display";
-import { cn, formatDate, phone } from "@/lib/utils";
+import { cn, formatDate, maskPhone, phone } from "@/lib/utils";
 import { logFollowUpAction } from "../leads/actions";
 
 export interface FollowUpRow {
-  id: string; leadNo: string; name: string; phone: string;
-  requirement: string | null; source: string; ownerName: string | null;
-  state: string; channel: string; remarks: string; outcome: string | null;
+  id: string; leadNo: string; name: string; phone: string; canCall: boolean;
+  companies: string | null; location: string | null; ownerName: string | null;
+  stageName: string; channel: string; remarks: string; outcome: string | null;
   dueAt: string;
 }
+
+/** The number as a click-to-call link, or masked where the viewer may not see it. */
+function Phone({ row }: { row: FollowUpRow }) {
+  if (!row.canCall) return <span>📞 {maskPhone(row.phone)}</span>;
+  return (
+    <a href={`tel:${row.phone.replace(/[^\d+]/g, "")}`} onClick={(e) => e.stopPropagation()} className="hover:underline" title="Call">
+      📞 {phone(row.phone)}
+    </a>
+  );
+}
+
+/** What the card reads under the name: the companies, the location, the stage. */
+const interest = (r: FollowUpRow) => [r.companies, r.location, r.stageName].filter(Boolean).join(" · ");
 
 
 
 /** The design's solid type chip: blue for a call, violet for a site visit. */
 const CHANNEL_PILL: Record<string, string> = {
-  CALL: "bg-brand-700", WHATSAPP: "bg-good-700", EMAIL: "bg-navy-800",
-  MEETING: "bg-navy-800", SITE_VISIT: "bg-plum-600",
+  CALL: "bg-brand-700", WHATSAPP: "bg-good-700", MEETING: "bg-navy-800",
 };
 
 export function FollowUpsScreen({
@@ -67,7 +79,7 @@ export function FollowUpsScreen({
       {/* Header */}
       <div className="mb-3.5 flex flex-wrap items-center gap-3">
         <p className="text-[13px] font-medium text-muted-600">
-          {rows.length} shown · every scheduled call and site visit across all leads
+          {rows.length} shown · every scheduled follow-up across your leads
         </p>
         <div className="flex-1" />
         <div className="flex gap-1.5">
@@ -146,12 +158,10 @@ export function FollowUpsScreen({
                           {CHANNEL_LABEL[c.channel] ?? c.channel}
                         </span>
                         <div className="mt-2 text-[13px] font-bold text-navy-950">{c.name}</div>
-                        <div className="mt-1 text-[12px] font-bold text-brand-700">📞 {phone(c.phone)}</div>
-                        {c.requirement && (
-                          <div className="mt-0.5 line-clamp-1 text-[11.5px] font-medium text-muted-500">
-                            {c.requirement}
-                          </div>
-                        )}
+                        <div className="mt-1 text-[12px] font-bold text-brand-700"><Phone row={c} /></div>
+                        <div className="mt-0.5 line-clamp-1 text-[11.5px] font-medium text-muted-500">
+                          {interest(c)}
+                        </div>
                         <div className="mt-1.5 line-clamp-2 text-[11.5px] font-medium text-navy-500">
                           {c.remarks}
                         </div>
@@ -221,9 +231,9 @@ export function FollowUpsScreen({
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="text-[13px] font-bold text-navy-950">{r.name}</div>
-                      <div className="mt-0.5 text-[12px] font-bold text-brand-700">📞 {phone(r.phone)}</div>
+                      <div className="mt-0.5 text-[12px] font-bold text-brand-700"><Phone row={r} /></div>
                       <div className="text-[11px] font-medium text-muted-400">
-                        {r.requirement ?? r.leadNo}
+                        {interest(r) || r.leadNo}
                       </div>
                     </td>
                     <td className="px-4 py-3.5 text-[12.5px] font-medium text-navy-500">{r.remarks}</td>
@@ -381,7 +391,7 @@ function CalendarView({
 function LogModal({
   row, canLog, onClose, onSaved,
 }: { row: FollowUpRow; canLog: boolean; onClose: () => void; onSaved: (m: string) => void }) {
-  const [channel, setChannel] = React.useState(row.channel === "SITE_VISIT" ? "SITE_VISIT" : "CALL");
+  const [channel, setChannel] = React.useState(CHANNEL_LABEL[row.channel] ? row.channel : "CALL");
   const [notes, setNotes] = React.useState("");
   const [outcome, setOutcome] = React.useState("");
   const [nextActionAt, setNextActionAt] = React.useState("");
@@ -417,10 +427,8 @@ function LogModal({
         {error && <Alert tone="error">{error}</Alert>}
 
         <div className="rounded-[10px] bg-surface-sunken px-3 py-2.5">
-          <p className="text-[12px] font-bold text-brand-700">📞 {phone(row.phone)}</p>
-          {row.requirement && (
-            <p className="mt-1 text-[11.5px] font-medium text-muted-600">{row.requirement}</p>
-          )}
+          <p className="text-[12px] font-bold text-brand-700"><Phone row={row} /></p>
+          <p className="mt-1 text-[11.5px] font-medium text-muted-600">{interest(row)}</p>
           <p className="mt-1 text-[11.5px] font-medium text-navy-500">{row.remarks}</p>
         </div>
 

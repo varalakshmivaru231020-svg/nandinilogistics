@@ -4,7 +4,6 @@ import { prisma, seededUsers } from "./helpers";
 import { POST as login } from "@/app/api/mobile/v1/auth/login/route";
 import { POST as logout } from "@/app/api/mobile/v1/auth/logout/route";
 import { GET as me } from "@/app/api/mobile/v1/me/route";
-import { GET as calendar } from "@/app/api/mobile/v1/calendar/route";
 import { PERM } from "@/lib/permissions/codes";
 
 /**
@@ -16,7 +15,7 @@ import { PERM } from "@/lib/permissions/codes";
  * right code, and that revoking a session reaches the device.
  */
 
-const PASSWORD = "Nninfra@2026";
+const PASSWORD = "Nandini@2026";
 const BASE = "https://nninfra.test/api/mobile/v1";
 
 const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
@@ -50,7 +49,7 @@ let pmEmail = "";
 const issuedTokenIds: string[] = [];
 
 beforeAll(async () => {
-  const { pm } = await seededUsers();
+  const { teamLeader: pm } = await seededUsers();
   pmEmail = pm.email;
 });
 
@@ -66,7 +65,7 @@ describe("signing in from a device", () => {
   it("refuses a wrong password without saying whether the address exists", async () => {
     const wrong = await body(await login(post("/auth/login", { email: pmEmail, password: "nope" })));
     const unknown = await body(
-      await login(post("/auth/login", { email: "nobody@nninfra.example", password: "nope" })),
+      await login(post("/auth/login", { email: "nobody@nandini.example", password: "nope" })),
     );
     expect(wrong.error).toBe("Email or password is incorrect.");
     expect(unknown.error).toBe(wrong.error);
@@ -86,11 +85,11 @@ describe("signing in from a device", () => {
     expect(Date.parse(data.expiresAt)).toBeGreaterThan(Date.now());
     expect(user.email).toBe(pmEmail);
     // What the app needs to draw its first screen without a second round trip.
-    expect(user.permissions).toContain(PERM.calendar.agenda.view);
+    expect(user.permissions).toContain(PERM.task.task.view);
     expect(user.permissions).toContain(PERM.admin.mobile.use);
 
     const row = await prisma.session.findFirst({
-      where: { userId: (await seededUsers()).pm.id },
+      where: { userId: (await seededUsers()).teamLeader.id },
       orderBy: { createdAt: "desc" },
       select: { tokenId: true, userAgent: true, revokedAt: true },
     });
@@ -113,7 +112,7 @@ describe("the guard on every endpoint", () => {
     expect(res.status).toBe(401);
   });
 
-  it("answers a signed-in device with its identity and its projects", async () => {
+  it("answers a signed-in device with its identity", async () => {
     const { token } = await signIn(pmEmail);
     const res = await me(get("/me", { authorization: `Bearer ${token}` }));
     const json = await body(res);
@@ -121,7 +120,6 @@ describe("the guard on every endpoint", () => {
     expect(res.status).toBe(200);
     const user = (json.data!.user as { email: string });
     expect(user.email).toBe(pmEmail);
-    expect(Array.isArray(json.data!.projects)).toBe(true);
     // The clock the app measures "overdue" against — never the phone's own.
     expect(Date.parse(json.data!.serverTime as string)).toBeGreaterThan(0);
   });
@@ -136,7 +134,7 @@ describe("the guard on every endpoint", () => {
     const before = await me(get("/me", { authorization: `Bearer ${token}` }));
     expect(before.status).toBe(200);
 
-    const { pm } = await seededUsers();
+    const { teamLeader: pm } = await seededUsers();
     const row = await prisma.session.findFirst({
       where: { userId: pm.id, revokedAt: null },
       orderBy: { createdAt: "desc" },
@@ -157,18 +155,18 @@ describe("what a super admin's permission set actually looks like", () => {
   /*
    * The trap the build brief now warns about, pinned so the warning cannot
    * drift away from the truth. A super admin's array is whatever their roles
-   * resolve to — the seeded Owner holds OWNER_ADMIN and so arrives with a large
+   * resolve to — the seeded Admin holds ADMIN and so arrives with a large
    * set, while one created with no role arrives empty and may still do
    * everything. An app that tests `code in permissions` is right for the first
    * and shows an empty application to the second.
    */
-  it("is populated for the seeded Owner, and the flag is what carries the authority", async () => {
-    const { owner } = await seededUsers();
+  it("is populated for the seeded Admin, and the flag is what carries the authority", async () => {
+    const { admin: owner } = await seededUsers();
     const data = await signIn(owner.email);
     const user = data.user as { isSuperAdmin: boolean; permissions: string[] };
 
     expect(user.isSuperAdmin).toBe(true);
-    expect(user.permissions.length).toBeGreaterThan(100);
+    expect(user.permissions.length).toBeGreaterThan(50);
 
     const row = await prisma.session.findFirst({
       where: { userId: owner.id },
@@ -176,38 +174,6 @@ describe("what a super admin's permission set actually looks like", () => {
       select: { tokenId: true },
     });
     issuedTokenIds.push(row!.tokenId);
-  });
-});
-
-describe("the calendar over the wire", () => {
-  it("aggregates the viewer's own sources onto a six-week grid", async () => {
-    const { token } = await signIn(pmEmail);
-    const res = await calendar(
-      get("/calendar?view=month&on=2026-10-10", { authorization: `Bearer ${token}` }),
-    );
-    const json = await body(res);
-    expect(res.status).toBe(200);
-
-    const data = json.data as {
-      grid: string[];
-      items: unknown[];
-      tally: { total: number };
-      serverTime: string;
-    };
-    // Always six weeks, so the panel under the grid never changes height.
-    expect(data.grid).toHaveLength(42);
-    expect(data.grid[0]).toBe("2026-09-28");
-    expect(data.tally.total).toBe(data.items.length);
-    // The instant overdue is measured against — never the phone's own clock.
-    expect(Date.parse(data.serverTime)).toBeGreaterThan(0);
-  });
-
-  it("refuses a view it does not recognise rather than guessing at a month", async () => {
-    const { token } = await signIn(pmEmail);
-    const res = await calendar(
-      get("/calendar?view=decade", { authorization: `Bearer ${token}` }),
-    );
-    expect(res.status).toBe(422);
   });
 });
 
@@ -219,7 +185,7 @@ describe("mobile access as a thing that can be taken away", () => {
    * untouched.
    */
   it("refuses the sign-in when the code is denied on the user", async () => {
-    const { pm } = await seededUsers();
+    const { teamLeader: pm } = await seededUsers();
     const perm = await prisma.permission.findUnique({
       where: { code: PERM.admin.mobile.use },
       select: { id: true },

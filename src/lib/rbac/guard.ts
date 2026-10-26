@@ -61,31 +61,6 @@ export async function authorize(...codes: string[]): Promise<AuthContext> {
   return ctx;
 }
 
-/** Guards a project-scoped record: the user must be mapped to the project. */
-export function assertProjectAccess(ctx: AuthContext, projectId: string | null | undefined): void {
-  if (!projectId) return;
-  if (ctx.canAccessAllProjects) return;
-  if (!ctx.projectIds.includes(projectId)) {
-    throw new PermissionError("project.project.accessAll", "This project is not mapped to you.");
-  }
-}
-
-/** Guards an approval against the actor's configured value ceiling. */
-export function assertWithinApprovalLimit(
-  ctx: AuthContext,
-  scope: string,
-  value: number,
-): void {
-  if (ctx.isSuperAdmin) return;
-  const limit = ctx.approvalLimitFor(scope);
-  if (limit > 0 && value > limit) {
-    throw new PermissionError(
-      scope,
-      `This value (₹${value.toLocaleString("en-IN")}) is above your approval limit of ₹${limit.toLocaleString("en-IN")}. It must go to the next level.`,
-    );
-  }
-}
-
 export type ActionResult<T = void> =
   | { ok: true; data: T; message?: string }
   | { ok: false; error: string; code?: string; fieldErrors?: Record<string, string[]> };

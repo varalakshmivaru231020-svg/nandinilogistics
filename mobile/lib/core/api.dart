@@ -32,7 +32,7 @@ class Res<T> {
 /// The boundary at /api/mobile/v1.
 ///
 /// One client, because every call shares the same four things: the bearer
-/// token, the chosen project, a timeout, and the envelope.
+/// token, a timeout, and the envelope.
 class Api {
   Api({required this.baseUrl, http.Client? client, this.timeout = const Duration(seconds: 15)})
       : _client = client ?? http.Client();
@@ -46,16 +46,12 @@ class Api {
   final Duration timeout;
 
   String? token;
-  String? projectId;
 
   String get authority => Uri.parse(baseUrl).authority;
 
   Map<String, String> get _headers => {
         'accept': 'application/json',
         if (token != null) 'authorization': 'Bearer $token',
-        // A view filter, never an access decision: the server drops a project
-        // the holder cannot reach rather than refusing the request.
-        if (projectId != null) 'x-project': projectId!,
       };
 
   Uri _url(String path, [Map<String, String>? query]) =>

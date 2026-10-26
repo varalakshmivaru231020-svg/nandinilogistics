@@ -1,7 +1,6 @@
 import "server-only";
 
 import { cache } from "react";
-import { headers } from "next/headers";
 
 import { prisma } from "@/lib/db";
 import {
@@ -9,9 +8,7 @@ import {
   verifySessionToken,
   type SessionPayload,
 } from "@/lib/auth/session";
-import { PERM } from "@/lib/permissions/codes";
 import { resolveEffectivePermissions } from "./resolve";
-import { readWorkspaceCookie } from "@/lib/workspace";
 
 /**
  * The authenticated actor, with every permission already resolved.
@@ -36,37 +33,20 @@ export interface AuthContext {
    * this set to make a decision; call `has()`, which short-circuits on the flag.
    */
   permissions: Set<string>;
-  /** Project ids the user is mapped to. Meaningless when `canAccessAllProjects`. */
-  projectIds: string[];
-  canAccessAllProjects: boolean;
-  /**
-   * The project chosen as the workspace, or null for all of them. A view
-   * filter, never an access decision — see src/lib/workspace.ts.
-   */
-  workspaceProjectId: string | null;
-  /** Approval ceilings by scope, e.g. { "material.indent": 500000 }. */
-  approvalLimits: Record<string, number>;
   has: (code: string) => boolean;
   hasAny: (...codes: string[]) => boolean;
   hasAll: (...codes: string[]) => boolean;
-  /** Highest ceiling the user carries for an approval chain, from role or personal limit. */
-  approvalLimitFor: (scope: string) => number;
 }
 
 /**
  * Builds the actor from a verified session payload.
  *
- * Takes the payload and the chosen workspace rather than reading them, because
- * the two transports find them in different places: a browser sends both as
- * cookies, the Android app sends the token as a bearer header and names the
- * project it is looking at. Everything after that — revocation, status,
- * permission resolution, project scope — has to be identical for both, so it
- * happens once, here.
+ * Takes the payload rather than reading it, because the two transports find
+ * it in different places: a browser sends a cookie, the Android app sends a
+ * bearer header. Everything after that — revocation, status, permission
+ * resolution — has to be identical for both, so it happens once, here.
  */
-export async function buildAuthContext(
-  session: SessionPayload,
-  chosenProjectId: string | null,
-): Promise<AuthContext | null> {
+export async function buildAuthContext(session: SessionPayload): Promise<AuthContext | null> {
   // The JWT is signed, but the session row is what makes revocation immediate.
   const sessionRow = await prisma.session.findUnique({
     where: { tokenId: session.tokenId },
@@ -82,21 +62,18 @@ export async function buildAuthContext(
           role: {
             include: {
               permissions: { include: { permission: { select: { code: true } } } },
-              approvalLimits: true,
             },
           },
         },
       },
       permissions: { include: { permission: { select: { code: true } } } },
-      projectAccess: { select: { projectId: true } },
-      approvalLimits: true,
     },
   });
 
   if (!user || user.status !== "ACTIVE") return null;
 
   // Resolution itself lives in ./resolve.ts so it can be unit-tested.
-  const { granted, roles, approvalLimits: roleLimits } = resolveEffectivePermissions(
+  const { granted, roles } = resolveEffectivePermissions(
     user.roles.map((ur) => ({
       id: ur.role.id,
       code: ur.role.code,
@@ -104,28 +81,12 @@ export async function buildAuthContext(
       level: ur.role.level,
       status: ur.role.status,
       permissionCodes: ur.role.permissions.map((rp) => rp.permission.code),
-      approvalLimits: ur.role.approvalLimits.map((l) => ({
-        scope: l.scope,
-        maxValue: Number(l.maxValue),
-      })),
     })),
     user.permissions.map((up) => ({ code: up.permission.code, effect: up.effect })),
-    user.approvalLimits.map((l) => ({ scope: l.scope, maxValue: Number(l.maxValue) })),
   );
 
   const isSuper = user.isSuperAdmin;
   const has = (code: string) => isSuper || granted.has(code);
-
-  const projectIds = user.projectAccess.map((p) => p.projectId);
-  const canAccessAll = has(PERM.project.project.accessAll);
-
-  // A workspace the person may not reach is no workspace at all — a mapping can
-  // be taken away after the cookie was written, and a phone can ask for any
-  // project id it likes.
-  const workspaceProjectId =
-    chosenProjectId && (canAccessAll || projectIds.includes(chosenProjectId))
-      ? chosenProjectId
-      : null;
 
   return {
     id: user.id,
@@ -135,14 +96,9 @@ export async function buildAuthContext(
     isSuperAdmin: isSuper,
     roles,
     permissions: granted,
-    projectIds,
-    canAccessAllProjects: canAccessAll,
-    workspaceProjectId,
-    approvalLimits: roleLimits,
     has,
     hasAny: (...codes) => codes.some(has),
     hasAll: (...codes) => codes.every(has),
-    approvalLimitFor: (scope) => roleLimits[scope] ?? 0,
   };
 }
 
@@ -154,14 +110,7 @@ export async function buildAuthContext(
 export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
   const session = await readSessionToken();
   if (!session) return null;
-  /*
-   * A browser names its workspace in a cookie; the Android client names it in
-   * the `X-Project` header, because it has no cookie jar. Either way it is only
-   * ever a view filter — `buildAuthContext` drops a project the holder cannot
-   * reach — so reading it from a header grants nothing.
-   */
-  const chosen = (await readWorkspaceCookie()) ?? (await headers()).get("x-project")?.trim() ?? null;
-  return buildAuthContext(session, chosen || null);
+  return buildAuthContext(session);
 });
 
 /**
@@ -171,27 +120,8 @@ export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
  * nothing here, so sharing it between two requests in one render pass would be
  * wrong rather than merely wasteful.
  */
-export async function getAuthContextFromToken(
-  token: string,
-  chosenProjectId: string | null = null,
-): Promise<AuthContext | null> {
+export async function getAuthContextFromToken(token: string): Promise<AuthContext | null> {
   const session = await verifySessionToken(token);
   if (!session) return null;
-  return buildAuthContext(session, chosenProjectId);
-}
-
-/**
- * Prisma `where` fragment that keeps a query inside the user's mapped projects.
- * Returns `{}` for users who may see everything.
- */
-export function projectScopeFilter(
-  ctx: AuthContext,
-  field = "projectId",
-): Record<string, unknown> {
-  // A chosen workspace narrows the view to that one project. It can only ever
-  // be a project the person may already reach — the context checks that when
-  // it reads the cookie — so this never widens what is returned.
-  if (ctx.workspaceProjectId) return { [field]: ctx.workspaceProjectId };
-  if (ctx.canAccessAllProjects) return {};
-  return { [field]: { in: ctx.projectIds } };
+  return buildAuthContext(session);
 }

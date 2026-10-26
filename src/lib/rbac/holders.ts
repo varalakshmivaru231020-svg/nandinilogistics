@@ -45,10 +45,8 @@ export async function usersHolding(db: Db, code: string): Promise<string[]> {
           level: ur.role.level,
           status: ur.role.status,
           permissionCodes: ur.role.permissions.map((rp) => rp.permission.code),
-          approvalLimits: [],
         })),
         u.permissions.map((up) => ({ code: up.permission.code, effect: up.effect })),
-        [],
       );
       return granted.has(code);
     })

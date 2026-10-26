@@ -1,30 +1,21 @@
 import { z } from "zod";
 
 /**
- * What a lead must look like to be captured — shared by the New Lead form's
- * action and the lead import, so a lead imported from a sheet passes exactly
- * the checks one typed in by hand does.
+ * What a lead must look like to be captured — the SOW's New stage: name,
+ * mobile number, companies and location. Shared by the capture action and
+ * the edit rules, so the two cannot drift apart.
  *
  * Pure, and outside the "use server" actions file, which may only export
  * async functions.
  */
 export const LeadSchema = z.object({
   name: z.string().trim().min(2, "Name is required"),
-  phone: z.string().trim().min(8, "A valid phone number is required"),
+  phone: z.string().trim().min(8, "A valid mobile number is required"),
   altPhone: z.string().trim().optional(),
   email: z.string().trim().email("Enter a valid email").or(z.literal("")).optional(),
-  sourceId: z.string().min(1, "Lead source is required"),
-  projectId: z.string().optional(),
+  location: z.string().trim().optional(),
   requirement: z.string().trim().optional(),
-  budgetMin: z.coerce.number().min(0).optional(),
-  budgetMax: z.coerce.number().min(0).optional(),
   nextActionAt: z.string().optional(),
-  /// The design's "Site visit planned?" — the lead opens on that stage.
-  siteVisitPlanned: z
-    .union([z.literal("on"), z.literal("true"), z.literal("")])
-    .optional()
-    .transform((v) => v === "on" || v === "true")
-    .optional(),
 });
 
 export type LeadInput = z.infer<typeof LeadSchema>;
@@ -38,4 +29,14 @@ export function phoneKey(phone: string): string {
   if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2);
   if (digits.length === 11 && digits.startsWith("0")) return digits.slice(1);
   return digits;
+}
+
+/** The several values a multi-select posts, whichever way the body carries them. */
+export function readIdList(formData: FormData, name: string): string[] {
+  const values = formData
+    .getAll(name)
+    .flatMap((v) => (typeof v === "string" ? v.split(",") : []))
+    .map((v) => v.trim())
+    .filter(Boolean);
+  return [...new Set(values)];
 }

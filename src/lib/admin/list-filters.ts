@@ -80,7 +80,6 @@ export const USER_EXPORT_SELECT = {
   department: { select: { name: true } },
   designation: { select: { name: true } },
   roles: { select: { role: { select: { name: true } } } },
-  _count: { select: { projectAccess: true } },
 } as const satisfies Prisma.UserSelect;
 
 export function describeUserFilters(p: UserListParams, roleName: string | null): string {
@@ -153,7 +152,7 @@ export function readAuditListParams(source: ParamSource): AuditListParams {
     q: read(source, "q"),
     action: oneOf(read(source, "action"), AUDIT_ACTIONS),
     entity: entity !== "all" && ENTITY.test(entity) ? entity : "",
-    range: parseReportFilters(source, { project: false, date: "When" }),
+    range: parseReportFilters(source, { company: false, date: "When" }),
   };
 }
 

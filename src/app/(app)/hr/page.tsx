@@ -8,7 +8,7 @@ import { ModuleStats } from "@/components/list/module-stats";
 import { employeeFigures } from "@/lib/metrics/figures";
 import { HrScreen } from "./hr-screen";
 
-export const metadata = { title: "Users & Attendance" };
+export const metadata = { title: "Riders & Staff" };
 
 export default async function WorkforcePage({
   searchParams,

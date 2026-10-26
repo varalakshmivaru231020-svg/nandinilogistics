@@ -5,69 +5,36 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Copy } from "lucide-react";
 
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
-import { ImportDialog } from "@/components/import/import-dialog";
 import { ListNote } from "@/components/list/list-note";
 import {
-  LEAD_EMPTY, LEAD_NOTE, LEAD_PIPELINE, LEAD_STAGE_LABEL, LEAD_STAGE_TONE, leadFollowUp,
+  LEAD_EMPTY, LEAD_NOTE, leadFollowUp, stageTone, type StageRef,
 } from "@/lib/sales/lead-display";
+import type { LeadListParams } from "@/lib/sales/lead-list";
+import { CHANNELS, CHANNEL_LABEL } from "@/lib/sales/follow-up-display";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { COUNTRY_CODES } from "@/lib/forms/dial-codes";
-import { cn, money, maskPhone, phone } from "@/lib/utils";
-import { LEAD_IMPORT_COLUMNS } from "@/lib/sales/lead-import";
-import {
-  changeLeadStageAction, createLeadAction, importLeadsAction, logFollowUpAction,
-  previewLeadImportAction,
-} from "./actions";
-
-const STAGES = [
-  "NEW", "CONTACTED", "SITE_VISIT_SCHEDULED", "VISIT_DONE", "NEGOTIATION", "BOOKED", "LOST",
-] as const;
-type Stage = (typeof STAGES)[number];
-
-/** Board columns exclude LOST — the design keeps the pipeline to live stages. */
-/**
- * The design's six columns. Site Visit is one column holding both the planned
- * and the done stage; dropping a card there schedules the visit.
- */
-/*
- * The pipeline itself is in `lead-display.ts`, which the phone's list reads to
- * draw the same six as tabs. The cast is only to put the stage union back on
- * the strings this screen drags between.
- */
-const BOARD_COLUMNS = LEAD_PIPELINE as ReadonlyArray<{
-  key: string; label: string; stages: Stage[]; drop: Stage;
-}>;
-
-// The stage words, the source tones and the follow-up line are shared with the
-// row the phone is sent, so the two screens cannot drift apart.
-const STAGE_LABEL = LEAD_STAGE_LABEL;
-const STAGE_TONE = LEAD_STAGE_TONE;
+import { cn, maskPhone, phone } from "@/lib/utils";
+import { changeLeadStageAction, createLeadAction, logFollowUpAction } from "./actions";
 
 interface Lead {
   id: string; leadNo: string; name: string; phone: string; email: string | null;
-  state: string; source: string; sourceId: string; ownerId: string | null; ownerName: string | null;
-  projectName: string | null; requirement: string | null;
-  budgetMin: number | null; budgetMax: number | null;
+  location: string | null;
+  stageId: string; stageName: string; stageKind: string;
+  ownerId: string | null; ownerName: string | null;
+  companies: string[]; requirement: string | null;
   nextActionAt: string | null; lostReason: string | null;
-  followUpCount: number; visitCount: number; isDuplicate: boolean;
+  followUpCount: number; isDuplicate: boolean;
 }
 
-type Lookup = Array<{ id: string; name: string; code?: string }>;
-
-/**
- * The country codes the design's capture form offers, in its order. The number
- * is stored with the code in front of it, which is how every screen reads it
- * back and how duplicate detection strips it again.
- */
-
+type Lookup = Array<{ id: string; name: string }>;
 
 /** What the design puts in an empty box, by the kind of thing it asks for. */
 const PLACEHOLDER: Record<string, string> = {
   PHONE: "98765 43210 (without country code)",
-  NUMBER: "e.g. 85,00,000",
+  NUMBER: "e.g. 25",
   DATE: "dd-mm-yyyy",
 };
 const placeholderFor = (type: string) => PLACEHOLDER[type] ?? "Type here";
@@ -87,57 +54,38 @@ const FU_BLOCK: Record<string, string> = {
   brand: "border-brand-200 border-l-brand-700 bg-brand-100 text-brand-700",
 };
 
-/**
- * The design colours a source chip by which source it is, and leaves anything
- * it does not know in slate.
- */
-const SOURCE_TONE: Record<string, string> = {
-  website: "bg-brand-100 text-brand-700",
-  magicbricks: "bg-warn-050 text-warn-700",
-  "99acres": "bg-plum-050 text-plum-600",
-  "walk-in": "bg-good-050 text-good-700",
-  referral: "bg-bad-050 text-bad-700",
+/** The count pill on a column, by what the stage means. */
+const COUNT_PILL: Record<string, string> = {
+  ONBOARDING: "bg-good-600", LOST: "bg-bad-700",
 };
-
-const sourceTone = (name: string) => SOURCE_TONE[name.trim().toLowerCase()] ?? "bg-slate-050 text-slate-600";
 
 const followUp = leadFollowUp;
 
-/** Someone a lead became. Kept for the customers module, which owns them now. */
-export interface CustomerRow {
-  id: string; customerNo: string; name: string; phone: string; email: string | null;
-  kycVerified: boolean; units: string; value: number;
-}
-
 export function LeadsScreen({
-  leads, sources, lostReasons, projects, unitTypes, formFields, can,
-  query, stateFilter, sourceFilter, followUpFilter, view, nowMs,
-  totalLeads, openLeads,
+  leads, stages, companies, teleCallers, lostReasons, formFields, can,
+  filters, view, nowMs, totalLeads, openLeads,
 }: {
-  /** The people these leads have turned into. */
   formFields: LeadField[];
   leads: Lead[];
   /** Every lead in the actor's scope, and those still open — for the header. */
   totalLeads: number;
   openLeads: number;
-  sources: Lookup;
-  unitTypes: Lookup;
+  /** The pipeline, as Masters orders it. */
+  stages: StageRef[];
+  companies: Lookup;
+  /** Who a lead can be assigned to. Empty when the viewer may not choose. */
+  teleCallers: Lookup;
   lostReasons: Lookup;
-  projects: Lookup;
   can: Record<string, boolean>;
-  query: string;
-  stateFilter: string;
-  sourceFilter: string;
-  followUpFilter: string;
+  filters: LeadListParams;
   view: "board" | "list";
   nowMs: number;
 }) {
   const router = useRouter();
   const params = useSearchParams();
   const [creating, setCreating] = React.useState(false);
-  const [staging, setStaging] = React.useState<Lead | null>(null);
+  const [staging, setStaging] = React.useState<{ lead: Lead; stage: StageRef } | null>(null);
   const [followingUp, setFollowingUp] = React.useState<Lead | null>(null);
-  const [importing, setImporting] = React.useState(false);
   const [dragging, setDragging] = React.useState<string | null>(null);
   const [dropTarget, setDropTarget] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -153,28 +101,30 @@ export function LeadsScreen({
   }
 
   /** Dropping a card onto a column moves the lead through the guarded action. */
-  async function moveTo(leadId: string, stage: Stage) {
+  async function moveTo(leadId: string, stage: StageRef) {
     setDragging(null);
     setDropTarget(null);
-    if (stage === "LOST") {
-      const lead = leads.find((l) => l.id === leadId);
-      if (lead) setStaging(lead);
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead || lead.stageId === stage.id) return;
+    if (stage.kind === "LOST") {
+      setStaging({ lead, stage });
       return;
     }
     setError(null);
-    const res = await changeLeadStageAction(leadId, stage);
+    const res = await changeLeadStageAction(leadId, stage.id);
     if (!res.ok) setError(res.error);
     else {
-      setNotice(`Moved to ${STAGE_LABEL[stage]}.`);
+      setNotice(`Moved to ${stage.name}.`);
       router.refresh();
     }
   }
 
   const byStage = new Map<string, Lead[]>();
-  for (const l of leads) byStage.set(l.state, [...(byStage.get(l.state) ?? []), l]);
+  for (const l of leads) byStage.set(l.stageId, [...(byStage.get(l.stageId) ?? []), l]);
 
   const filtersActive =
-    Boolean(query) || stateFilter !== "all" || sourceFilter !== "all" || followUpFilter !== "all";
+    Boolean(filters.q) || Boolean(filters.stage) || Boolean(filters.company) ||
+    Boolean(filters.owner) || Boolean(filters.fu) || Boolean(filters.from) || Boolean(filters.to);
 
   return (
     <div className="animate-fade-up">
@@ -204,11 +154,6 @@ export function LeadsScreen({
               </button>
             ))}
           </div>
-          {can.import && (
-            <Button variant="secondary" size="md" onClick={() => setImporting(true)}>
-              ↓ Import
-            </Button>
-          )}
           {can.export && (
             <ExportMenu
               size="md"
@@ -227,31 +172,45 @@ export function LeadsScreen({
       {/* Filter bar */}
       <div className="mb-3.5 flex flex-wrap items-center gap-[9px] rounded-[12px] border border-line-400 bg-white px-3.5 py-[11px]">
         <Input
-          defaultValue={query}
-          placeholder="Search name, mobile, requirement…"
-          className="w-[250px] py-[9px]"
+          defaultValue={filters.q}
+          placeholder="Search name, phone or location…"
+          className="w-[230px] py-[9px]"
           onKeyDown={(e) => {
             if (e.key === "Enter") setParam({ q: (e.target as HTMLInputElement).value });
           }}
         />
         <span className="text-[11px] font-semibold text-muted-400">Stage</span>
-        <Select value={stateFilter} onChange={(e) => setParam({ state: e.target.value })} className="w-auto min-w-[140px] px-[11px] py-[9px] text-[12px] font-semibold">
-          <option value="all">All</option>
-          {STAGES.map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
+        <Select value={filters.stage || "all"} onChange={(e) => setParam({ stage: e.target.value })} className="w-auto min-w-[130px] px-[11px] py-[9px] text-[12px] font-semibold">
+          <option value="all">All stages</option>
+          {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </Select>
-        <span className="text-[11px] font-semibold text-muted-400">Source</span>
-        <Select value={sourceFilter} onChange={(e) => setParam({ source: e.target.value })} className="w-auto min-w-[140px] px-[11px] py-[9px] text-[12px] font-semibold">
-          <option value="all">All</option>
-          {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        <span className="text-[11px] font-semibold text-muted-400">Company</span>
+        <Select value={filters.company || "all"} onChange={(e) => setParam({ company: e.target.value })} className="w-auto min-w-[130px] px-[11px] py-[9px] text-[12px] font-semibold">
+          <option value="all">All companies</option>
+          {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
+        {can.viewAll && (
+          <>
+            <span className="text-[11px] font-semibold text-muted-400">Tele-caller</span>
+            <Select value={filters.owner || "all"} onChange={(e) => setParam({ owner: e.target.value })} className="w-auto min-w-[130px] px-[11px] py-[9px] text-[12px] font-semibold">
+              <option value="all">Anyone</option>
+              {teleCallers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </Select>
+          </>
+        )}
         <span className="text-[11px] font-semibold text-muted-400">Follow-up</span>
-        <Select value={followUpFilter} onChange={(e) => setParam({ fu: e.target.value })} className="w-auto min-w-[140px] px-[11px] py-[9px] text-[12px] font-semibold">
-          <option value="all">All</option>
-          <option value="overdue">Overdue</option>
+        <Select value={filters.fu || "all"} onChange={(e) => setParam({ fu: e.target.value })} className="w-auto min-w-[130px] px-[11px] py-[9px] text-[12px] font-semibold">
+          <option value="all">Any follow-up</option>
           <option value="today">Due today</option>
+          <option value="overdue">Overdue</option>
           <option value="week">Next 7 days</option>
           <option value="none">Not set</option>
         </Select>
+        <span className="text-[11px] font-semibold text-muted-400">Captured</span>
+        <Input type="date" defaultValue={filters.from} className="w-auto py-[9px]" aria-label="Captured from"
+          onChange={(e) => setParam({ from: e.target.value || undefined })} />
+        <Input type="date" defaultValue={filters.to} className="w-auto py-[9px]" aria-label="Captured to"
+          onChange={(e) => setParam({ to: e.target.value || undefined })} />
         <div className="flex-1" />
         <span className="text-[11.5px] font-semibold text-muted-600">
           {leads.length} of {totalLeads} leads shown
@@ -259,7 +218,7 @@ export function LeadsScreen({
         {filtersActive && (
           <button
             type="button"
-            onClick={() => setParam({ q: undefined, state: undefined, source: undefined, fu: undefined })}
+            onClick={() => setParam({ q: undefined, stage: undefined, company: undefined, owner: undefined, fu: undefined, from: undefined, to: undefined })}
             className="rounded-[8px] border border-bad-100 bg-bad-050 px-3 py-[7px] text-[11.5px] font-semibold text-bad-700 hover:brightness-95"
           >
             Clear filters
@@ -269,48 +228,47 @@ export function LeadsScreen({
 
       {/* ------------------------------- Board -------------------------------- */}
       {/*
-       * One row, always. The columns used to wrap once the screen could not
-       * hold six, which put Lost underneath New and made the pipeline read as
-       * two rows that mean nothing together. A pipeline is a sequence, so it
-       * scrolls sideways instead and the order survives any width.
+       * One row, always: a pipeline is a sequence, so it scrolls sideways and
+       * the order survives any width. The columns are the active stages, in
+       * the order Masters gives them.
        */}
       {view === "board" && (
         <div className="scroll-thin overflow-x-auto pb-2">
         <div
           className="grid items-start gap-3"
           style={{
-            gridTemplateColumns: `repeat(${BOARD_COLUMNS.length}, minmax(210px, 1fr))`,
-            minWidth: `${BOARD_COLUMNS.length * 210 + (BOARD_COLUMNS.length - 1) * 12}px`,
+            gridTemplateColumns: `repeat(${stages.length}, minmax(210px, 1fr))`,
+            minWidth: `${stages.length * 210 + (stages.length - 1) * 12}px`,
           }}
         >
-          {BOARD_COLUMNS.map((col) => {
-            const cards = col.stages.flatMap((st) => byStage.get(st) ?? []);
+          {stages.map((col) => {
+            const cards = byStage.get(col.id) ?? [];
             return (
               <div
-                key={col.key}
+                key={col.id}
                 onDragOver={(e) => {
                   if (!can.changeStage) return;
                   e.preventDefault();
-                  setDropTarget(col.key);
+                  setDropTarget(col.id);
                 }}
-                onDragLeave={() => setDropTarget((t) => (t === col.key ? null : t))}
+                onDragLeave={() => setDropTarget((t) => (t === col.id ? null : t))}
                 onDrop={(e) => {
                   e.preventDefault();
-                  if (dragging && can.changeStage) moveTo(dragging, col.drop);
+                  if (dragging && can.changeStage) moveTo(dragging, col);
                 }}
                 className={cn(
                   "min-w-0 rounded-[13px] p-2.5 transition-colors",
-                  dropTarget === col.key ? "bg-brand-100 ring-2 ring-brand-500" : "bg-line-200",
+                  dropTarget === col.id ? "bg-brand-100 ring-2 ring-brand-500" : "bg-line-200",
                 )}
               >
                 <div className="flex items-center justify-between px-1.5 pb-2.5 pt-1">
                   <span className="text-[11.5px] font-bold uppercase tracking-[.04em] text-navy-600">
-                    {col.label}
+                    {col.name}
                   </span>
                   <span
                     className={cn(
                       "num rounded-full px-2.5 py-[3px] text-[10.5px] font-bold text-white",
-                      col.key === "booked" ? "bg-good-600" : col.key === "lost" ? "bg-bad-700" : "bg-navy-950",
+                      COUNT_PILL[col.kind] ?? "bg-navy-950",
                     )}
                   >
                     {cards.length}
@@ -319,7 +277,7 @@ export function LeadsScreen({
 
                 <div className="flex min-h-[60px] flex-col gap-2">
                   {cards.slice(0, 6).map((c) => {
-                    const fu = followUp(c.nextActionAt, nowMs, c.state);
+                    const fu = followUp(c.nextActionAt, nowMs);
                     return (
                       <div
                         key={c.id}
@@ -336,35 +294,35 @@ export function LeadsScreen({
                       >
                         <div className="mb-1.5 flex items-center justify-between gap-1.5">
                           <span className="text-[12.5px] font-bold text-navy-950">{c.name}</span>
-                          <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold tracking-[.04em]", sourceTone(c.source))}>
-                            {c.source}
-                          </span>
+                          {c.isDuplicate && <Copy className="h-3 w-3 shrink-0 text-warn-700" />}
                         </div>
                         <p className="text-[11.5px] font-medium text-navy-500">
-                          {[c.projectName, c.requirement].filter(Boolean).join(" · ") || "—"}
+                          {[c.companies.join(", "), c.location].filter(Boolean).join(" · ") || "—"}
                         </p>
                         <div className="mt-[7px] text-[11.5px] font-semibold text-brand-700">
-                          📞 {can.viewContact ? phone(c.phone) : maskPhone(c.phone)}
+                          <PhoneLink phone={c.phone} visible={can.viewContact} />
                         </div>
+                        {c.ownerName && (
+                          <p className="mt-1 text-[10.5px] font-medium text-muted-400">{c.ownerName}</p>
+                        )}
 
                         {fu ? (
                           <div className={cn("mt-2 flex flex-col gap-1 rounded-[8px] border border-l-[3px] px-[9px] py-[7px]", FU_BLOCK[fu.tone])}>
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-[12px]">{fu.icon}</span>
-                              <span className="text-[10px] font-extrabold tracking-[.06em]">{fu.kind}</span>
+                              <span className="text-[10px] font-extrabold tracking-[.06em]">FOLLOW-UP</span>
                               <span className="rounded-full bg-current px-[7px] py-[3px] text-[8.5px] font-extrabold tracking-[.06em]">
                                 <span className="text-white">{fu.badge.toUpperCase()}</span>
                               </span>
                             </div>
                             <span className="text-[10.5px] font-semibold opacity-85">{fu.text}</span>
                           </div>
-                        ) : (
+                        ) : col.kind !== "LOST" ? (
                           <div className="mt-2 rounded-[8px] border border-dashed border-amber-200 bg-warn-050 px-[9px] py-1.5 text-[10.5px] font-semibold text-warn-700">
                             No follow-up set
                           </div>
-                        )}
+                        ) : null}
 
-                        {col.key === "lost" && c.lostReason && (
+                        {col.kind === "LOST" && c.lostReason && (
                           <div className="mt-[7px] rounded-[7px] bg-bad-050 px-2 py-[5px] text-[10.5px] font-semibold text-bad-700">
                             {c.lostReason}
                           </div>
@@ -390,10 +348,10 @@ export function LeadsScreen({
 
       {view === "list" && (
         <Card className="overflow-x-auto">
-          <table className="w-full min-w-[700px] border-collapse">
+          <table className="w-full min-w-[760px] border-collapse">
             <thead>
               <tr className="bg-surface-sunken">
-                {["Lead", "Requirement", "Stage", "Next follow-up"].map((h) => (
+                {["Lead", "Companies · location", "Tele-caller", "Stage", "Next follow-up"].map((h) => (
                   <th key={h} className="border-b border-line-300 px-4 py-3 text-left text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500">
                     {h}
                   </th>
@@ -402,7 +360,7 @@ export function LeadsScreen({
             </thead>
             <tbody>
               {leads.map((r) => {
-                const fu = followUp(r.nextActionAt, nowMs, r.state);
+                const fu = followUp(r.nextActionAt, nowMs);
                 return (
                   <tr
                     key={r.id}
@@ -412,27 +370,20 @@ export function LeadsScreen({
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2">
                         <span className="text-[13px] font-bold text-navy-950">{r.name}</span>
-                        <span className={cn("rounded-full px-2 py-0.5 text-[9.5px] font-bold tracking-[.04em]", sourceTone(r.source))}>
-                          {r.source}
-                        </span>
+                        <span className="num text-[10.5px] font-medium text-muted-400">{r.leadNo}</span>
                         {r.isDuplicate && <Copy className="h-3 w-3 text-warn-700" />}
                       </div>
                       <div className="mt-1 text-[12px] font-semibold text-brand-700">
-                        📞 {can.viewContact ? phone(r.phone) : maskPhone(r.phone)}
+                        <PhoneLink phone={r.phone} visible={can.viewContact} />
                       </div>
                     </td>
                     <td className="px-4 py-3.5 text-[12.5px] font-medium text-navy-500">
-                      {r.requirement ?? "—"}
-                      {(r.budgetMin || r.budgetMax) && (
-                        <div className="num text-[11px] text-muted-400">
-                          {r.budgetMin && r.budgetMax
-                            ? `${money(r.budgetMin)} – ${money(r.budgetMax)}`
-                            : money(r.budgetMax ?? r.budgetMin ?? 0)}
-                        </div>
-                      )}
+                      {r.companies.join(", ") || "—"}
+                      {r.location && <div className="text-[11px] text-muted-400">{r.location}</div>}
                     </td>
+                    <td className="px-4 py-3.5 text-[12.5px] font-medium text-navy-500">{r.ownerName ?? "Unassigned"}</td>
                     <td className="px-4 py-3.5">
-                      <Badge tone={STAGE_TONE[r.state] ?? "muted"}>{STAGE_LABEL[r.state]}</Badge>
+                      <Badge tone={stageTone(r.stageKind)}>{r.stageName}</Badge>
                       {r.lostReason && (
                         <div className="mt-1 text-[10.5px] font-medium text-muted-400">{r.lostReason}</div>
                       )}
@@ -444,13 +395,22 @@ export function LeadsScreen({
                           <Badge tone={fu.tone}>{fu.badge}</Badge>
                         </div>
                       )}
+                      {can.followUp && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setFollowingUp(r); }}
+                          className="mt-1 text-[11px] font-bold text-brand-700 hover:underline"
+                        >
+                          + Log follow-up
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
               })}
               {leads.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-12 text-center text-[12.5px] font-medium text-muted-400">
+                  <td colSpan={5} className="px-4 py-12 text-center text-[12.5px] font-medium text-muted-400">
                     {LEAD_EMPTY.title}
                   </td>
                 </tr>
@@ -464,19 +424,19 @@ export function LeadsScreen({
 
       {creating && (
         <NewLeadModal
-          sources={sources}
-          projects={projects}
-          unitTypes={unitTypes}
+          companies={companies}
+          teleCallers={teleCallers}
+          mustAssign={can.assign}
           formFields={formFields}
           onClose={() => setCreating(false)}
           onSaved={(m) => { setCreating(false); setNotice(m); router.refresh(); }}
         />
       )}
       {staging && (
-        <StageModal
-          lead={staging}
+        <LostModal
+          lead={staging.lead}
+          stage={staging.stage}
           lostReasons={lostReasons}
-          canMarkLost={can.markLost}
           onClose={() => setStaging(null)}
           onSaved={(m) => { setStaging(null); setNotice(m); router.refresh(); }}
           onError={setError}
@@ -489,28 +449,34 @@ export function LeadsScreen({
           onSaved={(m) => { setFollowingUp(null); setNotice(m); router.refresh(); }}
         />
       )}
-      {importing && (
-        <ImportDialog
-          title="Import leads"
-          description="Upload a .csv or .xlsx — a portal export works as it is. Every row is checked, duplicates are flagged, and owners follow your assignment rule."
-          columns={LEAD_IMPORT_COLUMNS}
-          templateName="leads"
-          preview={previewLeadImportAction}
-          commit={importLeadsAction}
-          onClose={() => setImporting(false)}
-          onImported={(m) => { setImporting(false); setError(null); setNotice(m); router.refresh(); }}
-        />
-      )}
     </div>
+  );
+}
+
+/** The number as a click-to-call link — or masked, for somebody who may not see it. */
+export function PhoneLink({ phone: raw, visible }: { phone: string; visible: boolean }) {
+  if (!visible) return <span>📞 {maskPhone(raw)}</span>;
+  return (
+    <a
+      href={`tel:${raw.replace(/[^\d+]/g, "")}`}
+      onClick={(e) => e.stopPropagation()}
+      className="hover:underline"
+      title="Call"
+    >
+      📞 {phone(raw)}
+    </a>
   );
 }
 
 /* ------------------------------- Modals ---------------------------------- */
 
 function NewLeadModal({
-  sources, projects, unitTypes, formFields, onClose, onSaved,
+  companies, teleCallers, mustAssign, formFields, onClose, onSaved,
 }: {
-  sources: Lookup; projects: Lookup; unitTypes: Lookup;
+  companies: Lookup;
+  teleCallers: Lookup;
+  /** Admin and a Team Leader must name the tele-caller. */
+  mustAssign: boolean;
   /** What Masters → Lead Settings says this form asks, in its order. */
   formFields: LeadField[];
   onClose: () => void; onSaved: (m: string) => void;
@@ -586,43 +552,31 @@ function NewLeadModal({
                     >
                       {COUNTRY_CODES.map((c) => <option key={c} value={c}>{c}</option>)}
                     </Select>
-                    <Input
-                      name="phone"
-                      type="tel"
-                      required={f.required}
-                      placeholder={placeholderFor("PHONE")}
-                    />
+                    <Input name="phone" type="tel" required={f.required} placeholder={placeholderFor("PHONE")} />
                   </div>
                 </Field>
               );
-            case "sourceId":
-              return (
-                <Field key={f.id} label={f.label} required={f.required}>
-                  <Select name="sourceId" required={f.required} defaultValue="">
-                    <option value="">Select…</option>
-                    {sources.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                  </Select>
-                </Field>
-              );
+            case "altPhone":
+              return <Field key={f.id} label={f.label} required={f.required}><Input name="altPhone" type="tel" required={f.required} placeholder={placeholderFor("PHONE")} /></Field>;
             case "email":
               return <Field key={f.id} label={f.label} required={f.required}><Input name="email" type="email" required={f.required} placeholder="Type here" /></Field>;
-            case "budgetMax":
-              return <Field key={f.id} label={f.label} required={f.required}><Input name="budgetMax" type="number" min={0} step="any" required={f.required} placeholder={placeholderFor("NUMBER")} /></Field>;
-            case "unitTypeId":
+            case "location":
+              return <Field key={f.id} label={f.label} required={f.required}><Input name="location" required={f.required} placeholder="Area or hub" /></Field>;
+            case "companyIds":
               return (
-                <Field key={f.id} label={f.label} required={f.required}>
-                  <Select name="unitTypeId" required={f.required} defaultValue="">
-                    <option value="">Select…</option>
-                    {unitTypes.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                <Field key={f.id} label={f.label} required={f.required} hint="Hold Ctrl / ⌘ to tag more than one.">
+                  <Select name="companyIds" multiple required={f.required} className="min-h-[88px]">
+                    {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </Select>
                 </Field>
               );
-            case "projectId":
+            case "ownerId":
+              if (!mustAssign) return null;
               return (
-                <Field key={f.id} label={f.label} required={f.required}>
-                  <Select name="projectId" required={f.required} defaultValue="">
-                    <option value="">Select…</option>
-                    {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                <Field key={f.id} label={f.label} required hint="Assignment is mandatory when you create a lead.">
+                  <Select name="ownerId" required defaultValue="">
+                    <option value="">Select a tele-caller…</option>
+                    {teleCallers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </Select>
                 </Field>
               );
@@ -632,15 +586,8 @@ function NewLeadModal({
                   <Textarea name="requirement" required={f.required} placeholder="Type here…" className="min-h-[70px]" />
                 </Field>
               );
-            case "siteVisitPlanned":
-              return (
-                <Field key={f.id} label={f.label} required={f.required}>
-                  <label className="flex items-center gap-2 text-[12.5px] font-medium text-navy-900">
-                    <input type="checkbox" name="siteVisitPlanned" className="my-[3px] mr-[3px] ml-[4px] h-[15px] w-[15px] accent-brand-500" />
-                    Yes
-                  </label>
-                </Field>
-              );
+            case "nextActionAt":
+              return <Field key={f.id} label={f.label} required={f.required}><Input name="nextActionAt" type="date" required={f.required} placeholder={placeholderFor("DATE")} /></Field>;
             default:
               return null;
           }
@@ -650,13 +597,13 @@ function NewLeadModal({
   );
 }
 
-function StageModal({
-  lead, lostReasons, canMarkLost, onClose, onSaved, onError,
+/** The design asks for a reason before a lead may sit on a Lost stage. */
+function LostModal({
+  lead, stage, lostReasons, onClose, onSaved, onError,
 }: {
-  lead: Lead; lostReasons: Lookup; canMarkLost: boolean;
+  lead: Lead; stage: StageRef; lostReasons: Lookup;
   onClose: () => void; onSaved: (m: string) => void; onError: (e: string) => void;
 }) {
-  const [state, setState] = React.useState<Stage>(lead.state as Stage);
   const [lostReasonId, setLostReasonId] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -665,44 +612,33 @@ function StageModal({
   async function submit() {
     setBusy(true);
     setError(null);
-    const res = await changeLeadStageAction(lead.id, state, lostReasonId || undefined, notes);
+    const res = await changeLeadStageAction(lead.id, stage.id, lostReasonId || undefined, notes);
     setBusy(false);
     if (!res.ok) { setError(res.error); onError(res.error); }
-    else onSaved(`${lead.name} moved to ${STAGE_LABEL[state]}.`);
+    else onSaved(`${lead.name} moved to ${stage.name}.`);
   }
 
   return (
     <Modal
-      open onClose={onClose} title={`Move ${lead.name}`}
+      open onClose={onClose} title={`Mark ${lead.name} as ${stage.name}`}
       description="A mandatory reason is captured when a lead is marked lost."
       size="sm"
       footer={
         <>
           <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} loading={busy} disabled={state === "LOST" && !lostReasonId}>Move lead</Button>
+          <Button variant="danger" onClick={submit} loading={busy} disabled={!lostReasonId}>Mark lost</Button>
         </>
       }
     >
       <div className="space-y-4">
         {error && <Alert tone="error">{error}</Alert>}
-        <Field label="Stage" required>
-          <Select value={state} onChange={(e) => setState(e.target.value as Stage)}>
-            {STAGES.filter((s) => s !== "LOST" || canMarkLost).map((s) => (
-              <option key={s} value={s}>{STAGE_LABEL[s]}</option>
-            ))}
+        <Field label="Lost reason" required>
+          <Select value={lostReasonId} onChange={(e) => setLostReasonId(e.target.value)}>
+            <option value="">Select a reason…</option>
+            {lostReasons.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           </Select>
         </Field>
-        {state === "LOST" && (
-          <>
-            <Field label="Lost reason" required>
-              <Select value={lostReasonId} onChange={(e) => setLostReasonId(e.target.value)}>
-                <option value="">Select a reason…</option>
-                {lostReasons.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </Select>
-            </Field>
-            <Field label="Notes"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} /></Field>
-          </>
-        )}
+        <Field label="Remarks"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} /></Field>
       </div>
     </Modal>
   );
@@ -711,7 +647,7 @@ function StageModal({
 function FollowUpModal({
   lead, onClose, onSaved,
 }: { lead: Lead; onClose: () => void; onSaved: (m: string) => void }) {
-  const [channel, setChannel] = React.useState("CALL");
+  const [channel, setChannel] = React.useState<string>("CALL");
   const [notes, setNotes] = React.useState("");
   const [outcome, setOutcome] = React.useState("");
   const [nextActionAt, setNextActionAt] = React.useState("");
@@ -731,7 +667,7 @@ function FollowUpModal({
     <Modal
       open onClose={onClose}
       title={`${lead.name} · ${lead.leadNo}`}
-      description={[lead.requirement, lead.ownerName ? `owned by ${lead.ownerName}` : null]
+      description={[lead.stageName, lead.ownerName ? `with ${lead.ownerName}` : null]
         .filter(Boolean)
         .join(" · ")}
       size="sm"
@@ -746,9 +682,7 @@ function FollowUpModal({
         {error && <Alert tone="error">{error}</Alert>}
         <Field label="Channel" required>
           <Select value={channel} onChange={(e) => setChannel(e.target.value)}>
-            {["CALL", "WHATSAPP", "EMAIL", "MEETING", "SITE_VISIT"].map((c) => (
-              <option key={c} value={c}>{c.replace(/_/g, " ")}</option>
-            ))}
+            {CHANNELS.map((c) => <option key={c} value={c}>{CHANNEL_LABEL[c]}</option>)}
           </Select>
         </Field>
         <Field label="What happened" required>
@@ -757,11 +691,10 @@ function FollowUpModal({
         <Field label="Outcome">
           <Input value={outcome} onChange={(e) => setOutcome(e.target.value)} placeholder="Interested / Call back / Not reachable" />
         </Field>
-        <Field label="Next action on" hint="Leaving this blank drops the lead off the follow-up list.">
+        <Field label="Next follow-up on" hint="Leaving this blank drops the lead off the follow-up list.">
           <Input type="date" value={nextActionAt} onChange={(e) => setNextActionAt(e.target.value)} />
         </Field>
       </div>
     </Modal>
   );
 }
-

@@ -85,36 +85,14 @@ function sends(fields: ReadonlyArray<FormFieldDef>): string[] {
  * Kept short on purpose: anything else is a gap, not a convention.
  */
 const NOT_SENT: Record<string, Record<string, string>> = {
-  /*
-   * The project schema takes six particulars neither of the web's own dialogs
-   * asks for. They are left as they stand — the test below reads the web's
-   * forms back and fails if either of them grows one of these fields, so the
-   * excuse cannot outlive the reason for it.
-   */
-  "projects/projects:create": {
-    companyId: "Not on the web's New project dialog either.",
-    cityId: "Not on the web's New project dialog either — it is on the edit.",
-    budgetAmount: "Not on the web's New project dialog either.",
-    projectManagerId: "Not on the web's New project dialog either.",
-    description: "Not on the web's New project dialog either.",
-    status: "A new project takes the schema's own default.",
-  },
-  "projects/projects:edit": {
-    companyId: "Not on the web's Edit project dialog either.",
-    budgetAmount: "Not on the web's Edit project dialog either.",
-    projectManagerId: "Not on the web's Edit project dialog either.",
-    description: "Not on the web's Edit project dialog either.",
-  },
-  "projects/projects:uploadDocument": {
-    supersedesId:
-      "A new version of a document is started from that document on the web; the app uploads a new one.",
-  },
   "sales/leads:create": {
     // Built from Masters → Lead Settings by `lead-form.ts`, which is the same
     // configuration the web's own form is drawn from.
     phoneCode: "The configured form supplies it.",
     phone: "The configured form supplies it.",
-    unitTypeId: "The configured form supplies it.",
+    location: "The configured form supplies it.",
+    companyIds: "The configured form supplies it.",
+    ownerId: "The configured form supplies it.",
     "custom:${field.id}": "A configured field, by its own id.",
   },
 };
@@ -149,26 +127,3 @@ describe("every field an action reads is a field the app sends", () => {
   });
 });
 
-/*
- * The excuse above, checked rather than taken on trust. If the web ever asks
- * for a project's company, budget, manager or description, the phone has to
- * ask for it too — and this fails until it does.
- */
-describe("what the web's project dialogs do not ask for either", () => {
-  const dialogs = {
-    "projects/projects:create": "src/app/(app)/projects/new-project-button.tsx",
-    "projects/projects:edit": "src/app/(app)/projects/[id]/edit-project-button.tsx",
-  } as const;
-
-  for (const [key, file] of Object.entries(dialogs)) {
-    it(file, () => {
-      const src = readFileSync(join(ROOT, file), "utf8");
-      for (const name of Object.keys(NOT_SENT[key])) {
-        expect(
-          src.includes(`name="${name}"`) || src.includes(`name: "${name}"`),
-          `the web now asks for ${name} — the app's ${key} must too`,
-        ).toBe(false);
-      }
-    });
-  }
-});

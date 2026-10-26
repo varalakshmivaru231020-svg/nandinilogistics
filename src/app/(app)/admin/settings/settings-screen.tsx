@@ -6,36 +6,23 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, Field, Input } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
-import { ASSIGNMENT_MODE_LABEL, ASSIGNMENT_MODES, type AssignmentMode } from "@/lib/sales/assignment";
-import { updateEscalationHoursAction, updateLeadAssignmentModeAction } from "./actions";
+import { updateEscalationHoursAction } from "./actions";
 
 export function SettingsScreen({
-  assignmentMode, escalationHours, canUpdate,
+  escalationHours, canUpdate,
 }: {
-  assignmentMode: AssignmentMode;
   escalationHours: number;
   canUpdate: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [mode, setMode] = React.useState<AssignmentMode>(assignmentMode);
   const [hours, setHours] = React.useState(String(escalationHours));
-  const [busy, setBusy] = React.useState<"mode" | "hours" | null>(null);
-
-  async function saveMode() {
-    setBusy("mode");
-    const res = await updateLeadAssignmentModeAction(mode);
-    setBusy(null);
-    if (!res.ok) { toast(res.error, "bad"); return; }
-    toast("Lead assignment updated");
-    router.refresh();
-  }
+  const [busy, setBusy] = React.useState(false);
 
   async function saveHours() {
-    setBusy("hours");
+    setBusy(true);
     const res = await updateEscalationHoursAction(Number(hours));
-    setBusy(null);
+    setBusy(false);
     if (!res.ok) { toast(res.error, "bad"); return; }
     toast("Escalation grace period updated");
     router.refresh();
@@ -46,40 +33,10 @@ export function SettingsScreen({
       <Card className="px-5 py-4">
         <h2 className="font-display text-[15px] font-bold text-navy-950">Lead assignment</h2>
         <p className="mt-1 text-[12px] font-medium text-muted-600">
-          Who a new lead goes to the moment it is captured. Automatic modes share leads among everyone
-          holding the “Receive auto-assigned leads” permission.
+          Admin and Team Leaders choose the tele-caller when they create a lead. A tele-caller owns the
+          leads they capture. A lead a rider refers from the app goes round-robin to the tele-callers —
+          whoever holds the “Receive auto-assigned leads” permission.
         </p>
-
-        <div className="mt-3 space-y-1.5">
-          {ASSIGNMENT_MODES.map((m) => (
-            <label
-              key={m}
-              className={cn(
-                "flex cursor-pointer items-center gap-2.5 rounded-[10px] border px-3 py-2.5 transition-colors",
-                mode === m ? "border-brand-500 bg-brand-100" : "border-line-300 bg-white hover:bg-surface-hover",
-                !canUpdate && "cursor-not-allowed opacity-70",
-              )}
-            >
-              <input
-                type="radio"
-                name="assignment-mode"
-                value={m}
-                checked={mode === m}
-                disabled={!canUpdate}
-                onChange={() => setMode(m)}
-              />
-              <span className="text-[12.5px] font-semibold text-navy-900">{ASSIGNMENT_MODE_LABEL[m]}</span>
-            </label>
-          ))}
-        </div>
-
-        {canUpdate && (
-          <div className="mt-3 flex justify-end">
-            <Button onClick={saveMode} loading={busy === "mode"} disabled={mode === assignmentMode}>
-              Save assignment rule
-            </Button>
-          </div>
-        )}
       </Card>
 
       <Card className="px-5 py-4">
@@ -102,7 +59,7 @@ export function SettingsScreen({
             />
           </Field>
           {canUpdate && (
-            <Button onClick={saveHours} loading={busy === "hours"} disabled={Number(hours) === escalationHours}>
+            <Button onClick={saveHours} loading={busy} disabled={Number(hours) === escalationHours}>
               Save grace period
             </Button>
           )}

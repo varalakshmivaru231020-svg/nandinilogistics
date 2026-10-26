@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildArgs, coerce, toFormData } from "@/lib/api/mobile-args";
-import { MOBILE_ACTIONS, MOBILE_ACTION_KEYS } from "@/lib/api/mobile-actions";
+import { MOBILE_ACTION_KEYS } from "@/lib/api/mobile-actions";
 
 const arg = (over: Partial<Parameters<typeof coerce>[0]> = {}) => ({
   name: "value", kind: "text" as const, ...over,
@@ -56,13 +56,13 @@ describe("a form argument", () => {
 
   /* A repeated field is how a multi-select arrives, and what getAll() reads. */
   it("repeats a field for each value of a list", () => {
-    const form = toFormData({ reviewerIds: ["u1", "u2"] }, "formData");
-    expect(form.getAll("reviewerIds")).toEqual(["u1", "u2"]);
+    const form = toFormData({ assigneeIds: ["u1", "u2"] }, "formData");
+    expect(form.getAll("assigneeIds")).toEqual(["u1", "u2"]);
   });
 
   it("leaves out a field that was not given, rather than sending \"null\"", () => {
-    const form = toFormData({ title: "x", projectId: null, note: undefined }, "formData");
-    expect(form.has("projectId")).toBe(false);
+    const form = toFormData({ title: "x", location: null, note: undefined }, "formData");
+    expect(form.has("location")).toBe(false);
     expect(form.has("note")).toBe(false);
   });
 
@@ -119,44 +119,6 @@ describe("a form argument", () => {
   });
 });
 
-/*
- * The call the phone's checklist verdict makes, exactly as the record describes
- * it. It used to append the remark as a third argument to an action that takes
- * two, and the boundary answered 422 — so Approve and Deny did nothing at all
- * from the phone. The record now sends one body instead; this is that body
- * arriving.
- */
-describe("judging a checklist point across the boundary", () => {
-  it("arrives as the item and one form, with the verdict, the remark and the photograph", () => {
-    const def = MOBILE_ACTIONS["tasks/reviewChecklistItem"];
-    expect(def).toBeDefined();
-    expect(def.args.map((a) => a.kind)).toEqual(["text", "form"]);
-
-    const attached = new FormData();
-    attached.append("args", "[…]");
-    attached.append("files", new File(["\u0001"], "photo-20261017-094500.jpg", { type: "image/jpeg" }));
-    attached.delete("args"); // as the route does before handing it over
-
-    const [itemId, form] = buildArgs(
-      def,
-      ["ck1", { verdict: "DENY", remark: "Blocks missing on the east face." }],
-      attached,
-    ) as [string, FormData];
-
-    expect(itemId).toBe("ck1");
-    // The words the action reads — not the PASS/FAIL it stores.
-    expect(form.get("verdict")).toBe("DENY");
-    expect(form.get("remark")).toBe("Blocks missing on the east face.");
-    expect((form.getAll("files")[0] as File).name).toBe("photo-20261017-094500.jpg");
-  });
-
-  it("still refuses a remark sent as a third argument", () => {
-    const def = MOBILE_ACTIONS["tasks/reviewChecklistItem"];
-    expect(() => buildArgs(def, ["ck1", "PASS", "looks fine"], null)).toThrow(
-      "takes 2 argument(s), not 3",
-    );
-  });
-});
 
 describe("building a whole argument list", () => {
   const def = {
@@ -207,7 +169,8 @@ describe("the registry covers the web", () => {
 
     const inWeb = new Set<string>();
     for (const file of files(APP)) {
-      if (file.includes("/masters/") || file.includes("/admin/")) continue;
+      const posix = file.split("\\").join("/");
+      if (posix.includes("/masters/") || posix.includes("/admin/")) continue;
       const src = readFileSync(file, "utf8");
       if (!src.includes("use server")) continue;
       for (const [, name] of src.matchAll(/export async function ([a-zA-Z0-9_]+)Action\s*\(/g)) {
@@ -226,14 +189,4 @@ describe("the registry covers the web", () => {
     for (const key of MOBILE_ACTION_KEYS) expect(key).toContain("/");
   });
 
-  /*
-   * `requestExtension` asks for more time on a task in one module and on a
-   * schedule activity in another, and they check different permissions. Keying
-   * on the name alone would make one of them unreachable.
-   */
-  it("keeps two actions of the same name apart", () => {
-    const extensions = MOBILE_ACTION_KEYS.filter((k) => k.endsWith("/requestExtension"));
-    expect(extensions).toEqual(["schedule/requestExtension", "tasks/requestExtension"]);
-    expect(MOBILE_ACTIONS[extensions[0]].fn).not.toBe(MOBILE_ACTIONS[extensions[1]].fn);
-  });
 });

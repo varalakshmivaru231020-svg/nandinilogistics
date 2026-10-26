@@ -6,28 +6,16 @@ import type { Prisma } from "@prisma/client";
  * Where each series' numbers actually land, so a number that is already on a
  * row can be stepped over.
  *
- * A counter and the rows it numbers can drift apart: the demo data writes a
- * first cost sheet and booking by hand, an import carries numbers in with it,
- * a restore brings back rows without the counter behind them. When they drift,
- * the next document takes a number that is already taken and the write dies on
- * a unique constraint — the user sees a raw Prisma error and cannot book a
- * flat at all. Checking costs one indexed lookup and makes the series
- * self-healing instead.
+ * A counter and the rows it numbers can drift apart: a restore brings back
+ * rows without the counter behind them, a hand-entered Rider ID takes a number
+ * the counter has not reached. When they drift, the next document takes a
+ * number that is already taken and the write dies on a unique constraint.
+ * Checking costs one indexed lookup and makes the series self-healing.
  */
 const SERIES_ROWS: Record<string, { model: string; field: string }> = {
-  INDENT: { model: "indent", field: "indentNo" },
-  PO: { model: "purchaseOrder", field: "poNo" },
-  GRN: { model: "grn", field: "grnNo" },
-  ISSUE: { model: "materialIssue", field: "issueNo" },
-  RETURN: { model: "materialReturn", field: "returnNo" },
-  TRANSFER: { model: "stockTransfer", field: "transferNo" },
-  PAYMENT: { model: "vendorPayment", field: "paymentNo" },
   LEAD: { model: "lead", field: "leadNo" },
-  COSTSHEET: { model: "costSheet", field: "costSheetNo" },
-  BOOKING: { model: "booking", field: "bookingNo" },
-  DEMAND: { model: "paymentDemand", field: "demandNo" },
-  RECEIPT: { model: "receipt", field: "receiptNo" },
-  CUSTOMER: { model: "customer", field: "customerNo" },
+  TASK: { model: "task", field: "taskNo" },
+  RIDER: { model: "employee", field: "employeeCode" },
 };
 
 /** How far the counter may be wound forward before we stop trying. */
@@ -52,35 +40,41 @@ async function isTaken(
 }
 
 /**
- * Generates the next document number for a series — "IND/NNS/2026-27/0001".
+ * The number a series produces for a given sequence.
+ *
+ * Without a fiscal year the prefix runs straight into the digits — "NL001",
+ * the SOW's Rider ID. With one, the parts are separated: "LD/2026-27/00001".
+ */
+export function formatSeriesNumber(
+  series: { prefix: string; fiscalYear: string | null; padding: number },
+  n: number,
+): string {
+  const digits = String(n).padStart(series.padding, "0");
+  return series.fiscalYear ? `${series.prefix}/${series.fiscalYear}/${digits}` : `${series.prefix}${digits}`;
+}
+
+/**
+ * Generates the next document number for a series — "NL001", "LD00001".
  *
  * Must be called inside a transaction: the counter is incremented with an
- * atomic update so two simultaneous indents can never take the same number.
+ * atomic update so two simultaneous onboardings can never take the same
+ * Rider ID.
  */
 export async function nextDocumentNumber(
   tx: Prisma.TransactionClient,
   documentKey: string,
-  projectId: string | null,
 ): Promise<string> {
-  // Prefer a project-specific series, fall back to a platform-wide one.
-  let series = await tx.numberingSeries.findFirst({
-    where: { documentKey, projectId, status: "ACTIVE" },
+  const series = await tx.numberingSeries.findFirst({
+    where: { documentKey, status: "ACTIVE" },
+    orderBy: { createdAt: "asc" },
   });
-  if (!series) {
-    series = await tx.numberingSeries.findFirst({
-      where: { documentKey, projectId: null, status: "ACTIVE" },
-    });
-  }
 
   if (!series) {
     // No series configured — fall back to a timestamped number rather than failing.
     return `${documentKey}-${Date.now().toString(36).toUpperCase()}`;
   }
 
-  const format = (n: number) =>
-    [series!.prefix, series!.fiscalYear, String(n).padStart(series!.padding, "0")]
-      .filter(Boolean)
-      .join("/");
+  const format = (n: number) => formatSeriesNumber(series, n);
 
   // Take the counter first, atomically, so two callers never see the same
   // number. Only then step over anything already on a row.
