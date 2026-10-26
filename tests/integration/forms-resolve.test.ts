@@ -82,7 +82,7 @@ describe("every form resolves against the database", () => {
     expect(typeof employee === "string" ? employee : "ok").toBe("ok");
     if (typeof employee !== "string" && "fields" in employee) {
       const files = employee.fields.filter((f) => f.kind === "files");
-      expect(files.map((f) => f.name)).toEqual(["photo", "doc:Aadhaar card", "doc:PAN card"]);
+      expect(files.map((f) => f.name)).toEqual(["photo", "doc:Aadhaar front", "doc:Aadhaar back", "doc:PAN card", "doc:Passbook", "doc:Driving licence"]);
       expect(files[0].accept).toBe("image/*");
       expect(files[0].maxFiles).toBe(1);
     }

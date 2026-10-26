@@ -176,7 +176,15 @@ describe("lead automation", () => {
     });
 
     it("hands a rider's referral to the tele-caller never assigned before anyone else", async () => {
-      expect(await chooseLeadOwner(prisma, { ...rider, id: adminId }, null)).toEqual({ ownerId: temp.id, auto: true });
+      // Whoever has never been handed a lead goes first; the seeded tele-callers
+      // may also have none yet, so the pick is any never-assigned tele-caller.
+      const neverAssigned = [];
+      for (const id of [teleId, tele2Id, temp.id]) {
+        if ((await prisma.lead.count({ where: { ownerId: id, assignedAt: { not: null } } })) === 0) neverAssigned.push(id);
+      }
+      const pick = await chooseLeadOwner(prisma, { ...rider, id: adminId }, null);
+      expect(pick.auto).toBe(true);
+      expect(neverAssigned).toContain(pick.ownerId);
     });
 
     it("round-robin moves on once that person has been given one", async () => {

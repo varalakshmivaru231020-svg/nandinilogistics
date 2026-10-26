@@ -15,14 +15,17 @@ import { prisma } from "./helpers";
  * production is synced from.
  */
 describe("the roles that exist", () => {
-  it("lets every role use the app at all", async () => {
+  it("lets every role but Admin use the app — Admin is web-only by the SOW", async () => {
     const roles = await prisma.role.findMany({
       include: { permissions: { include: { permission: { select: { code: true } } } } },
     });
     expect(roles.length).toBeGreaterThan(0);
+    const admin = roles.find((r) => r.code === "ADMIN");
+    expect(admin?.permissions.some((p) => p.permission.code === "admin.mobile.use"), "Admin must stay web-only").toBe(false);
     const without = roles
       .filter((r) => !r.permissions.some((p) => p.permission.code === "admin.mobile.use"))
-      .map((r) => r.code);
+      .map((r) => r.code)
+      .filter((c) => c !== "ADMIN");
     // The one permission that exists because the phone exists. A role without
     // it is refused at every endpoint, whatever else it holds.
     expect(without, `these roles cannot sign in to the app: ${without.join(", ")}`).toEqual([]);
