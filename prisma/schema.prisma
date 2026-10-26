@@ -675,6 +675,7 @@ model Employee {
   advances       Advance[]
   bikeRents      BikeRent[]
   payslips       Payslip[]
+  editRequests   ProfileEditRequest[]
 
   @@index([employmentTypeId])
   @@index([onboardingStatus])
@@ -731,6 +732,13 @@ model AttendanceEntry {
   status        AttendanceStatus
   overtimeHours Decimal          @default(0) @db.Decimal(5, 2)
   notes         String?
+  /// Punch in / out from the app, with where the phone was (SOW §3.6 item 7).
+  punchInAt     DateTime?
+  punchInLat    Decimal?         @db.Decimal(9, 6)
+  punchInLng    Decimal?         @db.Decimal(9, 6)
+  punchOutAt    DateTime?
+  punchOutLat   Decimal?         @db.Decimal(9, 6)
+  punchOutLng   Decimal?         @db.Decimal(9, 6)
   markedById    String?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
@@ -1177,4 +1185,30 @@ model Payslip {
 
   @@unique([employeeId, month])
   @@map("payslips")
+}
+
+/// A rider asking for their own details to be changed (SOW §3.6 item 8).
+/// Admin approves, and only then is the record changed.
+enum ProfileEditStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ProfileEditRequest {
+  id           String            @id @default(cuid())
+  employeeId   String
+  /// Field name → requested value.
+  changes      Json
+  reason       String?
+  status       ProfileEditStatus @default(PENDING)
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?
+  createdAt    DateTime          @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("profile_edit_requests")
 }
