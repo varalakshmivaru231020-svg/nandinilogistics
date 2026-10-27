@@ -1,0 +1,18 @@
+# The sweeps and the WhatsApp outbox — installed as /etc/cron.d/nninfra-whatsapp.
+#
+# Every five minutes, all day. Three things run behind this one call: overdue
+# tasks, holds about to lapse, and the outbox those two fill. Five minutes is
+# the delay somebody would accept on "your task is overdue" and far below the
+# six-hour warning window on a hold; a minute would only mean twelve times the
+# log for the same messages.
+#
+# The secret matches WHATSAPP_CRON_SECRET in /var/www/nninfra/app/.env. A
+# server without it refuses the call, which is what an unconfigured host
+# should do.
+#
+# Output goes to the log rather than to mail — root on this host has no
+# mailbox, and a cron that mails nobody is a cron nobody reads.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+*/5 * * * * root /usr/bin/curl -fsS -m 120 -X POST -H "x-cron-secret: $(grep -m1 '^WHATSAPP_CRON_SECRET=' /var/www/nninfra/app/.env | cut -d= -f2- | tr -d '\"')" http://127.0.0.1:3021/api/whatsapp/dispatch >> /var/log/nninfra-whatsapp.log 2>&1

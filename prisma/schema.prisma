@@ -189,51 +189,53 @@ model User {
   sessions       Session[]
   auditLogs      AuditLog[]
 
-  indentsRaised          Indent[]            @relation("IndentRaisedBy")
+  indentsRaised          Indent[]                @relation("IndentRaisedBy")
   indentApprovals        IndentApproval[]
   purchaseOrders         PurchaseOrder[]
   goodsReceipts          Grn[]
   materialIssues         MaterialIssue[]
-  leadsOwned             Lead[]              @relation("LeadOwner")
+  leadsOwned             Lead[]                  @relation("LeadOwner")
   followUps              LeadFollowUp[]
   siteVisits             SiteVisit[]
   bookings               Booking[]
   unitHolds              UnitHold[]
   progressLogs           SiteProgressLog[]
-  managedProjects        Project[]           @relation("ProjectManager")
-  extensionsAsked        ScheduleExtension[] @relation("ExtensionRequestedBy")
-  extensionsDecidedPm    ScheduleExtension[] @relation("ExtensionPmDecidedBy")
-  extensionsDecidedAdmin ScheduleExtension[] @relation("ExtensionAdminDecidedBy")
+  managedProjects        Project[]               @relation("ProjectManager")
+  extensionsAsked        ScheduleExtension[]     @relation("ExtensionRequestedBy")
+  extensionsDecidedPm    ScheduleExtension[]     @relation("ExtensionPmDecidedBy")
+  extensionsDecidedAdmin ScheduleExtension[]     @relation("ExtensionAdminDecidedBy")
   leadNotes              LeadNote[]
   leadDocuments          LeadDocument[]
   employeeDocuments      EmployeeDocument[]
   attendanceEntries      AttendanceEntry[]
   kbArticles             KbArticle[]
   kbAttachments          KbAttachment[]
-  grnAttachments         GrnAttachment[]   @relation("GrnAttachmentUploader")
-  grnsInspected          Grn[]               @relation("GrnInspector")
-  settingsUpdated        AppSetting[]        @relation("SettingUpdatedBy")
-  notifications          Notification[]      @relation("NotificationRecipient")
-  calendarEventsCreated  CalendarEvent[]     @relation("CalendarEventBy")
-  calendarInvites        CalendarAttendee[]  @relation("CalendarAttendeeUser")
-  calendarEventsDone     CalendarEvent[]     @relation("CalendarEventDoneBy")
+  grnAttachments         GrnAttachment[]         @relation("GrnAttachmentUploader")
+  grnsInspected          Grn[]                   @relation("GrnInspector")
+  settingsUpdated        AppSetting[]            @relation("SettingUpdatedBy")
+  notifications          Notification[]          @relation("NotificationRecipient")
+  calendarEventsCreated  CalendarEvent[]         @relation("CalendarEventBy")
+  calendarInvites        CalendarAttendee[]      @relation("CalendarAttendeeUser")
+  calendarEventsDone     CalendarEvent[]         @relation("CalendarEventDoneBy")
   scheduleTemplates      ScheduleTemplate[]
-  posApprovedAsPm        PurchaseOrder[]     @relation("PoPmApprover")
-  posApprovedAsAdmin     PurchaseOrder[]     @relation("PoAdminApprover")
-  materialReturnsRaised  MaterialReturn[]    @relation("ReturnRaisedBy")
-  materialReturnsDecided MaterialReturn[]    @relation("ReturnDecidedBy")
-  tasksAssigned          Task[]              @relation("TaskAssignee")
-  tasksCreated           Task[]              @relation("TaskCreatedBy")
-  taskEvents             TaskEvent[]         @relation("TaskEventActor")
-  taskComments           TaskComment[]       @relation("TaskCommentAuthor")
-  taskAttachments        TaskAttachment[]    @relation("TaskAttachmentBy")
-  taskExtensions         TaskExtension[]     @relation("TaskExtensionBy")
-  taskExtensionsDecided  TaskExtension[]     @relation("TaskExtensionDecidedBy")
+  posApprovedAsPm        PurchaseOrder[]         @relation("PoPmApprover")
+  posApprovedAsAdmin     PurchaseOrder[]         @relation("PoAdminApprover")
+  materialReturnsRaised  MaterialReturn[]        @relation("ReturnRaisedBy")
+  materialReturnsDecided MaterialReturn[]        @relation("ReturnDecidedBy")
+  tasksAssigned          Task[]                  @relation("TaskAssignee")
+  tasksCreated           Task[]                  @relation("TaskCreatedBy")
+  taskEvents             TaskEvent[]             @relation("TaskEventActor")
+  taskComments           TaskComment[]           @relation("TaskCommentAuthor")
+  taskAttachments        TaskAttachment[]        @relation("TaskAttachmentBy")
+  taskExtensions         TaskExtension[]         @relation("TaskExtensionBy")
+  taskExtensionsDecided  TaskExtension[]         @relation("TaskExtensionDecidedBy")
   taskChecklistFiles     TaskChecklistItemFile[] @relation("TaskChecklistFileBy")
-  taskLevels             TaskLevel[]         @relation("TaskLevelUser")
-  taskLevelActions       TaskLevelAction[]   @relation("TaskLevelActionBy")
-  checklistRuns          ChecklistRun[]      @relation("ChecklistRunBy")
-  workPackagesManaged    WorkPackage[]       @relation("WorkPackageManager")
+  taskLevels             TaskLevel[]             @relation("TaskLevelUser")
+  taskLevelActions       TaskLevelAction[]       @relation("TaskLevelActionBy")
+  checklistRuns          ChecklistRun[]          @relation("ChecklistRunBy")
+  workPackagesManaged    WorkPackage[]           @relation("WorkPackageManager")
+  whatsappMessages       WhatsappMessage[]       @relation("WhatsappMessageFor")
+  whatsappTriggers       WhatsappTrigger[]       @relation("WhatsappTriggerBy")
 
   @@index([status])
   @@index([departmentId])
@@ -241,22 +243,22 @@ model User {
 }
 
 model Role {
-  id          String       @id @default(cuid())
-  code        String       @unique
-  name        String
-  description String?
+  id           String       @id @default(cuid())
+  code         String       @unique
+  name         String
+  description  String?
   /// System roles cannot be deleted or have their code changed.
-  isSystem    Boolean      @default(false)
+  isSystem     Boolean      @default(false)
   /// Lower number = higher authority. Used for approval routing and role-guarding.
-  level       Int          @default(100)
+  level        Int          @default(100)
   /// The permission codes this role falls back to. Set from the shipped matrix
   /// when a role is seeded, and overwritten whenever somebody saves the grants
   /// they have as the new default — which is what makes "restore" mean
   /// something a person chose rather than something the code shipped with.
   defaultCodes Json?
-  status      RecordStatus @default(ACTIVE)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  status       RecordStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   permissions    RolePermission[]
   users          UserRole[]
@@ -1162,8 +1164,8 @@ model CalendarEvent {
   completedAt   DateTime?
   completedById String?
 
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   project     Project? @relation(fields: [projectId], references: [id])
   createdBy   User     @relation("CalendarEventBy", fields: [createdById], references: [id])
@@ -2438,9 +2440,9 @@ model Task {
   status      TaskStatus   @default(PENDING)
 
   /// What the Assignee is working to now — moved by any approved extension.
-  dueAt DateTime
+  dueAt          DateTime
   /// What was asked for at the outset. Never changes.
-  originalDueAt DateTime
+  originalDueAt  DateTime
   /// The date performance is measured against: the original plus only the time
   /// added by uncontrollable extensions. Kept as a column so a report does not
   /// have to replay every extension.
@@ -2558,15 +2560,15 @@ model TaskAttachment {
 /// whether the delay was in the Assignee's control. A Hold is requested the
 /// same way, which is why the flag lives here.
 model TaskExtension {
-  id             String              @id @default(cuid())
-  taskId         String
-  requestedById  String
-  proposedDueAt  DateTime
-  reason         String
+  id               String              @id @default(cuid())
+  taskId           String
+  requestedById    String
+  proposedDueAt    DateTime
+  reason           String
   /// Set when the Assignee asked to pause rather than simply move the date.
-  isHoldRequest  Boolean             @default(false)
+  isHoldRequest    Boolean             @default(false)
   expectedResumeAt DateTime?
-  status         TaskExtensionStatus @default(REQUESTED)
+  status           TaskExtensionStatus @default(REQUESTED)
 
   decidedById    String?
   decidedAt      DateTime?
@@ -2654,8 +2656,8 @@ model TaskLevel {
   level  Int
   userId String
 
-  task    Task                @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  user    User                @relation("TaskLevelUser", fields: [userId], references: [id])
+  task    Task                      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user    User                      @relation("TaskLevelUser", fields: [userId], references: [id])
   actions TaskLevelAction[]
   reviews TaskChecklistItemReview[]
 
@@ -2782,4 +2784,140 @@ model ChecklistRun {
 
   @@index([checklistId])
   @@map("checklist_runs")
+}
+
+// ===========================================================================
+// WHATSAPP
+//
+// The same four tables the sales project runs on, because the integration
+// there is the one that works: the connection is a row an administrator can
+// change without a deploy, a template is the exact thing Meta approved, a
+// trigger says which event sends which template, and every message is a row in
+// an outbox that a dispatcher drains.
+//
+// Nothing here sends anything by itself. Business code calls
+// `enqueueWhatsApp()`, which writes a row; the dispatcher sends it and writes
+// back what happened. A send that fails must never take a booking or a receipt
+// down with it.
+// ===========================================================================
+
+enum WhatsappTemplateStatus {
+  /// Submitted to Meta and not yet decided.
+  PENDING
+  APPROVED
+  REJECTED
+  /// Approved once, then paused by Meta for quality, or by us.
+  PAUSED
+  DISABLED
+}
+
+enum WhatsappMessageStatus {
+  /// Waiting for the next dispatcher run.
+  QUEUED
+  /// Held until `sendAfter`, for a reminder with a delay on its trigger.
+  SCHEDULED
+  SENT
+  /// Refused by Meta, or out of attempts. `error` says which.
+  FAILED
+  /// Deliberately not sent — no number, no template, the trigger switched off.
+  SKIPPED
+}
+
+/// A template as Meta approved it: the name, the language, and the order its
+/// variables go in. The body is kept only so the screen can show what will be
+/// sent — Meta holds the authoritative copy.
+model WhatsappTemplate {
+  id              String                 @id @default(cuid())
+  /// The exact name registered with Meta — lowercase, underscores.
+  name            String
+  languageCode    String                 @default("en")
+  category        String                 @default("UTILITY")
+  /// What the body reads, with its {{1}} placeholders, for the preview.
+  bodyText        String?
+  /// The variables in order: ["recipient", "documentNo", …]. Their names are
+  /// this platform's, and the position is what Meta reads.
+  variables       Json                   @default("[]")
+  /// A url button's variables, as `[{ "index": 0, "name": "href" }]`.
+  buttonVariables Json                   @default("[]")
+  status          WhatsappTemplateStatus @default(PENDING)
+  /// Meta's own id, where the template was read back from them.
+  metaTemplateId  String?
+  enabled         Boolean                @default(true)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  triggers WhatsappTrigger[]
+  messages WhatsappMessage[]
+
+  @@unique([name, languageCode])
+  @@map("whatsapp_templates")
+}
+
+/// Which template an event sends, and whether it sends one at all.
+///
+/// One row per event, created by the seed for every event the code can raise —
+/// so the screen lists them all and an administrator switches on the ones they
+/// have a template for.
+model WhatsappTrigger {
+  id            String   @id @default(cuid())
+  /// The event key, e.g. `APPROVAL_PENDING`. One row each.
+  event         String   @unique
+  templateId    String?
+  enabled       Boolean  @default(false)
+  /// Minutes to wait after the event before sending, for a reminder that
+  /// should not go out the instant something happens. 0 or null is at once.
+  delayMinutes  Int?
+  /// Where the event has no person of its own to write to — a number typed in.
+  fallbackPhone String?
+  updatedById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  template  WhatsappTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  updatedBy User?             @relation("WhatsappTriggerBy", fields: [updatedById], references: [id])
+
+  @@map("whatsapp_triggers")
+}
+
+/// The outbox: one row per message, written by the business flow and drained
+/// by the dispatcher. It is also the log — a sent row is never deleted.
+model WhatsappMessage {
+  id              String                @id @default(cuid())
+  /// E.164 without the plus, which is what Meta takes: 919876543210.
+  toPhone         String
+  /// The template's name and language as they were when this was queued, so
+  /// the log still reads correctly after a template is renamed or removed.
+  templateName    String
+  languageCode    String
+  templateId      String?
+  /// The body variables, in order.
+  variables       Json                  @default("[]")
+  /// The url button's variables, as they were resolved.
+  buttonVariables Json                  @default("[]")
+  /// Which event raised it, and what it was about — so a record can show its
+  /// own messages and a failure can be traced to the thing that caused it.
+  event           String
+  entity          String?
+  entityId        String?
+  /// Who it is about, where that is a person on this platform.
+  userId          String?
+  status          WhatsappMessageStatus @default(QUEUED)
+  /// Not before this instant. Equal to `createdAt` for an immediate send.
+  sendAfter       DateTime              @default(now())
+  sentAt          DateTime?
+  /// Meta's message id, which is how a delivery report is matched later.
+  metaMessageId   String?
+  error           String?
+  attempts        Int                   @default(0)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  template WhatsappTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  user     User?             @relation("WhatsappMessageFor", fields: [userId], references: [id], onDelete: SetNull)
+
+  /// What the dispatcher reads every run.
+  @@index([status, sendAfter])
+  @@index([entity, entityId])
+  @@index([event, createdAt])
+  @@map("whatsapp_messages")
 }

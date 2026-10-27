@@ -662,6 +662,13 @@ perm("admin", "mobile", "use", "Sign in from the mobile app", G_ADMIN_SYS, "ACTI
 perm("admin", "settings", "view", "Platform settings", G_ADMIN_SYS, "PAGE");
 perm("admin", "settings", "update", "Change platform settings", G_ADMIN_SYS, "BUTTON");
 
+perm("admin", "whatsapp", "view", "WhatsApp", G_ADMIN_SYS, "PAGE",
+  "The connection, the approved templates, which events send one, and every message sent.");
+perm("admin", "whatsapp", "update", "Change the WhatsApp connection and its triggers", G_ADMIN_SYS, "BUTTON",
+  "Includes the access token, which is never shown back once saved.");
+perm("admin", "whatsapp", "send", "Send a WhatsApp message by hand", G_ADMIN_SYS, "BUTTON",
+  "A test message, or sending a failed one again.");
+
 // ===========================================================================
 // REPORTS — each is a page plus its export
 // ===========================================================================

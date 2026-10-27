@@ -1,5 +1,8 @@
 import { requireAuth } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
+import { whatsappConsole } from "@/lib/whatsapp/console";
+
+import { WhatsAppPanel } from "./whatsapp-panel";
 import { PERM } from "@/lib/permissions/codes";
 import { LIVE_PERMISSIONS } from "@/lib/permissions/registry";
 import { MASTERS, masterPerm } from "@/lib/masters/registry";
@@ -32,6 +35,13 @@ const SECTIONS = [
    * which is the same as not being reachable.
    */
   { key: "reference", label: "Reference Data", add: null },
+  /*
+   * The WhatsApp connection and its triggers. Here rather than on a screen of
+   * its own because it is configuration, and this is where configuration
+   * lives — the credentials, which template each event sends, and the log of
+   * what went out.
+   */
+  { key: "whatsapp", label: "WhatsApp", add: null },
 ] as const;
 
 /** The stages the pipeline moves through, in order. */
@@ -61,6 +71,7 @@ export default async function MastersPage({
     leadcfg: ctx.has(PERM.masters.lostReason.view),
     workforce: ctx.has(PERM.masters.designation.view),
     reference: MASTERS.some((m) => ctx.has(masterPerm(m, "view"))),
+    whatsapp: ctx.has(PERM.admin.whatsapp.view),
   };
 
   const sections = SECTIONS.filter((s) => may[s.key]);
@@ -148,9 +159,29 @@ export default async function MastersPage({
         {active.key === "reference" && (
           <ReferenceData visible={MASTERS.filter((m) => ctx.has(masterPerm(m, "view")))} />
         )}
+        {active.key === "whatsapp" && (
+          <WhatsApp
+            canUpdate={ctx.has(PERM.admin.whatsapp.update)}
+            canSend={ctx.has(PERM.admin.whatsapp.send)}
+          />
+        )}
       </div>
     </div>
   );
+}
+
+/* -------------------------------- WhatsApp -------------------------------- */
+
+/**
+ * The connection, the triggers and the log, read in one go.
+ *
+ * `whatsappConsole()` creates the trigger rows for any event that has none, so
+ * a fresh database shows the nine straight away rather than an empty table and
+ * a "set up" button.
+ */
+async function WhatsApp({ canUpdate, canSend }: { canUpdate: boolean; canSend: boolean }) {
+  const data = await whatsappConsole();
+  return <WhatsAppPanel console={data} canUpdate={canUpdate} canSend={canSend} />;
 }
 
 /* ----------------------------- Reference data ----------------------------- */

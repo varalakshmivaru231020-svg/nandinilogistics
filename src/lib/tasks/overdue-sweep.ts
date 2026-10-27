@@ -1,5 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
+import { whatsappTaskOverdue } from "@/lib/whatsapp/notify";
+
 import { notifyTask } from "./notify";
 
 type Tx = Prisma.TransactionClient | PrismaClient;
@@ -85,7 +87,35 @@ export async function sweepOverdueTasks(
   }
 
   const due = alertsDue(shaped, nowMs);
+
+  // The people an overdue alert is about, read once rather than per task.
+  const assignees = await tx.user.findMany({
+    where: { id: { in: [...new Set(due.map((a) => a.task.assigneeId))] } },
+    select: { id: true, name: true, phone: true },
+  });
+  const assigneeById = new Map(assignees.map((u) => [u.id, u]));
+
   for (const a of due) {
+    /*
+     * Overdue goes to WhatsApp as well as to the bell. Due-soon does not: a
+     * reminder before the time is useful on a screen somebody is already
+     * looking at, and a message on a phone the day before everything is due
+     * is how a number gets muted.
+     */
+    if (a.kind === "OVERDUE") {
+      const assignee = assigneeById.get(a.task.assigneeId);
+      if (assignee) {
+        await whatsappTaskOverdue(tx, {
+          taskId: a.task.id,
+          taskNo: a.task.taskNo,
+          title: a.task.title,
+          dueAt: a.task.dueAt,
+          daysOverdue: a.daysOverdue,
+          assignee,
+        });
+      }
+    }
+
     await notifyTask(tx, {
       kind: a.kind,
       taskId: a.task.id,

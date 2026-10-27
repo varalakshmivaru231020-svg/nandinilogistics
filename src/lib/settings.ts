@@ -23,6 +23,41 @@ export const SETTINGS = {
     schema: z.object({ afterHours: z.number().int().min(1).max(24 * 30) }),
     default: { afterHours: DEFAULT_ESCALATION_HOURS },
   },
+  /*
+   * The WhatsApp connection, as an administrator sets it on Admin → WhatsApp.
+   *
+   * A setting rather than an environment variable so the token can be rotated
+   * — or the whole thing switched off — without a deploy, which is how the
+   * sales project does it and the reason it can change provider in a minute:
+   * Meta direct is `https://graph.facebook.com`, and a BSP that proxies Meta
+   * is its own url with its own version.
+   *
+   * The token is read on the server only. It is never sent to a screen, and
+   * `whatsappSettingsForScreen()` is the only thing a page may call.
+   */
+  "whatsapp.api": {
+    schema: z.object({
+      apiUrl: z.string().trim().url().default("https://graph.facebook.com"),
+      apiVersion: z.string().trim().min(2).default("v21.0"),
+      /// Only needed to read the approved templates back from Meta.
+      wabaId: z.string().trim().default(""),
+      /// The id of the sending number, not the number itself.
+      phoneNumberId: z.string().trim().default(""),
+      /// The number as a person would read it, for the screen.
+      displayPhone: z.string().trim().default(""),
+      accessToken: z.string().default(""),
+      enabled: z.boolean().default(false),
+    }),
+    default: {
+      apiUrl: "https://graph.facebook.com",
+      apiVersion: "v21.0",
+      wabaId: "",
+      phoneNumberId: "",
+      displayPhone: "",
+      accessToken: "",
+      enabled: false,
+    },
+  },
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS;

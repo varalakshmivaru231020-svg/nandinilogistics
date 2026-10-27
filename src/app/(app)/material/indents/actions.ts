@@ -11,6 +11,7 @@ import { prisma } from "@/lib/db";
 import { authorize, runAction, assertProjectAccess, PermissionError, type ActionResult } from "@/lib/rbac/guard";
 import { diff, recordAudit } from "@/lib/audit";
 import { nextDocumentNumber } from "@/lib/numbering";
+import { whatsappApprovalPending } from "@/lib/whatsapp/notify";
 import { PERM } from "@/lib/permissions/codes";
 import {
   indentEstimatedValue, isIndentEditable, matchWorkPackage, mayEditIndentAs,
@@ -232,6 +233,31 @@ export async function submitIndentAction(id: string): Promise<ActionResult<null>
       action: "SUBMIT", entity: "Indent", entityId: id, userId: ctx.id, projectId: indent.projectId,
       summary: `Submitted indent ${indent.indentNo} for approval`,
     });
+
+    // It is now on the Project Manager, who is told where they are.
+    const submitted = await prisma.indent.findUnique({
+      where: { id },
+      select: {
+        indentNo: true,
+        project: { select: { code: true } },
+        raisedBy: { select: { name: true } },
+        items: { select: { item: { select: { name: true } } }, take: 1 },
+      },
+    });
+    if (submitted) {
+      await whatsappApprovalPending(prisma, {
+        document: `Indent ${submitted.indentNo}`,
+        subject: submitted.items[0]?.item?.name ?? "Material",
+        projectCode: submitted.project?.code ?? "—",
+        raisedBy: submitted.raisedBy?.name ?? "—",
+        href: `material/indents/${id}`,
+        entity: "Indent",
+        entityId: id,
+        permission: PERM.material.indent.approvePm,
+        projectId: indent.projectId,
+        actorId: ctx.id,
+      });
+    }
     revalidatePath("/material/indents");
     revalidatePath(`/material/indents/${id}`);
     return null;

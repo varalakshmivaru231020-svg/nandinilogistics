@@ -5,7 +5,7 @@ ERP. It is written to be handed to a developer or a coding agent with no prior
 knowledge of the system.
 
 Everything here is taken from the running web application, not from memory:
-20 navigation modules, 75 screens, **183 server actions** and **564 permission
+20 navigation modules, 75 screens, **183 server actions** and **567 permission
 codes**. Where this document names a permission, that is the exact string the
 server checks.
 

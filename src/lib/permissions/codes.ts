@@ -3,7 +3,7 @@
  * Source: src/lib/permissions/registry.ts
  * Regenerate: pnpm perms:codegen
  *
- * 564 permission codes.
+ * 567 permission codes.
  */
 
 export const PERM = {
@@ -663,6 +663,11 @@ export const PERM = {
     "settings": {
       "view": "admin.settings.view",
       "update": "admin.settings.update",
+    },
+    "whatsapp": {
+      "view": "admin.whatsapp.view",
+      "update": "admin.whatsapp.update",
+      "send": "admin.whatsapp.send",
     },
   },
   "reports": {
