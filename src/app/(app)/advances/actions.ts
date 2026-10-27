@@ -45,7 +45,8 @@ async function riderInScope(ctx: AuthContext, employeeId: string, viewAllCode: s
 /* --------------------------------- advances -------------------------------- */
 
 const AdvanceSchema = z.object({
-  employeeId: z.string().min(1, "Choose the rider."),
+  /** Left out by a rider asking for themselves; then it is their own record. */
+  employeeId: z.string().optional(),
   amount: z.coerce.number().positive("Enter the amount."),
   priority: z.enum(["EMERGENCY", "LOW"]),
   reasonId: z.string().optional(),
@@ -58,7 +59,12 @@ export async function createAdvanceAction(formData: FormData): Promise<ActionRes
     const parsed = AdvanceSchema.safeParse(Object.fromEntries(formData));
     if (!parsed.success) throw new Error(parsed.error.issues[0].message);
     const v = parsed.data;
-    const { rider } = await riderInScope(ctx, v.employeeId, PERM.advance.advance.viewAll);
+    const own = v.employeeId
+      ? null
+      : await prisma.employee.findUnique({ where: { userId: ctx.id }, select: { id: true } });
+    const employeeId = v.employeeId || own?.id;
+    if (!employeeId) throw new Error("Choose the rider.");
+    const { rider } = await riderInScope(ctx, employeeId, PERM.advance.advance.viewAll);
 
     if (v.reasonId) {
       const reason = await prisma.advanceReason.findFirst({ where: { id: v.reasonId, status: "ACTIVE" } });

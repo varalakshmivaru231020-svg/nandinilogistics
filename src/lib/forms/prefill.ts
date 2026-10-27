@@ -36,6 +36,28 @@ export async function prefillFor(
   id: string,
 ): Promise<Prefill | null> {
   switch (key) {
+    /* ------------------------------------------------------------- profile */
+    case "hr/profile:edit": {
+      const e = await prisma.employee.findUnique({ where: { id } });
+      if (!e) return null;
+      if (e.userId !== ctx.id) return { values: {}, refusal: "You can only ask to change your own profile." };
+      return {
+        values: {
+          mobile: e.mobile,
+          altContact: txt(e.altContact),
+          emergencyMobileFamily: txt(e.emergencyMobileFamily),
+          emergencyMobileFriend: txt(e.emergencyMobileFriend),
+          address: txt(e.address),
+          bankAccountNo: txt(e.bankAccountNo),
+          bankHolderName: txt(e.bankHolderName),
+          bankIfsc: txt(e.bankIfsc),
+          bankName: txt(e.bankName),
+          insuranceNumber: txt(e.insuranceNumber),
+          reason: "",
+        },
+      };
+    }
+
     /* --------------------------------------------------------------- leads */
     case "sales/leads:edit": {
       const lead = await prisma.lead.findUnique({

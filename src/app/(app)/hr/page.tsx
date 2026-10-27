@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
@@ -94,8 +96,19 @@ export default async function WorkforcePage({
     },
   });
 
+  const pendingEdits = ctx.has(PERM.hr.employee.update)
+    ? await prisma.profileEditRequest.count({ where: { status: "PENDING", employee: employeeScope(ctx) } })
+    : 0;
+
   return (
     <div>
+      {ctx.has(PERM.hr.employee.update) && (
+        <p className="mb-3 text-sm">
+          <Link href="/hr/edit-requests" className="font-medium text-brand-600 hover:underline">
+            Profile change requests{pendingEdits ? ` · ${pendingEdits} waiting` : ""} →
+          </Link>
+        </p>
+      )}
       <ModuleStats figures={employeeFigures(statRows)} />
       <HrScreen
         tab={tab}

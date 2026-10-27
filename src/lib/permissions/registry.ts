@@ -193,6 +193,7 @@ crud({
     ["idCard", "View the digital ID card", "BUTTON"],
     ["manageCompanies", "Change the companies a rider is deployed to", "BUTTON"],
     ["setPin", "Set or reset a rider's app PIN", "BUTTON", "The PIN is stored hashed; nobody can read it back."],
+    ["requestEdit", "Ask for a change to one's own profile", "ACTION", "The change waits for someone with update to approve it."],
   ],
 });
 
@@ -212,6 +213,7 @@ perm("hr", "attendance", "mark", "Mark attendance for a day", G_HR, "BUTTON", "R
 perm("hr", "attendance", "markAll", "Mark everyone present at once", G_HR, "BUTTON");
 perm("hr", "attendance", "tabReport", "Workforce tab — Attendance report", G_HR, "TAB");
 perm("hr", "attendance", "export", "Export the attendance report", G_HR, "BUTTON");
+perm("hr", "attendance", "punch", "Punch in / out from the app", G_HR, "ACTION", "One's own attendance, with the phone's location.");
 
 // ===========================================================================
 // TASK MANAGEMENT (SOW §3.9) — Admin assigns, Team Leaders update

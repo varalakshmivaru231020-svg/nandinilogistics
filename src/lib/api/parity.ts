@@ -128,10 +128,6 @@ export const PARITY: Record<string, ParityExemption> = {
 
   /* ------------- Rider/TL actions the app will carry once it is rebuilt ------------- */
 
-  "advances/createAdvance": {
-    reason: "todo",
-    note: "The Android client is rebuilt after the admin panel.",
-  },
   "advances/decideAdvance": {
     reason: "todo",
     note: "The Android client is rebuilt after the admin panel.",

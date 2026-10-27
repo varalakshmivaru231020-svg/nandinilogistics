@@ -9,6 +9,8 @@ import { referralStatus } from "@/lib/riders/referrals";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { EmployeeDetail, type AttendanceDay, type AttendanceRow } from "./employee-detail";
 import { RiderPanel } from "./rider-panel";
+import { EditRequestsPanel } from "../edit-requests/edit-requests-panel";
+import { editRequestRows } from "@/lib/hr/edit-request-rows";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -129,6 +131,9 @@ export default async function EmployeeDetailPage({
   const otHours = entries.reduce((s, e) => s + Number(e.overtimeHours), 0);
 
   const canIdentity = ctx.has(PERM.hr.employee.viewIdentity);
+  const editRequests = ctx.has(PERM.hr.employee.update)
+    ? await editRequestRows({ employeeId: id, status: "PENDING" }, canIdentity)
+    : [];
   const identity = (v: string | null) => (canIdentity ? v : maskId(v)) || "—";
   const rider = isRiderType(employee.employmentType.name);
 
@@ -172,6 +177,13 @@ export default async function EmployeeDetailPage({
         ],
       }}
       extras={
+        <>
+        {editRequests.length > 0 && (
+          <section className="mb-4">
+            <h2 className="mb-2 text-sm font-semibold text-navy-800">Profile change requests · {editRequests.length}</h2>
+            <EditRequestsPanel rows={editRequests} showRider={false} />
+          </section>
+        )}
         <RiderPanel
           rider={{
             id: employee.id,
@@ -211,6 +223,7 @@ export default async function EmployeeDetailPage({
             setPin: ctx.has(PERM.hr.employee.setPin),
           }}
         />
+        </>
       }
       documents={
         canIdentity

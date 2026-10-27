@@ -255,6 +255,89 @@ export const FORMS: Record<string, FormDef> = {
     ],
   },
 
+  // The same action for a rider referring somebody: name, mobile and where.
+  // The lead is handed to a tele-caller round-robin by the assignment rule.
+  // src/app/(app)/sales/leads/leads-screen.tsx → CaptureLead, whose labels are
+  // the Lead Settings master's.
+  "sales/leads:refer": {
+    key: "sales/leads:refer",
+    module: "sales/leads",
+    title: "Refer a rider",
+    description: "A tele-caller will call them.",
+    submitLabel: "Save lead",
+    permission: PERM.sales.lead.create,
+    hiddenFrom: PERM.sales.lead.assign,
+    action: "sales/leads/createLead",
+    shape: { kind: "formData" },
+    done: "Lead captured.",
+    fields: [
+      { name: "name", label: "Name", kind: "text", required: true, placeholder: "Type here" },
+      { name: "phone", label: "Mobile number", kind: "phone", required: true, placeholder: "98765 43210 (without country code)" },
+      { name: "location", label: "Location", kind: "text", placeholder: "Area or hub" },
+    ],
+  },
+
+  /* --------------------------------------------------------------- advances */
+
+  // src/app/(app)/advances/advances-screen.tsx → the request modal. A rider
+  // asks for themselves: the action takes their own record when no rider is sent.
+  "advances:create": {
+    key: "advances:create",
+    module: "advances",
+    title: "New advance request",
+    submitLabel: "Submit request",
+    permission: PERM.advance.advance.create,
+    action: "advances/createAdvance",
+    shape: { kind: "formData" },
+    done: "Advance requested.",
+    fields: [
+      { name: "amount", label: "Amount (₹)", kind: "money", required: true },
+      {
+        name: "priority",
+        label: "Priority",
+        kind: "select",
+        required: true,
+        initial: "LOW",
+        options: [
+          { value: "EMERGENCY", label: "Emergency" },
+          { value: "LOW", label: "Low priority" },
+        ],
+      },
+      { name: "reasonId", label: "Reason", kind: "select", source: "advanceReasons", emptyLabel: "Select…" },
+      { name: "remarks", label: "Remarks", kind: "textarea", wide: true },
+    ],
+  },
+
+  /* ------------------------------------------------------------- profile */
+
+  // src/app/(app)/hr/edit-requests/profile-edit-form.tsx. Opened on the
+  // caller's own rider record (id = their employee id) and prefilled from it.
+  "hr/profile:edit": {
+    key: "hr/profile:edit",
+    module: "hr/profile",
+    title: "Request a profile change",
+    submitLabel: "Request change",
+    permission: PERM.hr.employee.requestEdit,
+    action: "hr/requestProfileEdit",
+    shape: { kind: "formData" },
+    done: "Change requested.",
+    onRecord: true,
+    edits: true,
+    fields: [
+      { name: "mobile", label: "Mobile number", kind: "phone", placeholder: "98765 43210" },
+      { name: "altContact", label: "Alternate number", kind: "phone", placeholder: "98765 43210" },
+      { name: "emergencyMobileFamily", label: "Father / mother mobile", kind: "phone", placeholder: "98765 43210" },
+      { name: "emergencyMobileFriend", label: "Friend mobile", kind: "phone", placeholder: "98765 43210" },
+      { name: "address", label: "Address", kind: "textarea", placeholder: "House, area, city", wide: true },
+      { name: "bankAccountNo", label: "Account number", kind: "text", placeholder: "Account number" },
+      { name: "bankHolderName", label: "Account holder name", kind: "text", placeholder: "As on the passbook" },
+      { name: "bankIfsc", label: "IFSC code", kind: "text", placeholder: "HDFC0001234", caps: true },
+      { name: "bankName", label: "Bank name", kind: "text", placeholder: "Bank" },
+      { name: "insuranceNumber", label: "Insurance number", kind: "text", placeholder: "Shown on the ID card" },
+      { name: "reason", label: "Reason for the change", kind: "textarea", placeholder: "New number, bank changed…", wide: true },
+    ],
+  },
+
   /* ------------------------------------------------------------- attendance */
 
   // src/app/(app)/hr/hr-screen.tsx → MarkTab. One line per active person,
@@ -318,6 +401,6 @@ export function formsFor(module: string): FormDef[] {
  */
 export function formRefsFor(ctx: AuthContext, module: string): FormRef[] {
   return formsFor(module)
-    .filter((f) => !f.onRecord && ctx.has(f.permission))
+    .filter((f) => !f.onRecord && ctx.has(f.permission) && !(f.hiddenFrom && ctx.has(f.hiddenFrom)))
     .map((f) => ({ key: f.key, title: f.title, submitLabel: f.submitLabel }));
 }

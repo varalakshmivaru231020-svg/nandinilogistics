@@ -85,6 +85,15 @@ function sends(fields: ReadonlyArray<FormFieldDef>): string[] {
  * Kept short on purpose: anything else is a gap, not a convention.
  */
 const NOT_SENT: Record<string, Record<string, string>> = {
+  "sales/leads:refer": {
+    phoneCode: "A rider refers an Indian number; the action keeps the number as typed.",
+    companyIds: "The tele-caller tags companies when they call.",
+    ownerId: "A rider's referral is handed out round-robin.",
+    "custom:${field.id}": "A configured field, by its own id.",
+  },
+  "advances:create": {
+    employeeId: "A rider asks for themselves; the action takes their own record.",
+  },
   "sales/leads:create": {
     // Built from Masters → Lead Settings by `lead-form.ts`, which is the same
     // configuration the web's own form is drawn from.

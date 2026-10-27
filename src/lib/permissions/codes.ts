@@ -3,7 +3,7 @@
  * Source: src/lib/permissions/registry.ts
  * Regenerate: pnpm perms:codegen
  *
- * 224 permission codes.
+ * 226 permission codes.
  */
 
 export const PERM = {
@@ -69,6 +69,7 @@ export const PERM = {
       "idCard": "hr.employee.idCard",
       "manageCompanies": "hr.employee.manageCompanies",
       "setPin": "hr.employee.setPin",
+      "requestEdit": "hr.employee.requestEdit",
     },
     "referral": {
       "view": "hr.referral.view",
@@ -86,6 +87,7 @@ export const PERM = {
       "markAll": "hr.attendance.markAll",
       "tabReport": "hr.attendance.tabReport",
       "export": "hr.attendance.export",
+      "punch": "hr.attendance.punch",
     },
   },
   "task": {

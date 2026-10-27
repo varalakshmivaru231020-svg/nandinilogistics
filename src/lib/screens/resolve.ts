@@ -139,6 +139,14 @@ export async function loadOptions(source: OptionSource, ctx: AuthContext): Promi
       });
       return rows.map((d) => ({ value: d.id, label: d.name }));
     }
+    case "advanceReasons": {
+      const rows = await prisma.advanceReason.findMany({
+        where: { status: "ACTIVE" },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      });
+      return rows.map((r) => ({ value: r.id, label: r.name }));
+    }
   }
 }
 

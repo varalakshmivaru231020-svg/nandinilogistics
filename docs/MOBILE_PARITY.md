@@ -7,18 +7,18 @@ the registries that decide the behaviour: `src/lib/screens/registry.ts`,
 `src/lib/api/parity.ts`. `tests/unit/mobile-parity.test.ts` fails if an
 action is unreachable from the app and unexplained.
 
-Last written 2026-10-26.
+Last written 2026-10-27.
 
 ## In one line
 
 | | |
 |---|---|
-| Web actions on the boundary | **60** |
-| Reachable from the app | **32** |
-| Not reachable, with a reason | 28 |
+| Web actions on the boundary | **64** |
+| Reachable from the app | **37** |
+| Not reachable, with a reason | 27 |
 | Web list screens | 13 |
 | …with a record screen | 12 |
-| …with a create form | 4 |
+| …with a create form | 5 |
 | …with an edit form | 3 |
 
 ## The modules
@@ -31,7 +31,7 @@ The last column says where each one is raised.
 
 | Web module | Web route | Record | Create | Edit | | Where it is raised |
 |---|---|---|---|---|---|---|
-| `sales/leads` | `/sales/leads` | ✅ | `create` | ✅ | ✅ | its own list |
+| `sales/leads` | `/sales/leads` | ✅ | `create`, `refer` | ✅ | ✅ | its own list |
 | `sales/follow-ups` | `/sales/follow-ups` | ✅ | — | — | ✅ | the lead — “Log follow-up” |
 | `hr/employees` | `/hr` | ✅ | `create` | ✅ | ✅ | its own list |
 | `hr/attendance` | `/hr` | ✅ | `mark` | — | ✅ | its own list |
@@ -40,7 +40,7 @@ The last column says where each one is raised.
 | `hr/referrals` | `/hr/referrals` | ✅ | — | — | ⚠️ | its own list |
 | `payouts` | `/payouts` | ✅ | — | — | ⚠️ | its own list |
 | `payouts/imports` | `/payouts/imports` | ❌ | — | — | ❌ | its own list |
-| `advances` | `/advances` | ✅ | — | — | ⚠️ | its own list |
+| `advances` | `/advances` | ✅ | `create` | — | ✅ | its own list |
 | `advances/bike-rent` | `/advances/bike-rent` | ✅ | — | — | ⚠️ | its own list |
 | `accounts/invoices` | `/accounts/invoices` | ✅ | — | — | ⚠️ | its own list |
 | `staff/payslips` | `/staff/payslips` | ✅ | — | — | ⚠️ | its own list |
@@ -72,9 +72,8 @@ The last column says where each one is raised.
 - `advances/endBikeRent` — Admin work on the web admin panel.
 - `advances/deleteBikeRent` — Admin work on the web admin panel.
 
-### todo — 6
+### todo — 5
 
-- `advances/createAdvance` — The Android client is rebuilt after the admin panel.
 - `advances/decideAdvance` — The Android client is rebuilt after the admin panel.
 - `advances/deleteAdvance` — The Android client is rebuilt after the admin panel.
 - `payouts/holdPayoutLine` — The Android client is rebuilt after the admin panel.

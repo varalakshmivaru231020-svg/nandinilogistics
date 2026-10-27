@@ -121,6 +121,8 @@ export const ROLES: RoleSeed[] = [
       "hr.attendance.markAll",
       "hr.attendance.tabReport",
       "hr.attendance.export",
+      "hr.attendance.punch",
+      "hr.employee.requestEdit",
 
       // Tasks Admin assigns: view, start, finish, remark.
       "task.task.view",
@@ -207,6 +209,8 @@ export const ROLES: RoleSeed[] = [
       "advance.advance.create",
       "hr.attendance.view",
       "hr.attendance.mark",
+      "hr.attendance.punch",
+      "hr.employee.requestEdit",
     ],
   },
 ];

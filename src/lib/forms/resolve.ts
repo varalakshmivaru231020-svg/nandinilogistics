@@ -68,7 +68,8 @@ export async function resolveForm(
 
   // The permission, the viewer-dependent half and the raw fields all stay on
   // the server; what is left is what the client is sent.
-  const { when, dynamic, fields, ...withPermission } = def;
+  const { when, dynamic, fields, hiddenFrom, ...withPermission } = def;
+  void hiddenFrom;
   const { permission, ...rest } = withPermission;
   void permission;
 

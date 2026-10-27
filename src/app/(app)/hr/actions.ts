@@ -17,10 +17,15 @@ import { nextDocumentNumber } from "@/lib/numbering";
 import { mergeOfferLetter, renderOfferLetterPdf } from "@/lib/offer-letter";
 import {
   AADHAAR_RE, aadhaarDigits, IFSC_RE, isInternalStaffType, isRiderType, MANDATORY_RIDER_DOCS,
-  onboardingChecklist, onboardingTransition, PAN_RE, RIDER_DOC_KINDS,
+  onboardingChecklist, onboardingTransition, PAN_RE,
 } from "@/lib/riders/onboarding";
 import { referralCodeFor } from "@/lib/riders/referrals";
-import { FileTooLargeError, UnsupportedFileTypeError, put, remove } from "@/lib/storage";
+import { saveEmployeeFiles } from "@/lib/hr/employee-files";
+import { PROFILE_EDIT_LABEL, profileEditChanges, storedChanges, type ProfileEditKey } from "@/lib/hr/profile-edit";
+import { attendanceDay, checkCoordinates, planPunchIn, planPunchOut } from "@/lib/hr/punch";
+import { teamLeadersOf } from "@/lib/advances/service";
+import type { AttendanceStatus } from "@prisma/client";
+import { put, remove } from "@/lib/storage";
 import { formatDate } from "@/lib/utils";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 
@@ -73,53 +78,8 @@ function readDay(value: string | undefined, label: string): Date | null {
   return d;
 }
 
-/** Stores one uploaded file, turning the storage rules into form errors. */
-async function store(employeeId: string, file: File) {
-  try {
-    return await put(`employee-${employeeId}`, file.name, Buffer.from(await file.arrayBuffer()), file.type);
-  } catch (err) {
-    if (err instanceof FileTooLargeError || err instanceof UnsupportedFileTypeError) {
-      throw new Error(err.message);
-    }
-    throw err;
-  }
-}
-
-/**
- * Saves the photo and the KYC copies the form offers. Replacing one removes
- * what it replaced, so nothing is orphaned in storage.
- */
-async function saveFiles(employeeId: string, formData: FormData, uploadedById: string) {
-  const photo = formData.get("photo");
-  if (photo instanceof File && photo.size > 0) {
-    const previous = await prisma.employee.findUnique({ where: { id: employeeId }, select: { photoKey: true } });
-    const stored = await store(employeeId, photo);
-    await prisma.employee.update({ where: { id: employeeId }, data: { photoKey: stored.key } });
-    if (previous?.photoKey) await remove(previous.photoKey).catch(() => undefined);
-  }
-
-  for (const kind of RIDER_DOC_KINDS) {
-    const file = formData.get(`doc:${kind}`);
-    if (!(file instanceof File) || file.size === 0) continue;
-    const previous = await prisma.employeeDocument.findUnique({
-      where: { employeeId_kind: { employeeId, kind } },
-      select: { storageKey: true },
-    });
-    const stored = await store(employeeId, file);
-    await prisma.employeeDocument.upsert({
-      where: { employeeId_kind: { employeeId, kind } },
-      create: {
-        employeeId, kind, storageKey: stored.key, fileName: file.name,
-        fileSize: stored.size, mimeType: stored.mimeType, uploadedById,
-      },
-      update: {
-        storageKey: stored.key, fileName: file.name,
-        fileSize: stored.size, mimeType: stored.mimeType, uploadedById,
-      },
-    });
-    if (previous?.storageKey) await remove(previous.storageKey).catch(() => undefined);
-  }
-}
+/** Saves the photo and the KYC copies the form offers — see lib/hr/employee-files.ts. */
+const saveFiles = saveEmployeeFiles;
 
 /** The particulars the form posts, as the row stores them. */
 function particularsOf(v: z.infer<typeof EmployeeSchema>) {
@@ -715,6 +675,198 @@ export async function markAttendanceAction(
     });
     revalidatePath("/hr");
     return { marked };
+  });
+}
+
+/* ------------------------------ Punch in / out ----------------------------- */
+
+/** The caller's own rider record — punching and edit requests act on nobody else. */
+async function ownEmployee(userId: string) {
+  const employee = await prisma.employee.findUnique({
+    where: { userId },
+    select: {
+      id: true, name: true, employeeCode: true, status: true, onboardingStatus: true,
+      mobile: true, altContact: true, address: true, emergencyMobileFamily: true, emergencyMobileFriend: true,
+      bankAccountNo: true, bankHolderName: true, bankIfsc: true, bankName: true, insuranceNumber: true,
+    },
+  });
+  if (!employee) throw new Error("There is no rider record linked to your login.");
+  return employee;
+}
+
+async function punch(direction: "in" | "out", latitude: number, longitude: number) {
+  const ctx = await authorize(PERM.hr.attendance.punch);
+  const where = checkCoordinates(latitude, longitude);
+  if (!where.ok) throw new Error(where.error);
+  const e = await ownEmployee(ctx.id);
+  if (e.status !== "ACTIVE") throw new Error("Your record is not active.");
+  if (e.onboardingStatus !== "ACCEPTED") throw new Error("You can punch in once your onboarding is accepted.");
+
+  const now = new Date();
+  const attendanceOn = attendanceDay(now);
+  const day = attendanceOn.toISOString().slice(0, 10);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const today = await tx.attendanceEntry.findUnique({
+      where: { employeeId_attendanceOn: { employeeId: e.id, attendanceOn } },
+      select: { id: true, status: true, punchInAt: true, punchOutAt: true },
+    });
+    if (direction === "in") {
+      const plan = planPunchIn(today, now, where);
+      if (!plan.ok) throw new Error(plan.error);
+      const row = await tx.attendanceEntry.upsert({
+        where: { employeeId_attendanceOn: { employeeId: e.id, attendanceOn } },
+        create: { employeeId: e.id, attendanceOn, markedById: ctx.id, ...plan.data },
+        update: { markedById: ctx.id, ...plan.data },
+        select: { id: true, status: true },
+      });
+      return { ...row, hours: null as number | null };
+    }
+    const plan = planPunchOut(today, now, where);
+    if (!plan.ok) throw new Error(plan.error);
+    const { hours, status, ...data } = plan.data;
+    const row = await tx.attendanceEntry.update({
+      where: { id: today!.id },
+      data: { ...data, status: status as AttendanceStatus },
+      select: { id: true, status: true },
+    });
+    return { ...row, hours };
+  });
+
+  await recordAudit({
+    action: "UPDATE", entity: "AttendanceEntry", entityId: result.id, userId: ctx.id,
+    summary: direction === "in"
+      ? `${e.name} (${e.employeeCode}) punched in for ${day} at ${where.lat}, ${where.lng}`
+      : `${e.name} (${e.employeeCode}) punched out for ${day} at ${where.lat}, ${where.lng} — ${(result.hours ?? 0).toFixed(1)} h, ${result.status}`,
+  });
+  revalidatePath("/hr");
+  return { date: day, status: result.status as string, at: now.toISOString() };
+}
+
+/** Punches the caller in for today, with where the phone is. Once a day. */
+export async function punchInAction(
+  latitude: number,
+  longitude: number,
+): Promise<ActionResult<{ date: string; status: string; at: string }>> {
+  return runAction(() => punch("in", latitude, longitude));
+}
+
+/** Punches the caller out. Under four hours since punching in is a half day. */
+export async function punchOutAction(
+  latitude: number,
+  longitude: number,
+): Promise<ActionResult<{ date: string; status: string; at: string }>> {
+  return runAction(() => punch("out", latitude, longitude));
+}
+
+/* --------------------------- Profile edit requests -------------------------- */
+
+/**
+ * A rider (or Team Leader) asks for a change to their own particulars. Nothing
+ * changes until somebody holding `hr.employee.update` approves it.
+ */
+export async function requestProfileEditAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.hr.employee.requestEdit);
+    const e = await ownEmployee(ctx.id);
+    const reason = String(formData.get("reason") ?? "").trim();
+    const parsed = profileEditChanges(Object.fromEntries(formData), e);
+    if (!parsed.ok) throw new Error(parsed.error);
+
+    const pending = await prisma.profileEditRequest.count({ where: { employeeId: e.id, status: "PENDING" } });
+    if (pending > 0) throw new Error("You already have a change waiting for approval.");
+
+    const request = await prisma.$transaction(async (tx) => {
+      const created = await tx.profileEditRequest.create({
+        data: { employeeId: e.id, changes: parsed.changes, reason: reason || null },
+        select: { id: true },
+      });
+      const to = (await teamLeadersOf(tx, e.id)).filter((uid) => uid !== ctx.id);
+      if (to.length) {
+        await tx.notification.createMany({
+          data: to.map((userId) => ({
+            userId,
+            kind: "PROFILE_EDIT_REQUESTED",
+            title: `${e.name} asked to change their profile`,
+            body: Object.keys(parsed.changes).map((k) => PROFILE_EDIT_LABEL[k as ProfileEditKey]).join(", "),
+            href: `/hr/${e.id}`,
+            entity: "Employee",
+            entityId: e.id,
+          })),
+        });
+      }
+      return created;
+    });
+
+    await recordAudit({
+      action: "CREATE", entity: "ProfileEditRequest", entityId: request.id, userId: ctx.id,
+      summary: `${e.name} (${e.employeeCode}) requested a profile change — ${Object.keys(parsed.changes).join(", ")}`,
+    });
+    revalidatePath("/hr/edit-requests");
+    revalidatePath(`/hr/${e.id}`);
+    return { id: request.id };
+  });
+}
+
+/** Approves (and applies) or rejects a pending profile change; the rider is told. */
+export async function decideProfileEditAction(
+  id: string,
+  decision: "APPROVED" | "REJECTED",
+  note?: string,
+): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.hr.employee.update);
+    if (decision !== "APPROVED" && decision !== "REJECTED") throw new Error("Approve or reject the request.");
+    const why = (note ?? "").trim();
+    if (decision === "REJECTED" && why.length < 3) throw new Error("Give a reason for rejecting this change.");
+
+    const request = await prisma.profileEditRequest.findUnique({ where: { id } });
+    if (!request) throw new Error("Request not found.");
+    const before = await scopedEmployee(ctx, request.employeeId);
+    if (request.status !== "PENDING") throw new Error("This request has already been decided.");
+    const changes = storedChanges(request.changes);
+
+    await prisma.$transaction(async (tx) => {
+      const claimed = await tx.profileEditRequest.updateMany({
+        where: { id, status: "PENDING" },
+        data: { status: decision, decidedById: ctx.id, decidedAt: new Date(), decisionNote: why || null },
+      });
+      if (claimed.count !== 1) throw new Error("This request has already been decided.");
+      if (decision === "APPROVED") {
+        await tx.employee.update({ where: { id: before.id }, data: changes });
+        if (changes.mobile && before.userId) {
+          await tx.user.update({ where: { id: before.userId }, data: { phone: changes.mobile } });
+        }
+      }
+      if (before.userId && before.userId !== ctx.id) {
+        await tx.notification.create({
+          data: {
+            userId: before.userId,
+            kind: "PROFILE_EDIT_DECIDED",
+            title: decision === "APPROVED" ? "Your profile change was approved" : "Your profile change was rejected",
+            body: why || null,
+            entity: "Employee",
+            entityId: before.id,
+          },
+        });
+      }
+    });
+
+    const diffed = decision === "APPROVED"
+      ? maskIdentityChanges(diff(
+          editableEmployee({ ...before, monthlySalary: null, joinedOn: null }),
+          editableEmployee({ ...before, ...changes, monthlySalary: null, joinedOn: null }),
+        ))
+      : null;
+    await recordAudit({
+      action: decision === "APPROVED" ? "APPROVE" : "REJECT",
+      entity: "ProfileEditRequest", entityId: id, userId: ctx.id,
+      summary: `Profile change for ${before.name} (${before.employeeCode}) ${decision === "APPROVED" ? "approved" : "rejected"}${why ? ` — ${why}` : ""}`,
+      changes: diffed,
+    });
+    revalidatePath("/hr/edit-requests");
+    revalidatePath(`/hr/${before.id}`);
+    return null;
   });
 }
 

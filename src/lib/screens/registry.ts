@@ -28,7 +28,9 @@ export type OptionSource =
   /** How somebody is employed — the HR master's own list. */
   | "employmentTypes"
   /** Designations, as the HR form offers them. */
-  | "designations";
+  | "designations"
+  /** The advance reasons master, as the request form offers them. */
+  | "advanceReasons";
 
 export interface ScreenFilterDef {
   /** The query parameter, which is the same one the web reads from its URL. */

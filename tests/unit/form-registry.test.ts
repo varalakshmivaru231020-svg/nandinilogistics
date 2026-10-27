@@ -33,6 +33,9 @@ const SOURCE: Record<string, string> = {
   "hr/attendance:mark": "hr/hr-screen.tsx",
   "hr/employees:create": "hr/hr-screen.tsx",
   "hr/employees:edit": "hr/hr-screen.tsx",
+  "sales/leads:refer": "sales/leads/leads-screen.tsx",
+  "advances:create": "advances/advances-screen.tsx",
+  "hr/profile:edit": "hr/edit-requests/profile-edit-form.tsx",
 };
 
 /**
@@ -66,6 +69,16 @@ function labelled(src: string, label: string): boolean {
  * here: a label the web writes is the label the phone writes.
  */
 const OURS = new Set([
+  /*
+   * A rider's referral is the capture-lead drawer cut to three fields. The
+   * drawer's labels are the rows of Masters → Lead Settings, not literals, and
+   * a rider has no web screen to take a title from.
+   */
+  "sales/leads:refer → Refer a rider",
+  "sales/leads:refer → A tele-caller will call them.",
+  "sales/leads:refer → Name",
+  "sales/leads:refer → Mobile number",
+  "sales/leads:refer → Location",
   /*
    * The web's photograph is a square you press, labelled from inside — "Upload
    * photo", then "✓ Photo added", then "Change" over the picture on file. A

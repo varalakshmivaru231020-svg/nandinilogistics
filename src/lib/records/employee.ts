@@ -8,6 +8,7 @@ import {
   isRiderType, ONBOARDING_LABEL, ONBOARDING_TONE, onboardingChecklist, type OnboardingStatus,
 } from "@/lib/riders/onboarding";
 import { referralStatus } from "@/lib/riders/referrals";
+import { PROFILE_EDIT_LABEL, storedChanges, type ProfileEditKey } from "@/lib/hr/profile-edit";
 import { formatDate } from "@/lib/utils";
 
 import { toneOf, words, type RecordAction, type RecordView } from "./shared";
@@ -191,6 +192,53 @@ export async function employeeRecord(ctx: AuthContext, id: string): Promise<Reco
       setPin: ctx.has(PERM.hr.employee.setPin),
     },
   );
+
+  // Profile changes the rider asked for from the app, decided from here.
+  if (ctx.has(PERM.hr.employee.update)) {
+    const pending = await prisma.profileEditRequest.findMany({
+      where: { employeeId: id, status: "PENDING" },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, changes: true },
+    });
+    for (const r of pending) {
+      const asked = Object.keys(storedChanges(r.changes))
+        .map((k) => PROFILE_EDIT_LABEL[k as ProfileEditKey])
+        .join(", ");
+      actions.push(
+        {
+          key: `approveEdit:${r.id}`,
+          label: `Approve change — ${asked}`,
+          emphasis: "approve",
+          action: "hr/decideProfileEdit",
+          args: [r.id, "APPROVED"],
+          remark: "optional",
+          remarkLabel: "Note",
+          confirm: "The change is applied to the record and the rider is told.",
+        },
+        {
+          key: `rejectEdit:${r.id}`,
+          label: `Reject change — ${asked}`,
+          emphasis: "reject",
+          action: "hr/decideProfileEdit",
+          args: [r.id, "REJECTED"],
+          remark: "required",
+          remarkLabel: "Reason",
+        },
+      );
+    }
+  }
+  // One's own record: ask for a change rather than make it.
+  if (employee.userId === ctx.id && ctx.has(PERM.hr.employee.requestEdit)) {
+    actions.push({
+      key: "requestEdit",
+      label: "Request a profile change",
+      emphasis: "outline",
+      action: "",
+      args: [],
+      remark: "none",
+      form: "hr/profile:edit",
+    });
+  }
 
   const missing = onboardingChecklist(
     { ...employee, companyIds: employee.companies.map((c) => c.companyId), isRider: isRiderType(employee.employmentType.name) },

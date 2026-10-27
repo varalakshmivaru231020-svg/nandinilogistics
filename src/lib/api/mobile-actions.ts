@@ -138,6 +138,10 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
     fn: a3.createEmploymentTypeAction as MobileAction,
     args: [{ name: "name", kind: "text" }],
   },
+  "hr/decideProfileEdit": {
+    fn: a3.decideProfileEditAction as MobileAction,
+    args: [{ name: "id", kind: "text" }, { name: "decision", kind: "enum", values: ["APPROVED", "REJECTED"] }, { name: "note", kind: "text", optional: true }],
+  },
   "hr/deleteEmployee": {
     fn: a3.deleteEmployeeAction as MobileAction,
     args: [{ name: "id", kind: "text" }],
@@ -150,6 +154,14 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
     fn: a3.markAttendanceAction as MobileAction,
     args: [{ name: "attendanceOn", kind: "text" }, { name: "marks", kind: "json", optional: true }],
   },
+  "hr/punchIn": {
+    fn: a3.punchInAction as MobileAction,
+    args: [{ name: "latitude", kind: "num" }, { name: "longitude", kind: "num" }],
+  },
+  "hr/punchOut": {
+    fn: a3.punchOutAction as MobileAction,
+    args: [{ name: "latitude", kind: "num" }, { name: "longitude", kind: "num" }],
+  },
   "hr/regenerateOfferLetter": {
     fn: a3.regenerateOfferLetterAction as MobileAction,
     args: [{ name: "id", kind: "text" }],
@@ -157,6 +169,10 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
   "hr/rejectOnboarding": {
     fn: a3.rejectOnboardingAction as MobileAction,
     args: [{ name: "id", kind: "text" }, { name: "reason", kind: "text" }],
+  },
+  "hr/requestProfileEdit": {
+    fn: a3.requestProfileEditAction as MobileAction,
+    args: [{ name: "formData", kind: "form" }],
   },
   "hr/sendOfferLetterWhatsApp": {
     fn: a3.sendOfferLetterWhatsAppAction as MobileAction,

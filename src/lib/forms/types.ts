@@ -253,6 +253,12 @@ export interface FormDef {
   seeds?: boolean;
   edits?: boolean;
   /**
+   * Not offered on the list to somebody holding this permission. A rider's
+   * "Refer a rider" is the capture-lead action cut down to three fields; a
+   * tele-caller already has the whole form.
+   */
+  hiddenFrom?: string;
+  /**
    * A form whose fields are not fixed. "Capture lead" is whatever Masters →
    * Lead Settings says it is, and the attendance sheet is one line per active
    * worker — both are read when the form is served rather than written here.
