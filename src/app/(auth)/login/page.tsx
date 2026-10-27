@@ -31,31 +31,31 @@ export default async function LoginPage({
         <div className="relative flex items-center gap-3">
           <div className="grid h-[42px] w-[42px] place-items-center rounded-[11px] bg-white/10 ring-1 ring-white/20">
             <span className="font-display text-[16px] font-extrabold tracking-[-.02em] text-brand-300">
-              NN
+              NL
             </span>
           </div>
           <div>
-            <p className="font-display text-[15px] font-bold leading-tight">NN Infrastructure Developers</p>
+            <p className="font-display text-[15px] font-bold leading-tight">Nandini Logistics</p>
             <p className="mt-[3px] text-[9.5px] font-semibold uppercase tracking-[.14em] text-brand-300">
-              ERP &amp; Sales CRM
+              Rider CRM &amp; Payouts
             </p>
           </div>
         </div>
 
         <div className="relative max-w-lg">
           <h1 className="font-display text-[30px] font-extrabold leading-[1.25] tracking-[-.02em]">
-            One platform for project execution, material procurement and residential sales.
+            One platform for rider hiring, onboarding, attendance and weekly payouts.
           </h1>
           <p className="mt-4 text-[13.5px] font-medium leading-relaxed text-white/70">
             A single database and a single permission model, so the site and the office are never
-            working from different numbers.
+            working from different numbers — from the first call to the weekly payout.
           </p>
 
           <dl className="mt-10 grid grid-cols-2 gap-x-8 gap-y-5">
             {[
-              ["Projects", "Work breakdown, schedule, site progress"],
-              ["Material", "Indent to payment, fully approved"],
-              ["Sales", "Enquiry to booking on live availability"],
+              ["Leads", "Tele-calling, follow-ups and approvals"],
+              ["Onboarding", "KYC, Rider ID, ID card and offer letter"],
+              ["Payouts", "Excel import, advances, bike rent and holds"],
               ["Control", "Role-based access and a full audit trail"],
             ].map(([title, body]) => (
               <div key={title}>
@@ -79,13 +79,13 @@ export default async function LoginPage({
               className="mb-3 grid h-[42px] w-[42px] place-items-center rounded-[11px]"
               style={{ background: "linear-gradient(150deg,#191A5C,#2F308C)" }}
             >
-              <span className="font-display text-[16px] font-extrabold text-brand-300">NN</span>
+              <span className="font-display text-[16px] font-extrabold text-brand-300">NL</span>
             </div>
             <p className="font-display text-[15px] font-bold text-navy-950">
-              NN Infrastructure Developers
+              Nandini Logistics
             </p>
             <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-muted-500">
-              ERP &amp; Sales CRM
+              Rider CRM &amp; Payouts
             </p>
           </div>
 

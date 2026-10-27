@@ -23,11 +23,11 @@ const sora = Sora({
 
 export const metadata: Metadata = {
   title: {
-    default: "NN Infra ERP",
-    template: "%s · NN Infra ERP",
+    default: "Nandini Logistics",
+    template: "%s · Nandini Logistics",
   },
   description:
-    "Construction & Real Estate ERP and Sales CRM for NN Infrastructure Developers — projects, material, sales, one system of record.",
+    "Rider CRM, onboarding and payout platform for Nandini Logistics.",
 };
 
 /**

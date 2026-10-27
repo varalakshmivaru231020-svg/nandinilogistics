@@ -55,12 +55,12 @@ export function Sidebar({
             style={{ background: "linear-gradient(150deg,#191A5C,#2F308C)" }}
           >
             <span className="font-display text-[15px] font-extrabold tracking-[-.02em] text-brand-300">
-              NN
+              NL
             </span>
           </div>
           <div className="min-w-0">
             <div className="font-display text-[14px] font-bold leading-[1.1] text-navy-950">
-              NN Infra ERP
+              Nandini Logistics
             </div>
             <div className="mt-[3px] text-[9.5px] font-semibold uppercase tracking-[.14em] text-muted-500">
               Admin Console

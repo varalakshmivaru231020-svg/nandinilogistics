@@ -31,9 +31,9 @@ export function LoadingSplash() {
         </div>
 
         <div className="text-center">
-          <p className="font-display text-[22px] font-bold tracking-[.02em] text-white">NN Infra ERP</p>
+          <p className="font-display text-[22px] font-bold tracking-[.02em] text-white">Nandini Logistics</p>
           <p className="mt-2 text-[12px] font-medium uppercase tracking-[.22em] text-[#9AA0D6]">
-            Construction &amp; Real Estate Console
+            Rider CRM &amp; Payouts
           </p>
         </div>
 

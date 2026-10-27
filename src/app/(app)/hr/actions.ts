@@ -410,16 +410,26 @@ async function generateOfferLetter(employeeId: string): Promise<{ ok: true } | {
       },
     },
   });
-  const first = e.companies[0]?.company;
+  // Internal staff and Team Leaders work for Nandini Logistics itself, so with no
+  // client company of their own they take the Internal Staff company's letter.
+  const staffType = isInternalStaffType(e.employmentType.name) || e.employmentType.name.trim().toLowerCase() === "team leader";
+  const first =
+    e.companies[0]?.company ??
+    (staffType
+      ? await prisma.company.findUnique({
+          where: { code: "INTERNAL" },
+          include: { offerTemplateVendor: true, offerTemplateInternal: true },
+        })
+      : null);
   if (!first) return { ok: false, reason: "no company is assigned" };
-  const internal = isInternalStaffType(e.employmentType.name) || first.code === "INTERNAL";
+  const internal = staffType || first.code === "INTERNAL";
   const template = internal ? first.offerTemplateInternal : first.offerTemplateVendor;
   if (!template) return { ok: false, reason: `${first.name} has no ${internal ? "internal staff" : "vendor rider"} offer letter template mapped` };
 
   const letter = mergeOfferLetter(template, {
     name: e.name,
     riderId: e.employeeCode,
-    company: e.companies.map((c) => c.company.name).join(", "),
+    company: e.companies.length ? e.companies.map((c) => c.company.name).join(", ") : "Nandini Logistics",
     joiningDate: formatDate(e.joinedOn ?? new Date()),
     rateCard: first.rateCardFileName ? `as per the ${first.name} rate card (${first.rateCardFileName})` : `as per the ${first.name} rate card`,
   });
