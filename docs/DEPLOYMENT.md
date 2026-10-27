@@ -10,64 +10,47 @@ advisory.
 
 ## Last release
 
-`7178c0b` · 27 Oct 2026 · 4 commits, from `f868fd8`. Every item below was run.
+`21a5df4` · 27 Oct 2026 · 2 commits, from `7178c0b`. Every item below was run.
 
 | | |
 |---|---|
-| Rolled forward from | `f868fd8` |
-| Backup taken first | `nn_infra_erp-20261027-062304.dump` — 435 KB, 732 entries, `pg_restore --list` readable |
-| Migrations | **one applied**: `20261026120000_whatsapp` — four tables, nothing altered and nothing dropped. First schema change since 19 Sep |
-| Permission catalogue | 567 codes, 3 created (`admin.whatsapp.view/update/send`) |
-| Role grants | 1524 → 1524. **`pnpm perms:grants --add` has not been run** — see below |
-| Code gate | 1903 unit and integration tests, 124 on the phone, `flutter analyze` clean, `pnpm build` clean locally and again on the server |
-| Health | `==> Healthy (HTTP 200)`, pm2 `online`, `/login` 200 and `/masters` a **307** to sign-in over TLS |
-| Read on production | `7178c0b` checked out; the three tables exist (`whatsapp_templates` 12 columns, `whatsapp_triggers` 9, `whatsapp_messages` 19); the three permission codes are in the catalogue; `POST /api/whatsapp/dispatch` answers `401 Not for you.` — it has no secret yet, which is what an unconfigured host should do |
-| Android client | unchanged — `dist/nninfra-20261019-*.apk` is still the build to install |
+| Rolled forward from | `7178c0b` |
+| Backup taken first | `nn_infra_erp-20261027-111218.dump` — 445 KB, 752 entries, `pg_restore --list` readable |
+| Migrations | 38 found, none pending — no schema change |
+| Permission catalogue | 567 codes, 0 created |
+| Role grants | 1524 → 1524 |
+| Code gate | 1908 unit and integration tests, `pnpm build` clean locally and again on the server |
+| Health | `==> Healthy (HTTP 200)`, pm2 `online`, `/login` 200 and `/masters` a 307 to sign-in over TLS |
+| Android client | unchanged — `dist/nninfra-20261019-*.apk` |
 
 **What it put live.**
 
-1. **Masters & Users is off the phone's drawer.** It was listed there and
-   refused when tapped — the brief's rule (§12) delivered as a dead end. The
-   web's sidebar is untouched. While there: that endpoint honoured `permission`
-   and ignored `anyPermission`, which is how the entry reached every app user
-   in the first place.
-2. **WhatsApp, with one alert.** A site visit scheduled against a lead sends
-   that client a confirmation — the project, its address, when, who will meet
-   them and that person's own number. Nothing else sends.
-3. **The connection is a row, not an environment variable.** Masters & Users →
-   WhatsApp holds the url, version, phone number id, WABA id and token, read
-   fresh on every send, so a token is rotated without a deploy. Meta direct and
-   a BSP that proxies Meta differ by two fields.
-4. **An outbox, not an inline send.** The business flow writes a row and never
-   throws; `POST /api/whatsapp/dispatch` drains it from cron. A booking is
-   never held open while Meta is slow. A refusal about the message is final;
-   their outage is retried after 2, 8 and 32 minutes.
-5. **`sweepOverdueTasks()` finally has a caller.** It had tests and nothing
-   calling it, so the in-app overdue notice had never fired in production. The
-   same endpoint runs it — no WhatsApp, just the bell it was written for.
+1. **Moving a lead to Site Visit tells the client.** The schedule form already
+   did; dragging a card on the board — which is what the sales team actually
+   does — told nobody. Both paths send the same confirmation now, and so does
+   the move from the lead's own record. The board captures no time, so one is
+   found: the soonest visit already booked against the lead, or its next action
+   if that is still ahead. With neither, nothing is sent and a skipped row says
+   why, because a confirmation that cannot name a time is not a confirmation.
+   Told once per visit; a changed time goes again.
+2. **Users & Roles opens the WhatsApp section.** The three `admin.whatsapp.*`
+   codes were registered properly and held by no role, so the screen shipped
+   and nobody could reach it — the grant that fixes that has to be run on the
+   server, and could not be. The section now shows for `admin.user.view` and
+   saves for `admin.role.update`. Nothing is given away: whoever may change
+   what a role can do can hand themselves the narrow code in a few clicks.
+   Both gates widened in the same change, so the screen is never one somebody
+   can open and not use.
 
-**Two steps this deploy did not do, and why.**
+**Still outstanding, and unchanged by this release.**
 
-- **`pnpm perms:grants --add`.** The deploy's own run adds nothing by design.
-  Until this is run, only the one super admin can open Masters & Users →
-  WhatsApp; anybody else holding Owner / Admin cannot. Running it was refused
-  to the agent as a privileged action on a live system, which is the right
-  refusal — it is a one-line command for an administrator.
-- **The cron.** `WHATSAPP_CRON_SECRET` is not set and
-  `/etc/cron.d/nninfra-whatsapp` is not installed, so the dispatcher and the
-  overdue sweep do not run yet. Nothing is waiting to be sent — the trigger is
-  off until its template is approved at Meta — but the overdue-task bell stays
-  silent until this is done:
-
-  ```bash
-  echo 'WHATSAPP_CRON_SECRET=<a long random string>' >> /var/www/nninfra/app/.env
-  install -m 644 /var/www/nninfra/app/deploy/nninfra-whatsapp.cron /etc/cron.d/nninfra-whatsapp
-  pm2 restart nninfra
-  ```
-
-**Nothing messages anybody on arrival.** The trigger ships off, and the screen
-refuses to switch it on until `site_visit_scheduled_v1` reads *approved* at
-Meta. Submit it from `docs/whatsapp-templates.json`.
+- **The cron is not installed.** `WHATSAPP_CRON_SECRET` is unset and
+  `/etc/cron.d/nninfra-whatsapp` is absent, so the dispatcher does not run —
+  and neither does the overdue-task sweep, whose in-app bell has still never
+  fired. Nothing is queued waiting on it while the trigger is off.
+- **The template is not submitted.** `site_visit_scheduled_v1` has to be
+  approved by Meta before the trigger can be switched on; the screen refuses
+  to switch it on before then.
 
 ---
 
