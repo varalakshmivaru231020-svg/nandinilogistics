@@ -105,6 +105,8 @@ export const ROLES: RoleSeed[] = [
     grant: [
       ...MOBILE_APP,
       "dashboard.teamLeader.view",
+      "approvals.queue.view",
+      "approvals.queue.decide",
 
       // Leads: create and assign to a tele-caller, re-assign, see the team's.
       ...WORK_A_LEAD,
@@ -174,6 +176,7 @@ export const ROLES: RoleSeed[] = [
 
       // The riders they onboard: the form, the Rider ID, submission for review.
       "hr.employee.view",
+      "hr.attendance.punch",
       "hr.employee.create",
       "hr.employee.update",
       "hr.employee.tabStaff",

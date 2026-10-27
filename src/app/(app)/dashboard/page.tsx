@@ -8,6 +8,9 @@ import { Card, CardBody, CardHeader, CardSubtitle, CardTitle, StatLabel, StatVal
 import { Button } from "@/components/ui/button";
 import { cn, money } from "@/lib/utils";
 import { taskSummaryByTeamLeader } from "@/lib/tasks/service";
+import { inboxCount } from "@/lib/approvals/inbox";
+import { loadCheckIn } from "@/lib/hr/check-in";
+import { CheckInButton } from "@/components/shell/check-in-button";
 
 export const metadata = { title: "Dashboard" };
 
@@ -83,6 +86,17 @@ export default async function DashboardPage() {
     : [0, 0, 0];
 
   const kpis: Array<{ label: string; value: string; sub: string; href: string; icon: React.ReactNode; tone: string }> = [];
+  if (ctx.has(PERM.approvals.queue.view)) {
+    const waiting = await inboxCount(prisma, ctx);
+    kpis.push({
+      label: "Waiting for your approval",
+      value: String(waiting),
+      sub: "Leads, onboarding, referrals, advances, profile changes",
+      href: "/approvals",
+      icon: <ClipboardCheck className="h-4 w-4" />,
+      tone: "bg-warn-050 text-warn-700",
+    });
+  }
   if (canLeads) {
     kpis.push({
       label: "Leads in pipeline",
@@ -106,7 +120,7 @@ export default async function DashboardPage() {
       label: "Active riders & staff",
       value: String(activePeople),
       sub: `${leftPeople} left`,
-      href: "/hr",
+      href: "/hr/riders",
       icon: <Users className="h-4 w-4" />,
       tone: "bg-plum-050 text-plum-600",
     });
@@ -202,6 +216,7 @@ export default async function DashboardPage() {
   // The SOW's Admin dashboard card: open, overdue and completed tasks per Team Leader.
   const canTaskReport = ctx.has(PERM.task.report.view);
   const perTeamLeader = canTaskReport ? await taskSummaryByTeamLeader(prisma, nowMs) : [];
+  const checkIn = await loadCheckIn(prisma, ctx, now);
 
   return (
     <div className="animate-fade-up">
@@ -213,6 +228,24 @@ export default async function DashboardPage() {
           })}
         </div>
       </div>
+
+      {checkIn && (
+        <Card className="mb-4">
+          <CardBody className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle>Today&apos;s attendance</CardTitle>
+              <CardSubtitle>
+                {checkIn.state === "NOT_PUNCHED"
+                  ? "You have not checked in yet."
+                  : checkIn.state === "PUNCHED_IN"
+                    ? `Checked in at ${checkIn.inAt}.`
+                    : `Checked in at ${checkIn.inAt}, out at ${checkIn.outAt}.`}
+              </CardSubtitle>
+            </div>
+            <CheckInButton card={checkIn} />
+          </CardBody>
+        </Card>
+      )}
 
       {kpis.length > 0 ? (
         <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
@@ -246,7 +279,7 @@ export default async function DashboardPage() {
               <CardTitle>Active riders by company</CardTitle>
               <CardSubtitle>Accepted and active, by where they are deployed</CardSubtitle>
             </div>
-            <Link href="/hr">
+            <Link href="/hr/riders">
               <Button size="sm" variant="secondary">Open riders →</Button>
             </Link>
           </CardHeader>

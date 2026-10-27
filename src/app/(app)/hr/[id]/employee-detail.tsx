@@ -61,6 +61,10 @@ export function EmployeeDetail({
   can: { update: boolean; delete: boolean; export: boolean; viewAttendance: boolean };
 }) {
   const router = useRouter();
+  // The list this person belongs to, by employment type — the breadcrumb says which.
+  const staffType = ["internal staff", "team leader"].includes(employee.type.trim().toLowerCase());
+  const listHref = staffType ? "/hr/staff" : "/hr/riders";
+  const listLabel = staffType ? "Internal Staff" : "Riders";
   const [confirming, setConfirming] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -80,17 +84,17 @@ export function EmployeeDetail({
       setError(res.error ?? "Something went wrong.");
       return;
     }
-    router.push("/hr");
+    router.push(listHref);
   }
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
         <Link
-          href="/hr"
+          href={listHref}
           className="rounded-[9px] border border-line-400 bg-white px-3.5 py-[9px] text-[12px] font-semibold text-navy-500 transition-colors hover:border-brand-500 hover:text-brand-700"
         >
-          ← Riders & staff
+          ← {listLabel}
         </Link>
         {can.viewAttendance && (
           <>
@@ -121,7 +125,7 @@ export function EmployeeDetail({
         )}
         {can.update && (
           <Link
-            href={`/hr?edit=${employee.id}`}
+            href={`${listHref}?edit=${employee.id}`}
             className="rounded-[9px] bg-brand-500 px-4 py-2.5 text-[12.5px] font-bold text-white transition-colors hover:bg-brand-600"
           >
             ✎ Edit

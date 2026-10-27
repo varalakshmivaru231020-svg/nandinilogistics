@@ -130,6 +130,9 @@ that one resolution, computed once per request.
 ```
 Lead             captured by anyone; Admin/TL must name a tele-caller, a
   ↓              tele-caller keeps their own, a rider's referral goes round-robin
+Approval         a lead (or referral) a tele-caller enters waits as Pending approval
+  ↓              in /approvals until a TL or Super Admin approves or rejects it
+                 (reason mandatory); nothing can be followed up until then
 Follow-ups       logged with stage, remarks and next date; overdue ones escalate to the TL
   ↓
 Onboarding       the lead reaches the Onboarding stage → a rider record in Draft:
@@ -142,6 +145,12 @@ Payouts          the company's weekly sheet is imported, matched by Rider ID,
                  advances and bike rent deducted, held or posted — visible to
                  the rider, the TL and the tele-caller who onboarded them
 ```
+
+The sidebar lists **Riders**, **Internal Staff** (Internal Staff and Team
+Leader types) and **Attendance** separately. Everyone with a person record —
+riders, Team Leaders, tele-callers — checks in and out (the app's punch, or the
+top bar's Check in on the web; location optional on the web). Under four hours
+is a half day; a day with no check-out stays Present and is flagged.
 
 ---
 

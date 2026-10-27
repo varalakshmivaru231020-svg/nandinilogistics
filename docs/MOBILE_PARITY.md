@@ -13,13 +13,13 @@ Last written 2026-10-27.
 
 | | |
 |---|---|
-| Web actions on the boundary | **64** |
+| Web actions on the boundary | **65** |
 | Reachable from the app | **37** |
-| Not reachable, with a reason | 27 |
-| Web list screens | 13 |
-| …with a record screen | 12 |
-| …with a create form | 5 |
-| …with an edit form | 3 |
+| Not reachable, with a reason | 28 |
+| Web list screens | 0 |
+| …with a record screen | 0 |
+| …with a create form | 0 |
+| …with an edit form | 0 |
 
 ## The modules
 
@@ -31,19 +31,7 @@ The last column says where each one is raised.
 
 | Web module | Web route | Record | Create | Edit | | Where it is raised |
 |---|---|---|---|---|---|---|
-| `sales/leads` | `/sales/leads` | ✅ | `create`, `refer` | ✅ | ✅ | its own list |
-| `sales/follow-ups` | `/sales/follow-ups` | ✅ | — | — | ✅ | the lead — “Log follow-up” |
-| `hr/employees` | `/hr` | ✅ | `create` | ✅ | ✅ | its own list |
-| `hr/attendance` | `/hr` | ✅ | `mark` | — | ✅ | its own list |
-| `tasks` | `/tasks` | ✅ | `create` | ✅ | ✅ | its own list |
-| `hr/onboarding` | `/hr/onboarding` | ✅ | — | — | ⚠️ | its own list |
-| `hr/referrals` | `/hr/referrals` | ✅ | — | — | ⚠️ | its own list |
-| `payouts` | `/payouts` | ✅ | — | — | ⚠️ | its own list |
-| `payouts/imports` | `/payouts/imports` | ❌ | — | — | ❌ | its own list |
-| `advances` | `/advances` | ✅ | `create` | — | ✅ | its own list |
-| `advances/bike-rent` | `/advances/bike-rent` | ✅ | — | — | ⚠️ | its own list |
-| `accounts/invoices` | `/accounts/invoices` | ✅ | — | — | ⚠️ | its own list |
-| `staff/payslips` | `/staff/payslips` | ✅ | — | — | ⚠️ | its own list |
+
 
 ## The actions the phone cannot reach
 
@@ -72,8 +60,9 @@ The last column says where each one is raised.
 - `advances/endBikeRent` — Admin work on the web admin panel.
 - `advances/deleteBikeRent` — Admin work on the web admin panel.
 
-### todo — 5
+### todo — 6
 
+- `approvals/decideApproval` — The Approvals inbox list is served (/api/approvals/export); the app worker adds the decide buttons later.
 - `advances/decideAdvance` — The Android client is rebuilt after the admin panel.
 - `advances/deleteAdvance` — The Android client is rebuilt after the admin panel.
 - `payouts/holdPayoutLine` — The Android client is rebuilt after the admin panel.

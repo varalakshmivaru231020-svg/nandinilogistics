@@ -42,9 +42,13 @@ interface Employee {
   companyIds: string[]; companies: string[];
   /** Whether a photograph is on file, so the row and the form can show it. */
   hasPhoto: boolean;
+  referredById?: string | null;
+  referralApproval?: string;
   documents: Array<{ id: string; kind: string; fileName: string; fileSize: number }>;
 }
 interface TypeRow { id: string; name: string; count: number; canDelete: boolean }
+/** Someone who can be picked as "Referred by" — an active, accepted rider. */
+export interface Referrer { id: string; name: string; code: string; referralCode: string | null }
 
 /**
  * The design colours the employment type: staff navy, a contract purple, and
@@ -78,7 +82,14 @@ function initials(name: string) {
 function initialsIndex(name: string) {
   return name.length % AVATAR_COLOURS.length;
 }
-interface Mark { employeeId: string; status: string; overtimeHours: number }
+interface Mark {
+  employeeId: string; status: string; overtimeHours: number;
+  /** Check in / out on the Indian clock, and a Maps link where a location was shared. */
+  checkIn?: string | null; checkOut?: string | null;
+  inMap?: string | null; outMap?: string | null;
+  /** Checked in on a past day and never out. */
+  noCheckOut?: boolean;
+}
 /** Someone who can be marked — active employees only. */
 interface MarkRow { id: string; code: string; name: string; employmentType: string; designation: string | null }
 
@@ -96,8 +107,16 @@ const TABS = [
 ];
 
 export function HrScreen({
+  tabs, newLabel, defaultTypeId, referrers = [],
   tab, date, from, to, rangeError, employees, markable, employmentTypes, designations, companies, dayMarks, report, can,
 }: {
+  /** Which tabs this sidebar entry shows — the list, or mark and report. */
+  tabs: string[];
+  /** "+ New rider" or "+ New staff member". */
+  newLabel: string;
+  /** The employment type a new record starts on. */
+  defaultTypeId: string | null;
+  referrers?: Referrer[];
   tab: string; date: string; from: string; to: string;
   /** Why the report range was refused, or null. */
   rangeError: string | null;
@@ -129,6 +148,7 @@ export function HrScreen({
 
   const visibleTabs = TABS.filter(
     (t) =>
+      tabs.includes(t.key) &&
       (t.key !== "staff" || can.tabStaff) &&
       (t.key !== "mark" || can.viewAttendance) &&
       (t.key !== "report" || can.report),
@@ -170,9 +190,9 @@ export function HrScreen({
 
   return (
     <div className="animate-fade-up">
-      {/* Tabs, underlined as the design draws them */}
+      {/* Tabs, underlined as the design draws them — only when there is a choice */}
       <div className="mb-4 flex flex-wrap items-center gap-[22px] border-b border-line-400">
-        {visibleTabs.map((t) => (
+        {visibleTabs.length > 1 && visibleTabs.map((t) => (
           <button
             key={t.key}
             type="button"
@@ -193,6 +213,7 @@ export function HrScreen({
         <StaffTab
           employees={employees}
           can={can}
+          newLabel={newLabel}
           onEdit={setEditing}
           onRemove={setRemoving}
           onStatus={openStatus}
@@ -227,6 +248,8 @@ export function HrScreen({
         <EmployeeForm
           employee={editing === "new" ? null : editing}
           employmentTypes={employmentTypes}
+          defaultTypeId={defaultTypeId}
+          referrers={referrers}
           designations={designations}
           companies={companies}
           canManageCompanies={Boolean(can.manageCompanies)}
@@ -295,9 +318,10 @@ export function HrScreen({
 /* -------------------------------- Employees -------------------------------- */
 
 function StaffTab({
-  employees, can, onEdit, onRemove, onStatus,
+  employees, can, newLabel, onEdit, onRemove, onStatus,
 }: {
   employees: Employee[];
+  newLabel: string;
   can: Record<string, boolean>;
   onEdit: (e: Employee | "new") => void; onRemove: (e: Employee) => void;
   onStatus: (e: Employee) => void;
@@ -311,7 +335,7 @@ function StaffTab({
         </span>
         {can.create && (
           <Button size="md" onClick={() => onEdit("new")}>
-            + New rider / staff
+            {newLabel}
           </Button>
         )}
       </div>
@@ -445,6 +469,19 @@ function StaffTab({
 
 /* ---------------------------- Mark attendance ------------------------------ */
 
+/** The day's check in / out under the marks: times, and where, or "no location". */
+function PunchLine({ mark }: { mark?: Mark }) {
+  if (!mark?.checkIn) return null;
+  const where = (href: string | null | undefined) =>
+    href ? <a href={href} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline">map</a> : <span className="text-muted-400">no location</span>;
+  return (
+    <p className="num mt-1 text-[11px] font-medium text-navy-500">
+      In {mark.checkIn} ({where(mark.inMap)})
+      {mark.checkOut ? <> · Out {mark.checkOut} ({where(mark.outMap)})</> : mark.noCheckOut ? <span className="font-semibold text-warn-700"> · no check-out</span> : null}
+    </p>
+  );
+}
+
 function MarkTab({
   employees, date, marks, can, onDate, onDone, onError,
 }: {
@@ -573,6 +610,7 @@ function MarkTab({
                         );
                       })}
                     </span>
+                    <PunchLine mark={marks.find((m) => m.employeeId === e.id)} />
                   </td>
                   <td className="px-4 py-2.5">
                     <Input
@@ -644,7 +682,7 @@ function ReportTab({
         <table className="w-full min-w-[760px] border-collapse">
           <thead>
             <tr className="bg-surface-sunken">
-              {["Employee", "Type", "Present", "Half day", "Absent", "Payable days", "Overtime"].map((h, i) => (
+              {["Employee", "Type", "Present", "Half day", "Absent", "Payable days", "Overtime", "First check-in (avg)", "Last check-out (avg)"].map((h, i) => (
                 <th key={h} className={cn(
                   "border-b border-line-300 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
                   i >= 2 ? "text-right" : "text-left",
@@ -654,7 +692,7 @@ function ReportTab({
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
+              <tr><td colSpan={9} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
                 {ATTENDANCE_EMPTY.title}
               </td></tr>
             ) : rows.map((r) => (
@@ -672,6 +710,11 @@ function ReportTab({
                 <td className="num px-4 py-2.5 text-right text-[12px] font-bold text-bad-600">{r.absent}</td>
                 <td className="num px-4 py-2.5 text-right text-[12px] font-bold text-navy-950">{r.payable}</td>
                 <td className="num px-4 py-2.5 text-right text-[12px] font-medium text-muted-600">{r.overtime}</td>
+                <td className="num px-4 py-2.5 text-right text-[12px] font-medium text-navy-500">{r.firstCheckIn ?? "—"}</td>
+                <td className="num px-4 py-2.5 text-right text-[12px] font-medium text-navy-500">
+                  {r.lastCheckOut ?? "—"}
+                  {r.noCheckOut > 0 && <span className="block text-[10.5px] font-semibold text-warn-700">{r.noCheckOut} no check-out</span>}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -683,11 +726,13 @@ function ReportTab({
 
 /* ------------------------------ Employee form ------------------------------ */
 
-function EmployeeForm({
-  employee, employmentTypes, designations, companies, canManageCompanies, onClose, onSaved,
+export function EmployeeForm({
+  employee, employmentTypes, defaultTypeId = null, referrers = [], designations, companies, canManageCompanies, onClose, onSaved,
 }: {
   employee: Employee | null;
-  employmentTypes: TypeRow[];
+  employmentTypes: Array<{ id: string; name: string }>;
+  defaultTypeId?: string | null;
+  referrers?: Referrer[];
   designations: Array<{ id: string; name: string }>;
   companies: Array<{ id: string; name: string }>;
   canManageCompanies: boolean;
@@ -698,7 +743,7 @@ function EmployeeForm({
   // Which particulars the form asks for follows the employment type picked:
   // a rider has emergency numbers, a bank account and companies; internal
   // staff a monthly salary.
-  const [typeId, setTypeId] = React.useState(employee?.employmentTypeId ?? employmentTypes[0]?.id ?? "");
+  const [typeId, setTypeId] = React.useState(employee?.employmentTypeId ?? defaultTypeId ?? employmentTypes[0]?.id ?? "");
   const typeName = employmentTypes.find((t) => t.id === typeId)?.name ?? "";
   const rider = isRiderType(typeName);
   const internal = isInternalStaffType(typeName);
@@ -859,6 +904,30 @@ function EmployeeForm({
             </Field>
           )}
         </div>
+
+        {rider && (
+          <Field label="Referred by" hint="Optional — search a rider by name or Rider ID, or type their referral code">
+            <Input
+              name="referredById"
+              list="referrer-options"
+              defaultValue={
+                employee?.referredById
+                  ? (referrers.find((r) => r.id === employee.referredById)?.code ?? employee.referredById)
+                  : ""
+              }
+              placeholder="e.g. NL004 or REF-NL004"
+              autoComplete="off"
+            />
+            <datalist id="referrer-options">
+              {referrers.filter((r) => r.id !== employee?.id).map((r) => (
+                <option key={r.id} value={r.code}>{`${r.name}${r.referralCode ? ` · ${r.referralCode}` : ""}`}</option>
+              ))}
+            </datalist>
+            {employee?.referralApproval === "PENDING" && (
+              <p className="mt-1 text-[11px] font-semibold text-warn-700">Referral pending approval</p>
+            )}
+          </Field>
+        )}
 
         {rider && (
           <>

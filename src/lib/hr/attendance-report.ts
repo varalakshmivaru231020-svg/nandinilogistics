@@ -79,6 +79,9 @@ export interface AttendanceReportEntry {
   attendanceOn: string;
   status: string;
   overtimeHours: number;
+  /** Check in / out on the Indian clock, "09:12", when punched. */
+  checkIn?: string | null;
+  checkOut?: string | null;
 }
 
 export interface AttendanceSummaryRow extends AttendanceReportEmployee {
@@ -88,6 +91,18 @@ export interface AttendanceSummaryRow extends AttendanceReportEmployee {
   /** Present days plus half of the half days. */
   payable: number;
   overtime: number;
+  /** The average check-in and check-out time over the days punched, "09:12", or null. */
+  firstCheckIn: string | null;
+  lastCheckOut: string | null;
+  /** Days checked in and never out. */
+  noCheckOut: number;
+}
+
+const toMinutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+function averageClock(times: string[]): string | null {
+  if (!times.length) return null;
+  const avg = Math.round(times.reduce((s, t) => s + toMinutes(t), 0) / times.length);
+  return `${String(Math.floor(avg / 60)).padStart(2, "0")}:${String(avg % 60).padStart(2, "0")}`;
 }
 
 /**
@@ -100,8 +115,15 @@ export function summarizeAttendance(
   range: { from: string; to: string },
 ): AttendanceSummaryRow[] {
   const tally = new Map<string, { present: number; half: number; absent: number; overtime: number }>();
+  const clocks = new Map<string, { ins: string[]; outs: string[]; missing: number }>();
   for (const e of entries) {
     if (e.attendanceOn < range.from || e.attendanceOn > range.to) continue;
+    if (e.checkIn) {
+      const c = clocks.get(e.employeeId) ?? { ins: [], outs: [], missing: 0 };
+      c.ins.push(e.checkIn);
+      if (e.checkOut) c.outs.push(e.checkOut); else c.missing += 1;
+      clocks.set(e.employeeId, c);
+    }
     const t = tally.get(e.employeeId) ?? { present: 0, half: 0, absent: 0, overtime: 0 };
     if (e.status === "PRESENT") t.present += 1;
     else if (e.status === "HALF_DAY") t.half += 1;
@@ -113,7 +135,11 @@ export function summarizeAttendance(
 
   return employees.map((emp) => {
     const t = tally.get(emp.id) ?? { present: 0, half: 0, absent: 0, overtime: 0 };
+    const c = clocks.get(emp.id);
     return {
+      firstCheckIn: c ? averageClock(c.ins) : null,
+      lastCheckOut: c ? averageClock(c.outs) : null,
+      noCheckOut: c?.missing ?? 0,
       ...emp,
       present: t.present,
       half: t.half,

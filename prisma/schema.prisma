@@ -546,6 +546,13 @@ model Lead {
   /// by field id. The system fields live in columns of their own.
   customFields      Json?
   score             Int       @default(0)
+  /// Fixed rule: a lead a tele-caller captures waits for a Team Leader or Admin.
+  approval          LeadApproval @default(APPROVED)
+  approvedById      String?
+  approvedAt        DateTime?
+  approvalNote      String?
+  /// Who captured the lead — told when its approval is decided.
+  createdById       String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -562,6 +569,7 @@ model Lead {
   /// The rider this lead became, once onboarded.
   rider     Employee?      @relation("LeadRider")
 
+  @@index([approval])
   @@index([stageId, ownerId])
   @@index([phone])
   @@index([nextActionAt])
@@ -652,6 +660,12 @@ model Employee {
   /// The rider's own code to share, and who referred them.
   referralCode      String?  @unique
   referredById      String?
+  /// A referral a tele-caller enters waits for approval (fixed rule).
+  referralApproval     LeadApproval @default(APPROVED)
+  referralSetById      String?
+  referralApprovedById String?
+  referralApprovedAt   DateTime?
+  referralApprovalNote String?
   /// The generated offer letter, once accepted.
   offerLetterKey    String?
   offerLetterAt     DateTime?
@@ -681,6 +695,13 @@ model Employee {
   @@index([onboardingStatus])
   @@index([referredById])
   @@map("employees")
+}
+
+/// Approval state of something a tele-caller raised.
+enum LeadApproval {
+  APPROVED
+  PENDING
+  REJECTED
 }
 
 enum OnboardingStatus {

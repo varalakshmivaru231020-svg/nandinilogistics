@@ -30,6 +30,29 @@ export interface EmployeeListParams {
   company: string;
   /** "ACTIVE", "INACTIVE", or "" for everyone. */
   status: EmployeeStatusFilter;
+  /** Which sidebar list: riders only, internal staff and Team Leaders, or "" for both. */
+  group: EmployeeGroup;
+}
+
+export type EmployeeGroup = "" | "riders" | "staff";
+
+/** The employment types each sidebar list holds, by name — the master's own rows. */
+export const GROUP_TYPES: Record<Exclude<EmployeeGroup, "">, readonly string[]> = {
+  riders: ["Rider"],
+  staff: ["Internal Staff", "Team Leader"],
+};
+
+export function readEmployeeGroup(value: string): EmployeeGroup {
+  const v = value.toLowerCase();
+  return v === "riders" || v === "staff" ? v : "";
+}
+
+/** The where fragment for one group; {} for "". */
+export function employeeGroupWhere(group: EmployeeGroup): Prisma.EmployeeWhereInput {
+  if (!group) return {};
+  return {
+    employmentType: { OR: GROUP_TYPES[group].map((name) => ({ name: { equals: name, mode: "insensitive" as const } })) },
+  };
 }
 
 export type EmployeeStatusFilter = "" | "ACTIVE" | "INACTIVE";
@@ -45,6 +68,7 @@ export function readEmployeeListParams(source: ParamSource): EmployeeListParams 
     designation: ID.test(designation) ? designation : "",
     company: ID.test(company) ? company : "",
     status: status === "ACTIVE" || status === "INACTIVE" ? status : "",
+    group: readEmployeeGroup(read(source, "group")),
   };
 }
 
@@ -60,6 +84,7 @@ export function employeeListWhere(p: EmployeeListParams): Prisma.EmployeeWhereIn
           ],
         }
       : {}),
+    ...employeeGroupWhere(p.group ?? ""),
     ...(p.type ? { employmentTypeId: p.type } : {}),
     ...(p.designation ? { designationId: p.designation } : {}),
     ...(p.company ? { companies: { some: { companyId: p.company } } } : {}),
@@ -75,6 +100,7 @@ export function describeEmployeeFilters(
   names: { type: string | null; designation: string | null; company?: string | null },
 ): string {
   const parts = [
+    p.group === "riders" ? "Riders" : p.group === "staff" ? "Internal staff" : null,
     p.q.trim() ? `Search "${p.q.trim()}"` : null,
     names.type ? `Type ${names.type}` : null,
     names.designation ? `Designation ${names.designation}` : null,

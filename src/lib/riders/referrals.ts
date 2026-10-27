@@ -58,3 +58,31 @@ export function referralStatus(
 export function referralCodeFor(riderId: string): string {
   return `REF-${riderId.replace(/[^A-Za-z0-9]/g, "").toUpperCase()}`;
 }
+
+/** The referrer as the form's picker found them. */
+export interface ReferrerCandidate {
+  id: string;
+  employmentTypeName: string;
+  onboardingStatus: string;
+  status: string;
+}
+
+/**
+ * Whether `referrer` may be recorded as having referred `selfId` (null while
+ * the record is being created). Only an active, accepted rider refers, and
+ * nobody refers themselves.
+ */
+export function checkReferrer(
+  referrer: ReferrerCandidate | null,
+  selfId: string | null,
+): { ok: true } | { ok: false; error: string } {
+  if (!referrer) return { ok: false, error: "The referring rider was not found." };
+  if (selfId && referrer.id === selfId) return { ok: false, error: "A rider cannot refer themselves." };
+  if (referrer.employmentTypeName.trim().toLowerCase() !== "rider") {
+    return { ok: false, error: "Only a rider can be recorded as the referrer." };
+  }
+  if (referrer.onboardingStatus !== "ACCEPTED" || referrer.status === "INACTIVE") {
+    return { ok: false, error: "The referrer must be an active, accepted rider." };
+  }
+  return { ok: true };
+}

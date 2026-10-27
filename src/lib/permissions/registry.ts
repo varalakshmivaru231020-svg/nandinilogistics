@@ -21,6 +21,7 @@ import type { ModuleDef, PermissionDef, PermissionKind } from "./types";
 
 export const MODULES: ModuleDef[] = [
   { key: "dashboard", label: "Dashboards", sortOrder: 10 },
+  { key: "approvals", label: "Approvals", sortOrder: 15 },
   { key: "sales", label: "Leads · CRM", sortOrder: 20 },
   { key: "hr", label: "Riders & Attendance", sortOrder: 30 },
   { key: "task", label: "Task Management", sortOrder: 40 },
@@ -132,6 +133,17 @@ perm("dashboard", "teleCaller", "view", "Tele-caller dashboard", G_DASH, "PAGE",
   "Today's follow-ups, overdue follow-ups and leads by stage.");
 perm("dashboard", "rider", "view", "Rider dashboard", G_DASH, "PAGE",
   "My ID card, this week's payout, attendance and referrals.");
+
+// ===========================================================================
+// APPROVALS — one inbox for everything a tele-caller (or rider) raised
+// ===========================================================================
+
+const G_APPROVALS = "Approvals";
+
+perm("approvals", "queue", "view", "Approvals inbox", G_APPROVALS, "PAGE",
+  "Leads, onboarding forms, referrals, advances and profile changes waiting for a decision.");
+perm("approvals", "queue", "decide", "Approve or reject items waiting in the Approvals inbox", G_APPROVALS, "BUTTON",
+  "A reason is mandatory on reject. A Team Leader decides only for their own companies.");
 
 // ===========================================================================
 // CRM — LEAD MANAGEMENT (SOW §3.1)

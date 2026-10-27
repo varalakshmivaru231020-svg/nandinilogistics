@@ -78,6 +78,8 @@ export interface CaptureLeadInput extends LeadInput {
   customFields?: Record<string, string> | null;
   /** The tele-caller chosen by someone allowed to assign. */
   ownerId?: string | null;
+  /** The fixed approval rule's answer for whoever captured it — lib/approvals/rule.ts. */
+  approval?: "APPROVED" | "PENDING";
 }
 
 /**
@@ -120,11 +122,13 @@ export async function captureLead(
         ? input.customFields
         : undefined,
       duplicateOfId: duplicateOf?.id ?? null,
+      approval: input.approval ?? "APPROVED",
+      createdById: actor.id,
       companies: input.companyIds.length
         ? { create: input.companyIds.map((companyId) => ({ companyId })) }
         : undefined,
     },
-    select: { id: true, leadNo: true, name: true },
+    select: { id: true, leadNo: true, name: true, approval: true },
   });
 
   return { lead, auto: owner.auto, duplicateOf };

@@ -4,6 +4,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { dateCondition } from "@/lib/reports/filters";
 import { employeeListWhere, type EmployeeListParams } from "@/lib/hr/list-filters";
+import { istClock } from "@/lib/hr/punch";
 import { summarizeAttendance, type AttendanceSummaryRow } from "@/lib/hr/attendance-report";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -42,7 +43,7 @@ export async function loadAttendanceReport(
     }),
     db.attendanceEntry.findMany({
       where: { attendanceOn, employee: { AND: [scope, employeeListWhere({ ...listParams, status: "" })] } },
-      select: { employeeId: true, attendanceOn: true, status: true, overtimeHours: true },
+      select: { employeeId: true, attendanceOn: true, status: true, overtimeHours: true, punchInAt: true, punchOutAt: true },
     }),
   ]);
 
@@ -60,6 +61,8 @@ export async function loadAttendanceReport(
       attendanceOn: e.attendanceOn.toISOString().slice(0, 10),
       status: e.status,
       overtimeHours: Number(e.overtimeHours),
+      checkIn: e.punchInAt ? istClock(e.punchInAt) : null,
+      checkOut: e.punchOutAt ? istClock(e.punchOutAt) : null,
     })),
     range,
   );

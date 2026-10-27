@@ -22,6 +22,9 @@ import {
 import { referralCodeFor } from "@/lib/riders/referrals";
 import { saveEmployeeFiles } from "@/lib/hr/employee-files";
 import { PROFILE_EDIT_LABEL, profileEditChanges, storedChanges, type ProfileEditKey } from "@/lib/hr/profile-edit";
+import { initialApproval, leadWorkBlock } from "@/lib/approvals/rule";
+import { notifyApprovalRequested } from "@/lib/approvals/inbox";
+import { checkReferrer } from "@/lib/riders/referrals";
 import { attendanceDay, checkCoordinates, planPunchIn, planPunchOut } from "@/lib/hr/punch";
 import { teamLeadersOf } from "@/lib/advances/service";
 import type { AttendanceStatus } from "@prisma/client";
@@ -112,6 +115,73 @@ async function assertCompaniesExist(ids: string[]) {
   if (found !== ids.length) throw new Error("One of the companies chosen does not exist.");
 }
 
+/**
+ * The "Referred by" picker: a rider id, or a typed referral code / Rider ID.
+ * Returns undefined when the form did not post the field, null when cleared.
+ * Only an active, accepted rider may refer, and nobody refers themselves.
+ */
+async function readReferrer(
+  formData: FormData,
+  selfId: string | null,
+  current: string | null = null,
+): Promise<string | null | undefined> {
+  if (!formData.has("referredById")) return undefined;
+  const value = String(formData.get("referredById") ?? "").trim();
+  if (!value) return null;
+  // Saving a form that left the referrer alone keeps it, even if they have since left.
+  if (current && value === current) return current;
+  const found = await prisma.employee.findFirst({
+    where: {
+      OR: [
+        { id: value },
+        { referralCode: { equals: value, mode: "insensitive" } },
+        { employeeCode: { equals: value, mode: "insensitive" } },
+      ],
+    },
+    select: { id: true, status: true, onboardingStatus: true, employmentType: { select: { name: true } } },
+  });
+  const check = checkReferrer(
+    found && { id: found.id, status: found.status, onboardingStatus: found.onboardingStatus, employmentTypeName: found.employmentType.name },
+    selfId,
+  );
+  if (!check.ok) throw new Error(check.error);
+  return found!.id;
+}
+
+/** The referral columns to write when the referrer is set or changed, by the fixed approval rule. */
+function referralWrite(ctx: Awaited<ReturnType<typeof authorize>>, referredById: string | null) {
+  if (referredById === null) {
+    return { referredById: null, referralApproval: "APPROVED" as const, referralSetById: null };
+  }
+  const approval = initialApproval({
+    receivesLeads: ctx.has(PERM.sales.lead.receiveAssignment),
+    canDecide: ctx.has(PERM.approvals.queue.decide),
+  });
+  return {
+    referredById,
+    referralApproval: approval === "PENDING" ? ("PENDING" as const) : ("APPROVED" as const),
+    referralSetById: ctx.id,
+    referralApprovedById: approval === "PENDING" ? null : ctx.id,
+    referralApprovedAt: approval === "PENDING" ? null : new Date(),
+    referralApprovalNote: null,
+  };
+}
+
+async function askReferralApproval(
+  ctx: Awaited<ReturnType<typeof authorize>>,
+  employee: { id: string; name: string; employeeCode: string },
+  companyIds: string[],
+) {
+  await notifyApprovalRequested(prisma, {
+    companyIds,
+    actorId: ctx.id,
+    title: `Referral for ${employee.name} (${employee.employeeCode}) waits for approval`,
+    body: `Recorded by ${ctx.name}`,
+    entity: "Employee",
+    entityId: employee.id,
+  });
+}
+
 /** Loads a record inside the viewer's scope, or refuses as not found. */
 async function scopedEmployee(ctx: Awaited<ReturnType<typeof authorize>>, id: string) {
   const employee = await prisma.employee.findFirst({
@@ -135,6 +205,8 @@ export async function createEmployeeAction(formData: FormData): Promise<ActionRe
     const data = particularsOf(parsed.data);
     const companyIds = readCompanyIds(formData);
     await assertCompaniesExist(companyIds);
+    const referrer = await readReferrer(formData, null);
+    const referral = referrer ? referralWrite(ctx, referrer) : {};
 
     const employee = await prisma.$transaction(async (tx) => {
       // The Rider ID — NL001 — from the series Masters holds.
@@ -143,6 +215,7 @@ export async function createEmployeeAction(formData: FormData): Promise<ActionRe
         data: {
           employeeCode,
           ...data,
+          ...referral,
           referralCode: referralCodeFor(employeeCode),
           companies: companyIds.length ? { create: companyIds.map((companyId) => ({ companyId })) } : undefined,
         },
@@ -150,12 +223,15 @@ export async function createEmployeeAction(formData: FormData): Promise<ActionRe
     });
 
     await saveFiles(employee.id, formData, ctx.id);
+    if (employee.referralApproval === "PENDING") await askReferralApproval(ctx, employee, companyIds);
 
     await recordAudit({
       action: "CREATE", entity: "Employee", entityId: employee.id, userId: ctx.id,
-      summary: `Added ${employee.name} as ${employee.employeeCode} — onboarding draft`,
+      summary: `Added ${employee.name} as ${employee.employeeCode} — onboarding draft` +
+        (employee.referredById ? (employee.referralApproval === "PENDING" ? " — referral pending approval" : " — referral recorded") : ""),
     });
-    revalidatePath("/hr");
+    revalidatePath("/hr", "layout");
+    revalidatePath("/hr/referrals");
     revalidatePath("/hr/onboarding");
     return { id: employee.id };
   });
@@ -174,9 +250,11 @@ export async function updateEmployeeAction(id: string, formData: FormData): Prom
     if (companyIds.join() !== before.companies.map((c) => c.companyId).sort().join() && !ctx.has(PERM.hr.employee.manageCompanies)) {
       throw new Error("You do not have permission to change the companies this rider is deployed to.");
     }
+    const referrer = await readReferrer(formData, id, before.referredById);
+    const referral = referrer !== undefined && referrer !== before.referredById ? referralWrite(ctx, referrer) : {};
 
     await prisma.$transaction(async (tx) => {
-      await tx.employee.update({ where: { id }, data });
+      await tx.employee.update({ where: { id }, data: { ...data, ...referral } });
       await tx.riderCompany.deleteMany({ where: { employeeId: id, companyId: { notIn: companyIds } } });
       await tx.riderCompany.createMany({
         data: companyIds.map((companyId) => ({ employeeId: id, companyId })),
@@ -184,13 +262,19 @@ export async function updateEmployeeAction(id: string, formData: FormData): Prom
       });
     });
     await saveFiles(id, formData, ctx.id);
+    if ("referralApproval" in referral && referral.referralApproval === "PENDING") {
+      await askReferralApproval(ctx, before, companyIds);
+    }
 
     const beforeDay = before.joinedOn ? before.joinedOn.toISOString().slice(0, 10) : null;
     // Every field the form changed; identity and bank numbers masked to their last four.
-    const changes = maskIdentityChanges(diff(
+    const fieldChanges = maskIdentityChanges(diff(
       editableEmployee({ ...before, monthlySalary: before.monthlySalary === null ? null : Number(before.monthlySalary), joinedOn: beforeDay, companyIds: before.companies.map((c) => c.companyId) }),
       editableEmployee({ ...data, joinedOn: data.joinedOn ? data.joinedOn.toISOString().slice(0, 10) : null, companyIds }),
     ));
+    const changes = "referredById" in referral
+      ? { ...(fieldChanges ?? {}), referredById: { from: before.referredById, to: referral.referredById } }
+      : fieldChanges;
     await recordAudit({
       action: "UPDATE", entity: "Employee", entityId: id, userId: ctx.id,
       summary: changes
@@ -198,7 +282,7 @@ export async function updateEmployeeAction(id: string, formData: FormData): Prom
         : `${data.name} saved with no changes`,
       changes,
     });
-    revalidatePath("/hr");
+    revalidatePath("/hr", "layout");
     revalidatePath(`/hr/${id}`);
     return null;
   });
@@ -239,7 +323,7 @@ export async function setEmployeeStatusAction(
         ...(change.reason ? { reason: { from: null, to: change.reason } } : {}),
       },
     });
-    revalidatePath("/hr");
+    revalidatePath("/hr", "layout");
     revalidatePath(`/hr/${id}`);
     return null;
   });
@@ -263,7 +347,7 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult<nul
       action: "DELETE", entity: "Employee", entityId: id, userId: ctx.id,
       summary: `Removed ${employee.name}`,
     });
-    revalidatePath("/hr");
+    revalidatePath("/hr", "layout");
     return null;
   });
 }
@@ -296,7 +380,7 @@ export async function submitOnboardingAction(id: string): Promise<ActionResult<n
       summary: `${e.name} (${e.employeeCode}) submitted for onboarding review`,
       changes: { onboardingStatus: { from: e.onboardingStatus, to: "SUBMITTED" } },
     });
-    revalidatePath("/hr");
+    revalidatePath("/hr", "layout");
     revalidatePath("/hr/onboarding");
     revalidatePath(`/hr/${id}`);
     return null;
@@ -410,7 +494,7 @@ export async function acceptOnboardingAction(id: string): Promise<ActionResult<n
         (whatsapp.sent ? "; onboarding WhatsApp sent" : `; WhatsApp not sent (${whatsapp.reason})`),
       changes: { onboardingStatus: { from: e.onboardingStatus, to: "ACCEPTED" } },
     });
-    revalidatePath("/hr");
+    revalidatePath("/hr", "layout");
     revalidatePath("/hr/onboarding");
     revalidatePath(`/hr/${id}`);
     if (e.lead) revalidatePath(`/sales/leads/${e.lead.id}`);
@@ -453,7 +537,7 @@ export async function rejectOnboardingAction(id: string, reason: string): Promis
       summary: `${e.name} (${e.employeeCode}) rejected — ${why}`,
       changes: { onboardingStatus: { from: e.onboardingStatus, to: "REJECTED" }, reason: { from: null, to: why } },
     });
-    revalidatePath("/hr");
+    revalidatePath("/hr", "layout");
     revalidatePath("/hr/onboarding");
     revalidatePath(`/hr/${id}`);
     return null;
@@ -557,6 +641,8 @@ export async function startOnboardingFromLeadAction(leadId: string): Promise<Act
     });
     if (!lead) throw new Error("Lead not found.");
     if (!ctx.has(PERM.sales.lead.viewAll) && lead.ownerId !== ctx.id) throw new Error("Lead not found.");
+    const blocked = leadWorkBlock(lead.approval);
+    if (blocked) throw new Error(blocked);
     if (lead.rider) return { id: lead.rider.id };
 
     const riderType = await prisma.employmentType.findFirst({
@@ -593,7 +679,7 @@ export async function startOnboardingFromLeadAction(leadId: string): Promise<Act
       action: "UPDATE", entity: "Lead", entityId: lead.id, userId: ctx.id,
       summary: `Onboarding started — rider ${employee.employeeCode}`,
     });
-    revalidatePath("/hr");
+    revalidatePath("/hr", "layout");
     revalidatePath(`/sales/leads/${leadId}`);
     return { id: employee.id };
   });
@@ -617,7 +703,7 @@ export async function createEmploymentTypeAction(name: string): Promise<ActionRe
       action: "CREATE", entity: "EmploymentType", userId: ctx.id,
       summary: `Employment type added — ${trimmed}`,
     });
-    revalidatePath("/hr");
+    revalidatePath("/hr", "layout");
     return null;
   });
 }
@@ -639,7 +725,7 @@ export async function deleteEmploymentTypeAction(id: string): Promise<ActionResu
       action: "DELETE", entity: "EmploymentType", entityId: id, userId: ctx.id,
       summary: `Employment type removed — ${type.name}`,
     });
-    revalidatePath("/hr");
+    revalidatePath("/hr", "layout");
     return null;
   });
 }
@@ -673,7 +759,7 @@ export async function markAttendanceAction(
       action: "UPDATE", entity: "AttendanceEntry", userId: ctx.id,
       summary: `${marked} marked for ${attendanceOn}`,
     });
-    revalidatePath("/hr");
+    revalidatePath("/hr", "layout");
     return { marked };
   });
 }
@@ -690,14 +776,15 @@ async function ownEmployee(userId: string) {
       bankAccountNo: true, bankHolderName: true, bankIfsc: true, bankName: true, insuranceNumber: true,
     },
   });
-  if (!employee) throw new Error("There is no rider record linked to your login.");
+  if (!employee) throw new Error("There is no person record linked to your login.");
   return employee;
 }
 
-async function punch(direction: "in" | "out", latitude: number, longitude: number) {
+async function punch(direction: "in" | "out", latitude: number | null | undefined, longitude: number | null | undefined) {
   const ctx = await authorize(PERM.hr.attendance.punch);
   const where = checkCoordinates(latitude, longitude);
   if (!where.ok) throw new Error(where.error);
+  const place = where.lat === null ? "no location" : `${where.lat}, ${where.lng}`;
   const e = await ownEmployee(ctx.id);
   if (e.status !== "ACTIVE") throw new Error("Your record is not active.");
   if (e.onboardingStatus !== "ACCEPTED") throw new Error("You can punch in once your onboarding is accepted.");
@@ -736,25 +823,29 @@ async function punch(direction: "in" | "out", latitude: number, longitude: numbe
   await recordAudit({
     action: "UPDATE", entity: "AttendanceEntry", entityId: result.id, userId: ctx.id,
     summary: direction === "in"
-      ? `${e.name} (${e.employeeCode}) punched in for ${day} at ${where.lat}, ${where.lng}`
-      : `${e.name} (${e.employeeCode}) punched out for ${day} at ${where.lat}, ${where.lng} — ${(result.hours ?? 0).toFixed(1)} h, ${result.status}`,
+      ? `${e.name} (${e.employeeCode}) punched in for ${day} — ${place}`
+      : `${e.name} (${e.employeeCode}) punched out for ${day} — ${place} — ${(result.hours ?? 0).toFixed(1)} h, ${result.status}`,
   });
-  revalidatePath("/hr");
+  revalidatePath("/hr", "layout");
+  revalidatePath("/dashboard");
   return { date: day, status: result.status as string, at: now.toISOString() };
 }
 
-/** Punches the caller in for today, with where the phone is. Once a day. */
+/**
+ * Punches the caller in for today — the app's punch and the web's Check in.
+ * Where the device is, when it says; null when it will not. Once a day.
+ */
 export async function punchInAction(
-  latitude: number,
-  longitude: number,
+  latitude?: number | null,
+  longitude?: number | null,
 ): Promise<ActionResult<{ date: string; status: string; at: string }>> {
   return runAction(() => punch("in", latitude, longitude));
 }
 
 /** Punches the caller out. Under four hours since punching in is a half day. */
 export async function punchOutAction(
-  latitude: number,
-  longitude: number,
+  latitude?: number | null,
+  longitude?: number | null,
 ): Promise<ActionResult<{ date: string; status: string; at: string }>> {
   return runAction(() => punch("out", latitude, longitude));
 }

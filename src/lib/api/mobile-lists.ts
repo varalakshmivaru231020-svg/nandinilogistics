@@ -19,16 +19,17 @@ import "server-only";
 import { GET as l0 } from "@/app/api/accounts/invoices/export/route";
 import { GET as l1 } from "@/app/api/advances/export/route";
 import { GET as l2 } from "@/app/api/advances/bike-rent/export/route";
-import { GET as l3 } from "@/app/api/hr/attendance/export/route";
-import { GET as l4 } from "@/app/api/hr/employees/export/route";
-import { GET as l5 } from "@/app/api/hr/onboarding/export/route";
-import { GET as l6 } from "@/app/api/hr/referrals/export/route";
-import { GET as l7 } from "@/app/api/payouts/export/route";
-import { GET as l8 } from "@/app/api/payouts/imports/export/route";
-import { GET as l9 } from "@/app/api/sales/follow-ups/export/route";
-import { GET as l10 } from "@/app/api/sales/leads/export/route";
-import { GET as l11 } from "@/app/api/staff/payslips/export/route";
-import { GET as l12 } from "@/app/api/tasks/export/route";
+import { GET as l3 } from "@/app/api/approvals/export/route";
+import { GET as l4 } from "@/app/api/hr/attendance/export/route";
+import { GET as l5 } from "@/app/api/hr/employees/export/route";
+import { GET as l6 } from "@/app/api/hr/onboarding/export/route";
+import { GET as l7 } from "@/app/api/hr/referrals/export/route";
+import { GET as l8 } from "@/app/api/payouts/export/route";
+import { GET as l9 } from "@/app/api/payouts/imports/export/route";
+import { GET as l10 } from "@/app/api/sales/follow-ups/export/route";
+import { GET as l11 } from "@/app/api/sales/leads/export/route";
+import { GET as l12 } from "@/app/api/staff/payslips/export/route";
+import { GET as l13 } from "@/app/api/tasks/export/route";
 
 export type ListHandler = (request: Request) => Promise<Response>;
 
@@ -36,16 +37,17 @@ export const MOBILE_LISTS: Record<string, ListHandler> = {
   "accounts/invoices": l0,
   "advances": l1,
   "advances/bike-rent": l2,
-  "hr/attendance": l3,
-  "hr/employees": l4,
-  "hr/onboarding": l5,
-  "hr/referrals": l6,
-  "payouts": l7,
-  "payouts/imports": l8,
-  "sales/follow-ups": l9,
-  "sales/leads": l10,
-  "staff/payslips": l11,
-  "tasks": l12,
+  "approvals": l3,
+  "hr/attendance": l4,
+  "hr/employees": l5,
+  "hr/onboarding": l6,
+  "hr/referrals": l7,
+  "payouts": l8,
+  "payouts/imports": l9,
+  "sales/follow-ups": l10,
+  "sales/leads": l11,
+  "staff/payslips": l12,
+  "tasks": l13,
 };
 
 export const MOBILE_LIST_KEYS = Object.keys(MOBILE_LISTS).sort();

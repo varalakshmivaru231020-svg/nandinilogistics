@@ -101,10 +101,19 @@ export const SCREENS: Record<string, ScreenDef> = {
   // ------------------------------------------------------------------ people
   "hr/employees": {
     key: "hr/employees",
-    href: "/hr",
+    href: "/hr/riders",
     title: "Riders & Staff",
     searchPlaceholder: null,
     filters: [
+      {
+        name: "group",
+        label: "List",
+        allLabel: "Riders and staff",
+        options: [
+          { value: "riders", label: "Riders" },
+          { value: "staff", label: "Internal Staff" },
+        ],
+      },
       {
         name: "status",
         label: "Status",
@@ -119,7 +128,7 @@ export const SCREENS: Record<string, ScreenDef> = {
 
   "hr/attendance": {
     key: "hr/attendance",
-    href: "/hr",
+    href: "/hr/attendance",
     title: "Attendance",
     searchPlaceholder: null,
     filters: [],
@@ -166,6 +175,28 @@ export const SCREENS: Record<string, ScreenDef> = {
     filters: [
       { name: "status", label: "Status", allLabel: "All", options: [{ value: "DRAFT", label: "Draft" }, { value: "SUBMITTED", label: "Submitted" }, { value: "ACCEPTED", label: "Accepted" }, { value: "REJECTED", label: "Rejected" }] },
       { name: "company", label: "Company", allLabel: "All companies", source: "companies" },
+    ],
+  },
+
+  approvals: {
+    key: "approvals",
+    href: "/approvals",
+    title: "Approvals",
+    countNoun: "waiting",
+    searchPlaceholder: null,
+    filters: [
+      {
+        name: "type",
+        label: "Type",
+        allLabel: "Everything",
+        options: [
+          { value: "LEAD", label: "Lead" },
+          { value: "ONBOARDING", label: "Onboarding" },
+          { value: "REFERRAL", label: "Referral" },
+          { value: "ADVANCE", label: "Advance" },
+          { value: "PROFILE", label: "Profile change" },
+        ],
+      },
     ],
   },
 

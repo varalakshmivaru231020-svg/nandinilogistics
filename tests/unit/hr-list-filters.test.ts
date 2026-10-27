@@ -26,7 +26,7 @@ describe("employee list filters", () => {
   });
 
   it("ignores malformed ids from a hand-edited URL", () => {
-    expect(readEmployeeListParams({ type: "x' OR '1", designation: "a/b" })).toEqual({ q: "", type: "", designation: "", company: "", status: "" });
+    expect(readEmployeeListParams({ type: "x' OR '1", designation: "a/b" })).toEqual({ q: "", type: "", designation: "", company: "", status: "", group: "" });
   });
 
   it("defaults to every status", () => {

@@ -24,7 +24,7 @@ describe("exactly one navigation entry is ever active", () => {
   });
 
   it("picks the parent for a route the navigation does not list", () => {
-    expect(activeNavHref("/hr/abc123", NAVIGATION)).toBe("/hr");
+    expect(activeNavHref("/hr/abc123", NAVIGATION)).toBe("/hr/riders");
   });
 
   it("never returns a parent when a longer entry also matches", () => {

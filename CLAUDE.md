@@ -42,6 +42,26 @@ is editable from Administration → Roles. Two codes are *duties*, not access:
 `sales.followUp.receiveEscalation` (who is told about a lapse — the Team
 Leaders). They are resolved without the super-admin bypass.
 
+### Approval rule (fixed, not configurable)
+
+Anything a **Tele-caller** raises waits as *Pending approval* until a Team
+Leader or Super Admin approves or rejects it; a reason is mandatory on reject.
+"Tele-caller" means holds `sales.lead.receiveAssignment` and not
+`approvals.queue.decide` (`initialApproval()` in `src/lib/approvals/rule.ts`).
+It covers leads (`Lead.approval`) and referrals (`Employee.referralApproval`);
+onboarding forms, advances and profile changes already wait in their own
+states. A pending or rejected lead cannot be followed up, moved or onboarded —
+enforced in the actions, not only the UI. Everything waiting is one list,
+`/approvals` (`src/lib/approvals/inbox.ts`), decided by
+`decideApprovalAction()`, which hands onboarding, advances and profile changes
+to their own module's action. A Team Leader sees only items for their
+companies (and untagged leads). Requests and decisions notify
+(`APPROVAL_REQUESTED` / `APPROVAL_DECIDED`).
+
+Every staff login has a person record (`src/lib/hr/staff-link.ts`, created
+with the user; `pnpm staff:link` backfills), so Tele-callers and Team Leaders
+check in / out from the top bar like a rider punches from the app.
+
 ## Conventions
 
 - Reference permissions through `PERM.*` (typed, generated) — never string

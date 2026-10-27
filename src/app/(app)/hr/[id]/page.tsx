@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { employeeScope, maskId } from "@/lib/hr/list-filters";
+import { istClock } from "@/lib/hr/punch";
 import { isRiderType, onboardingChecklist, type OnboardingStatus } from "@/lib/riders/onboarding";
 import { referralStatus } from "@/lib/riders/referrals";
 import { formatDate, formatDateTime } from "@/lib/utils";
@@ -44,6 +45,19 @@ function dayKey(d: Date): string {
 /** The design's dd/mm/yyyy, used on the log and the range label. */
 function slashDate(d: Date): string {
   return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
+}
+
+/** The day's check in / out for the calendar's tooltip. */
+function punchTip(
+  e: { punchInAt: Date | null; punchOutAt: Date | null; punchInLat: unknown; punchOutLat: unknown },
+  past: boolean,
+): string {
+  if (!e.punchInAt) return "";
+  const where = (lat: unknown) => (lat === null ? " (no location)" : "");
+  const out = e.punchOutAt
+    ? ` · Out ${istClock(e.punchOutAt)}${where(e.punchOutLat)}`
+    : past ? " · no check-out" : "";
+  return `\nIn ${istClock(e.punchInAt)}${where(e.punchInLat)}${out}`;
 }
 
 export default async function EmployeeDetailPage({
@@ -107,7 +121,7 @@ export default async function EmployeeDetailPage({
       status: (entry?.status as AttendanceDay["status"]) ?? null,
       tip: `${slashDate(new Date(`${key}T00:00:00.000Z`))}${
         meta
-          ? ` · ${meta.label}${Number(entry!.overtimeHours) ? ` · OT ${Number(entry!.overtimeHours)} h` : ""}${entry!.notes ? `\n${entry!.notes}` : ""}`
+          ? ` · ${meta.label}${Number(entry!.overtimeHours) ? ` · OT ${Number(entry!.overtimeHours)} h` : ""}${punchTip(entry!, key < dayKey(today))}${entry!.notes ? `\n${entry!.notes}` : ""}`
           : " · not marked"
       }`,
     });

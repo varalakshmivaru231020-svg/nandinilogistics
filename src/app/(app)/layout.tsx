@@ -4,6 +4,8 @@ import { PERM } from "@/lib/permissions/codes";
 import { PermissionProvider } from "@/components/rbac/permission-provider";
 import { AppShell } from "@/components/shell/app-shell";
 import { escalateOverdueFollowUps } from "@/lib/sales/lead-service";
+import { inboxCount } from "@/lib/approvals/inbox";
+import { loadCheckIn } from "@/lib/hr/check-in";
 
 /**
  * Every screen below this layout is authenticated. The permission set is
@@ -52,6 +54,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     badges.advances = await prisma.advance.count({ where: { status: "PENDING" } });
   }
 
+  // Everything waiting on this person in the Approvals inbox.
+  if (ctx.has(PERM.approvals.queue.view)) {
+    badges.approvals = await inboxCount(prisma, ctx);
+  }
+
   if (ctx.has(PERM.sales.followUp.view)) {
     badges.followUpDue = await prisma.lead.count({
       where: {
@@ -74,7 +81,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         permissions: [...ctx.permissions],
       }}
     >
-      <AppShell badges={badges}>{children}</AppShell>
+      <AppShell badges={badges} checkIn={await loadCheckIn(prisma, ctx, now)}>{children}</AppShell>
     </PermissionProvider>
   );
 }

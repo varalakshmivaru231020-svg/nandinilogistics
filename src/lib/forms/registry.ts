@@ -125,6 +125,13 @@ const EMPLOYEE_FIELDS: ReadonlyArray<FormFieldDef> = [
   { name: "pfNumber", label: "PF number", kind: "text", placeholder: "Optional" },
   { name: "insuranceNumber", label: "Insurance number", kind: "text", placeholder: "Shown on the ID card" },
   { name: "monthlySalary", label: "Monthly salary (₹)", kind: "money", placeholder: "e.g. 18000" },
+  {
+    name: "referredById",
+    label: "Referred by",
+    kind: "text",
+    placeholder: "e.g. NL004 or REF-NL004",
+    hint: "Optional — search a rider by name or Rider ID, or type their referral code",
+  },
   { name: "emergencyMobileFamily", label: "Father / mother mobile", kind: "phone", placeholder: "98765 43210" },
   { name: "emergencyMobileFriend", label: "Friend mobile", kind: "phone", placeholder: "98765 43210" },
   { name: "bankAccountNo", label: "Account number", kind: "text", placeholder: "Account number" },

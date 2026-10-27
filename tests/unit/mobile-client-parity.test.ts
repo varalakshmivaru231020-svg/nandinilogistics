@@ -60,10 +60,13 @@ const WEB_ONLY = new Set(["/masters", "/reports"]);
 const APP_PENDING = new Set([
   "/hr/onboarding", "/hr/referrals", "/payouts", "/advances", "/advances/bike-rent",
   "/accounts/invoices", "/staff/payslips",
+  // The Approvals inbox, and Riders / Internal Staff split out of /hr: the app
+  // still maps '/hr' to hr/employees until its worker adds the `group` filter.
+  "/approvals", "/hr/riders", "/hr/staff",
 ]);
 const APP_PENDING_LISTS = new Set([
   "hr/onboarding", "hr/referrals", "payouts", "payouts/imports", "advances", "advances/bike-rent",
-  "accounts/invoices", "staff/payslips",
+  "accounts/invoices", "staff/payslips", "approvals",
 ]);
 
 describe("the app reaches every entry the web's sidebar can show", () => {

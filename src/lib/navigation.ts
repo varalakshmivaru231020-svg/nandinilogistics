@@ -19,7 +19,7 @@ export interface NavItem {
   anyPermission?: string[];
   /** Key into the design's icon set — see components/shell/nav-icons.tsx. */
   icon?: string;
-  badge?: "followUpDue" | "tasks" | "onboarding" | "advances";
+  badge?: "followUpDue" | "tasks" | "onboarding" | "advances" | "approvals";
 }
 
 export interface NavSection {
@@ -42,6 +42,7 @@ export const NAVIGATION: NavSection[] = [
           PERM.dashboard.rider.view,
         ],
       },
+      { label: "Approvals", href: "/approvals", icon: "tasks", permission: PERM.approvals.queue.view, badge: "approvals" },
     ],
   },
   {
@@ -54,7 +55,9 @@ export const NAVIGATION: NavSection[] = [
   {
     label: "Riders",
     items: [
-      { label: "Users & Attendance", href: "/hr", icon: "hr", permission: PERM.hr.employee.view },
+      { label: "Riders", href: "/hr/riders", icon: "hr", permission: PERM.hr.employee.view },
+      { label: "Internal Staff", href: "/hr/staff", icon: "hr", permission: PERM.hr.employee.view },
+      { label: "Attendance", href: "/hr/attendance", icon: "tasks", permission: PERM.hr.employee.view },
       { label: "Onboarding", href: "/hr/onboarding", icon: "hr", permission: PERM.hr.employee.view, badge: "onboarding" },
       { label: "Referrals", href: "/hr/referrals", icon: "followups", permission: PERM.hr.referral.view },
       { label: "Tasks", href: "/tasks", icon: "tasks", permission: PERM.task.task.view, badge: "tasks" },
@@ -115,6 +118,15 @@ const BELONGS_TO: ReadonlyArray<[prefix: string, href: string]> = [
 ];
 
 /**
+ * Where a URL falls when no entry matches it: a person's record and the
+ * other screens under /hr sit with Riders (the record's own header says
+ * whether it is a rider or a member of staff).
+ */
+const FALLS_BACK_TO: ReadonlyArray<[prefix: string, href: string]> = [
+  ["/hr", "/hr/riders"],
+];
+
+/**
  * Which navigation entry a URL belongs to.
  *
  * Longest match wins, and exactly one entry can ever be returned, so a screen
@@ -134,6 +146,11 @@ export function activeNavHref(
         pathname === item.href ||
         (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
       if (hit && (best === null || item.href.length > best.length)) best = item.href;
+    }
+  }
+  if (best === null) {
+    for (const [prefix, href] of FALLS_BACK_TO) {
+      if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return href;
     }
   }
   return best;

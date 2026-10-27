@@ -21,6 +21,9 @@ describe("punch in / out", () => {
     expect(checkCoordinates(0, -181).ok).toBe(false);
     expect(checkCoordinates(Number.NaN, 0).ok).toBe(false);
     expect(checkCoordinates(undefined, 0).ok).toBe(false);
+    // The web checks in when the browser will not share a location.
+    expect(checkCoordinates(undefined, undefined)).toEqual({ ok: true, lat: null, lng: null });
+    expect(checkCoordinates(null, null)).toEqual({ ok: true, lat: null, lng: null });
   });
 
   it("punches in once a day, over a row a Team Leader may have marked", () => {

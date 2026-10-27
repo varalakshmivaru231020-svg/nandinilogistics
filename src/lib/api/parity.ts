@@ -128,6 +128,10 @@ export const PARITY: Record<string, ParityExemption> = {
 
   /* ------------- Rider/TL actions the app will carry once it is rebuilt ------------- */
 
+  "approvals/decideApproval": {
+    reason: "todo",
+    note: "The Approvals inbox list is served (/api/approvals/export); the app worker adds the decide buttons later.",
+  },
   "advances/decideAdvance": {
     reason: "todo",
     note: "The Android client is rebuilt after the admin panel.",

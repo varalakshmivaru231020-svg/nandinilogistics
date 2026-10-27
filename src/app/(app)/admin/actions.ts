@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { linkStaffEmployee } from "@/lib/hr/staff-link";
 import { z } from "zod";
 
 import { prisma } from "@/lib/db";
@@ -290,10 +291,18 @@ export async function createUserAction(formData: FormData): Promise<ActionResult
     const roleId = String(formData.get("roleId") ?? "");
     if (roleId) await prisma.userRole.create({ data: { userId: user.id, roleId } });
 
+    // Every staff login gets a person record, so it can check in.
+    const role = roleId ? await prisma.role.findUnique({ where: { id: roleId }, select: { code: true } }) : null;
+    const person = await prisma.$transaction((tx) =>
+      linkStaffEmployee(tx, { ...user, roleCodes: role ? [role.code] : [] }, new Date()),
+    );
+
     await recordAudit({
       action: "CREATE", entity: "User", entityId: user.id, userId: ctx.id,
-      summary: `Created user ${user.name} (${user.email})`,
+      summary: `Created user ${user.name} (${user.email})` +
+        (person ? (person.created ? " — person record created" : " — linked to the existing person record") : ""),
     });
+    revalidatePath("/hr", "layout");
     revalidatePath("/admin/users");
     return { id: user.id };
   });

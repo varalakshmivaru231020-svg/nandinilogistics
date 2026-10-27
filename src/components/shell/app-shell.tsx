@@ -5,12 +5,16 @@ import * as React from "react";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { ToastProvider } from "@/components/ui/toast";
+import type { CheckInCard } from "@/lib/hr/punch";
 
 export function AppShell({
   badges,
+  checkIn = null,
   children,
 }: {
   badges?: Partial<Record<string, number>>;
+  /** Today's Check in state, or null for someone with nothing to check in to. */
+  checkIn?: CheckInCard | null;
   children: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -30,6 +34,7 @@ export function AppShell({
           <Topbar
             onOpenMobile={() => setMobileOpen(true)}
             notificationCount={badges?.notifications ?? 0}
+            checkIn={checkIn}
           />
           <main data-app-scroll className="flex-1 overflow-y-auto px-[26px] pb-10 pt-6">
             {children}

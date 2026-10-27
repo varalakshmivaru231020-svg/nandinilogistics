@@ -11,6 +11,14 @@ import { LeadSchema, readIdList } from "@/lib/sales/lead-schema";
 import { captureLead, recordFirstResponse } from "@/lib/sales/lead-service";
 import { LeadEditError } from "@/lib/sales/lead-edit";
 import { applyLeadEdit } from "@/lib/sales/lead-edit-service";
+import { initialApproval, leadWorkBlock } from "@/lib/approvals/rule";
+import { notifyApprovalRequested } from "@/lib/approvals/inbox";
+
+/** Refuses work on a lead still waiting for approval, or rejected. */
+function assertWorkable(lead: { approval: string }) {
+  const block = leadWorkBlock(lead.approval);
+  if (block) throw new Error(block);
+}
 
 /**
  * Captures a lead — the SOW's New stage: name, mobile, company tags and
@@ -65,25 +73,43 @@ export async function createLeadAction(formData: FormData): Promise<ActionResult
       canAssign: ctx.has(PERM.sales.lead.assign),
       receivesLeads: ctx.has(PERM.sales.lead.receiveAssignment),
     };
-    const { lead, auto, duplicateOf } = await prisma.$transaction((tx) =>
-      captureLead(
+    // The fixed approval rule: a tele-caller's lead waits for a Team Leader.
+    const approval = initialApproval({
+      receivesLeads: ctx.has(PERM.sales.lead.receiveAssignment),
+      canDecide: ctx.has(PERM.approvals.queue.decide),
+    });
+    const { lead, auto, duplicateOf } = await prisma.$transaction(async (tx) => {
+      const captured = await captureLead(
         tx,
         {
           ...parsed.data,
           companyIds,
           customFields,
           ownerId: String(formData.get("ownerId") ?? "") || null,
+          approval: approval === "PENDING" ? "PENDING" : "APPROVED",
         },
         actor,
         new Date(),
-      ),
-    );
+      );
+      if (captured.lead.approval === "PENDING") {
+        await notifyApprovalRequested(tx, {
+          companyIds,
+          actorId: ctx.id,
+          title: `Lead ${captured.lead.leadNo} — ${captured.lead.name} waits for approval`,
+          body: `Captured by ${ctx.name}`,
+          entity: "Lead",
+          entityId: captured.lead.id,
+        });
+      }
+      return captured;
+    });
 
     await recordAudit({
       action: "CREATE", entity: "Lead", entityId: lead.id, userId: ctx.id,
       summary:
         `Captured lead ${lead.leadNo} — ${lead.name}${duplicateOf ? ` (possible duplicate of ${duplicateOf.name})` : ""}` +
-        (auto ? " — assigned round-robin" : ""),
+        (auto ? " — assigned round-robin" : "") +
+        (lead.approval === "PENDING" ? " — pending approval" : ""),
     });
 
     revalidatePath("/sales/leads");
@@ -102,6 +128,8 @@ export async function createLeadAction(formData: FormData): Promise<ActionResult
 export async function updateLeadAction(id: string, formData: FormData): Promise<ActionResult<{ changed: boolean }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.sales.lead.update);
+    const current = await prisma.lead.findUnique({ where: { id }, select: { approval: true } });
+    if (current?.approval === "REJECTED") throw new Error("This lead was rejected and is read-only.");
     const { updatedAt, ...fields } = Object.fromEntries(formData);
     const form: Record<string, unknown> = { ...fields };
     // A multi-select posts several values under one name; Object.fromEntries kept one.
@@ -178,6 +206,7 @@ export async function changeLeadStageAction(
     if (lead.ownerId !== ctx.id && !ctx.has(PERM.sales.lead.viewAll)) {
       throw new PermissionError(PERM.sales.lead.viewAll, "You can only work leads assigned to you.");
     }
+    assertWorkable(lead);
     if (lead.stageId === stageId) throw new Error(`The lead is already in ${target.name}.`);
     if (losing && !lostReasonId) throw new Error("A lost reason is mandatory.");
 
@@ -262,6 +291,7 @@ export async function logFollowUpAction(
     if (lead.ownerId !== ctx.id && !ctx.has(PERM.sales.lead.viewAll)) {
       throw new PermissionError(PERM.sales.lead.viewAll, "You can only follow up leads assigned to you.");
     }
+    assertWorkable(lead);
     const next = nextActionAt ? new Date(nextActionAt) : null;
     if (next && Number.isNaN(next.getTime())) throw new Error("Next follow-up on must be a date.");
 
@@ -306,8 +336,9 @@ export async function addLeadNoteAction(leadId: string, body: string): Promise<A
     const text = body.trim();
     if (!text) throw new Error("A note cannot be empty.");
 
-    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { leadNo: true, ownerId: true } });
+    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { leadNo: true, ownerId: true, approval: true } });
     if (!lead) throw new Error("Lead not found.");
+    if (lead.approval === "REJECTED") throw new Error("This lead was rejected and is read-only.");
     if (!ctx.has(PERM.sales.lead.viewAll) && lead.ownerId !== ctx.id) {
       throw new PermissionError(PERM.sales.lead.viewAll);
     }

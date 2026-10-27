@@ -82,7 +82,7 @@ function Summary({ company, canViewRiders }: { company: Props["company"]; canVie
       <CardHeader>
         <CardTitle>At a glance</CardTitle>
         {canViewRiders && (
-          <Link href={`/hr?company=${company.id}`} className="text-[12px] font-bold text-brand-700 hover:underline">
+          <Link href={`/hr/riders?company=${company.id}`} className="text-[12px] font-bold text-brand-700 hover:underline">
             Riders →
           </Link>
         )}

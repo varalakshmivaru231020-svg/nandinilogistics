@@ -8,6 +8,8 @@ import { Bell, ChevronDown, Menu, Search } from "lucide-react";
 import { screenTitle } from "@/lib/screen-title";
 import { usePermissions } from "@/components/rbac/permission-provider";
 import { logoutAction } from "@/app/(auth)/login/actions";
+import type { CheckInCard } from "@/lib/hr/punch";
+import { CheckInButton } from "./check-in-button";
 
 /**
  * The design's topbar, in its order: title, the 290px search box, "All
@@ -17,9 +19,11 @@ import { logoutAction } from "@/app/(auth)/login/actions";
 export function Topbar({
   onOpenMobile,
   notificationCount = 0,
+  checkIn = null,
 }: {
   onOpenMobile: () => void;
   notificationCount?: number;
+  checkIn?: CheckInCard | null;
 }) {
   const perms = usePermissions();
   const title = screenTitle(usePathname());
@@ -64,6 +68,8 @@ export function Topbar({
       </div>
 
       <div className="flex-1" />
+
+      {checkIn && <CheckInButton card={checkIn} />}
 
       <div className="relative hidden sm:block" ref={ref}>
         <button
