@@ -29,10 +29,8 @@ export default async function LoginPage({
         />
 
         <div className="relative flex items-center gap-3">
-          <div className="grid h-[42px] w-[42px] place-items-center rounded-[11px] bg-white/10 ring-1 ring-white/20">
-            <span className="font-display text-[16px] font-extrabold tracking-[-.02em] text-brand-300">
-              NL
-            </span>
+          <div className="grid h-[42px] w-[42px] place-items-center rounded-[11px] bg-white ring-1 ring-white/20">
+            <img src="/nandini-logo.png" alt="Nandini Logistics" className="h-full w-full object-contain p-[3px]" />
           </div>
           <div>
             <p className="font-display text-[15px] font-bold leading-tight">Nandini Logistics</p>
@@ -77,9 +75,9 @@ export default async function LoginPage({
           <div className="mb-9 lg:hidden">
             <div
               className="mb-3 grid h-[42px] w-[42px] place-items-center rounded-[11px]"
-              style={{ background: "linear-gradient(150deg,#191A5C,#2F308C)" }}
+              style={{ background: "#fff" }}
             >
-              <span className="font-display text-[16px] font-extrabold text-brand-300">NL</span>
+              <img src="/nandini-logo.png" alt="Nandini Logistics" className="h-full w-full object-contain p-[3px]" />
             </div>
             <p className="font-display text-[15px] font-bold text-navy-950">
               Nandini Logistics

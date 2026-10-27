@@ -10,7 +10,7 @@ import { NavIcon } from "./nav-icons";
 import { usePermissions } from "@/components/rbac/permission-provider";
 
 /**
- * The sidebar, as drawn in design/NN Infra Admin.dc.html: a 236px white panel,
+ * The sidebar, as drawn in the admin design: a 236px white panel,
  * gradient logo tile, uppercase group labels that never collapse, and the live
  * status line pinned to the foot.
  *
@@ -52,11 +52,9 @@ export function Sidebar({
         <div className="flex shrink-0 items-center gap-[11px] border-b border-line-200 px-[18px] pb-4 pt-[18px]">
           <div
             className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[10px]"
-            style={{ background: "linear-gradient(150deg,#191A5C,#2F308C)" }}
+            style={{ background: "#fff" }}
           >
-            <span className="font-display text-[15px] font-extrabold tracking-[-.02em] text-brand-300">
-              NL
-            </span>
+            <img src="/nandini-logo.png" alt="Nandini Logistics" className="h-full w-full object-contain p-[3px]" />
           </div>
           <div className="min-w-0">
             <div className="font-display text-[14px] font-bold leading-[1.1] text-navy-950">

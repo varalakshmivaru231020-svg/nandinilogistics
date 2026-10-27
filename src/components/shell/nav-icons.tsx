@@ -1,5 +1,5 @@
 /**
- * The sidebar's icons, exactly as drawn in design/NN Infra Admin.dc.html.
+ * The sidebar's icons, exactly as drawn in the admin design.
  *
  * The design draws each one itself rather than pulling from an icon set, so
  * they are reproduced here path for path: 17px box, 24-unit viewBox, 1.8

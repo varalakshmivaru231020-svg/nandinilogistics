@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Button styles taken from design/NN Infra Admin.dc.html.
+ * Button styles taken from the admin design.
  *
  * The design uses cyan for the primary call to action, green only for
  * approvals, and an outlined white button carrying brand-coloured text for
