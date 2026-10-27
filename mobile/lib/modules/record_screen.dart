@@ -14,7 +14,7 @@ import 'form_screen.dart';
 /// Everything on this screen is decided by the server: which fields it shows,
 /// which children it has, and what may be done to it or to any one of its rows.
 /// The app had none of this — a detail screen was built from the list row, so a
-/// task had no checklist, an indent had no lines, and nothing could be pressed.
+/// lead had no history, an advance had no decision, and nothing could be pressed.
 class RecordScreen extends StatefulWidget {
   const RecordScreen({
     super.key,
@@ -26,7 +26,7 @@ class RecordScreen extends StatefulWidget {
 
   final Api api;
 
-  /// The list key — "tasks", "material/indents".
+  /// The list key — "tasks", "advances".
   final String module;
   final String id;
   final String? fallbackTitle;
@@ -195,8 +195,7 @@ class RecordScreenState extends State<RecordScreen> {
     final collections = _list('collections');
 
     /*
-     * The tabs the web's own detail screen has — Checklist · Review and
-     * approval · History on a task. A collection says which it belongs under;
+     * The tabs the web's own detail screen has — Details · Follow-ups · History on a lead. A collection says which it belongs under;
      * one that names none shows on every tab, as the web's cards above its tab
      * strip do.
      */
@@ -207,9 +206,9 @@ class RecordScreenState extends State<RecordScreen> {
         : collections.where((c) => c['tab'] == null || c['tab'] == tab).toList();
 
     /*
-     * A section can belong to a tab too. The project's particulars are its
+     * A section can belong to a tab too. A record's particulars are its
      * Overview tab and nowhere else — drawn above the strip they sat on top of
-     * Documents and Site Progress as well, which the web does not do.
+     * its other tabs as well, which the web does not do.
      */
     /*
      * With no tabs at all — a viewer who may see only one of them, so the strip
@@ -258,7 +257,7 @@ class RecordScreenState extends State<RecordScreen> {
                     onTap: () => setState(() => _tab = '${t["key"]}'),
                   ),
               ]),
-              // "Next: Reviewer level 2 · Anil Deshpande", beside the web's tabs.
+              // "Next: Team Leader review", beside the web's tabs.
               if ((_rec?['tabNote'] as String?)?.isNotEmpty ?? false)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -311,7 +310,7 @@ class RecordScreenState extends State<RecordScreen> {
   /// session's token, shown here where it is a picture, and handed to whatever
   /// this phone reads where it is not.
   ///
-  /// It used to say of a drawing that it "opens on the web", which is true of
+  /// It used to say of a document that it "opens on the web", which is true of
   /// a browser and false of a phone: a PDF reader is one intent away, and a
   /// document the app can upload and not open is half a repository.
   Future<void> _openFile(Map<String, dynamic> file) async {
@@ -339,7 +338,7 @@ class RecordScreenState extends State<RecordScreen> {
     );
   }
 
-  /// Opens another record from a row — a task on a project, a log on a day.
+  /// Opens another record from a row — a follow-up on a lead.
   Future<void> _openRecord(String module, String id) async {
     final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => RecordScreen(api: widget.api, module: module, id: id),
@@ -352,7 +351,7 @@ class RecordScreenState extends State<RecordScreen> {
     final navigator = Navigator.of(context);
     /*
      * Which record the action is about. Usually this one — but a row's action
-     * is about the row: renaming a project document opens the document's own
+     * is about the row: renaming a rider document opens the document's own
      * form, and the server says so with `formId`.
      */
     final about = (a['formId'] as String?) ?? widget.id;
@@ -509,9 +508,9 @@ class _Section extends StatelessWidget {
   }
 }
 
-/// A child collection — a checklist, the item lines, the comments. Its rows
-/// carry their own actions, because a checklist point is settled point by
-/// point rather than by a verdict on the whole task.
+/// A child collection — documents, follow-ups, the comments. Its rows
+/// carry their own actions, because each is settled on its own rather than
+/// by one decision on the whole record.
 class _Collection extends StatelessWidget {
   const _Collection({
     required this.collection,
@@ -526,7 +525,7 @@ class _Collection extends StatelessWidget {
   /// A row that stands for a stored file — an attachment, an identity copy.
   final void Function(Map<String, dynamic> file) onOpenFile;
 
-  /// A row that stands for another record — the project's tasks are links on
+  /// A row that stands for another record — a lead's follow-ups are links on
   /// the web, and a row that cannot be followed is a dead end.
   final void Function(String module, String id) onOpenRecord;
 
@@ -548,8 +547,8 @@ class _Collection extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Overline('${collection["label"]}'),
             /*
-             * The bar the web draws over a checklist: how many points are
-             * through every level, and what is waiting on this viewer. Green
+             * The bar the web draws over a collection: how many items are
+             * done, and what is waiting on this viewer. Green
              * once every point is through, violet until then — as the web
              * colours it.
              */
@@ -591,7 +590,7 @@ class _Collection extends StatelessWidget {
     final trailing = r['trailing'] as String?;
     final badge = r['badge'] as Map<String, dynamic>?;
     final file = r['file'] as Map<String, dynamic>?;
-    // The web draws some of a row's buttons as icons — ↑ ↓ 🗑 on a checkpoint —
+    // The web draws some of a row's buttons as icons — ↑ ↓ 🗑 on a document —
     // and the glyph it uses comes with the action.
     final glyphs = actions.where((a) => (a['glyph'] as String?)?.isNotEmpty ?? false).toList();
     final worded = actions.where((a) => (a['glyph'] as String?)?.isEmpty ?? true).toList();
@@ -605,7 +604,7 @@ class _Collection extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           // The square at the head of the line: the server says what is in it —
-          // a tick once the point is approved, a cross while it stands denied,
+          // a tick once the item is done, a cross while it stands refused,
           // its number until then.
           if (badge != null) ...[
             Container(

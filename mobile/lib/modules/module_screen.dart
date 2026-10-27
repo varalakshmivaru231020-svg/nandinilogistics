@@ -14,7 +14,7 @@ import 'record_screen.dart';
 
 /// A module's list, drawn to the pattern the canvas sets for one.
 ///
-/// The canvas draws this list once — on Indents — and reuses it, with the band,
+/// The canvas draws this list once and reuses it, with the band,
 /// the chips, the row and the actions changing per module. The pattern is here;
 /// **the specifics are the web's**, sent by `/screen/<key>` and `/list/<key>`.
 ///
@@ -30,7 +30,12 @@ class ModuleScreen extends StatefulWidget {
     required this.onBack,
     required this.bottom,
     required this.onOpenRelated,
+    this.initialQuery = const {},
   });
+
+  /// Filters the screen opens with — the advance approvals tile opens the
+  /// advances list on Pending. The viewer can still change them.
+  final Map<String, String> initialQuery;
 
   final Api api;
   final Session session;
@@ -66,14 +71,18 @@ class ModuleScreenState extends State<ModuleScreen> {
   @override
   void initState() {
     super.initState();
+    _query.addAll(widget.initialQuery);
     _load();
   }
 
   @override
   void didUpdateWidget(ModuleScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.moduleKey != widget.moduleKey) {
-      _query.clear();
+    if (oldWidget.moduleKey != widget.moduleKey ||
+        oldWidget.initialQuery.toString() != widget.initialQuery.toString()) {
+      _query
+        ..clear()
+        ..addAll(widget.initialQuery);
       _search.clear();
       _searching = false;
       _screen = null;
@@ -87,8 +96,7 @@ class ModuleScreenState extends State<ModuleScreen> {
     super.dispose();
   }
 
-  /// How many rows a page carries. The web reads thirty indents and fifty
-  /// units to a page; a phone over a site connection cannot read a whole list
+  /// How many rows a page carries. The web reads thirty rows to a page; a phone on a mobile connection cannot read a whole list
   /// of twenty thousand, so it walks them.
   static const _pageSize = 50;
 
@@ -179,7 +187,7 @@ class ModuleScreenState extends State<ModuleScreen> {
 
   int get _applied => _query.keys.where((k) => k != 'q').length;
 
-  /// The noun the web counts in — "indents", "purchase orders", "receipts".
+  /// The noun the web counts in — "leads", "riders", "advances".
   String _noun(int n) {
     final noun = _screen?.countNoun;
     if (noun == null) return n == 1 ? 'record' : 'records';
@@ -225,7 +233,7 @@ class ModuleScreenState extends State<ModuleScreen> {
           title: _screen?.title ?? '',
           subtitle: _loading
               ? 'Loading…'
-              // "12 indents", in the web's own noun — not "12 records".
+              // "12 leads", in the web's own noun — not "12 records".
               // What matches, not what has been fetched so far.
               : '${_page?.total ?? rows.length} ${_noun(_page?.total ?? rows.length)}',
           onBack: widget.onBack,
@@ -831,7 +839,7 @@ class _Reach extends StatelessWidget {
         key: Key('chat:$number'),
         // WhatsApp's own mark, in its own green — a speech bubble said "a
         // message", which is not what this button does.
-        icon: FontAwesomeIcons.whatsapp,
+        icon: FontAwesomeIcons.whatsapp.data,
         tooltip: 'WhatsApp $name',
         tone: const Color(0xFF25D366),
         onTap: () => _go(context, () => Dial.live.chat(number)),

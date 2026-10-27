@@ -9,7 +9,7 @@ import 'support.dart';
 /// A record, with its children and its actions.
 ///
 /// The app used to build a detail screen from the list row, so a task had no
-/// checklist, an indent had no lines, and there was nothing to press. These
+/// collection, an advance had no decision, and there was nothing to press. These
 /// check that what the server sends is what appears, and — the part that was
 /// missing entirely — that a **row's own** action runs.
 
@@ -21,8 +21,8 @@ Map<String, Object> taskRecord({
       '/record/tasks/t1': {
         'key': 'tasks',
         'id': 't1',
-        'title': 'Flat handover — 1203',
-        'subtitle': 'T-9301 · NNS',
+        'title': 'Rider onboarding — NL012',
+        'subtitle': 'T-9301 · Zomato',
         'pills': [
           {'label': 'Under review L1', 'tone': 'warn'},
           {'label': 'HIGH', 'tone': 'bad'},
@@ -35,16 +35,16 @@ Map<String, Object> taskRecord({
               {'label': 'Given to', 'value': 'Ravi Shankar'},
               {'label': 'Due', 'value': '2026-10-20T10:00:00.000Z', 'format': 'datetime'},
               {'label': 'Nothing here', 'value': null},
-              {'label': 'What is wanted', 'value': 'Hand the flat over.', 'wide': true},
+              {'label': 'What is wanted', 'value': 'Collect the documents.', 'wide': true},
             ],
           },
         ],
         'collections': [
           {
-            'key': 'checklist:c1',
-            'label': 'Flat handover checklist · 1 of 2 approved',
+            'key': 'advances:c1',
+            'label': 'Advance requests · 1 of 2 decided',
             'rows': points,
-            'emptyMessage': 'This checklist has no points.',
+            'emptyMessage': 'No advance requests.',
           },
         ],
         'actions': actions,
@@ -82,17 +82,17 @@ Future<Boundary> pumpRecord(WidgetTester tester, Map<String, Object> routes) asy
 void main() {
   group('a record shows what the server sent', () {
     testWidgets('its heading, its pills and its fields', (tester) async {
-      await pumpRecord(tester, taskRecord(points: [point(id: 'p1', title: 'Snag list cleared')]));
+      await pumpRecord(tester, taskRecord(points: [point(id: 'p1', title: 'Aadhaar verified')]));
 
-      expect(find.text('Flat handover — 1203'), findsOneWidget);
-      expect(find.text('T-9301 · NNS'), findsOneWidget);
+      expect(find.text('Rider onboarding — NL012'), findsOneWidget);
+      expect(find.text('T-9301 · Zomato'), findsOneWidget);
       expect(find.text('Under review L1'), findsOneWidget);
       expect(find.text('Ravi Shankar'), findsOneWidget);
       // A date is shown as a date and a time, not as an ISO string.
       expect(find.textContaining('20 Oct 2026'), findsOneWidget);
       expect(find.textContaining('2026-10-20T'), findsNothing);
       // A long value gets a line of its own.
-      expect(find.text('Hand the flat over.'), findsOneWidget);
+      expect(find.text('Collect the documents.'), findsOneWidget);
     });
 
     /// A field with nothing in it is left out rather than shown as a blank row.
@@ -102,13 +102,13 @@ void main() {
     });
 
     /*
-     * The checklist. This is what the report was about: the task's status says
+     * The collection. This is what the report was about: the task's status says
      * "Under Review" and tells a reviewer nothing; the points say which one is
      * standing in front of whom.
      */
     testWidgets('its children, with who holds each one', (tester) async {
       await pumpRecord(tester, taskRecord(points: [
-        point(id: 'p1', title: 'Snag list cleared', pill: 'Approved', tone: 'good'),
+        point(id: 'p1', title: 'Aadhaar verified', pill: 'Approved', tone: 'good'),
         point(
           id: 'p2',
           title: 'Meter readings recorded',
@@ -117,44 +117,44 @@ void main() {
         ),
       ]));
 
-      expect(find.text('FLAT HANDOVER CHECKLIST · 1 OF 2 APPROVED'), findsOneWidget);
-      expect(find.text('Snag list cleared'), findsOneWidget);
+      expect(find.text('ADVANCE REQUESTS · 1 OF 2 DECIDED'), findsOneWidget);
+      expect(find.text('Aadhaar verified'), findsOneWidget);
       expect(find.text('Review L1 · Anil Deshpande'), findsOneWidget);
       expect(find.text('02'), findsOneWidget);
     });
 
     testWidgets('says so when a collection is empty', (tester) async {
       await pumpRecord(tester, taskRecord(points: const []));
-      expect(find.text('This checklist has no points.'), findsOneWidget);
+      expect(find.text('No advance requests.'), findsOneWidget);
     });
   });
 
   group('a row carries its own action', () {
     /*
-     * The thing that was missing. A checklist point is settled by the level
-     * holding it — there is no verdict on the whole task — so the buttons are
+     * The thing that was missing. A collection item is decided on its own
+     * — there is no decision on the whole task — so the buttons are
      * on the point, and only on the one this person holds.
      */
     testWidgets('approving a point calls the server\'s action for that point',
         (tester) async {
       final b = await pumpRecord(tester, {
         ...taskRecord(points: [
-          point(id: 'p1', title: 'Snag list cleared', pill: 'Approved', tone: 'good'),
+          point(id: 'p1', title: 'Aadhaar verified', pill: 'Approved', tone: 'good'),
           point(id: 'p2', title: 'Meter readings recorded', pill: 'Review L1', actions: [
             {
               'key': 'pass', 'label': 'Approve', 'emphasis': 'approve',
-              'action': 'tasks/reviewChecklistItem', 'args': ['p2', 'PASS'],
-              'remark': 'optional', 'confirm': 'This point moves to the next level.',
+              'action': 'advances/decideAdvance', 'args': ['p2', 'PASS'],
+              'remark': 'optional', 'confirm': 'This point moves to the next step.',
             },
             {
               'key': 'fail', 'label': 'Deny', 'emphasis': 'reject',
-              'action': 'tasks/reviewChecklistItem', 'args': ['p2', 'FAIL'],
+              'action': 'advances/decideAdvance', 'args': ['p2', 'FAIL'],
               'remark': 'required', 'remarkLabel': 'What is wrong',
               'confirm': 'This point alone goes back to reviewer 1.',
             },
           ]),
         ]),
-        '/do/tasks/reviewChecklistItem': const {'ok': true},
+        '/do/advances/decideAdvance': const {'ok': true},
       });
 
       // Only the point they hold has buttons.
@@ -163,14 +163,14 @@ void main() {
 
       await tester.tap(find.text('Approve'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('moves to the next level'), findsOneWidget);
+      expect(find.textContaining('moves to the next step'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('confirm')));
       await tester.pumpAndSettle();
 
       expect(b.actions, hasLength(1));
-      expect(b.actions.single.action, 'tasks/reviewChecklistItem');
-      // The point's id, the verdict, then the remark the sheet collected.
+      expect(b.actions.single.action, 'advances/decideAdvance');
+      // The point's id, the decision, then the remark the sheet collected.
       expect(b.actions.single.args, ['p2', 'PASS', '']);
     });
 
@@ -180,12 +180,12 @@ void main() {
           point(id: 'p2', title: 'Meter readings', pill: 'Review L1', actions: [
             {
               'key': 'fail', 'label': 'Deny', 'emphasis': 'reject',
-              'action': 'tasks/reviewChecklistItem', 'args': ['p2', 'FAIL'],
+              'action': 'advances/decideAdvance', 'args': ['p2', 'FAIL'],
               'remark': 'required', 'remarkLabel': 'What is wrong',
             },
           ]),
         ]),
-        '/do/tasks/reviewChecklistItem': const {'ok': true},
+        '/do/advances/decideAdvance': const {'ok': true},
       });
 
       await tester.tap(find.text('Deny'));
@@ -232,7 +232,7 @@ void main() {
 
   group('an action that needs more than a remark', () {
     /*
-     * Extending a calendar task needs a new finish as well as a reason, and
+     * Extending a task needs a new finish as well as a reason, and
      * the web asks for both in one dialog. The server sends the field to ask
      * for and a `$newEndAt` in the arguments; the sheet collects it and puts
      * it where the placeholder was. Before this, Extend on the phone said the
@@ -244,7 +244,7 @@ void main() {
         ...taskRecord(points: const [], actions: [
           {
             'key': 'extend', 'label': 'Extend', 'emphasis': 'outline',
-            'action': 'calendar/extendCalendarTask',
+            'action': 'tasks/extendTask',
             'args': ['t1', r'$newEndAt'],
             'remark': 'required', 'remarkLabel': 'Why',
             'fields': [
@@ -256,7 +256,7 @@ void main() {
             'confirm': 'The first move keeps the original finish.',
           },
         ]),
-        '/do/calendar/extendCalendarTask': const {'extendedCount': 1},
+        '/do/tasks/extendTask': const {'extendedCount': 1},
       });
 
       await tester.tap(find.text('Extend'));

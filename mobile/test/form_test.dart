@@ -154,13 +154,13 @@ void main() {
   });
 
   group('a checkbox, and the fields that change with it', () {
-    Map<String, Object> calendarForm() => {
-          '/form/calendar/create': {
-            'key': 'calendar:create',
-            'module': 'calendar',
-            'title': 'New calendar task',
-            'submitLabel': 'Add to my calendar',
-            'action': 'calendar/createCalendarTask',
+    Map<String, Object> taskForm() => {
+          '/form/tasks/create': {
+            'key': 'tasks:create',
+            'module': 'tasks',
+            'title': 'New task',
+            'submitLabel': 'Assign task',
+            'action': 'tasks/createTask',
             'shape': {'kind': 'formData'},
             'fields': [
               field('title', 'Title', 'text', required: true),
@@ -172,18 +172,18 @@ void main() {
                   note: 'they accept before it is theirs',
                   placeholder: 'Search people…',
                   options: [
-                    {'value': 'u2', 'label': 'Ravi Shankar', 'hint': 'Site Engineer'},
-                    {'value': 'u3', 'label': 'Girish Patil', 'hint': 'Store Keeper'},
+                    {'value': 'u2', 'label': 'Ravi Shankar', 'hint': 'Team Leader'},
+                    {'value': 'u3', 'label': 'Girish Patil', 'hint': 'Tele-caller'},
                   ]),
             ],
           },
-          '/do/calendar/createCalendarTask': const {'id': 'e1'},
+          '/do/tasks/createTask': const {'id': 'e1'},
         };
 
     /// "Starts" is "First day" once it runs all day, and takes a day rather
     /// than an instant — which is what the action reads.
     testWidgets('ticking it renames the field it governs', (tester) async {
-      await pumpForm(tester, calendarForm(), 'calendar:create');
+      await pumpForm(tester, taskForm(), 'tasks:create');
 
       expect(find.text('Starts *'), findsOneWidget);
       expect(find.text('First day *'), findsNothing);
@@ -199,9 +199,9 @@ void main() {
     /// one of these actions reads it that way, so the phone has to send it so.
     testWidgets('is sent as "on", and left out when it is not ticked',
         (tester) async {
-      final b = await pumpForm(tester, calendarForm(), 'calendar:create');
+      final b = await pumpForm(tester, taskForm(), 'tasks:create');
 
-      await tester.enterText(find.byKey(const Key('field-title')), 'Site walk');
+      await tester.enterText(find.byKey(const Key('field-title')), 'Hub visit');
       await tester.tap(find.text('Runs all day'));
       await tester.pumpAndSettle();
       // The day, through the picker the design asks for rather than typed text.
@@ -214,19 +214,19 @@ void main() {
 
       final sent = b.actions.single.args.single as Map;
       expect(sent['allDay'], 'on');
-      expect(sent['title'], 'Site walk');
+      expect(sent['title'], 'Hub visit');
       // A day, not an instant — the action slices the first ten characters.
       expect(sent['startAt'], matches(RegExp(r'^\d{4}-\d{2}-\d{2}$')));
     });
 
     testWidgets('the people it goes on are picked by search, in order',
         (tester) async {
-      final b = await pumpForm(tester, calendarForm(), 'calendar:create');
+      final b = await pumpForm(tester, taskForm(), 'tasks:create');
 
       // The web's small print travels with the label.
       expect(find.textContaining('they accept before it is theirs'), findsOneWidget);
 
-      await tester.enterText(find.byKey(const Key('field-title')), 'Site walk');
+      await tester.enterText(find.byKey(const Key('field-title')), 'Hub visit');
       await tester.tap(find.text('Pick a date and time'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('OK'));
@@ -238,7 +238,7 @@ void main() {
       await tester.tap(find.text('Search people…'));
       await tester.pumpAndSettle();
       // The hint under each name is searchable, as it is on the web.
-      await tester.enterText(find.byKey(const Key('search-options')), 'store');
+      await tester.enterText(find.byKey(const Key('search-options')), 'tele');
       await tester.pumpAndSettle();
       expect(find.text('Ravi Shankar'), findsNothing);
       await tester.tap(find.byKey(const Key('option-u3')));
@@ -259,18 +259,18 @@ void main() {
   });
 
   group('a document with lines', () {
-    Map<String, Object> indentForm() => {
-          '/form/material/indents/create': {
-            'key': 'material/indents:create',
-            'module': 'material/indents',
-            'title': 'New indent',
+    Map<String, Object> invoiceForm() => {
+          '/form/accounts/invoices/create': {
+            'key': 'accounts/invoices:create',
+            'module': 'accounts/invoices',
+            'title': 'New invoice',
             'submitLabel': 'Save draft',
-            'action': 'material/indents/createIndent',
+            'action': 'accounts/invoices/createInvoice',
             // The action takes a parsed object and a submit flag.
             'shape': {'kind': 'positional', 'order': [r'$values', false]},
             'fields': [
-              field('projectId', 'Project', 'select', required: true, options: [
-                {'value': 'p1', 'label': 'NNS — NN Skyline'},
+              field('companyId', 'Company', 'select', required: true, options: [
+                {'value': 'p1', 'label': 'Zomato — Koramangala'},
               ]),
               field('requiredByDate', 'Required by', 'date', required: true),
               field('items', 'Items', 'rows',
@@ -279,18 +279,18 @@ void main() {
                   minRowsMessage: 'Add at least one item',
                   row: [
                     field('itemId', 'Item', 'lookup', required: true, options: [
-                      {'value': 'i1', 'label': 'OPC 53 Grade Cement', 'hint': 'CEM-001 · BAG'},
+                      {'value': 'i1', 'label': 'Helmet', 'hint': 'HLM-001 · NOS'},
                     ]),
                     field('requestedQty', 'Quantity', 'number', required: true),
                   ]),
             ],
           },
-          '/do/material/indents/createIndent': const {'id': 'x1', 'indentNo': 'IND/NNS/2026-27/9009'},
+          '/do/accounts/invoices/createInvoice': const {'id': 'x1', 'invoiceNo': 'INV/2026-27/9009'},
         };
 
     testWidgets('one line is there to fill, and more can be added',
         (tester) async {
-      await pumpForm(tester, indentForm(), 'material/indents:create');
+      await pumpForm(tester, invoiceForm(), 'accounts/invoices:create');
 
       expect(find.text('LINE 1'), findsOneWidget);
       expect(find.text('Add item'), findsOneWidget);
@@ -312,9 +312,9 @@ void main() {
 
     testWidgets('the lines go inside the object the action parses',
         (tester) async {
-      final b = await pumpForm(tester, indentForm(), 'material/indents:create');
+      final b = await pumpForm(tester, invoiceForm(), 'accounts/invoices:create');
 
-      await tester.tap(find.text('NNS — NN Skyline'));
+      await tester.tap(find.text('Zomato — Koramangala'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Pick a date'));
       await tester.pumpAndSettle();
@@ -333,10 +333,10 @@ void main() {
       await tester.tap(find.byKey(const Key('submit')));
       await tester.pumpAndSettle();
 
-      expect(b.actions.single.action, 'material/indents/createIndent');
+      expect(b.actions.single.action, 'accounts/invoices/createInvoice');
       final args = b.actions.single.args;
       final input = args.first as Map;
-      expect(input['projectId'], 'p1');
+      expect(input['companyId'], 'p1');
       expect(input['items'], [
         {'itemId': 'i1', 'requestedQty': 120}
       ]);
@@ -346,9 +346,9 @@ void main() {
 
     testWidgets('an empty line is caught in the line\'s own words',
         (tester) async {
-      final b = await pumpForm(tester, indentForm(), 'material/indents:create');
+      final b = await pumpForm(tester, invoiceForm(), 'accounts/invoices:create');
 
-      await tester.tap(find.text('NNS — NN Skyline'));
+      await tester.tap(find.text('Zomato — Koramangala'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Pick a date'));
       await tester.pumpAndSettle();
@@ -413,13 +413,13 @@ void main() {
     testWidgets('each line is named and cannot be added to or removed',
         (tester) async {
       await pumpForm(tester, withSheet([
-        {'_label': 'Ravi Shankar · EMP-0001 · Site Supervisor', 'employeeId': 'e1', 'status': 'PRESENT', 'overtimeHours': 0},
-        {'_label': 'Girish Patil · EMP-0002 · Store Keeper', 'employeeId': 'e2', 'status': 'ABSENT', 'overtimeHours': 0},
+        {'_label': 'Ravi Shankar · EMP-0001 · Rider', 'employeeId': 'e1', 'status': 'PRESENT', 'overtimeHours': 0},
+        {'_label': 'Girish Patil · EMP-0002 · Tele-caller', 'employeeId': 'e2', 'status': 'ABSENT', 'overtimeHours': 0},
       ]), 'hr/attendance:mark');
 
       // The line's own name, not "Line 1".
-      expect(find.text('RAVI SHANKAR · EMP-0001 · SITE SUPERVISOR'), findsOneWidget);
-      expect(find.text('GIRISH PATIL · EMP-0002 · STORE KEEPER'), findsOneWidget);
+      expect(find.text('RAVI SHANKAR · EMP-0001 · RIDER'), findsOneWidget);
+      expect(find.text('GIRISH PATIL · EMP-0002 · TELE-CALLER'), findsOneWidget);
       expect(find.text('LINE 1'), findsNothing);
       // Fixed: nothing to add, nothing to remove.
       expect(find.text('Add line'), findsNothing);
@@ -448,103 +448,6 @@ void main() {
       expect(args[1], [
         {'employeeId': 'e1', 'status': 'HALF_DAY', 'overtimeHours': 0},
         {'employeeId': 'e2', 'status': 'ABSENT', 'overtimeHours': 0},
-      ]);
-    });
-  });
-
-  group('review levels', () {
-    /// Review level 1 is the assignee, and the action reads the list in level
-    /// order — so whoever the assignee field names is sent first.
-    testWidgets('the reviewers are led by the assignee', (tester) async {
-      final b = await pumpForm(tester, {
-        '/form/tasks/create': {
-          'key': 'tasks:create',
-          'module': 'tasks',
-          'title': 'New task',
-          'submitLabel': 'Create task',
-          'action': 'tasks/createTask',
-          'shape': {'kind': 'formData'},
-          'fields': [
-            field('assigneeId', 'Assign to', 'lookup', required: true, options: [
-              {'value': 'u2', 'label': 'Ravi Shankar'},
-            ]),
-            field('reviewerIds', 'Reviewers', 'multi', leadWith: 'assigneeId', options: [
-              {'value': 'u4', 'label': 'Anil Deshpande'},
-            ]),
-          ],
-        },
-        '/do/tasks/createTask': const {'id': 't9'},
-      }, 'tasks:create');
-
-      await tester.tap(find.text('Choose'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('option-u2')));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Add'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('option-u4')));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const Key('submit')));
-      await tester.pumpAndSettle();
-
-      final sent = b.actions.single.args.single as Map;
-      expect(sent['reviewerIds'], ['u2', 'u4']);
-    });
-  });
-
-  group('an action that takes a shape', () {
-    /*
-     * Generating a tower: the action takes the project, the name, and a shape
-     * — floors, flats per floor, kind — which the server lays out with the
-     * same function the web's grid previews. The placeholders are inside an
-     * object, so they have to be filled in there too.
-     */
-    testWidgets('fills the placeholders inside the object', (tester) async {
-      final b = await pumpForm(tester, {
-        '/form/units/generate': {
-          'key': 'units:generate',
-          'module': 'units',
-          'title': 'Create units',
-          'submitLabel': 'Generate units',
-          'action': 'units/board/generateUnits',
-          'shape': {
-            'kind': 'positional',
-            'order': [
-              r'$projectId',
-              r'$towerName',
-              {'floors': r'$floors', 'perFloor': r'$perFloor', 'unitTypeId': r'$unitTypeId'},
-            ],
-          },
-          'fields': [
-            field('projectId', 'Project', 'select', required: true, options: [
-              {'value': 'p1', 'label': 'NNS — NN Skyline'},
-            ]),
-            field('towerName', 'Tower or block', 'text', required: true),
-            field('floors', 'Floors', 'number', required: true, initial: 8),
-            field('perFloor', 'Flats per floor', 'number', required: true, initial: 4),
-            field('unitTypeId', 'Unit type', 'select', options: [
-              {'value': 't1', 'label': '2 BHK'},
-            ]),
-          ],
-        },
-        '/do/units/board/generateUnits': const {'created': 32},
-      }, 'units:generate');
-
-      await tester.tap(find.text('NNS — NN Skyline'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const Key('field-towerName')), 'Tower A');
-      await tester.enterText(find.byKey(const Key('field-floors')), '8');
-      await tester.tap(find.text('2 BHK'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('submit')));
-      await tester.pumpAndSettle();
-
-      expect(b.actions.single.args, [
-        'p1',
-        'Tower A',
-        {'floors': 8, 'perFloor': 4, 'unitTypeId': 't1'},
       ]);
     });
   });

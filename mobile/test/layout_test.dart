@@ -127,10 +127,9 @@ void main() {
         );
       }
 
-      // And every one of the four is still there.
+      // And every one of the three is still there.
       for (final icon in [
         Icons.add_rounded,
-        Icons.more_vert_rounded,
         Icons.search_rounded,
         Icons.filter_list_rounded,
       ]) {
@@ -164,20 +163,17 @@ void main() {
       Dial.live = _FakeDial();
       await _leads(tester);
 
-      expect(find.byIcon(FontAwesomeIcons.whatsapp), findsOneWidget);
+      expect(find.byIcon(FontAwesomeIcons.whatsapp.data), findsOneWidget);
       expect(find.byIcon(Icons.chat_rounded), findsNothing);
       expect(find.byIcon(Icons.phone_rounded), findsOneWidget);
     });
   });
 
-  group('the dashboard', () {
-    testWidgets('opens the tasks it says are overdue', (tester) async {
+  group('the home screen', () {
+    testWidgets('a staff tile opens its list in the shell', (tester) async {
       useEmptyPrefs();
       final opened = <String>[];
-      final b = Boundary({
-        '/list/tasks': _taskList(),
-        '/list/sales/leads': _emptyList('Leads'),
-      });
+      final b = Boundary({});
       await tester.pumpWidget(MaterialApp(
         theme: T.theme,
         home: DashboardScreen(
@@ -185,24 +181,15 @@ void main() {
           session: sessionWith(const ['task.task.view', 'sales.lead.view']),
           onMenu: () {},
           onNotifications: () {},
-          onOpen: opened.add,
+          onOpen: (key, query) => opened.add(key),
           bottom: const SizedBox.shrink(),
         ),
       ));
       await tester.pumpAndSettle();
 
-      // Two tasks, both past their due date and neither done.
-      expect(find.text('Tasks overdue'), findsOneWidget);
-      expect(find.text('2'), findsWidgets);
-
-      // It counts tasks, so it opens tasks. It used to do nothing at all.
-      await tester.tap(find.text('Tasks overdue'));
+      await tester.tap(find.byKey(const Key('tile-leads')));
       await tester.pumpAndSettle();
-      expect(opened, ['tasks']);
-
-      // A module the person may see is a row, read from its own list.
-      expect(find.text('Leads'), findsOneWidget);
-      expect(find.text('Could not be read'), findsNothing);
+      expect(opened, ['sales/leads']);
     });
   });
 
@@ -240,25 +227,3 @@ void main() {
     });
   });
 }
-/// The dashboard's counts, and what they do when tapped.
-Map<String, Object> _emptyList(String title) => {
-      'title': title,
-      'filters': '',
-      'columns': const [],
-      'rows': const [],
-      'total': 0,
-      'page': 1,
-      'pageSize': 50,
-      'hasMore': false,
-      'serverTime': '2026-10-19T06:00:00.000Z',
-    };
-
-Map<String, Object> _taskList() => {
-      ..._emptyList('Tasks'),
-      'rows': const [
-        {'id': 't1', 'status': 'In progress', 'dueAt': '2026-10-01T06:00:00.000Z'},
-        {'id': 't2', 'status': 'Open', 'dueAt': '2026-10-02T06:00:00.000Z'},
-      ],
-      'total': 2,
-    };
-

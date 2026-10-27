@@ -63,7 +63,7 @@ void main() {
     testWidgets('counts the unread the way the web counts them', (tester) async {
       await pump(tester, feed([
         note(id: 'n1', kind: 'TASK_OVERDUE', title: 'Overdue: T-1005'),
-        note(id: 'n2', kind: 'CALENDAR_ACCEPTED', title: 'Ravi accepted', read: true),
+        note(id: 'n2', kind: 'ADVANCE_APPROVED', title: 'Ravi accepted', read: true),
       ]));
 
       expect(find.text('Notifications'), findsOneWidget);

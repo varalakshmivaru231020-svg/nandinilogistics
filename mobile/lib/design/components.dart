@@ -42,7 +42,7 @@ class Btn extends StatelessWidget {
 
   final String label;
 
-  /// Null means the rule is not met yet — stock short, level not reached — and
+  /// Null means the rule is not met yet — target not reached — and
   /// the control is drawn greyed. A control the viewer has **no permission
   /// for is not built at all**, which is the caller's business, not this
   /// widget's.
@@ -142,7 +142,7 @@ class Pill extends StatelessWidget {
   }
 }
 
-/// The kind tag on an approvals row — a small square-ish tag, not a pill.
+/// The kind tag on a notification or row — a small square-ish tag, not a pill.
 class KindTag extends StatelessWidget {
   const KindTag(this.label, {super.key, this.tone = Tone.draft});
 
@@ -169,9 +169,9 @@ class KindTag extends StatelessWidget {
   }
 }
 
-/* --------------------------------------------------------- approval chain */
+/* --------------------------------------------------------- stage chain */
 
-/// One step of an approval chain.
+/// One step of a chain — a lead's stages, an onboarding's steps.
 ///
 /// Named `ChainStep` rather than `Step` because Material already has a `Step`
 /// for its stepper, and an ambiguous import is a worse problem than a longer

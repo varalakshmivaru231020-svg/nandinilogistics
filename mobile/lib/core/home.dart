@@ -43,6 +43,9 @@ class HomeState extends State<Home> {
   /// those are not menu entries and so have no route of their own here.
   String? _related;
 
+  /// The filters the open list starts on, where a home tile chose them.
+  Map<String, String> _query = const {};
+
   List<NavSection> _nav = const [];
   final Map<String, int> _badges = {};
 
@@ -75,10 +78,11 @@ class HomeState extends State<Home> {
   String? get _moduleKey => _related ?? hrefToModule[_current];
 
   /// Opens a web route, by the href the server's navigation uses.
-  void _open(String href) {
+  void _open(String href, [Map<String, String> query = const {}]) {
     setState(() {
       _current = href;
       _related = null;
+      _query = query;
     });
   }
 
@@ -101,9 +105,26 @@ class HomeState extends State<Home> {
     }
     final i = _item;
     if (i == null || i.href == '/dashboard') {
-      return ('Tasks', Icons.check_box_outlined);
+      return _homeThird;
     }
     return (i.label, i.icon);
+  }
+
+  /// The third tab from home: the list this person works most.
+  (String, IconData) get _homeThird {
+    final s = _session;
+    if (s.rider != null) return ('Payouts', Icons.payments_outlined);
+    if (s.can('sales.lead.view')) return ('Leads', Icons.person_search_outlined);
+    if (s.can('hr.employee.view')) return ('My team', Icons.groups_outlined);
+    return ('Tasks', Icons.check_box_outlined);
+  }
+
+  String get _homeThirdHref {
+    final s = _session;
+    if (s.rider != null) return '/payouts';
+    if (s.can('sales.lead.view')) return '/sales/leads';
+    if (s.can('hr.employee.view')) return '/hr';
+    return '/tasks';
   }
 
   Widget get _bottom {
@@ -113,7 +134,7 @@ class HomeState extends State<Home> {
       thirdLabel: label,
       thirdIcon: icon,
       onHome: () => _open('/dashboard'),
-      onThird: _related == null && _current == '/dashboard' ? () => _open('/tasks') : null,
+      onThird: _related == null && _current == '/dashboard' ? () => _open(_homeThirdHref) : null,
       onMore: () => _drawer.currentState?.openDrawer(),
     );
   }
@@ -170,6 +191,7 @@ class HomeState extends State<Home> {
             api: widget.api,
             session: _session,
             moduleKey: moduleKey,
+            initialQuery: _query,
             bottom: _bottom,
             onBack: () => _related != null ? _open(_current) : _open('/dashboard'),
             onOpenRelated: (key) => setState(() => _related = key),
@@ -182,15 +204,22 @@ class HomeState extends State<Home> {
           onMenu: () => _drawer.currentState?.openDrawer(),
           onNotifications: () => _open('/notifications'),
           unread: _badges['/notifications'],
-          onOpen: (moduleKey) {
+          onRefreshSession: () async {
+            final s = await widget.auth.reload();
+            if (mounted && s.ok) setState(() => _session = s.data!);
+          },
+          onOpen: (moduleKey, query) {
             final href = hrefToModule.entries
                 .where((e) => e.value == moduleKey)
                 .map((e) => e.key)
                 .firstOrNull;
             if (href != null) {
-              _open(href);
+              _open(href, query);
             } else {
-              setState(() => _related = moduleKey);
+              setState(() {
+                _related = moduleKey;
+                _query = query;
+              });
             }
           },
         );

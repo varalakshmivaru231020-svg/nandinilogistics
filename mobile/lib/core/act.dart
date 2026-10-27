@@ -35,12 +35,12 @@ class Act {
   });
 
   /// A key into the boundary's action registry, e.g.
-  /// "material/indents/approveIndent". The server tells us this; the app does
+  /// "advances/approveAdvance". The server tells us this; the app does
   /// not map a record kind to an action itself.
   final String action;
 
   /// The leading positional arguments. An argument of the form `$name` is
-  /// replaced by the field of that name in [fields] — extending a calendar
+  /// replaced by the field of that name in [fields] — rejecting an onboarding
   /// task needs a new finish as well as a reason, and the web asks for both in
   /// one dialog.
   ///
@@ -67,7 +67,7 @@ class Act {
   /// positional remark: a field of the body, named by the server.
   final String? remarkField;
 
-  /// Values the body carries whatever the person types — the verdict that
+  /// Values the body carries whatever the person types — the decision that
   /// tells Approve from Deny, which are otherwise the same call.
   final Map<String, String> parts;
 

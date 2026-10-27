@@ -23,7 +23,7 @@ class FormScreen extends StatefulWidget {
 
   final Api api;
 
-  /// "calendar:create" — module, then what the form does.
+  /// "advances:create" — module, then what the form does.
   final String formKey;
 
   /// The record an edit form was opened on, for a `$id` argument.

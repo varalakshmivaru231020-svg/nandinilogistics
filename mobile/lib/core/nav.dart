@@ -5,7 +5,7 @@ import 'api.dart';
 /// The sidebar, as the server sends it.
 ///
 /// Not a copy. The app had its own list and it drifted: a dozen screens the web
-/// reaches from inside other screens had been promoted to top level, so the
+/// reaches from inside other screens had been promoted to the menu, so the
 /// drawer and the panel no longer matched. `/screens` returns the web's own
 /// `NAVIGATION` — its sections, its order, its labels, already filtered to what
 /// this person may open — and the drawer draws exactly that.
@@ -37,6 +37,11 @@ const hrefToModule = <String, String>{
   '/sales/leads': 'sales/leads',
   '/sales/follow-ups': 'sales/follow-ups',
   '/hr': 'hr/employees',
+  '/hr/attendance': 'hr/attendance',
+  '/hr/onboarding': 'hr/onboarding',
+  '/hr/referrals': 'hr/referrals',
+  '/payouts': 'payouts',
+  '/advances': 'advances',
 };
 
 const _icons = <String, IconData>{
@@ -44,7 +49,16 @@ const _icons = <String, IconData>{
   '/tasks': Icons.check_box_outlined,
   '/sales/leads': Icons.person_search_outlined,
   '/sales/follow-ups': Icons.phone_forwarded_outlined,
-  '/hr': Icons.badge_outlined,
+  '/hr': Icons.groups_outlined,
+  '/hr/attendance': Icons.event_available_outlined,
+  '/hr/onboarding': Icons.how_to_reg_outlined,
+  '/hr/referrals': Icons.group_add_outlined,
+  '/payouts': Icons.payments_outlined,
+  '/payouts/imports': Icons.upload_file_outlined,
+  '/advances': Icons.account_balance_wallet_outlined,
+  '/advances/bike-rent': Icons.two_wheeler_outlined,
+  '/accounts/invoices': Icons.receipt_long_outlined,
+  '/staff/payslips': Icons.description_outlined,
   '/reports': Icons.bar_chart_outlined,
   '/masters': Icons.settings_outlined,
 };
@@ -54,6 +68,10 @@ const _icons = <String, IconData>{
 const webOnly = <String, String>{
   '/masters': 'Masters & Users is managed on the web.',
   '/reports': 'Reports are on the web.',
+  '/payouts/imports': 'Payout imports are done on the web.',
+  '/accounts/invoices': 'Vendor invoices are managed on the web.',
+  '/staff/payslips': 'Staff payslips are managed on the web.',
+  '/advances/bike-rent': 'Bike rent is managed on the web.',
 };
 
 /// The screens the web reaches from inside another screen rather than from the
@@ -93,7 +111,8 @@ RecordTarget? recordFor(String href) {
   return RecordTarget(alias[module] ?? module, id);
 }
 
-/// Reads `/screens` once, at sign-in.
+/// Reads `/screens` once, at sign-in. The web's Admin-only entries are left
+/// out of the drawer altogether — Admin works on the web.
 Future<List<NavSection>> loadNavigation(Api api) async {
   final res = await api.get('/screens');
   if (!res.ok) return const [];
@@ -108,9 +127,10 @@ Future<List<NavSection>> loadNavigation(Api api) async {
                 label: i['label'] as String,
                 permission: i['permission'] as String?,
               ))
+          .where((i) => !webOnly.containsKey(i.href))
           .toList(),
     );
-  }).toList();
+  }).where((s) => s.items.isNotEmpty).toList();
 }
 
 /// A module's screen, as the server describes it: the search placeholder it

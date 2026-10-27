@@ -5,8 +5,8 @@ import 'package:path_provider/path_provider.dart';
 
 /// Opening a stored file with whatever the phone reads it with.
 ///
-/// A project drawing is a PDF, a challan is sometimes a photograph and
-/// sometimes a scan, and an identity copy is either. The app showed a picture
+/// An offer letter is a PDF, a licence is sometimes a photograph and
+/// sometimes a scan, and an Aadhaar copy is either. The app showed a picture
 /// and said of everything else that it "opens on the web" — which is true of a
 /// browser and false of a phone, where there is a PDF reader behind an intent.
 ///

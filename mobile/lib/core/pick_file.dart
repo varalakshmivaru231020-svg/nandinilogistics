@@ -49,7 +49,7 @@ class _Picker implements Files {
 
   /*
    * A photograph is stored as the JPEG the camera gives, named by the moment
-   * it was taken: a checklist point carries several, and "image_picker…jpg" in
+   * it was taken: a rider uploads several, and "image_picker…jpg" in
    * a list of them says nothing about which is which. The size cap is the
    * server's own — a 12-megapixel original would be refused, and shrinking it
    * here is what the browser's own capture does.

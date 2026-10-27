@@ -69,7 +69,7 @@ class _NnInfraState extends State<NnInfra> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'NN Infra',
+        title: 'Nandini Rider',
         debugShowCheckedModeBanner: false,
         theme: T.theme,
         home: _resuming
@@ -104,10 +104,10 @@ class _Splash extends StatelessWidget {
                   colors: [T.brand500, T.navy800],
                 ),
               ),
-              child: const Icon(Icons.home_work_rounded, color: Colors.white, size: 29),
+              child: const Icon(Icons.two_wheeler_rounded, color: Colors.white, size: 29),
             ),
             const SizedBox(height: 16),
-            Text('NN Infra', style: T.display(color: Colors.white)),
+            Text('Nandini Rider', style: T.display(color: Colors.white)),
           ]),
         ),
       );

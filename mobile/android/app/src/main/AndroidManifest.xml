@@ -1,15 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <!--
-      Where a site log was written. Asked for at the moment it is used, and
-      refusable: the log saves without a position, exactly as the web's does
-      when a browser denies geolocation.
+      Where a rider or Team Leader punched in or out. Asked for at the moment
+      of punching; a punch is refused without it, and the app says why.
     -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
-        android:label="NN Infra"
+        android:label="Nandini Rider"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:networkSecurityConfig="@xml/network_security_config">

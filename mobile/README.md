@@ -70,6 +70,7 @@ Four suites, and what each is for:
 | `permissions_test.dart` | `can()` — including a super admin with **no** roles, whose permission array is empty and who may still do everything |
 | `sign_in_test.dart` | The three refusals, and that being barred takes the password field away rather than inviting a retry |
 | `list_screen_test.dart` | One screen rendering whatever columns the server sent; search and filters producing the web's own query parameters |
+| `rider_test.dart` | PIN sign-in and Forgot PIN, sign-up checks, the home tiles each permission set gets, and the punch screen's states |
 | `usability_test.dart` | Contrast against WCAG AA, 44px targets, 200% system font, 320px width, Indian numbering |
 
 ## The shape of it

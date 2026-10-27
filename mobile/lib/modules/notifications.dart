@@ -14,7 +14,7 @@ import 'record_screen.dart';
 /// for this screen to exist at all.
 ///
 /// Every row carries the route the web would open, so tapping one lands on the
-/// record it is about — a declined calendar task, an overdue task, an approval
+/// record it is about — an overdue follow-up, an advance decision, an onboarding
 /// that is waiting — and marks it read on the way, as the web's link does.
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({

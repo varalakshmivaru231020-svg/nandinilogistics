@@ -10,7 +10,7 @@ import 'support.dart';
 
 /// The forms that carry a file.
 ///
-/// An employee's photograph, a receipt's challan and a project's drawings were
+/// An employee's photograph, an Aadhaar copy and a rider's licence were
 /// all web-only while the boundary carried no file. What the app has to get
 /// right now is which record a row's form is about, and that a field which
 /// takes one file holds one.
@@ -25,9 +25,9 @@ class _FakeFiles implements Files {
       [Upload(field: field, name: 'from-camera.jpg', bytes: const [2], mime: 'image/jpeg')];
 }
 
-/// A project record whose documents each carry their own edit and delete.
-Map<String, Object> _project() => {
-      'key': 'projects/projects',
+/// An employee record whose documents each carry their own edit and delete.
+Map<String, Object> _employee() => {
+      'key': 'hr/employees',
       'id': 'p1',
       'title': 'NN Skyline',
       'subtitle': 'NNS',
@@ -40,8 +40,8 @@ Map<String, Object> _project() => {
           'rows': const [
             {
               'id': 'd1',
-              'title': 'Tower B structural drawing',
-              'subtitle': 'Drawing · 2 versions · All roles · view',
+              'title': 'Driving licence scan',
+              'subtitle': 'Licence · 2 versions · view',
               'actions': [
                 {
                   'key': 'edit',
@@ -51,7 +51,7 @@ Map<String, Object> _project() => {
                   'action': '',
                   'args': [],
                   'remark': 'none',
-                  'form': 'projects/projects:editDocument',
+                  'form': 'hr/employees:editDocument',
                   'formId': 'd1',
                 },
               ],
@@ -67,7 +67,7 @@ Map<String, Object> _project() => {
           'action': '',
           'args': [],
           'remark': 'none',
-          'form': 'projects/projects:uploadDocument',
+          'form': 'hr/employees:uploadDocument',
         },
       ],
       'serverTime': '2026-10-17T06:00:00.000Z',
@@ -75,26 +75,26 @@ Map<String, Object> _project() => {
 
 void main() {
   group('a row whose form is about the row', () {
-    testWidgets('opens the document, not the project', (tester) async {
+    testWidgets('opens the document, not the employee', (tester) async {
       useEmptyPrefs();
       final b = Boundary({
-        '/record/projects/projects/p1': _project(),
-        '/form/projects/projects/editDocument?id=d1': const {
-          'key': 'projects/projects:editDocument',
-          'module': 'projects/projects',
+        '/record/hr/employees/p1': _employee(),
+        '/form/hr/employees/editDocument?id=d1': const {
+          'key': 'hr/employees:editDocument',
+          'module': 'hr/employees',
           'title': 'Edit document',
           'submitLabel': 'Save',
-          'action': 'projects/[id]/documents/updateDocument',
+          'action': 'hr/[id]/documents/updateDocument',
           'shape': {'kind': 'positional', 'order': [r'$id', {'title': r'$title'}]},
           'fields': [
-            {'name': 'title', 'label': 'Title', 'kind': 'text', 'required': true, 'initial': 'Tower B structural drawing'},
+            {'name': 'title', 'label': 'Title', 'kind': 'text', 'required': true, 'initial': 'Driving licence scan'},
           ],
         },
-        '/do/projects/[id]/documents/updateDocument': const {'ok': true},
+        '/do/hr/[id]/documents/updateDocument': const {'ok': true},
       });
       await tester.pumpWidget(MaterialApp(
         theme: T.theme,
-        home: RecordScreen(api: b.api, module: 'projects/projects', id: 'p1', fallbackTitle: 'Project'),
+        home: RecordScreen(api: b.api, module: 'hr/employees', id: 'p1', fallbackTitle: 'Employee'),
       ));
       await tester.pumpAndSettle();
 
@@ -107,18 +107,18 @@ void main() {
       await tester.pumpAndSettle();
 
       // The form was fetched for the document's own id — the record's id would
-      // have prefilled the form from the project and saved onto it.
-      expect(b.gets, contains('/form/projects/projects/editDocument?id=d1'));
+      // have prefilled the form from the employee and saved onto it.
+      expect(b.gets, contains('/form/hr/employees/editDocument?id=d1'));
       expect(find.text('Edit document'), findsOneWidget);
 
-      await tester.enterText(find.byKey(const Key('field-title')), 'Tower B structural drawing rev B');
+      await tester.enterText(find.byKey(const Key('field-title')), 'Driving licence scan rev B');
       await tester.tap(find.byKey(const Key('submit')));
       await tester.pumpAndSettle();
 
-      expect(b.actions.last.action, 'projects/[id]/documents/updateDocument');
+      expect(b.actions.last.action, 'hr/[id]/documents/updateDocument');
       expect(b.actions.last.args, [
         'd1',
-        {'title': 'Tower B structural drawing rev B'},
+        {'title': 'Driving licence scan rev B'},
       ]);
     });
   });

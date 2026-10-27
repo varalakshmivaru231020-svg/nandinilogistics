@@ -1,6 +1,6 @@
 import 'package:geolocator/geolocator.dart';
 
-/// Where this phone is.
+/// Where this phone is — read when a rider or Team Leader punches in or out.
 ///
 /// Behind a seam on purpose: a widget test has no device to ask, and a screen
 /// that called the plugin directly could not be driven in one. The real
@@ -24,7 +24,7 @@ class _Device implements Where {
   Future<({double lat, double lng})?> position() async {
     problem = null;
     if (!await Geolocator.isLocationServiceEnabled()) {
-      problem = 'Location is switched off on this phone.';
+      problem = 'Location is switched off on this phone. Turn it on and try again.';
       return null;
     }
     var permission = await Geolocator.checkPermission();
@@ -32,11 +32,11 @@ class _Device implements Where {
       permission = await Geolocator.requestPermission();
     }
     if (permission == LocationPermission.denied) {
-      problem = 'Location permission was refused, so the log is saved without it.';
+      problem = 'Location permission was refused. Allow it to punch in or out.';
       return null;
     }
     if (permission == LocationPermission.deniedForever) {
-      problem = 'Location is blocked for this app in Android settings.';
+      problem = 'Location is blocked for this app. Turn it on in Android settings → Apps → Nandini Rider → Permissions.';
       return null;
     }
     try {

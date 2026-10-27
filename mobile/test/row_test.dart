@@ -9,16 +9,16 @@ import 'support.dart';
 /// The row the server composed, drawn.
 ///
 /// The app used to build each row itself out of the export's columns, so an
-/// indent on the phone had no approval chain, no fulfilment line and no
+/// advance on the phone had no approval chain, no fulfilment line and no
 /// "required by". It is sent drawn now, and this is what arriving drawn looks
 /// like on screen.
 
-const _indentScreen = {
-  'key': 'material/indents',
-  'href': '/material/indents',
-  'title': 'Indents',
-  'countNoun': 'indents',
-  'searchPlaceholder': 'Search indent no., item, project, activity…',
+const _advanceScreen = {
+  'key': 'advances',
+  'href': '/advances',
+  'title': 'Advances',
+  'countNoun': 'advances',
+  'searchPlaceholder': 'Search rider, reason…',
   'filters': [],
   'dateRange': {'label': 'Raised'},
   'forms': [],
@@ -26,15 +26,15 @@ const _indentScreen = {
 };
 
 Map<String, Object> _list() => {
-      '/screen/material/indents': _indentScreen,
-      '/list/material/indents?page=1&pageSize=50': {
-        'title': 'Indents',
-        'filters': 'All indents in view',
+      '/screen/advances': _advanceScreen,
+      '/list/advances?page=1&pageSize=50': {
+        'title': 'Advances',
+        'filters': 'All advances in view',
         'columns': const [
-          {'key': 'indentNo', 'header': 'Indent No'},
+          {'key': 'advanceNo', 'header': 'Advance No'},
         ],
         'rows': const [
-          {'id': 'i1', 'indentNo': 'IND/NNS/2026-27/9002'},
+          {'id': 'i1', 'advanceNo': 'ADV/2026-27/9002'},
         ],
         'total': 1,
         'page': 1,
@@ -43,10 +43,10 @@ Map<String, Object> _list() => {
         'serverTime': '2026-10-15T06:00:00.000Z',
         'screen': const {
           'band': [
-            {'value': '4', 'label': 'Indents'},
+            {'value': '4', 'label': 'Advances'},
             {'value': '2', 'label': 'Awaiting approval', 'tone': 'warn'},
           ],
-          'note': 'An indent is an internal request to the store, not a purchase.',
+          'note': 'An advance is recovered from the next payouts.',
           'rows': [
             {
               'id': 'i1',
@@ -58,7 +58,7 @@ Map<String, Object> _list() => {
               ],
               'chain': [
                 {'short': 'R', 'name': 'Raised', 'state': 'done'},
-                {'short': 'PM', 'name': 'PM approval', 'state': 'now'},
+                {'short': 'TL', 'name': 'TL approval', 'state': 'now'},
                 {'short': 'ST', 'name': 'Store stock check', 'state': 'todo'},
               ],
               'pill': {
@@ -80,8 +80,8 @@ Future<Boundary> _pump(WidgetTester tester, Map<String, Object> routes) async {
     theme: T.theme,
     home: ModuleScreen(
       api: b.api,
-      session: sessionWith(const ['material.indent.view']),
-      moduleKey: 'material/indents',
+      session: sessionWith(const ['advance.advance.view']),
+      moduleKey: 'advances',
       onBack: () {},
       bottom: const SizedBox.shrink(),
       onOpenRelated: (_) {},
@@ -116,7 +116,7 @@ void main() {
 
       // The approval chain, as far as it has got.
       expect(find.byType(Chain), findsOneWidget);
-      expect(find.text('PM'), findsOneWidget);
+      expect(find.text('TL'), findsOneWidget);
     });
 
     testWidgets('opens the band and the note the web screen has', (tester) async {
@@ -125,21 +125,21 @@ void main() {
       expect(find.text('Awaiting approval'), findsOneWidget);
       expect(find.text('4'), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.textContaining('An indent is an internal request'),
+        find.textContaining('An advance is recovered'),
         300,
         scrollable: find
             .byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down)
             .last,
       );
-      expect(find.textContaining('An indent is an internal request'), findsOneWidget);
+      expect(find.textContaining('An advance is recovered'), findsOneWidget);
     });
 
     testWidgets('a report, whose rows the server did not compose, reads its columns',
         (tester) async {
       await _pump(tester, {
-        '/screen/material/indents': _indentScreen,
-        '/list/material/indents?page=1&pageSize=50': {
-          'title': 'Indents',
+        '/screen/advances': _advanceScreen,
+        '/list/advances?page=1&pageSize=50': {
+          'title': 'Advances',
           'filters': '',
           'columns': const [
             {'key': 'name', 'header': 'Employee'},
@@ -174,15 +174,15 @@ void main() {
 void rowActions() {
   group('a row that carries the web row\'s buttons', () {
     Map<String, Object> listWith(List<Map<String, Object>> actions) => {
-          '/screen/material/indents': _indentScreen,
-          '/list/material/indents?page=1&pageSize=50': {
-            'title': 'Indents',
+          '/screen/advances': _advanceScreen,
+          '/list/advances?page=1&pageSize=50': {
+            'title': 'Advances',
             'filters': '',
             'columns': const [
-              {'key': 'indentNo', 'header': 'Indent No'},
+              {'key': 'advanceNo', 'header': 'Advance No'},
             ],
             'rows': const [
-              {'id': 'i1', 'indentNo': 'IND-1'},
+              {'id': 'i1', 'advanceNo': 'ADV-1'},
             ],
             'total': 1,
             'page': 1,
@@ -200,23 +200,23 @@ void rowActions() {
               ],
             },
           },
-          '/do/material/indents/approveIndent': {'ok': true},
+          '/do/advances/approveAdvance': {'ok': true},
         };
 
     testWidgets('draws them, and only the ones it was sent', (tester) async {
       await _pump(tester, listWith([
         const {
           'key': 'approve',
-          'label': '✓ PM approve',
+          'label': '✓ TL approve',
           'emphasis': 'approve',
-          'action': 'material/indents/approveIndent',
+          'action': 'advances/approveAdvance',
           'args': ['i1', 'PM'],
           'remark': 'none',
           'confirm': 'It goes to the Admin for the second approval.',
         },
       ]));
 
-      expect(find.text('✓ PM approve'), findsOneWidget);
+      expect(find.text('✓ TL approve'), findsOneWidget);
       expect(find.text('Reject'), findsNothing);
     });
 
@@ -224,9 +224,9 @@ void rowActions() {
       final b = await _pump(tester, listWith([
         const {
           'key': 'approve',
-          'label': '✓ PM approve',
+          'label': '✓ TL approve',
           'emphasis': 'approve',
-          'action': 'material/indents/approveIndent',
+          'action': 'advances/approveAdvance',
           'args': ['i1', 'PM'],
           'remark': 'none',
           'confirm': 'It goes to the Admin for the second approval.',
@@ -239,10 +239,10 @@ void rowActions() {
       // The sheet says what will happen, in the server's words.
       expect(find.text('It goes to the Admin for the second approval.'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(Btn, '✓ PM approve').last);
+      await tester.tap(find.widgetWithText(Btn, '✓ TL approve').last);
       await tester.pumpAndSettle();
 
-      expect(b.actions.last.action, 'material/indents/approveIndent');
+      expect(b.actions.last.action, 'advances/approveAdvance');
       expect(b.actions.last.args, ['i1', 'PM']);
     });
 
@@ -255,15 +255,15 @@ void rowActions() {
           'action': '',
           'args': [],
           'remark': 'none',
-          'form': 'material/indents:edit',
+          'form': 'advances:edit',
         },
       ]);
-      routes['/form/material/indents/edit?id=i1'] = const {
-        'key': 'material/indents:edit',
-        'module': 'material/indents',
-        'title': 'Edit indent',
+      routes['/form/advances/edit?id=i1'] = const {
+        'key': 'advances:edit',
+        'module': 'advances',
+        'title': 'Edit advance',
         'submit': 'Save',
-        'action': 'material/indents/updateIndent',
+        'action': 'advances/updateAdvance',
         'shape': {'kind': 'formData'},
         'fields': [
           {'name': 'purpose', 'label': 'Purpose', 'kind': 'text'},
@@ -274,7 +274,7 @@ void rowActions() {
       await tester.tap(find.byKey(const Key('row-action:i1:edit')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Edit indent'), findsOneWidget);
+      expect(find.text('Edit advance'), findsOneWidget);
       expect(find.text('Purpose'), findsOneWidget);
     });
   });

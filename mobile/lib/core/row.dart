@@ -4,8 +4,8 @@ import '../design/components.dart';
 ///
 /// The app used to build every row itself, out of the export's columns and a
 /// guess per module in `spec.dart` — its own title, its own subtitle, its own
-/// status word. So an indent on the phone read nothing like an indent on the
-/// web: no approval chain, no fulfilment line, no "required by", and a status
+/// status word. So a row on the phone read nothing like the same row on the
+/// web: no stage chain, no pill, no dates, and a status
 /// spelled the way the database spells it.
 ///
 /// Now the row arrives drawn: the title the card links, the muted line under

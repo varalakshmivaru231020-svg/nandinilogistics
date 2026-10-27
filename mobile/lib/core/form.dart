@@ -56,7 +56,6 @@ class FieldDef {
     this.minRows = 0,
     this.minRowsMessage,
     this.leadWith,
-    this.levels = false,
     this.showWhen,
     this.prefixes,
     this.accept,
@@ -83,8 +82,8 @@ class FieldDef {
   final bool wide;
   final Object? initial;
 
-  /// What this field becomes while another is ticked: the calendar's "Starts"
-  /// is "First day" once "Runs all day" is on, and takes a day, not an instant.
+  /// What this field becomes while another is ticked: the a date that
+  /// becomes a day rather than an instant once "All day" is ticked.
   final String? variantWhen;
   final String? variantLabel;
   final String? variantKind;
@@ -113,12 +112,8 @@ class FieldDef {
   /// For `multi`: the field whose value is sent first in the list.
   final String? leadWith;
 
-  /// For `multi`: drawn as the web's numbered levels — "Level 1", "Level 2",
-  /// "+ Add level 3" — one person a level, in order, and nobody twice.
-  final bool levels;
-
   /// Shown only once this other field has a value, as the web reveals its
-  /// review and approval levels only once a checklist has been picked.
+  /// its dependent fields only once the field it follows has a value.
   final String? showWhen;
 
   /// This field's value is prefixed onto another and not sent by itself — the
@@ -126,8 +121,8 @@ class FieldDef {
   final String? prefixes;
 
   /// For `files`: what the web's own input accepts. A field that takes images
-  /// is offered the camera as well as the file chooser — judging a checkpoint
-  /// happens in front of the thing being judged.
+  /// is offered the camera as well as the file chooser — a document is
+  /// photographed where it is.
   final String? accept;
 
   /// For `files`: at most this many. A photograph is one, and choosing
@@ -140,8 +135,8 @@ class FieldDef {
 
   /// Whether a picture taken now belongs here.
   ///
-  /// Only where the web's own control asks for one: the checklist verdict and
-  /// the goods receipt do, and a general attachment box does not get a camera
+  /// Only where the web's own control asks for one: a rider's photo and
+  /// identity documents do, and a general attachment box does not get a camera
   /// it never had.
   bool get takesPhotos => camera ?? (accept?.contains('image/') ?? false);
 
@@ -178,7 +173,6 @@ class FieldDef {
       minRows: (j['minRows'] as num?)?.toInt() ?? 0,
       minRowsMessage: j['minRowsMessage'] as String?,
       leadWith: j['leadWith'] as String?,
-      levels: j['levels'] == true,
       showWhen: j['showWhen'] as String?,
       prefixes: j['prefixes'] as String?,
       accept: j['accept'] as String?,
@@ -338,8 +332,7 @@ class FormValues {
       // An empty list, not nothing: an action that takes a list of ids takes
       // the empty one, and `toFormData` appends nothing for it.
       if (f.leadWith == null) return picked;
-      // Review level 1 is the assignee, and the action reads the list in level
-      // order — so whoever that field names goes first.
+      // The field it leads with goes first.
       final lead = values[f.leadWith!] ?? _text[f.leadWith!]?.text;
       return [
         if (lead != null && '$lead'.isNotEmpty) '$lead',
@@ -447,7 +440,7 @@ Object? fill(Object? slot, FormValues v, {String? recordId, Map<String, Object?>
 
   final name = slot.substring(1);
   /*
-   * The whole body. An action called from a record gets the verdict it stands
+   * The whole body. An action called from a record gets the decision it stands
    * for and the remark that was typed as well as the fields — one body, as the
    * web posts one.
    */
@@ -499,7 +492,7 @@ class _FormBodyState extends State<FormBody> {
   }
 
   /// Whether a field that waits on another is due yet. The web reveals review
-  /// and approval levels only once a checklist has been picked.
+  /// dependent fields only once the field it follows has a value.
   bool _due(FieldDef f) {
     final on = f.showWhen;
     if (on == null) return true;
@@ -589,22 +582,6 @@ class _FormBodyState extends State<FormBody> {
           enabled: enabled,
           onChanged: (s) => setState(() => into.values[f.name] = s),
         ),
-      'multi' when f.levels => _Levels(
-          field: f,
-          label: label + (f.required ? ' *' : ''),
-          // Level 1 is the field it follows — the assignee — and is read from
-          // that field rather than stored here, exactly as the web derives it.
-          lockedFirst: f.leadWith != null && _leader(f).isNotEmpty,
-          picked: [
-            if (f.leadWith != null && _leader(f).isNotEmpty) _leader(f),
-            ...((into.values[f.name] as List?) ?? const []).cast<String>(),
-          ],
-          enabled: enabled,
-          onChanged: (list) => setState(() {
-            final lead = f.leadWith != null && _leader(f).isNotEmpty;
-            into.values[f.name] = lead ? list.skip(1).toList() : list;
-          }),
-        ),
       'multi' => _PickMany(
           field: f,
           label: _labelled(f, label),
@@ -636,15 +613,6 @@ class _FormBodyState extends State<FormBody> {
         ),
       _ => const SizedBox.shrink(),
     };
-  }
-
-  /// The value of the field a level list follows — the assignee.
-  String _leader(FieldDef f) {
-    final name = f.leadWith;
-    if (name == null) return '';
-    final value = v.values[name];
-    if (value is String) return value;
-    return '';
   }
 
   /// The label, with the web's required mark and its small print.
@@ -1004,7 +972,7 @@ class _FilesState extends State<_Files> {
         const SizedBox(height: 8),
       ],
       /*
-       * Two ways in where the field takes pictures, because on site the
+       * Two ways in where the field takes pictures, because in the field the
        * photograph does not exist yet: the camera takes it, the chooser finds
        * one already taken. The web's single file input is both of these on a
        * desktop and neither on a phone.
@@ -1057,7 +1025,7 @@ class _FilesState extends State<_Files> {
 
 /// Where this is, taken from the phone.
 ///
-/// The web's site log fills two hidden inputs from the browser's geolocation
+/// The web fills two hidden inputs from the browser's geolocation
 /// and saves the log either way if it cannot. So does this: the button asks,
 /// the coordinates show once they are known, and a refusal is said plainly
 /// rather than blocking the form.
@@ -1129,121 +1097,7 @@ class _GeoState extends State<_Geo> {
   }
 }
 
-/// One person a level, in order, and nobody twice — the web's own `Levels`.
-///
-/// The order *is* the meaning here: review level 1 looks at the work first, and
-/// on a task it is the assignee, which the web shows and will not let anybody
-/// change. So the first row is locked when the field follows another, and the
-/// rest are searchable pickers with the web's own "+ Add level N" under them.
-class _Levels extends StatelessWidget {
-  const _Levels({
-    required this.field,
-    required this.label,
-    required this.picked,
-    required this.lockedFirst,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final FieldDef field;
-  final String label;
-
-  /// Every level in order, including the locked first one where there is one.
-  final List<String> picked;
-  final bool lockedFirst;
-  final bool enabled;
-  final ValueChanged<List<String>> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    String nameOf(String id) =>
-        field.options.where((o) => o.value == id).firstOrNull?.label ?? 'The assignee';
-
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: T.caption()),
-      if (field.note != null) ...[
-        const SizedBox(height: 2),
-        Text(field.note!, style: T.caption(color: T.disabledInk).copyWith(fontWeight: FontWeight.w500)),
-      ],
-      const SizedBox(height: 8),
-      for (final (i, id) in picked.indexed) ...[
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SizedBox(
-            width: 52,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 13),
-              child: Text('Level ${i + 1}',
-                  style: T.caption().copyWith(fontWeight: FontWeight.w600)),
-            ),
-          ),
-          Expanded(
-            child: lockedFirst && i == 0
-                // Level 1 follows the assignee: shown, and not editable.
-                ? Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                    decoration: BoxDecoration(
-                      color: T.fieldFill,
-                      border: Border.all(color: T.line),
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                    child: Text('${nameOf(id)} · the assignee',
-                        style: T.body(weight: FontWeight.w600).copyWith(fontSize: 12.5),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                  )
-                : Btn(
-                    id.isEmpty ? (field.placeholder ?? 'Search people…') : nameOf(id),
-                    key: Key('level:${field.name}:$i'),
-                    emphasis: Emphasis.outline,
-                    icon: Icons.search_rounded,
-                    expand: true,
-                    onPressed: enabled
-                        ? () async {
-                            final free = field.options
-                                .where((o) => o.value == id || !picked.contains(o.value))
-                                .toList();
-                            final one = await _search(context, field, free);
-                            if (one == null) return;
-                            onChanged([
-                              for (final (xi, x) in picked.indexed) if (xi == i) one else x,
-                            ]);
-                          }
-                        : null,
-                  ),
-          ),
-          if (!(lockedFirst && i == 0)) ...[
-            const SizedBox(width: 7),
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Btn(
-                'Remove',
-                key: Key('level-remove:${field.name}:$i'),
-                emphasis: Emphasis.outline,
-                height: 38,
-                onPressed: enabled
-                    ? () => onChanged([
-                          for (final (xi, x) in picked.indexed) if (xi != i) x,
-                        ])
-                    : null,
-              ),
-            ),
-          ],
-        ]),
-        const SizedBox(height: 8),
-      ],
-      Btn(
-        '+ Add level ${picked.length + 1}',
-        key: Key('level-add:${field.name}'),
-        emphasis: Emphasis.outline,
-        height: 40,
-        expand: true,
-        onPressed: enabled ? () => onChanged([...picked, '']) : null,
-      ),
-    ]);
-  }
-}
-
-/// The lines of a document — an indent's items.
+/// The lines of a document — a document's line items.
 class _Lines extends StatelessWidget {
   const _Lines({
     required this.field,

@@ -149,7 +149,7 @@ void main() {
         theme: T.theme,
         home: Scaffold(
           body: Column(children: [
-            Bar(title: 'Indents', onBack: () {}, actions: [
+            Bar(title: 'Advances', onBack: () {}, actions: [
               BarButton(icon: Icons.search_rounded, label: 'Search', onTap: () {}),
             ]),
             Chips([FilterChip2(label: 'Pending', count: 2, onTap: () {})]),
@@ -243,7 +243,7 @@ void main() {
      * The menu is the server's — the web's own NAVIGATION, in its own order
      * with its own labels. The app keeps no list of its own, which is what
      * stopped the two from matching: a dozen screens the web reaches from
-     * inside other screens had been promoted to top level here.
+     * inside other screens had been promoted to the menu here.
      */
     test('every menu entry the web can send maps to a screen or is web-only', () {
       // `hrefToModule` is the only thing the app says about a route: which

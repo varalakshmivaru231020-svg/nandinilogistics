@@ -27,7 +27,14 @@ class Res<T> {
 
   /// Never reached, so nothing was decided either way.
   bool get unreachable => status == 0;
+
+  /// The route itself is not on this server — an older deployment than the
+  /// app. Distinct from a record that is not there, which carries its own code.
+  bool get missing => status == 404 && (code == null || code == 'unknown' || code == 'not-found');
 }
+
+/// What a screen says when the server it reached predates the feature.
+const notOnServer = 'Not available on this server yet.';
 
 /// The boundary at /api/mobile/v1.
 ///
@@ -69,6 +76,28 @@ class Api {
           body: jsonEncode(body ?? const {}),
         ),
       );
+
+  /// A multipart POST to a boundary route that is not an action — rider
+  /// sign-up, which carries a photograph and identity documents.
+  Future<Res<Map<String, dynamic>>> multipart(
+    String path, {
+    Map<String, String> fields = const {},
+    List<Upload> files = const [],
+  }) =>
+      _send(() async {
+        final req = http.MultipartRequest('POST', _url(path))
+          ..headers.addAll(_headers)
+          ..fields.addAll(fields);
+        for (final f in files) {
+          req.files.add(http.MultipartFile.fromBytes(
+            f.field,
+            f.bytes,
+            filename: f.name,
+            contentType: f.mime == null ? null : MediaType.parse(f.mime!),
+          ));
+        }
+        return http.Response.fromStream(await _client.send(req));
+      });
 
   /// Runs one of the web's own server actions. Arguments are positional, in the
   /// order `/actions` gives them — which is the order the server tells us, not

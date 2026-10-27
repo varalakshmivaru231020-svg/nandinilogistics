@@ -64,7 +64,7 @@ class Boundary {
         }
         /*
          * Decoded, as the boundary decodes it. One action key carries a route
-         * folder — `projects/[id]/documents/uploadDocument` — and a bracket
+         * folder — `hr/[id]/documents/uploadDocument` — and a bracket
          * travels escaped, so the raw path names no action anybody can read.
          */
         final path =

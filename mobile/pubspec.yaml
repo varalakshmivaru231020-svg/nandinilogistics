@@ -1,5 +1,5 @@
 name: nninfra
-description: NN Infra ERP — Android client.
+description: Nandini Rider — Android client for the Nandini Logistics Rider CRM.
 publish_to: "none"
 version: 0.1.0+1
 
@@ -12,20 +12,20 @@ dependencies:
   http: ^1.2.2
   shared_preferences: ^2.3.3
   intl: ^0.19.0
-  # Where a site log was written. The web fills its two hidden inputs from the
-  # browser's geolocation; a phone standing on the site is the better
-  # instrument, and the record shows the position either way.
+  # Where a punch in / punch out was made (SOW §3.6, §3.7).
   geolocator: ^13.0.2
-  # Picking a document to attach — an Aadhaar copy, a drawing, a photograph.
+  # Picking a document to attach — an Aadhaar copy, a licence, a photograph.
   file_picker: ^8.1.6
   image_picker: ^1.1.2
   open_filex: ^4.5.0
   url_launcher: ^6.3.1
-  font_awesome_flutter: ^10.8.0
+  font_awesome_flutter: ^11.0.0
   path_provider: ^2.1.5
   # The media type of a multipart part; `http`'s own dependency, named here
   # because this package imports it directly.
   http_parser: ^4.0.2
+  # Sharing the ID card as a picture and the referral ID as text.
+  share_plus: ^12.0.2
 
 dev_dependencies:
   flutter_test:

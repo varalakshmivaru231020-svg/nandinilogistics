@@ -17,7 +17,7 @@ Map<String, dynamic> taskRow(int n) => {
       'id': 't$n',
       'taskNo': 'T-90${n.toString().padLeft(2, "0")}',
       'title': 'Task number $n',
-      'project': 'NNS',
+      'company': 'Zomato',
       'assignee': 'Ravi Shankar',
       'status': 'PENDING',
       'priority': 'MEDIUM',

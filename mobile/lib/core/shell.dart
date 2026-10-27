@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../design/components.dart';
 import '../design/tokens.dart';
 import 'nav.dart';
 import 'session.dart';
@@ -8,7 +7,7 @@ import 'session.dart';
 /// The three tabs: Home, the module you are in (Tasks by default), More.
 ///
 /// The third tab takes the name of whatever module is open, which is how the
-/// design shows it on the indent list — the tab is "where you are", not a
+/// design shows it on every list — the tab is "where you are", not a
 /// fixed destination.
 class BottomBar extends StatelessWidget {
   const BottomBar({
