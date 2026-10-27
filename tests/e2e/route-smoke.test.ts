@@ -62,7 +62,9 @@ suite("every route renders or is refused, for every role", () => {
       for (const route of all) {
         const res = await visit(route, tokens[role]);
         const refused = res.status === 307 && (res.location ?? "").includes("/forbidden");
-        if (res.status === 200 || refused) continue;
+        // /hr is kept for old links and sends people on to the Riders list.
+        const movedOn = route === "/hr" && res.status === 307 && (res.location ?? "").includes("/hr/riders");
+        if (res.status === 200 || refused || movedOn) continue;
         broken.push(`${route} → ${res.status} ${res.location ?? ""}`);
       }
       expect(broken).toEqual([]);

@@ -61,7 +61,11 @@ suite("access control, end to end", () => {
     const matrix: Array<[route: string, allowed: string[], denied: string[]]> = [
       ["/sales/leads", ["admin", "tl", "telecaller"], ["rider"]],
       ["/sales/follow-ups", ["admin", "tl", "telecaller"], ["rider"]],
-      ["/hr", ["admin", "tl", "telecaller"], ["rider"]],
+      // A rider may open these, scoped to their own record only.
+      ["/hr/riders", ["admin", "tl", "telecaller", "rider"], []],
+      ["/hr/staff", ["admin", "tl", "telecaller", "rider"], []],
+      ["/hr/attendance", ["admin", "tl", "telecaller", "rider"], []],
+      ["/approvals", ["admin", "tl"], ["telecaller", "rider"]],
       ["/tasks", ["admin", "tl"], ["telecaller", "rider"]],
       ["/masters/companies", ["admin", "tl", "telecaller"], ["rider"]],
       ["/masters/lead-stages", ["admin"], ["tl", "telecaller", "rider"]],

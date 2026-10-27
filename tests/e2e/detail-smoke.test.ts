@@ -25,7 +25,7 @@ const LABEL = "detail-smoke";
  *
  * A 500 is a screen that does not work.
  */
-const HIDES_EXISTENCE = new Set(["/tasks/[id]", "/sales/leads/[id]"]);
+const HIDES_EXISTENCE = new Set(["/tasks/[id]", "/sales/leads/[id]", "/hr/[id]", "/hr/[id]/id-card"]);
 
 type Resolver = () => Promise<string | null>;
 
@@ -39,6 +39,11 @@ const first = (find: () => Promise<{ id: string } | null>): Resolver => async ()
  */
 const ID_SOURCE: Record<string, Resolver> = {
   "/hr/[id]": first(() => prisma.employee.findFirst({ select: { id: true } })),
+  "/hr/[id]/id-card": first(() => prisma.employee.findFirst({ where: { onboardingStatus: "ACCEPTED" }, select: { id: true } })),
+  "/companies/[id]": first(() => prisma.company.findFirst({ select: { id: true } })),
+  "/payouts/imports/[id]": first(() => prisma.payoutImport.findFirst({ select: { id: true } })),
+  "/accounts/invoices/[id]": first(() => prisma.clientInvoice.findFirst({ select: { id: true } })),
+  "/staff/payslips/[id]": first(() => prisma.payslip.findFirst({ select: { id: true } })),
   "/tasks/[id]": first(() => prisma.task.findFirst({ select: { id: true } })),
   "/sales/leads/[id]": first(() => prisma.lead.findFirst({ select: { id: true } })),
   // Not a database id: a key from the report registry.
