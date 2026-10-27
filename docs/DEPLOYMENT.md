@@ -10,64 +10,64 @@ advisory.
 
 ## Last release
 
-`f868fd8` · 17 Oct 2026 · 1 commit, from `a6af7d2`. Every item below was run.
+`7178c0b` · 27 Oct 2026 · 4 commits, from `f868fd8`. Every item below was run.
 
 | | |
 |---|---|
-| Rolled forward from | `a6af7d2` |
-| Backup taken first | `nn_infra_erp-20261017-121113.dump` — 431 KB, `pg_restore --list` readable |
-| Migrations | 37 found, none pending — no schema change |
-| Permission catalogue | 564 codes, 0 created |
-| Role grants | 1524 → 1524 |
-| Code gate | 1872 unit and integration tests, 119 on the phone, `flutter analyze` clean; the deploy's own `==> Building` passed |
-| Health | `==> Healthy (HTTP 200)`, pm2 `online`, `/login` 200 over TLS |
-| Read on production | `f868fd8` checked out; `/calendar`, `/record/projects/projects/…`, `/list/sales/leads?pipeline=lost` and `/form/projects/projects/newDocumentVersion` all routed, each answering `401 Sign-in required` rather than 404 |
-| Android client | `dist/nninfra-20261017-arm64.apk` (18.7 MB) and `-arm32.apk` (16.2 MB), from clean. `https://nninfra.zapeat.in` the only address in `libapp.so`; `wa.me` and the dialler's words present; `url_launcher` registered beside `image_picker` and `open_filex` |
+| Rolled forward from | `f868fd8` |
+| Backup taken first | `nn_infra_erp-20261027-062304.dump` — 435 KB, 732 entries, `pg_restore --list` readable |
+| Migrations | **one applied**: `20261026120000_whatsapp` — four tables, nothing altered and nothing dropped. First schema change since 19 Sep |
+| Permission catalogue | 567 codes, 3 created (`admin.whatsapp.view/update/send`) |
+| Role grants | 1524 → 1524. **`pnpm perms:grants --add` has not been run** — see below |
+| Code gate | 1903 unit and integration tests, 124 on the phone, `flutter analyze` clean, `pnpm build` clean locally and again on the server |
+| Health | `==> Healthy (HTTP 200)`, pm2 `online`, `/login` 200 and `/masters` a **307** to sign-in over TLS |
+| Read on production | `7178c0b` checked out; the three tables exist (`whatsapp_templates` 12 columns, `whatsapp_triggers` 9, `whatsapp_messages` 19); the three permission codes are in the catalogue; `POST /api/whatsapp/dispatch` answers `401 Not for you.` — it has no secret yet, which is what an unconfigured host should do |
+| Android client | unchanged — `dist/nninfra-20261019-*.apk` is still the build to install |
 
-**What it put live:** the three things asked for by name, and one defect found
-while reading the screen they were asked for.
+**What it put live.**
 
-1. **The project screen has the web's five tabs** — Overview, Tasks, Team
-   Mapping, Documents, Site Progress — in its order and its words, each behind
-   the permission that draws it there, and each carrying the add button the web
-   puts on it: "+ New task", "+ Log entry", Upload, Map user. The tab's own
-   action is the one on the bar; the record's own (Edit project) stays whichever
-   tab is open. A viewer who holds only one tab gets no strip and still sees
-   that tab's cards.
-2. **Its Tasks tab was showing the wrong thing** — the phases and work
-   packages, which is what the tab used to be before the web changed it to the
-   work assigned against the project. It lists the tasks now, with the number,
-   the location, the assignee, the due date and the web's own overdue rule, and
-   each row opens its task as the web's row links to it.
-3. **Documents carry versions.** "New version" opens the web's own superseding
-   upload: the particulars come from the document being superseded,
-   `supersedesId` travels in the body, and the earlier version stays readable.
-4. **Site Progress is the day's capture**, as the web's tab is — today's logs
-   with the time and the geo tick, and the web's own empty line. Every log ever
-   written is the Site Progress screen's own list.
-5. **The lead pipeline is the web's six columns, as tabs**, with the counts the
-   board puts on its headings and "All" for its list view. The pipeline moved
-   to `lead-display.ts` so the board and the tabs are one definition; the list
-   takes `pipeline=<column>`, and the counts are read with the column left out
-   so they do not move as you change tab.
-6. **How late a follow-up is** shows as a chip in its own tone beside the name,
-   where it was buried in a line down the card.
-7. **Call and WhatsApp on a lead row** — the two things a handset can do that a
-   desk cannot. The number travels only where the viewer may see contact
-   details: a masked number cannot be rung, and offering to ring it would offer
-   to leak it.
-8. **The calendar's "Activity" is "Schedule"**, the word the navigation and the
-   module use. Every other label in that list names where the item came from;
-   this one read as a synonym for Task beside the Task items. The app held its
-   own copy of all seven words — which is how they could differ at all — so the
-   boundary sends them now and the app draws what it is sent.
+1. **Masters & Users is off the phone's drawer.** It was listed there and
+   refused when tapped — the brief's rule (§12) delivered as a dead end. The
+   web's sidebar is untouched. While there: that endpoint honoured `permission`
+   and ignored `anyPermission`, which is how the entry reached every app user
+   in the first place.
+2. **WhatsApp, with one alert.** A site visit scheduled against a lead sends
+   that client a confirmation — the project, its address, when, who will meet
+   them and that person's own number. Nothing else sends.
+3. **The connection is a row, not an environment variable.** Masters & Users →
+   WhatsApp holds the url, version, phone number id, WABA id and token, read
+   fresh on every send, so a token is rotated without a deploy. Meta direct and
+   a BSP that proxies Meta differ by two fields.
+4. **An outbox, not an inline send.** The business flow writes a row and never
+   throws; `POST /api/whatsapp/dispatch` drains it from cron. A booking is
+   never held open while Meta is slow. A refusal about the message is final;
+   their outage is retried after 2, 8 and 32 minutes.
+5. **`sweepOverdueTasks()` finally has a caller.** It had tests and nothing
+   calling it, so the in-app overdue notice had never fired in production. The
+   same endpoint runs it — no WhatsApp, just the bell it was written for.
 
-**What keeps it true:** `project-detail` (the tabs, each add on its own tab, the
-seeded task form, the version carried over), `lead-pipeline` (the six columns
-over the list route, the counts, one column at a time, the badge, and no number
-for somebody who may not see one), `asked_for_test.dart` (all of it on screen,
-including the one-tab viewer and a phone with no WhatsApp), and the calendar's
-labels pinned to one definition in `mobile-client-parity`.
+**Two steps this deploy did not do, and why.**
+
+- **`pnpm perms:grants --add`.** The deploy's own run adds nothing by design.
+  Until this is run, only the one super admin can open Masters & Users →
+  WhatsApp; anybody else holding Owner / Admin cannot. Running it was refused
+  to the agent as a privileged action on a live system, which is the right
+  refusal — it is a one-line command for an administrator.
+- **The cron.** `WHATSAPP_CRON_SECRET` is not set and
+  `/etc/cron.d/nninfra-whatsapp` is not installed, so the dispatcher and the
+  overdue sweep do not run yet. Nothing is waiting to be sent — the trigger is
+  off until its template is approved at Meta — but the overdue-task bell stays
+  silent until this is done:
+
+  ```bash
+  echo 'WHATSAPP_CRON_SECRET=<a long random string>' >> /var/www/nninfra/app/.env
+  install -m 644 /var/www/nninfra/app/deploy/nninfra-whatsapp.cron /etc/cron.d/nninfra-whatsapp
+  pm2 restart nninfra
+  ```
+
+**Nothing messages anybody on arrival.** The trigger ships off, and the screen
+refuses to switch it on until `site_visit_scheduled_v1` reads *approved* at
+Meta. Submit it from `docs/whatsapp-templates.json`.
 
 ---
 
