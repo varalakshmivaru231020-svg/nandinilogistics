@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { assertProjectAccess, authorize, runAction, PermissionError, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
+import { whatsappSiteVisitScheduled } from "@/lib/whatsapp/notify";
 import { PERM } from "@/lib/permissions/codes";
 import { getSetting } from "@/lib/settings";
 import type { ImportPlan, ImportSummary } from "@/lib/import/columns";
@@ -175,6 +176,56 @@ export async function changeLeadStageAction(
       summary: `Moved lead ${lead.leadNo} from ${lead.state.replace(/_/g, " ")} to ${state.replace(/_/g, " ")}`,
       changes: { state: { from: lead.state, to: state } },
     });
+
+    /*
+     * Moved to Site Visit — on the board, or from the record — tells the
+     * client, the same message the schedule form sends. Dragging a card is
+     * what the sales team actually does, and it was the one path that told
+     * nobody.
+     *
+     * The board captures no time, so one is found: the soonest visit already
+     * booked against this lead, or the next action if that is still ahead. If
+     * there is neither, nothing is sent and the log says why — a confirmation
+     * that cannot name a time is not a confirmation.
+     */
+    if (state === "SITE_VISIT_SCHEDULED") {
+      const now = new Date();
+      const [visit, project, executive] = await Promise.all([
+        prisma.siteVisit.findFirst({
+          where: { leadId: id, visitedAt: null, scheduledAt: { gte: now } },
+          orderBy: { scheduledAt: "asc" },
+          select: { scheduledAt: true, projectId: true },
+        }),
+        lead.projectId
+          ? prisma.project.findUnique({
+              where: { id: lead.projectId },
+              select: { name: true, addressLine: true, city: { select: { name: true } } },
+            })
+          : null,
+        prisma.user.findUnique({ where: { id: ctx.id }, select: { name: true, phone: true } }),
+      ]);
+
+      const when =
+        visit?.scheduledAt ??
+        (lead.nextActionAt && lead.nextActionAt > now ? lead.nextActionAt : null);
+
+      const site =
+        visit?.projectId && visit.projectId !== lead.projectId
+          ? await prisma.project.findUnique({
+              where: { id: visit.projectId },
+              select: { name: true, addressLine: true, city: { select: { name: true } } },
+            })
+          : project;
+
+      await whatsappSiteVisitScheduled(prisma, {
+        leadId: id,
+        client: { name: lead.name, phone: lead.phone },
+        project: site?.name ?? "our project",
+        address: [site?.addressLine, site?.city?.name].filter(Boolean).join(", ") || "—",
+        scheduledAt: when,
+        executive: { name: executive?.name ?? ctx.name, phone: executive?.phone ?? null },
+      });
+    }
 
     revalidatePath("/sales/leads");
     return null;

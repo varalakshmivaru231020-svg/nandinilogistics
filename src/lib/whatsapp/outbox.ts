@@ -33,6 +33,15 @@ export interface EnqueueInput {
   entityId?: string;
   /** Who it is about, where they are a user here. */
   userId?: string;
+  /**
+   * Do not send, and say why on the log.
+   *
+   * For the case where the event happened but the message cannot be written
+   * truthfully — a site visit moved on the board with no time on it. Silence
+   * would leave somebody waiting for a message that was never coming; a row
+   * saying why is something an administrator can act on.
+   */
+  refuse?: string;
 }
 
 export type EnqueueOutcome =
@@ -82,6 +91,14 @@ export async function enqueueWhatsApp(db: Db, input: EnqueueInput): Promise<Enqu
       entityId: input.entityId ?? null,
       userId: input.userId ?? null,
     };
+
+    if (input.refuse) {
+      const row = await db.whatsappMessage.create({
+        data: { ...common, toPhone: toPhone || "", status: "SKIPPED", error: input.refuse },
+        select: { id: true },
+      });
+      return { queued: false, why: `${input.refuse} (${row.id})` };
+    }
 
     if (!isSendable(toPhone)) {
       // Recorded rather than dropped: "nobody was told" is the thing an

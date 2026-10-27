@@ -47,7 +47,10 @@ for (const chunk of block.split(/\n  \{\n/).slice(1)) {
 if (events.length === 0) throw new Error("No events parsed — has events.ts changed shape?");
 
 const WHERE = {
-  SITE_VISIT_SCHEDULED: "`sales/site-visits/actions.ts` → `scheduleSiteVisitAction`",
+  SITE_VISIT_SCHEDULED:
+    "`sales/site-visits/actions.ts` → `scheduleSiteVisitAction` (the form), and " +
+    "`sales/leads/actions.ts` → `changeLeadStageAction` when a lead is moved to " +
+    "Site Visit (the board, or the record)",
 };
 
 const L = [];
@@ -127,6 +130,18 @@ pm2 restart nninfra           # so the app reads the new variable
 Without \`WHATSAPP_CRON_SECRET\` the endpoint refuses every call, which is what
 an unconfigured host should do. The sweeps then never run — including the
 overdue-task notices, which this endpoint is also the only caller of.
+
+## When it does not send
+
+- **The same visit twice.** The time is what makes it the same message: a
+  client scheduled on the form and then dragged to Site Visit on the board
+  hears once. A *changed* time is news and is sent.
+- **A lead moved to Site Visit with no time on it.** The board captures none,
+  so one is looked for — the soonest visit already booked against the lead, or
+  its next action if that is still ahead. With neither, nothing is sent: a
+  confirmation that cannot name a time is not a confirmation. The log carries
+  a skipped row saying so, rather than leaving somebody waiting for a message
+  that was never coming.
 
 ## What is deliberately not here
 

@@ -19,6 +19,7 @@ import { prisma, tag } from "./helpers";
 
 import { setSetting } from "@/lib/settings";
 import { dispatchWhatsapp } from "@/lib/whatsapp/dispatch";
+import { whatsappSiteVisitScheduled } from "@/lib/whatsapp/notify";
 import { enqueueWhatsApp } from "@/lib/whatsapp/outbox";
 
 bindCookieBox(cookieBox);
@@ -204,6 +205,79 @@ describe("what an event writes", () => {
     expect(row.status).toBe("SCHEDULED");
     expect(row.sendAfter.getTime()).toBeGreaterThan(Date.now() + 25 * 60_000);
     await prisma.whatsappTrigger.update({ where: { event: EVENT }, data: { delayMinutes: null } });
+  });
+});
+
+describe("the client is told once, for one visit", () => {
+  it("does not say the same thing twice", async () => {
+    await connect(true);
+    const when = new Date("2026-11-03T11:00:00+05:30");
+    const lead = `lead-once-${suffix}`;
+
+    const say = () =>
+      whatsappSiteVisitScheduled(prisma, {
+        leadId: lead,
+        client: { name: "Vikram Shetty", phone: "+91 98765 43210" },
+        project: "NN Skyline",
+        address: "Sarjapur Road, Bengaluru",
+        scheduledAt: when,
+        executive: { name: "Priya Nair", phone: "+91 90000 00000" },
+      });
+
+    // Scheduled on the form, then the card dragged to Site Visit: one visit,
+    // one message.
+    await say();
+    await say();
+
+    const rows = await prisma.whatsappMessage.findMany({ where: { entityId: lead } });
+    written.push(...rows.map((r) => r.id));
+    expect(rows).toHaveLength(1);
+  });
+
+  it("says it again when the time changes", async () => {
+    await connect(true);
+    const lead = `lead-moved-${suffix}`;
+    const client = { name: "Vikram Shetty", phone: "+91 98765 43210" };
+    const executive = { name: "Priya Nair", phone: "+91 90000 00000" };
+
+    for (const when of [new Date("2026-11-03T11:00:00+05:30"), new Date("2026-11-04T16:00:00+05:30")]) {
+      await whatsappSiteVisitScheduled(prisma, {
+        leadId: lead,
+        client,
+        project: "NN Skyline",
+        address: "Sarjapur Road, Bengaluru",
+        scheduledAt: when,
+        executive,
+      });
+    }
+
+    const rows = await prisma.whatsappMessage.findMany({ where: { entityId: lead } });
+    written.push(...rows.map((r) => r.id));
+    expect(rows, "a moved visit is news; the same one twice is not").toHaveLength(2);
+  });
+
+  /*
+   * Dragging a card to Site Visit captures no time. A confirmation that
+   * cannot name one is not a confirmation, so nothing is sent — and the log
+   * says why, rather than leaving somebody waiting for a message that was
+   * never coming.
+   */
+  it("sends nothing, visibly, when no time is set", async () => {
+    await connect(true);
+    const lead = `lead-notime-${suffix}`;
+    await whatsappSiteVisitScheduled(prisma, {
+      leadId: lead,
+      client: { name: "Vikram Shetty", phone: "+91 98765 43210" },
+      project: "NN Skyline",
+      address: "Sarjapur Road, Bengaluru",
+      scheduledAt: null,
+      executive: { name: "Priya Nair", phone: null },
+    });
+
+    const row = await prisma.whatsappMessage.findFirstOrThrow({ where: { entityId: lead } });
+    written.push(row.id);
+    expect(row.status).toBe("SKIPPED");
+    expect(row.error).toContain("no time");
   });
 });
 

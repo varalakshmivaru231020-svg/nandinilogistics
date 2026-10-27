@@ -38,20 +38,48 @@ export async function whatsappSiteVisitScheduled(
     client: { name: string; phone: string | null };
     project: string;
     address: string;
-    scheduledAt: Date | string;
+    /** Null where the lead was moved to the stage without a time on it. */
+    scheduledAt: Date | string | null;
     executive: { name: string; phone: string | null };
   },
 ): Promise<void> {
+  const when = input.scheduledAt ? at(input.scheduledAt) : null;
+
+  /*
+   * Told already, for this visit?
+   *
+   * The same client can arrive at this message twice — a visit scheduled on
+   * the form, then the card dragged to Site Visit on the board, or simply
+   * dragged twice. The time is what makes it the same message, so that is
+   * what is matched: a changed time is news, the same time twice is not.
+   */
+  if (when) {
+    const told = await db.whatsappMessage.findFirst({
+      where: {
+        event: "SITE_VISIT_SCHEDULED",
+        entity: "Lead",
+        entityId: input.leadId,
+        status: { in: ["QUEUED", "SCHEDULED", "SENT"] },
+        variables: { array_contains: [when] },
+      },
+      select: { id: true },
+    });
+    if (told) return;
+  }
+
   await enqueueWhatsApp(db, {
     event: "SITE_VISIT_SCHEDULED",
     toPhone: input.client.phone,
     entity: "Lead",
     entityId: input.leadId,
+    // The message says when the visit is. Without a time there is nothing
+    // truthful to send, and the log says so rather than staying silent.
+    refuse: when ? undefined : "The lead was moved to Site Visit with no time on it.",
     values: {
       client: input.client.name,
       project: input.project,
       address: input.address,
-      when: at(input.scheduledAt),
+      when: when ?? "—",
       executive: input.executive.name,
       // Their own number, so the client can reach somebody before they set off.
       executivePhone: input.executive.phone ?? "—",
