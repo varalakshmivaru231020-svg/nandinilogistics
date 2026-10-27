@@ -5,8 +5,6 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { nextDocumentNumber } from "@/lib/numbering";
 import { PERM } from "@/lib/permissions/codes";
 import { usersHolding } from "@/lib/rbac/holders";
-import { whatsappFollowUpOverdue } from "@/lib/whatsapp/notify";
-import { LEAD_STAGE_LABEL } from "@/lib/sales/lead-display";
 import { getSetting } from "@/lib/settings";
 
 import {
@@ -179,12 +177,6 @@ export async function escalateOverdueFollowUps(db: Db, now: Date): Promise<numbe
   const recipients = await usersHolding(db, PERM.sales.followUp.receiveEscalation);
   if (recipients.length === 0) return 0;
 
-  // Their names and numbers, for the message that goes with the bell.
-  const heads = await db.user.findMany({
-    where: { id: { in: recipients } },
-    select: { id: true, name: true, phone: true },
-  });
-
   const { afterHours } = await getSetting(db, "sales.followUpEscalation");
   const cutoff = new Date(now.getTime() - afterHours * 3_600_000);
 
@@ -219,16 +211,6 @@ export async function escalateOverdueFollowUps(db: Db, now: Date): Promise<numbe
     escalated += 1;
 
     const overdueHours = Math.floor((now.getTime() - lead.nextActionAt!.getTime()) / 3_600_000);
-
-    // And on WhatsApp, to the same people the bell goes to.
-    await whatsappFollowUpOverdue(db, {
-      leadId: lead.id,
-      lead: `${lead.name} (${lead.leadNo})`,
-      owner: lead.owner?.name ?? "Nobody",
-      stage: LEAD_STAGE_LABEL[lead.state] ?? lead.state,
-      dueAt: lead.nextActionAt,
-      to: heads,
-    });
 
     await db.notification.createMany({
       data: recipients.map((userId) => ({

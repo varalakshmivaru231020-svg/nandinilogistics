@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { authorize, runAction, assertProjectAccess, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
-import { approvalRecipients, whatsappPaymentReceipt, whatsappReceiptBounced } from "@/lib/whatsapp/notify";
 import { PERM } from "@/lib/permissions/codes";
 import { bounceReceipt, clearReceipt } from "@/lib/sales/receipt-clearance";
 import { parseClearedOn } from "@/lib/sales/receipt-status";
@@ -21,12 +20,6 @@ function revalidate(bookingId: string) {
   revalidatePath("/sales/receipts");
   revalidatePath("/sales/bookings");
   revalidatePath(`/sales/bookings/${bookingId}`);
-}
-
-/** Whoever may clear a receipt on this project — the people a bounce is for. */
-async function whatsappReceiptHolders(db: typeof prisma, projectId: string | null, actorId: string) {
-  const people = await approvalRecipients(db, PERM.sales.receipt.clear, projectId);
-  return people.filter((p) => p.id !== actorId);
 }
 
 export async function clearReceiptAction(
@@ -58,42 +51,6 @@ export async function clearReceiptAction(
       summary: `Cleared ${receipt.mode} ${receipt.receiptNo} for ${inr(Number(receipt.amount))} against ${receipt.booking.bookingNo} (cleared on ${clearedOn})`,
       changes: { clearedAt: { from: null, to: done.clearedAt.toISOString() } },
     });
-
-    /*
-     * The customer's acknowledgement. After the audit row on purpose: the
-     * money is recorded whatever happens to the message, and a WhatsApp that
-     * cannot be queued must not undo a receipt.
-     */
-    const full = await prisma.receipt.findUnique({
-      where: { id },
-      select: {
-        receiptNo: true,
-        amount: true,
-        receiptDate: true,
-        booking: {
-          select: {
-            bookingNo: true,
-            totalAmount: true,
-            receivedAmount: true,
-            unit: { select: { unitNumber: true } },
-            project: { select: { name: true } },
-            customer: { select: { name: true, phone: true } },
-          },
-        },
-      },
-    });
-    if (full?.booking) {
-      const booking = full.booking;
-      await whatsappPaymentReceipt(prisma, {
-        receiptId: id,
-        receiptNo: full.receiptNo,
-        amount: Number(full.amount),
-        receivedOn: full.receiptDate,
-        towards: `Flat ${booking.unit?.unitNumber ?? ""}, ${booking.project?.name ?? ""}`.trim(),
-        balance: Math.max(0, Number(booking.totalAmount) - Number(booking.receivedAmount)),
-        customer: booking.customer,
-      });
-    }
 
     revalidate(receipt.booking.id);
     return { receiptNo: receipt.receiptNo };
@@ -138,25 +95,6 @@ export async function bounceReceiptAction(
         (receipt.demand ? ` and ${receipt.demand.demandNo}` : "") +
         `: ${reason.trim()}`,
       changes,
-    });
-
-    /*
-     * A bounce is the one receipt event the office has to hear about on a
-     * phone: the money is no longer there and somebody has to ring the
-     * customer today.
-     */
-    const customer = await prisma.booking.findUnique({
-      where: { id: receipt.booking.id },
-      select: { customer: { select: { name: true } } },
-    });
-    const toTell = await whatsappReceiptHolders(prisma, receipt.booking.projectId, ctx.id);
-    await whatsappReceiptBounced(prisma, {
-      receiptId: id,
-      receiptNo: receipt.receiptNo,
-      amount: result.amount,
-      customer: customer?.customer?.name ?? "the customer",
-      mode: [receipt.mode, receipt.referenceNo].filter(Boolean).join(" "),
-      to: toTell,
     });
 
     revalidate(receipt.booking.id);

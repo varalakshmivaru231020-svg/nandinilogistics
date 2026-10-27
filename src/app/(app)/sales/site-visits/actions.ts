@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { authorize, runAction, PermissionError, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
+import { whatsappSiteVisitScheduled } from "@/lib/whatsapp/notify";
 import { PERM } from "@/lib/permissions/codes";
 
 export async function scheduleSiteVisitAction(
@@ -43,6 +44,31 @@ export async function scheduleSiteVisitAction(
     await recordAudit({
       action: "CREATE", entity: "SiteVisit", entityId: leadId, userId: ctx.id,
       summary: `Scheduled a site visit for ${lead.name} on ${new Date(scheduledAt).toLocaleString("en-IN")}`,
+    });
+
+    /*
+     * And the client is told, on WhatsApp — where to come, when, and who will
+     * meet them. After the audit row: the visit is booked whatever happens to
+     * the message, and `enqueueWhatsApp` never throws into this flow.
+     *
+     * Off until an administrator switches it on at Masters & Users → WhatsApp,
+     * and refused there until the template is approved by Meta.
+     */
+    const [site, executive] = await Promise.all([
+      prisma.project.findUnique({
+        where: { id: projectId ?? lead.projectId ?? "" },
+        select: { name: true, addressLine: true, city: { select: { name: true } } },
+      }),
+      // Their own number, so the client can reach somebody before setting off.
+      prisma.user.findUnique({ where: { id: ctx.id }, select: { name: true, phone: true } }),
+    ]);
+    await whatsappSiteVisitScheduled(prisma, {
+      leadId,
+      client: { name: lead.name, phone: lead.phone },
+      project: site?.name ?? "our project",
+      address: [site?.addressLine, site?.city?.name].filter(Boolean).join(", ") || "—",
+      scheduledAt: new Date(scheduledAt),
+      executive: { name: executive?.name ?? ctx.name, phone: executive?.phone ?? null },
     });
 
     revalidatePath("/sales/site-visits");

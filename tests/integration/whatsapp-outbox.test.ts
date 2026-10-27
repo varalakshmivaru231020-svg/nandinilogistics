@@ -33,8 +33,8 @@ bindCookieBox(cookieBox);
  */
 
 const suffix = tag();
-const EVENT = "BOOKING_CONFIRMED";
-const TEMPLATE = `booking_confirmed_v1_${suffix}`;
+const EVENT = "SITE_VISIT_SCHEDULED";
+const TEMPLATE = `site_visit_scheduled_v1_${suffix}`;
 
 let templateId: string;
 let previousTrigger: { templateId: string | null; enabled: boolean; delayMinutes: number | null } | null =
@@ -66,7 +66,7 @@ beforeAll(async () => {
       languageCode: "en",
       category: "UTILITY",
       status: "APPROVED",
-      variables: ["customer", "flat", "project", "bookingNo", "dated", "value", "executive"],
+      variables: ["client", "project", "address", "when", "executive", "executivePhone"],
     },
     select: { id: true },
   });
@@ -114,13 +114,12 @@ function metaAnswers(status: number, body: unknown) {
 }
 
 const values = {
-  customer: "Vikram Shetty",
-  flat: "A-0101",
+  client: "Vikram Shetty",
   project: "NN Skyline",
-  bookingNo: `BKG/${suffix}`,
-  dated: "19 Oct 2026",
-  value: "₹1,35,00,000",
+  address: "Sarjapur Road, Bengaluru",
+  when: `28 Oct 2026 11:00 (${suffix})`,
   executive: "Priya Nair",
+  executivePhone: "+91 98765 43210",
 };
 
 describe("what an event writes", () => {
@@ -130,8 +129,8 @@ describe("what an event writes", () => {
       event: EVENT,
       toPhone: "+91 98765 43210",
       values,
-      entity: "Booking",
-      entityId: `bk-${suffix}`,
+      entity: "Lead",
+      entityId: `sv-${suffix}`,
     });
     expect(out.queued).toBe(true);
     if (!out.queued) return;
@@ -143,12 +142,11 @@ describe("what an event writes", () => {
     expect(row.toPhone).toBe("919876543210");
     expect(row.variables).toEqual([
       "Vikram Shetty",
-      "A-0101",
       "NN Skyline",
-      `BKG/${suffix}`,
-      "19 Oct 2026",
-      "₹1,35,00,000",
+      "Sarjapur Road, Bengaluru",
+      `28 Oct 2026 11:00 (${suffix})`,
       "Priya Nair",
+      "+91 98765 43210",
     ]);
   });
 
@@ -158,13 +156,13 @@ describe("what an event writes", () => {
       event: EVENT,
       toPhone: null,
       values,
-      entity: "Booking",
-      entityId: `bk-none-${suffix}`,
+      entity: "Lead",
+      entityId: `sv-none-${suffix}`,
     });
     expect(out.queued).toBe(false);
 
     const row = await prisma.whatsappMessage.findFirstOrThrow({
-      where: { entityId: `bk-none-${suffix}` },
+      where: { entityId: `sv-none-${suffix}` },
     });
     written.push(row.id);
     expect(row.status).toBe("SKIPPED");
@@ -177,12 +175,12 @@ describe("what an event writes", () => {
       event: EVENT,
       toPhone: "+91 98765 43210",
       values,
-      entity: "Booking",
-      entityId: `bk-off-${suffix}`,
+      entity: "Lead",
+      entityId: `sv-off-${suffix}`,
     });
     expect(out.queued).toBe(false);
     expect(
-      await prisma.whatsappMessage.count({ where: { entityId: `bk-off-${suffix}` } }),
+      await prisma.whatsappMessage.count({ where: { entityId: `sv-off-${suffix}` } }),
       "an outbox full of rows nobody asked for buries the ones that matter",
     ).toBe(0);
     await prisma.whatsappTrigger.update({ where: { event: EVENT }, data: { enabled: true } });
@@ -194,14 +192,14 @@ describe("what an event writes", () => {
       event: EVENT,
       toPhone: "+91 98765 43210",
       values,
-      entity: "Booking",
-      entityId: `bk-later-${suffix}`,
+      entity: "Lead",
+      entityId: `sv-later-${suffix}`,
     });
     expect(out.queued && out.scheduled).toBe(true);
     if (out.queued) written.push(out.id);
 
     const row = await prisma.whatsappMessage.findFirstOrThrow({
-      where: { entityId: `bk-later-${suffix}` },
+      where: { entityId: `sv-later-${suffix}` },
     });
     expect(row.status).toBe("SCHEDULED");
     expect(row.sendAfter.getTime()).toBeGreaterThan(Date.now() + 25 * 60_000);
@@ -216,7 +214,7 @@ describe("what the dispatcher does with it", () => {
       event: EVENT,
       toPhone: "+91 98765 43210",
       values,
-      entity: "Booking",
+      entity: "Lead",
       entityId: key,
     });
     if (!out.queued) throw new Error("not queued");
@@ -225,7 +223,7 @@ describe("what the dispatcher does with it", () => {
   }
 
   it("sends it, and keeps Meta's message id", async () => {
-    const id = await queueOne(`bk-send-${suffix}`);
+    const id = await queueOne(`sv-send-${suffix}`);
     metaAnswers(200, { messages: [{ id: "wamid.TEST123" }] });
 
     const result = await dispatchWhatsapp();
@@ -238,7 +236,7 @@ describe("what the dispatcher does with it", () => {
   });
 
   it("gives up on a refusal about the message, in Meta's own words", async () => {
-    const id = await queueOne(`bk-refused-${suffix}`);
+    const id = await queueOne(`sv-refused-${suffix}`);
     metaAnswers(400, { error: { message: "Template name does not exist in the translation" } });
 
     await dispatchWhatsapp();
@@ -250,7 +248,7 @@ describe("what the dispatcher does with it", () => {
   });
 
   it("tries again on their outage, later", async () => {
-    const id = await queueOne(`bk-outage-${suffix}`);
+    const id = await queueOne(`sv-outage-${suffix}`);
     metaAnswers(503, { error: { message: "Service temporarily unavailable" } });
 
     await dispatchWhatsapp();
@@ -263,7 +261,7 @@ describe("what the dispatcher does with it", () => {
   });
 
   it("sends nothing at all while the connection is switched off", async () => {
-    const id = await queueOne(`bk-offline-${suffix}`);
+    const id = await queueOne(`sv-offline-${suffix}`);
     await connect(false);
     metaAnswers(200, { messages: [{ id: "wamid.NOPE" }] });
 

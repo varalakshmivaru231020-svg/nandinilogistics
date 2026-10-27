@@ -12,7 +12,6 @@ import { FileTooLargeError, put, remove, UnsupportedFileTypeError } from "@/lib/
 import { nextDocumentNumber } from "@/lib/numbering";
 import { buildPaymentSchedule } from "@/lib/sales/cost-sheet";
 import { clearsOnEntry } from "@/lib/sales/receipt-status";
-import { whatsappBookingConfirmed } from "@/lib/whatsapp/notify";
 import { PERM } from "@/lib/permissions/codes";
 
 /* -------------------------------- Customers ------------------------------- */
@@ -311,35 +310,6 @@ export async function createBookingAction(
       projectId: created.projectId,
       summary: `Booked unit ${created.unitNumber} to ${created.customerName} on ${created.bookingNo} for ₹${created.total.toLocaleString("en-IN")} — ${created.demands} milestone demand(s) raised`,
     });
-
-    /*
-     * The customer's confirmation, after the booking is recorded and audited.
-     * They are the one person in this flow who will never open the app.
-     */
-    const forCustomer = await prisma.booking.findUnique({
-      where: { id: created.id },
-      select: {
-        bookingNo: true,
-        bookingDate: true,
-        totalAmount: true,
-        unit: { select: { unitNumber: true } },
-        project: { select: { name: true } },
-        customer: { select: { name: true, phone: true } },
-        soldBy: { select: { name: true } },
-      },
-    });
-    if (forCustomer) {
-      await whatsappBookingConfirmed(prisma, {
-        bookingId: created.id,
-        bookingNo: forCustomer.bookingNo,
-        bookedOn: forCustomer.bookingDate,
-        flat: forCustomer.unit?.unitNumber ?? "",
-        project: forCustomer.project?.name ?? "",
-        value: Number(forCustomer.totalAmount),
-        executive: forCustomer.soldBy?.name ?? ctx.name,
-        customer: forCustomer.customer,
-      });
-    }
 
     revalidatePath("/sales/bookings");
     revalidatePath("/units/board");

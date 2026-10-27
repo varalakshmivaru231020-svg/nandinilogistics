@@ -43,17 +43,25 @@ describe("a number as Meta takes it", () => {
 });
 
 describe("the variables an event sends", () => {
-  it("keeps the template's own order", () => {
-    const event = whatsappEvent("TASK_OVERDUE")!;
+  it("keeps the template's own order, whatever order it was given them in", () => {
+    const event = whatsappEvent("SITE_VISIT_SCHEDULED")!;
     expect(
       orderedVariables(event, {
-        overdueBy: "3 days",
-        assignee: "Anil",
-        taskNo: "T-9001",
-        dueOn: "08 Oct 2026",
-        title: "Slab shuttering check",
+        when: "28 Oct 2026 11:00",
+        client: "Vikram Shetty",
+        executivePhone: "+91 98765 43210",
+        project: "NN Skyline",
+        executive: "Priya Nair",
+        address: "Sarjapur Road, Bengaluru",
       }),
-    ).toEqual(["Anil", "T-9001", "Slab shuttering check", "08 Oct 2026", "3 days"]);
+    ).toEqual([
+      "Vikram Shetty",
+      "NN Skyline",
+      "Sarjapur Road, Bengaluru",
+      "28 Oct 2026 11:00",
+      "Priya Nair",
+      "+91 98765 43210",
+    ]);
   });
 
   /*
@@ -162,11 +170,16 @@ describe("the event registry itself", () => {
    */
   it("knows which of them leave the organisation", () => {
     const outside = WHATSAPP_EVENTS.filter((e) => e.audience !== "staff").map((e) => e.key);
-    expect(outside.sort()).toEqual([
-      "BOOKING_CONFIRMED",
-      "PAYMENT_RECEIPT",
-      "PURCHASE_ORDER_ISSUED",
-    ]);
+    expect(outside.sort()).toEqual(["SITE_VISIT_SCHEDULED"]);
+  });
+
+  /*
+   * One event, deliberately: the client's site-visit confirmation. Eight more
+   * were built and are in the history. Anything added back needs its own
+   * approved template, so this fails rather than letting one arrive quietly.
+   */
+  it("sends exactly what this release was asked for", () => {
+    expect(WHATSAPP_EVENTS.map((e) => e.key)).toEqual(["SITE_VISIT_SCHEDULED"]);
   });
 });
 

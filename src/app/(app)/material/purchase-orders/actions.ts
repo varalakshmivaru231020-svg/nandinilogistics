@@ -12,7 +12,6 @@ import {
 } from "@/lib/rbac/guard";
 import { diff, recordAudit } from "@/lib/audit";
 import { nextDocumentNumber } from "@/lib/numbering";
-import { whatsappApprovalPending, whatsappPurchaseOrderIssued } from "@/lib/whatsapp/notify";
 import { PERM } from "@/lib/permissions/codes";
 import { dateFrom } from "@/lib/parse-input";
 import { isPoEditable, poTotals, priceLine } from "@/lib/material/procurement";
@@ -310,56 +309,6 @@ async function approveAtLevel(id: string, level: ApprovalLevel, remarks: string,
       `${level === "PM" ? "PM approved" : "Admin approved"} purchase order ${po.poNo}` +
       ` for ₹${Number(po.totalAmount).toLocaleString("en-IN")}${remarks ? ` — ${remarks}` : ""}`,
   });
-
-  /*
-   * Two messages come out of an approval, and which one depends on the level.
-   *
-   *   - PM approved: the order now waits on the Admin, who is told it is
-   *     theirs;
-   *   - Admin approved: the order exists, and the vendor it is placed with is
-   *     told — the one person in this chain with no login.
-   */
-  const full = await prisma.purchaseOrder.findUnique({
-    where: { id },
-    select: {
-      poNo: true,
-      totalAmount: true,
-      expectedDate: true,
-      updatedAt: true,
-      project: { select: { code: true, name: true } },
-      vendor: { select: { name: true, phone: true } },
-      createdBy: { select: { name: true } },
-      items: { select: { item: { select: { name: true } } }, take: 1 },
-      deliveryAddress: true,
-    },
-  });
-  if (full) {
-    const subject = full.items[0]?.item?.name ?? "Material";
-    if (level === "PM") {
-      await whatsappApprovalPending(prisma, {
-        document: `Purchase order ${full.poNo}`,
-        subject,
-        projectCode: full.project?.code ?? "—",
-        raisedBy: full.createdBy?.name ?? "—",
-        href: `material/purchase-orders/${id}`,
-        entity: "PurchaseOrder",
-        entityId: id,
-        permission: PERM.material.purchaseOrder.approveAdmin,
-        projectId: po.projectId,
-        actorId: ctx.id,
-      });
-    } else {
-      await whatsappPurchaseOrderIssued(prisma, {
-        poId: id,
-        poNo: full.poNo,
-        issuedOn: now,
-        value: Number(full.totalAmount),
-        expectedDate: full.expectedDate,
-        deliverTo: full.deliveryAddress || full.project?.name || "—",
-        vendor: full.vendor,
-      });
-    }
-  }
 
   revalidatePath("/material/purchase-orders");
   revalidatePath(`/material/purchase-orders/${id}`);

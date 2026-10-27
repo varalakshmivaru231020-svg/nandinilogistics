@@ -6,7 +6,6 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
-import { whatsappChecklistDenied } from "@/lib/whatsapp/notify";
 import { PERM } from "@/lib/permissions/codes";
 import {
   checklistStage, earliestWaitingLevel, waitingLevel,
@@ -811,34 +810,6 @@ export async function reviewChecklistItemAction(
       if (verdict === "FAIL") {
         await tell(tx, "CHECKLIST_FAILED", taskId, ctx.id,
           `A point was sent back from ${where.toLowerCase()}`, remark || undefined);
-
-        /*
-         * And on WhatsApp, where the person doing the work is: a denied point
-         * is the one checklist event that makes somebody walk back to the
-         * floor they just left.
-         */
-        const task = await tx.task.findUnique({
-          where: { id: taskId },
-          select: {
-            taskNo: true,
-            title: true,
-            assignee: { select: { id: true, name: true, phone: true } },
-          },
-        });
-        const point = await tx.taskChecklistItem.findUnique({
-          where: { id: itemId },
-          select: { checkpoint: { select: { text: true } } },
-        });
-        if (task) {
-          await whatsappChecklistDenied(tx, {
-            taskId,
-            task: `${task.taskNo} ${task.title}`,
-            point: point?.checkpoint.text ?? "A checklist point",
-            deniedBy: `${ctx.name} (${where})`,
-            remark: remark || null,
-            assignee: task.assignee,
-          });
-        }
       }
 
       if (to === "APPROVED") {
