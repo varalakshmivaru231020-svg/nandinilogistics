@@ -54,7 +54,7 @@ export const NAVIGATION: NavSection[] = [
   {
     label: "Riders",
     items: [
-      { label: "Riders & Staff", href: "/hr", icon: "hr", permission: PERM.hr.employee.view },
+      { label: "Users & Attendance", href: "/hr", icon: "hr", permission: PERM.hr.employee.view },
       { label: "Onboarding", href: "/hr/onboarding", icon: "hr", permission: PERM.hr.employee.view, badge: "onboarding" },
       { label: "Referrals", href: "/hr/referrals", icon: "followups", permission: PERM.hr.referral.view },
       { label: "Tasks", href: "/tasks", icon: "tasks", permission: PERM.task.task.view, badge: "tasks" },

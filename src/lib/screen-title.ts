@@ -9,7 +9,7 @@ const SCREEN_TITLES: Array<[href: string, title: string]> = [
   ["/tasks", "Task Management"],
   ["/sales/leads", "Lead Management · CRM"],
   ["/sales/follow-ups", "Follow-ups"],
-  ["/hr", "Riders & Staff"],
+  ["/hr", "Users & Attendance"],
   ["/reports", "Reports"],
   ["/masters", "Masters & Users"],
   ["/notifications", "Notifications"],
