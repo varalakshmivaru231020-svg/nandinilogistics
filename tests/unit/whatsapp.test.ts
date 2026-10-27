@@ -209,3 +209,37 @@ describe("when a refusal is worth trying again", () => {
     expect(total).toBeLessThan(60);
   });
 });
+
+/**
+ * Who can reach the WhatsApp section.
+ *
+ * Its own three permissions were registered properly, and nothing on
+ * production held them — so the screen existed and nobody could open it, and
+ * the grant that would fix that has to be run on the server. Users & Roles
+ * stands in for them: anybody who may change what a role can do can hand
+ * themselves `admin.whatsapp.*` in a few clicks, so refusing them here
+ * protects nothing.
+ */
+describe("who may open WhatsApp on Masters & Users", () => {
+  const masters = readFileSync(join(ROOT, "src", "app", "(app)", "masters", "page.tsx"), "utf8");
+  const actions = readFileSync(
+    join(ROOT, "src", "app", "(app)", "masters", "whatsapp-actions.ts"),
+    "utf8",
+  );
+
+  it("shows the section to its own permission, or to Users & Roles", () => {
+    expect(
+      masters.includes("hasAny(PERM.admin.whatsapp.view, PERM.admin.user.view)"),
+    ).toBe(true);
+  });
+
+  it("lets the same people save, so the screen is never a dead end", () => {
+    // A screen somebody can open and not use is worse than one they cannot
+    // open: they fill the form in and the save refuses them.
+    expect(actions.includes("PERM.admin.whatsapp.update, PERM.admin.role.update")).toBe(true);
+    expect(actions.includes("PERM.admin.whatsapp.send, PERM.admin.role.update")).toBe(true);
+    expect(actions.includes("authorizeAny("), "every action uses the wider check").toBe(true);
+    // And nothing still asks for the narrow one on its own.
+    expect(actions.includes("authorize(PERM.admin.whatsapp")).toBe(false);
+  });
+});

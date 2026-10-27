@@ -53,6 +53,22 @@ export async function requireAnyPermission(...codes: string[]): Promise<AuthCont
 }
 
 /** For server actions: throws instead of redirecting, so the form can show the error. */
+/**
+ * Any one of these is enough, where two permissions mean the same thing in
+ * practice.
+ *
+ * `authorize()` wants every code it is given; this wants one. It exists for
+ * the case where a narrow permission has a broader one that already implies
+ * it — somebody who may change what roles can do can grant themselves the
+ * narrow code in any case, so refusing them is ceremony rather than security.
+ */
+export async function authorizeAny(...codes: string[]): Promise<AuthContext> {
+  const ctx = await getAuthContext();
+  if (!ctx) throw new AuthRequiredError();
+  if (!ctx.hasAny(...codes)) throw new PermissionError(codes[0]);
+  return ctx;
+}
+
 export async function authorize(...codes: string[]): Promise<AuthContext> {
   const ctx = await getAuthContext();
   if (!ctx) throw new AuthRequiredError();

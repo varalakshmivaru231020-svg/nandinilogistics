@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { recordAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
+import { authorizeAny, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { setSetting } from "@/lib/settings";
 import { listMetaTemplates, pingWhatsapp, whatsappCreds } from "@/lib/whatsapp/client";
 import { WHATSAPP_EVENTS, whatsappEvent } from "@/lib/whatsapp/events";
@@ -22,6 +22,17 @@ import { WHATSAPP_EVENTS, whatsappEvent } from "@/lib/whatsapp/events";
 
 const PATH = "/masters";
 
+/*
+ * Who may work this screen.
+ *
+ * Its own permissions, or the ones that run Users & Roles — because somebody
+ * who may change what a role can do can hand themselves `admin.whatsapp.*` in
+ * a few clicks, so refusing them here protects nothing and only means the
+ * section cannot be reached until a grant is run on the server.
+ */
+const MAY_CHANGE = [PERM.admin.whatsapp.update, PERM.admin.role.update] as const;
+const MAY_SEND = [PERM.admin.whatsapp.send, PERM.admin.role.update] as const;
+
 /* ------------------------------------------------------------ connection */
 
 /**
@@ -32,7 +43,7 @@ export async function saveWhatsappConnectionAction(
   formData: FormData,
 ): Promise<ActionResult<null>> {
   return runAction(async () => {
-    const ctx = await authorize(PERM.admin.whatsapp.update);
+    const ctx = await authorizeAny(...MAY_CHANGE);
     const current = await whatsappCreds();
 
     const text = (name: string) => String(formData.get(name) ?? "").trim();
@@ -80,7 +91,7 @@ export async function testWhatsappConnectionAction(): Promise<
   ActionResult<{ phoneNumberId: string; displayPhone: string }>
 > {
   return runAction(async () => {
-    await authorize(PERM.admin.whatsapp.send);
+    await authorizeAny(...MAY_SEND);
     return pingWhatsapp();
   });
 }
@@ -99,7 +110,7 @@ export async function importWhatsappTemplatesAction(): Promise<
   ActionResult<{ found: number; added: number; updated: number }>
 > {
   return runAction(async () => {
-    const ctx = await authorize(PERM.admin.whatsapp.update);
+    const ctx = await authorizeAny(...MAY_CHANGE);
     const theirs = await listMetaTemplates();
 
     let added = 0;
@@ -175,7 +186,7 @@ export async function saveWhatsappTriggerAction(
   input: { templateId: string | null; enabled: boolean; delayMinutes: number | null; fallbackPhone: string | null },
 ): Promise<ActionResult<null>> {
   return runAction(async () => {
-    const ctx = await authorize(PERM.admin.whatsapp.update);
+    const ctx = await authorizeAny(...MAY_CHANGE);
 
     const def = whatsappEvent(event);
     if (!def) throw new Error(`There is no such WhatsApp event: ${event}`);
@@ -246,7 +257,7 @@ export async function saveWhatsappTriggerAction(
 /** Puts a failed or skipped message back in the queue, once. */
 export async function resendWhatsappMessageAction(id: string): Promise<ActionResult<null>> {
   return runAction(async () => {
-    const ctx = await authorize(PERM.admin.whatsapp.send);
+    const ctx = await authorizeAny(...MAY_SEND);
 
     const message = await prisma.whatsappMessage.findUnique({
       where: { id },

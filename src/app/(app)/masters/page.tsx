@@ -71,7 +71,14 @@ export default async function MastersPage({
     leadcfg: ctx.has(PERM.masters.lostReason.view),
     workforce: ctx.has(PERM.masters.designation.view),
     reference: MASTERS.some((m) => ctx.has(masterPerm(m, "view"))),
-    whatsapp: ctx.has(PERM.admin.whatsapp.view),
+    /*
+     * Its own permission, or the one that opens Users & Roles. Somebody who
+     * may change what a role can do can grant themselves `admin.whatsapp.view`
+     * in a few clicks, so gating the section behind only the new code means a
+     * server-side grant has to be run before anybody can reach it — ceremony,
+     * for no protection.
+     */
+    whatsapp: ctx.hasAny(PERM.admin.whatsapp.view, PERM.admin.user.view),
   };
 
   const sections = SECTIONS.filter((s) => may[s.key]);
@@ -161,8 +168,8 @@ export default async function MastersPage({
         )}
         {active.key === "whatsapp" && (
           <WhatsApp
-            canUpdate={ctx.has(PERM.admin.whatsapp.update)}
-            canSend={ctx.has(PERM.admin.whatsapp.send)}
+            canUpdate={ctx.hasAny(PERM.admin.whatsapp.update, PERM.admin.role.update)}
+            canSend={ctx.hasAny(PERM.admin.whatsapp.send, PERM.admin.role.update)}
           />
         )}
       </div>
