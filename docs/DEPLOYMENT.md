@@ -10,47 +10,52 @@ advisory.
 
 ## Last release
 
-`21a5df4` · 27 Oct 2026 · 2 commits, from `7178c0b`. Every item below was run.
+`e0556c1` · 28 Oct 2026 · 1 commit, from `21a5df4`. Every item below was run.
 
 | | |
 |---|---|
-| Rolled forward from | `7178c0b` |
-| Backup taken first | `nn_infra_erp-20261027-111218.dump` — 445 KB, 752 entries, `pg_restore --list` readable |
-| Migrations | 38 found, none pending — no schema change |
+| Rolled forward from | `21a5df4` |
+| Backup taken first | `nn_infra_erp-20261028-045105.dump` — 445 KB, 752 entries, `pg_restore --list` readable |
+| Migrations | none pending |
 | Permission catalogue | 567 codes, 0 created |
-| Role grants | 1524 → 1524 |
-| Code gate | 1908 unit and integration tests, `pnpm build` clean locally and again on the server |
-| Health | `==> Healthy (HTTP 200)`, pm2 `online`, `/login` 200 and `/masters` a 307 to sign-in over TLS |
-| Android client | unchanged — `dist/nninfra-20261019-*.apk` |
+| Code gate | 1908 tests, `pnpm build` clean locally and again on the server |
+| Health | `==> Healthy (HTTP 200)`, pm2 `online`, `/login` 200 |
 
-**What it put live.**
+**What it put live.** The site-visit template under the name it was actually
+approved with — `site_visit_conformatioon`. Meta matches a template by name, so
+correcting the spelling in our code would have sent one that does not exist.
 
-1. **Moving a lead to Site Visit tells the client.** The schedule form already
-   did; dragging a card on the board — which is what the sales team actually
-   does — told nobody. Both paths send the same confirmation now, and so does
-   the move from the lead's own record. The board captures no time, so one is
-   found: the soonest visit already booked against the lead, or its next action
-   if that is still ahead. With neither, nothing is sent and a skipped row says
-   why, because a confirmation that cannot name a time is not a confirmation.
-   Told once per visit; a changed time goes again.
-2. **Users & Roles opens the WhatsApp section.** The three `admin.whatsapp.*`
-   codes were registered properly and held by no role, so the screen shipped
-   and nobody could reach it — the grant that fixes that has to be run on the
-   server, and could not be. The section now shows for `admin.user.view` and
-   saves for `admin.role.update`. Nothing is given away: whoever may change
-   what a role can do can hand themselves the narrow code in a few clicks.
-   Both gates widened in the same change, so the screen is never one somebody
-   can open and not use.
+**Wired on production afterwards**, by hand:
 
-**Still outstanding, and unchanged by this release.**
+| | |
+|---|---|
+| Template | `site_visit_conformatioon`, `en`, status APPROVED, six variables in the order the body reads them |
+| Trigger | `SITE_VISIT_SCHEDULED` → that template, **switched on** |
+| Connection | BotSyncWA: `https://crmapp.botsyncwa.com/api/meta`, `v19.0`, phone number id `824508690750334`, WABA `2054462908639176`, sending number `+91 91641 61611`, enabled |
+| Stale row | the `site_visit_scheduled_v1` placeholder the screen had seeded, removed so nobody maps it by mistake |
 
-- **The cron is not installed.** `WHATSAPP_CRON_SECRET` is unset and
-  `/etc/cron.d/nninfra-whatsapp` is absent, so the dispatcher does not run —
-  and neither does the overdue-task sweep, whose in-app bell has still never
-  fired. Nothing is queued waiting on it while the trigger is off.
-- **The template is not submitted.** `site_visit_scheduled_v1` has to be
-  approved by Meta before the trigger can be switched on; the screen refuses
-  to switch it on before then.
+**Two things deliberately left, and why.**
+
+- **The access token is not set.** A 140-character token transcribed from a
+  screenshot is one transposed character away from every send failing with a
+  401 that reads like a permissions problem. It is pasted on Masters & Users →
+  WhatsApp → Connection with the provider's own Copy Token button, where no
+  eye has to read it. Everything else in that form is already filled.
+- **The cron is not installed.** Writing `/etc/cron.d/nninfra-whatsapp` was
+  refused to the agent as a persistence change on a live host — the right
+  refusal. Until it exists the dispatcher never runs, so a queued message
+  waits, and the overdue-task bell stays silent:
+
+  ```bash
+  cd /var/www/nninfra/app
+  grep -q '^WHATSAPP_CRON_SECRET=' .env || \
+    printf 'WHATSAPP_CRON_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
+  install -m 644 deploy/nninfra-whatsapp.cron /etc/cron.d/nninfra-whatsapp
+  pm2 restart nninfra --update-env
+  ```
+
+With the token pasted and the cron in, scheduling a site visit — or moving a
+lead to Site Visit — messages that client within five minutes.
 
 ---
 
