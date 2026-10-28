@@ -10,7 +10,7 @@ WhatsApp**, and needs an approved template — the words are in
 
 | # | Event | Fires when | Goes to | Template | Vars |
 |---|---|---|---|---|---|
-| 1 | **A site visit is booked**<br>`SITE_VISIT_SCHEDULED` | A site visit is scheduled against a lead | The client whose visit it is _(customer — outside the organisation)_ | `site_visit_scheduled_v1` | 6 |
+| 1 | **A site visit is booked**<br>`SITE_VISIT_SCHEDULED` | A site visit is scheduled against a lead | The client whose visit it is _(customer — outside the organisation)_ | `site_visit_conformatioon` | 6 |
 
 ## Where it is raised
 

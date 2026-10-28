@@ -127,11 +127,19 @@ describe("the events against the templates submitted to Meta", () => {
         expect(body.example?.body_text?.[0]?.length).toBe(highest);
       });
 
-      it("claims a url button only where the template has one", () => {
+      /*
+       * Only a *dynamic* url button — one whose link carries a `{{1}}` — needs
+       * anything sent for it. The live template also has a static "Visit"
+       * button, set in the provider's portal, and that one takes no parameter
+       * and is none of this side's business.
+       */
+      it("claims a url button only where the template has a variable in one", () => {
         const template = byName.get(event.template)!;
         const buttons = template.components.find((c) => c.type === "BUTTONS");
-        const hasUrl = Boolean(buttons?.buttons?.some((b) => b.type === "URL"));
-        expect(Boolean(event.button)).toBe(hasUrl);
+        const dynamic = Boolean(
+          buttons?.buttons?.some((b) => b.type === "URL" && /\{\{\d+\}\}/.test(b.url ?? "")),
+        );
+        expect(Boolean(event.button)).toBe(dynamic);
       });
     });
   }

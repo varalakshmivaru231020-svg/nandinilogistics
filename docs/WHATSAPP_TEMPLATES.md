@@ -1,7 +1,9 @@
 # WhatsApp message template — for submission to Meta
 
 One template, for the one message this platform sends: a client's confirmation
-that their site visit is booked.
+that their site visit is booked. It is **approved and live** on the BotSyncWA
+channel; this file is the record of what was approved, not a thing waiting to
+be submitted.
 
 Submit it from `docs/whatsapp-templates.json` — paste it into Meta Business
 Manager → WhatsApp Manager → Message templates, or post the file with
@@ -11,7 +13,7 @@ after any edit.
 
 | | |
 |---|---|
-| Name | `site_visit_scheduled_v1` |
+| Name | `site_visit_conformatioon` — the spelling it was **approved** under. Meta matches by name, so this is not ours to tidy; a correctly spelled one can be submitted later and `events.ts` pointed at it in one line. |
 | Category | **UTILITY** — it follows from something the client arranged. Not marketing: one selling word and Meta recategorises it, which costs more, needs opt-in and can be throttled. |
 | Language | `en`. A Kannada or Hindi version is a separate submission under the same name. |
 | Goes to | The client, on the number held against the lead. |
@@ -32,7 +34,10 @@ Reply to this message if you need a different time.
 ```
 
 **Footer:** `NN Infra`  
-**Buttons:** none. A client has no login, so there is nowhere to send them.
+**Buttons:** a static **Visit** link, set in the provider's portal. Static means
+it carries no `{{n}}`, so this platform sends nothing for it — the link is the
+same for every client. A dynamic one would need a parameter on every send, and
+the code would have to be told about it.
 
 The last line invites a reply on purpose: a reply opens a 24-hour window in
 which the sales executive can write to them freely, without another template.

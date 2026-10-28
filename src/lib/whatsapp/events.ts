@@ -45,7 +45,16 @@ export const WHATSAPP_EVENTS: readonly WhatsappEventDef[] = [
     audience: "customer",
     recipient: "The client whose visit it is",
     fires: "A site visit is scheduled against a lead",
-    template: "site_visit_scheduled_v1",
+    /*
+     * The name as it was approved, spelling and all.
+     *
+     * Meta matches a template by its name, so this is not ours to tidy: the
+     * approved one reads `site_visit_conformatioon`, and correcting it here
+     * would send a template that does not exist. A correctly spelled one can
+     * be submitted later and this line changed to it — one line, and nothing
+     * else moves.
+     */
+    template: "site_visit_conformatioon",
     variables: ["client", "project", "address", "when", "executive", "executivePhone"],
   },
 ] as const;

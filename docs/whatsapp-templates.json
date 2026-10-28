@@ -1,6 +1,6 @@
 [
   {
-    "name": "site_visit_scheduled_v1",
+    "name": "site_visit_conformatioon",
     "language": "en",
     "category": "UTILITY",
     "components": [
@@ -20,7 +20,10 @@
           ]
         }
       },
-      { "type": "FOOTER", "text": "NN Infra" }
+      {
+        "type": "FOOTER",
+        "text": "NN Infra"
+      }
     ]
   }
 ]

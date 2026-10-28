@@ -7,7 +7,12 @@ import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
 import { authorizeAny, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { setSetting } from "@/lib/settings";
-import { listMetaTemplates, pingWhatsapp, whatsappCreds } from "@/lib/whatsapp/client";
+import {
+  listMetaTemplates,
+  pingWhatsapp,
+  whatsappCreds,
+  WhatsappError,
+} from "@/lib/whatsapp/client";
 import { WHATSAPP_EVENTS, whatsappEvent } from "@/lib/whatsapp/events";
 
 /**
@@ -86,13 +91,32 @@ export async function saveWhatsappConnectionAction(
   });
 }
 
-/** The Test connection button: proves the credentials reach the number. */
+/**
+ * The Test connection button: proves the credentials reach the number.
+ *
+ * It asks the provider about the sending number, which Meta answers directly.
+ * A BSP that proxies Meta may not implement that one read even though sending
+ * works perfectly — so a 404 or 405 is reported as what it is rather than as
+ * "your credentials are wrong", which would send somebody rechecking a token
+ * that was never the problem.
+ */
 export async function testWhatsappConnectionAction(): Promise<
   ActionResult<{ phoneNumberId: string; displayPhone: string }>
 > {
   return runAction(async () => {
     await authorizeAny(...MAY_SEND);
-    return pingWhatsapp();
+    try {
+      return await pingWhatsapp();
+    } catch (err) {
+      if (err instanceof WhatsappError && (err.status === 404 || err.status === 405)) {
+        throw new Error(
+          "The connection is saved, but this provider does not answer the check this button makes " +
+            "(it asks Meta about the sending number). That does not mean sending is broken — switch " +
+            "the trigger on and watch the Messages tab for the first one.",
+        );
+      }
+      throw err;
+    }
   });
 }
 
