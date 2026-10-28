@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { assertProjectAccess, authorize, runAction, PermissionError, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
+import { sendWhatsappNow } from "@/lib/whatsapp/dispatch";
 import { whatsappSiteVisitScheduled } from "@/lib/whatsapp/notify";
 import { PERM } from "@/lib/permissions/codes";
 import { getSetting } from "@/lib/settings";
@@ -217,7 +218,7 @@ export async function changeLeadStageAction(
             })
           : project;
 
-      await whatsappSiteVisitScheduled(prisma, {
+      const queued = await whatsappSiteVisitScheduled(prisma, {
         leadId: id,
         client: { name: lead.name, phone: lead.phone },
         project: site?.name ?? "our project",
@@ -225,6 +226,8 @@ export async function changeLeadStageAction(
         scheduledAt: when,
         executive: { name: executive?.name ?? ctx.name, phone: executive?.phone ?? null },
       });
+      // Sent now, as from the form — the sweep is the backstop, not the path.
+      if (queued.queued) await sendWhatsappNow(queued.id);
     }
 
     revalidatePath("/sales/leads");

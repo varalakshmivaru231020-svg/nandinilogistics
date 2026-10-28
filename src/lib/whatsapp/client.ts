@@ -67,7 +67,12 @@ export function configurationProblem(creds: WhatsappCreds): string | null {
   return null;
 }
 
-async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+async function call<T>(
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+  timeoutMs = 20_000,
+): Promise<T> {
   const creds = await whatsappCreds();
   const problem = configurationProblem(creds);
   if (problem) throw new WhatsappError(500, null, problem);
@@ -82,8 +87,9 @@ async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Pr
         authorization: `Bearer ${creds.accessToken}`,
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      // A send that hangs must not hold a dispatcher run open.
-      signal: AbortSignal.timeout(20_000),
+      // A send that hangs must not hold a dispatcher run open — nor, on the
+      // immediate path, the screen of whoever just scheduled the visit.
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
     throw new WhatsappError(0, null, `Could not reach ${creds.apiUrl}: ${String(err)}`);
@@ -128,7 +134,10 @@ export interface SentMessage {
  *     answers "Param button[0] is missing parameter URL" and nothing is sent.
  *     A message without its button beats no message.
  */
-export async function sendTemplate(input: SendTemplate): Promise<SentMessage> {
+export async function sendTemplate(
+  input: SendTemplate,
+  timeoutMs?: number,
+): Promise<SentMessage> {
   const creds = await whatsappCreds();
   const to = normalisePhone(input.toPhone);
   if (!to) throw new WhatsappError(400, null, "There is no number to send to.");
@@ -154,17 +163,22 @@ export async function sendTemplate(input: SendTemplate): Promise<SentMessage> {
     });
   }
 
-  return call<SentMessage>("POST", `/${creds.phoneNumberId}/messages`, {
-    messaging_product: "whatsapp",
-    to,
-    recipient_type: "individual",
-    type: "template",
-    template: {
-      name: input.templateName,
-      language: { policy: "deterministic", code: input.languageCode },
-      components,
+  return call<SentMessage>(
+    "POST",
+    `/${creds.phoneNumberId}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to,
+      recipient_type: "individual",
+      type: "template",
+      template: {
+        name: input.templateName,
+        language: { policy: "deterministic", code: input.languageCode },
+        components,
+      },
     },
-  });
+    timeoutMs,
+  );
 }
 
 export interface MetaTemplate {

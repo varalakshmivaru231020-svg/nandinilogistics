@@ -3,7 +3,7 @@ import "server-only";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 
-import { enqueueWhatsApp } from "./outbox";
+import { enqueueWhatsApp, type EnqueueOutcome } from "./outbox";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -42,7 +42,7 @@ export async function whatsappSiteVisitScheduled(
     scheduledAt: Date | string | null;
     executive: { name: string; phone: string | null };
   },
-): Promise<void> {
+): Promise<EnqueueOutcome> {
   const when = input.scheduledAt ? at(input.scheduledAt) : null;
 
   /*
@@ -64,10 +64,10 @@ export async function whatsappSiteVisitScheduled(
       },
       select: { id: true },
     });
-    if (told) return;
+    if (told) return { queued: false, why: "This client has already been told about this visit." };
   }
 
-  await enqueueWhatsApp(db, {
+  return enqueueWhatsApp(db, {
     event: "SITE_VISIT_SCHEDULED",
     toPhone: input.client.phone,
     entity: "Lead",

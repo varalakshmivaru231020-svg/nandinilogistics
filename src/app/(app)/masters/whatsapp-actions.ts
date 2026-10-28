@@ -13,6 +13,7 @@ import {
   whatsappCreds,
   WhatsappError,
 } from "@/lib/whatsapp/client";
+import { sendWhatsappNow } from "@/lib/whatsapp/dispatch";
 import { WHATSAPP_EVENTS, whatsappEvent } from "@/lib/whatsapp/events";
 
 /**
@@ -278,8 +279,17 @@ export async function saveWhatsappTriggerAction(
 
 /* ------------------------------------------------------------------- log */
 
-/** Puts a failed or skipped message back in the queue, once. */
-export async function resendWhatsappMessageAction(id: string): Promise<ActionResult<null>> {
+/**
+ * Sends a failed or skipped message again, now.
+ *
+ * It used to put the row back in the queue and stop there, which on a server
+ * with no sweep installed meant the button did nothing visible at all. It
+ * sends, and says what the provider said — which is the one place an
+ * administrator can see a refusal in Meta's own words.
+ */
+export async function resendWhatsappMessageAction(
+  id: string,
+): Promise<ActionResult<{ sent: boolean; detail: string }>> {
   return runAction(async () => {
     const ctx = await authorizeAny(...MAY_SEND);
 
@@ -298,15 +308,28 @@ export async function resendWhatsappMessageAction(id: string): Promise<ActionRes
       data: { status: "QUEUED", sendAfter: new Date(), attempts: 0, error: null },
     });
 
+    // Twenty seconds here rather than eight: somebody pressed a button and is
+    // waiting for the answer, which is worth a little patience.
+    const outcome = await sendWhatsappNow(id, 20_000);
+
     await recordAudit({
       action: "UPDATE",
       entity: "WhatsappMessage",
       entityId: id,
       userId: ctx.id,
-      summary: `Queued ${message.templateName} to ${message.toPhone} again`,
+      summary: outcome.sent
+        ? `Sent ${message.templateName} to ${message.toPhone} by hand`
+        : `Tried ${message.templateName} to ${message.toPhone} by hand — ${outcome.why}`,
     });
 
     revalidatePath(PATH);
-    return null;
+    return {
+      sent: outcome.sent,
+      detail: outcome.sent
+        ? `Sent to ${message.toPhone}.`
+        : outcome.willRetry
+          ? `Not sent yet — ${outcome.why} It stays in the queue.`
+          : `Refused — ${outcome.why}`,
+    };
   });
 }

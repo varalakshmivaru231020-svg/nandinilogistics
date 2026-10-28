@@ -23,14 +23,19 @@ WhatsApp**, and needs an approved template — the words are in
 1. The business flow calls `enqueueWhatsApp()`, which writes one row in
    `whatsapp_messages` — or nothing, if the trigger is off. **It never throws**:
    a booking must not fail because a template was renamed.
-2. `POST /api/whatsapp/dispatch` runs every five minutes from cron and drains
-   the outbox. It also runs the overdue-task sweep, which rings the in-app bell
-   and sends no WhatsApp — that sweep had tests and no caller until this
-   endpoint existed.
-3. A refusal about the message itself (400: template not approved, number not on
+2. **The action sends it there and then**, on an eight-second deadline. The
+   client is told while the person who scheduled the visit is still looking at
+   the screen, and a provider having a slow minute delays the message rather
+   than failing the visit.
+3. `POST /api/whatsapp/dispatch` runs every five minutes from cron and sweeps
+   up whatever the first attempt did not get: a timeout, a 5xx, a rate limit,
+   anything queued while the connection was off. It also runs the overdue-task
+   sweep, which rings the in-app bell and sends no WhatsApp — that sweep had
+   tests and no caller until this endpoint existed.
+4. A refusal about the message itself (400: template not approved, number not on
    WhatsApp) is final. Their outage (5xx, 429) or an unreachable host is tried
    again after 2, then 8, then 32 minutes, four attempts in all.
-4. Every message stays as a row, sent or not. The log on the WhatsApp tab is
+5. Every message stays as a row, sent or not. The log on the WhatsApp tab is
    that table.
 
 ## The connection

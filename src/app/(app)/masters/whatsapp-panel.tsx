@@ -384,13 +384,23 @@ function Log({ recent, canSend }: { recent: Console["recent"]; canSend: boolean 
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
+  const [notice, setNotice] = React.useState<string | null>(null);
+
   async function resend(id: string) {
     setBusy(id);
     setError(null);
+    setNotice(null);
     const res = await resendWhatsappMessageAction(id);
     setBusy(null);
-    if (!res.ok) setError(res.error);
-    else router.refresh();
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    // What the provider said, either way — this is the one place a refusal is
+    // visible in Meta's own words.
+    if (res.data.sent) setNotice(res.data.detail);
+    else setError(res.data.detail);
+    router.refresh();
   }
 
   if (recent.length === 0) {
@@ -405,6 +415,7 @@ function Log({ recent, canSend }: { recent: Console["recent"]; canSend: boolean 
   return (
     <div className="space-y-3">
       {error && <Alert tone="error">{error}</Alert>}
+      {notice && !error && <Alert tone="success">{notice}</Alert>}
       <div className="overflow-hidden rounded-[13px] border border-line-400 bg-white">
         {recent.map((m, i) => (
           <div

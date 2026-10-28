@@ -109,6 +109,65 @@ describe("a site visit tells the client", () => {
     await cleanupActionSessions();
   });
 
+  /*
+   * The provider, as far as this side can tell. A real send would message a
+   * real phone, which a test must never do.
+   */
+  function metaAnswers(status: number, body: unknown) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+  }
+
+  it("sends it at once, rather than waiting for the sweep", async () => {
+    metaAnswers(200, { messages: [{ id: "wamid.SEEDED" }] });
+    const when = new Date(Date.now() + 5 * 86_400_000);
+
+    const res = await scheduleSiteVisitAction(leadId, when.toISOString(), projectId);
+    expect(res.ok, res.ok ? "" : res.error).toBe(true);
+
+    // Sent by the time the action returned: the person who scheduled it is
+    // still on the screen, and the client already has the message.
+    const message = await prisma.whatsappMessage.findFirstOrThrow({
+      where: { entityId: leadId },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(message.status).toBe("SENT");
+    expect(message.metaMessageId).toBe("wamid.SEEDED");
+    expect(message.sentAt).not.toBeNull();
+
+    vi.unstubAllGlobals();
+    await prisma.whatsappMessage.deleteMany({ where: { entityId: leadId } });
+    await prisma.siteVisit.deleteMany({ where: { leadId } });
+  });
+
+  it("leaves it queued for the sweep when the provider is having a bad minute", async () => {
+    metaAnswers(503, { error: { message: "Service temporarily unavailable" } });
+    const when = new Date(Date.now() + 6 * 86_400_000);
+
+    const res = await scheduleSiteVisitAction(leadId, when.toISOString(), projectId);
+    // The visit is booked regardless. That is the whole point of the outbox.
+    expect(res.ok, res.ok ? "" : res.error).toBe(true);
+
+    const message = await prisma.whatsappMessage.findFirstOrThrow({
+      where: { entityId: leadId },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(message.status).toBe("QUEUED");
+    expect(message.attempts).toBe(1);
+    expect(message.error).toContain("temporarily unavailable");
+
+    vi.unstubAllGlobals();
+    await prisma.whatsappMessage.deleteMany({ where: { entityId: leadId } });
+    await prisma.siteVisit.deleteMany({ where: { leadId } });
+  });
+
   it("queues the confirmation when the visit is scheduled", async () => {
     const when = new Date(Date.now() + 3 * 86_400_000);
     const res = await scheduleSiteVisitAction(leadId, when.toISOString(), projectId);
