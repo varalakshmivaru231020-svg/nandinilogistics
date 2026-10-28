@@ -9,6 +9,7 @@
 import { PrismaClient } from "@prisma/client";
 import { PERMISSIONS } from "../src/lib/permissions/registry";
 import { applyRoleGrants } from "./role-matrix";
+import { seedWhatsapp } from "./whatsapp-seed";
 import { seedWorkforceAndKb } from "./workforce-seed";
 import { seedBoardRecords } from "./board-records-seed";
 import { seedMasters, NUMBERING } from "./masters-seed";
@@ -308,6 +309,7 @@ async function main() {
   await seedApprovalLimits();
   await seedDemoProject();
   await seedWorkforceAndKb(prisma);
+  await seedWhatsapp(prisma);
   console.log("\nSeed complete.\n");
 }
 

@@ -15,6 +15,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { ensureLaterNumberingSeries, seedMasters } from "../prisma/masters-seed";
+import { seedWhatsapp } from "../prisma/whatsapp-seed";
 import { seedWorkforceAndKb } from "../prisma/workforce-seed";
 
 const prisma = new PrismaClient();
@@ -25,6 +26,11 @@ async function main() {
   const series = await ensureLaterNumberingSeries(prisma);
   if (series) console.log(`  created ${series} number series for documents added since setup`);
   await seedWorkforceAndKb(prisma);
+
+  const wa = await seedWhatsapp(prisma);
+  if (wa.templates || wa.triggers) {
+    console.log(`  WhatsApp: ${wa.templates} template(s) and ${wa.triggers} trigger(s) created`);
+  }
   console.log("\nDone.\n");
 }
 
