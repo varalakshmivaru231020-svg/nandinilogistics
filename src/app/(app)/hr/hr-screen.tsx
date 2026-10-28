@@ -12,6 +12,7 @@ import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { useToast } from "@/components/ui/toast";
 import { Drawer } from "@/components/ui/drawer";
 import { Modal } from "@/components/ui/modal";
+import { decideApprovalAction } from "@/app/(app)/approvals/actions";
 import { COUNTRY_CODES } from "@/lib/forms/dial-codes";
 import { cn } from "@/lib/utils";
 import { uploadProblem } from "@/lib/upload-rules";
@@ -136,6 +137,9 @@ export function HrScreen({
   const setError = React.useCallback((m: string) => toast(m, "bad"), [toast]);
   const [editing, setEditing] = React.useState<Employee | "new" | null>(null);
   const [removing, setRemoving] = React.useState<Employee | null>(null);
+  // A new record waiting for approval, decided from its row.
+  const [deciding, setDeciding] = React.useState<{ e: Employee; decision: "APPROVED" | "REJECTED" } | null>(null);
+  const [decisionNote, setDecisionNote] = React.useState("");
   const [statusTarget, setStatusTarget] = React.useState<Employee | null>(null);
   const [statusReason, setStatusReason] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -170,6 +174,18 @@ export function HrScreen({
     if (!res.ok) { setError(res.error); setRemoving(null); return; }
     setRemoving(null);
     flash(res.data?.pending ? `Deletion of ${removing.name} sent for approval` : `${removing.name} removed`);
+  }
+
+  async function decide() {
+    if (!deciding) return;
+    setBusy(true);
+    const res = await decideApprovalAction("RIDER", deciding.e.id, deciding.decision, decisionNote);
+    setBusy(false);
+    if (!res.ok) { setError(res.error); return; }
+    const { e, decision } = deciding;
+    setDeciding(null);
+    setDecisionNote("");
+    flash(`${e.name} ${decision === "APPROVED" ? "approved" : "rejected"}`);
   }
 
   function openStatus(e: Employee) {
@@ -221,6 +237,7 @@ export function HrScreen({
           onEdit={setEditing}
           onRemove={setRemoving}
           onStatus={openStatus}
+          onDecide={(e, decision) => { setDecisionNote(""); setDeciding({ e, decision }); }}
         />
       )}
 
@@ -246,6 +263,30 @@ export function HrScreen({
           can={can}
           onRange={(f, t) => setParam({ from: f, to: t })}
         />
+      )}
+
+      {deciding && (
+        <Modal
+          open
+          onClose={() => setDeciding(null)}
+          size="sm"
+          title={`${deciding.decision === "APPROVED" ? "Approve" : "Reject"} ${deciding.e.name}?`}
+          description={deciding.decision === "APPROVED"
+            ? "The record is approved and onboarding can go ahead. Whoever added it is told."
+            : "The record stays on file, marked rejected. A reason is required."}
+          footer={
+            <>
+              <Button variant="outline" type="button" onClick={() => setDeciding(null)}>Cancel</Button>
+              <Button type="button" loading={busy} onClick={() => void decide()}>
+                {deciding.decision === "APPROVED" ? "Approve" : "Reject"}
+              </Button>
+            </>
+          }
+        >
+          <Field label={deciding.decision === "APPROVED" ? "Note (optional)" : "Reason"} required={deciding.decision === "REJECTED"}>
+            <Textarea value={decisionNote} onChange={(ev) => setDecisionNote(ev.target.value)} className="min-h-[64px]" />
+          </Field>
+        </Modal>
       )}
 
       {editing && (
@@ -328,13 +369,14 @@ export function HrScreen({
 /* -------------------------------- Employees -------------------------------- */
 
 function StaffTab({
-  employees, can, newLabel, onEdit, onRemove, onStatus,
+  employees, can, newLabel, onEdit, onRemove, onStatus, onDecide,
 }: {
   employees: Employee[];
   newLabel: string;
   can: Record<string, boolean>;
   onEdit: (e: Employee | "new") => void; onRemove: (e: Employee) => void;
   onStatus: (e: Employee) => void;
+  onDecide: (e: Employee, decision: "APPROVED" | "REJECTED") => void;
 }) {
   return (
     <div>
@@ -453,6 +495,24 @@ function StaffTab({
                       >
                         View
                       </Link>
+                    )}
+                    {can.decide && e.approval === "PENDING" && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onDecide(e, "APPROVED")}
+                          className="rounded-[7px] bg-good-600 px-3 py-1.5 text-[11px] font-bold text-white hover:brightness-95"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDecide(e, "REJECTED")}
+                          className="rounded-[7px] border border-bad-100 bg-white px-3 py-1.5 text-[11px] font-semibold text-bad-700 hover:bg-bad-050"
+                        >
+                          Reject
+                        </button>
+                      </>
                     )}
                     {can.update && (
                       <button

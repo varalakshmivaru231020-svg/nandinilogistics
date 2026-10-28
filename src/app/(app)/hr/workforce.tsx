@@ -201,6 +201,7 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
           tabStaff: ctx.has(PERM.hr.employee.tabStaff),
           create: ctx.has(PERM.hr.employee.create),
           createStaff: ctx.has(PERM.hr.employee.createStaff),
+          decide: ctx.has(PERM.approvals.queue.decide),
           update: ctx.has(PERM.hr.employee.update),
           remove: ctx.has(PERM.hr.employee.delete),
           viewIdentity: canIdentity,
