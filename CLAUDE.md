@@ -44,19 +44,33 @@ Leaders). They are resolved without the super-admin bypass.
 
 ### Approval rule (fixed, not configurable)
 
-Anything a **Tele-caller** raises waits as *Pending approval* until a Team
-Leader or Super Admin approves or rejects it; a reason is mandatory on reject.
-"Tele-caller" means holds `sales.lead.receiveAssignment` and not
-`approvals.queue.decide` (`initialApproval()` in `src/lib/approvals/rule.ts`).
-It covers leads (`Lead.approval`) and referrals (`Employee.referralApproval`);
-onboarding forms, advances and profile changes already wait in their own
-states. A pending or rejected lead cannot be followed up, moved or onboarded —
-enforced in the actions, not only the UI. Everything waiting is one list,
-`/approvals` (`src/lib/approvals/inbox.ts`), decided by
-`decideApprovalAction()`, which hands onboarding, advances and profile changes
-to their own module's action. A Team Leader sees only items for their
-companies (and untagged leads). Requests and decisions notify
-(`APPROVAL_REQUESTED` / `APPROVAL_DECIDED`).
+Leads and referrals: anything a **Tele-caller** raises waits as *Pending
+approval* until a Team Leader or Super Admin decides (`initialApproval()`).
+
+Riders, advances, edits, deletions and status changes follow the **chain**
+(`needsApproval()` / `mayDecideFor()` in `src/lib/approvals/rule.ts`): a
+Tele-caller's work waits for a Team Leader *or* Super Admin — whichever decides
+first; a Team Leader's waits for Super Admin; Super Admin's goes through. Nobody
+decides their own request. "Super Admin" is the flag or an approver holding
+`hr.employee.viewAll`; "Team Leader" any other holder of
+`approvals.queue.decide`.
+
+- A new rider is created with `Employee.approval = PENDING` and cannot be
+  submitted for onboarding until approved.
+- An edit, deletion or Left/reactivate is held as a `ChangeRequest`
+  (`src/lib/approvals/changes.ts`) and applied only on approval. Photos and
+  KYC copies on an edit are attached at once; the particulars wait. The
+  creator's edits to their own still-pending record apply directly.
+- Advances record `requestedById`; a Team Leader cannot approve one they
+  raised.
+- Only `hr.employee.createStaff` (Admin) adds Internal Staff or Team Leader
+  records.
+
+Everything waiting is one list, `/approvals` (`src/lib/approvals/inbox.ts`),
+decided by `decideApprovalAction()`, with "Recently decided" below it (from
+the audit trail — Super Admin sees what Team Leaders approved). Requests and
+decisions notify; a Team Leader's decision also notifies Super Admin
+(`APPROVAL_DECIDED_BY_TL`). A reason is mandatory on reject.
 
 Every staff login has a person record (`src/lib/hr/staff-link.ts`, created
 with the user; `pnpm staff:link` backfills), so Tele-callers and Team Leaders

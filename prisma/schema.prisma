@@ -662,6 +662,14 @@ model Employee {
   referredById      String?
   /// A referral a tele-caller enters waits for approval (fixed rule).
   referralApproval     LeadApproval @default(APPROVED)
+  /// Who added the record. A tele-caller sees the riders they created.
+  createdById          String?
+  /// A record added by anyone but Super Admin waits for approval: a
+  /// tele-caller's by a Team Leader or Super Admin, a Team Leader's by Super Admin.
+  approval             LeadApproval @default(APPROVED)
+  approvalById         String?
+  approvalAt           DateTime?
+  approvalNote         String?
   referralSetById      String?
   referralApprovedById String?
   referralApprovedAt   DateTime?
@@ -1107,6 +1115,8 @@ model Advance {
   /// How much comes off each payout until the advance is recovered.
   recoveryPerPeriod Decimal?        @db.Decimal(12, 2)
   recoveredAmount   Decimal         @default(0) @db.Decimal(12, 2)
+  /// Who raised the request: a tele-caller, a Team Leader, or the rider.
+  requestedById     String?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
@@ -1240,4 +1250,31 @@ model ProfileEditRequest {
 
   @@index([status])
   @@map("profile_edit_requests")
+}
+
+/// An edit, deletion or status change a Team Leader or tele-caller asked for.
+/// Nothing changes until it is approved: a tele-caller's by a Team Leader or
+/// Super Admin, a Team Leader's by Super Admin. Approval applies the payload.
+model ChangeRequest {
+  id          String       @id @default(cuid())
+  /// UPDATE, DELETE or STATUS.
+  kind        String
+  entity      String
+  entityId    String
+  /// What is asked, in a line: "Delete rider NL105 — Ramesh".
+  title       String
+  detail      String?
+  payload     Json
+  /// The companies involved, so the right Team Leaders see it.
+  companyIds  String[]
+  raisedById  String
+  status      LeadApproval @default(PENDING)
+  decidedById String?
+  decidedAt   DateTime?
+  note        String?
+  createdAt   DateTime     @default(now())
+
+  @@index([status])
+  @@index([entity, entityId])
+  @@map("change_requests")
 }

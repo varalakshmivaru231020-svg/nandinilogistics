@@ -1,13 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { notifyChainDecided, notifyChainRequested, personOf, tiersOf } from "@/lib/approvals/changes";
+import { mayDecideFor } from "@/lib/approvals/rule";
 import { z } from "zod";
 
 import { prisma } from "@/lib/db";
 import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
-import { decideAdvance, notifyAdvance, teamLeadersOf } from "@/lib/advances/service";
+import { decideAdvance, notifyAdvance } from "@/lib/advances/service";
 import { employeeScopeWhere, resolveViewerScope } from "@/lib/payouts/scope";
 import type { AuthContext } from "@/lib/rbac/context";
 
@@ -79,16 +81,19 @@ export async function createAdvanceAction(formData: FormData): Promise<ActionRes
           priority: v.priority,
           reasonId: v.reasonId || null,
           remarks: v.remarks || null,
+          requestedById: ctx.id,
         },
         select: { id: true },
       });
-      await notifyAdvance(tx, {
-        kind: "ADVANCE_REQUESTED",
-        advanceId: created.id,
-        title: `Advance requested — ${rider.name}`,
-        body: `₹${v.amount.toLocaleString("en-IN")} · ${v.priority === "EMERGENCY" ? "Emergency" : "Low priority"}`,
-        to: await teamLeadersOf(tx, rider.id),
-        actorId: ctx.id,
+      // A tele-caller's request goes to the rider's Team Leaders and Super
+      // Admin; a Team Leader's to Super Admin.
+      const companies = await tx.riderCompany.findMany({ where: { employeeId: rider.id }, select: { companyId: true } });
+      await notifyChainRequested(tx, ctx, {
+        companyIds: companies.map((c) => c.companyId),
+        title: `Advance ₹${v.amount.toLocaleString("en-IN")} for ${rider.name} waits for approval`,
+        body: `${v.priority === "EMERGENCY" ? "Emergency" : "Low priority"} · requested by ${ctx.name}`,
+        entity: "Advance",
+        entityId: created.id,
       });
       return created;
     });
@@ -111,9 +116,13 @@ export async function decideAdvanceAction(
   return runAction(async () => {
     const ctx = await authorize(PERM.advance.advance.approve);
     if (decision !== "APPROVED" && decision !== "REJECTED") throw new Error("Approve or reject.");
-    const existing = await prisma.advance.findUnique({ where: { id }, select: { employeeId: true } });
+    const existing = await prisma.advance.findUnique({ where: { id }, select: { employeeId: true, requestedById: true } });
     if (!existing) throw new Error("That advance request does not exist.");
     const { rider } = await riderInScope(ctx, existing.employeeId, PERM.advance.advance.viewAll);
+    const raiserTier = existing.requestedById ? (await tiersOf(prisma, [existing.requestedById])).get(existing.requestedById) ?? "MEMBER" : "MEMBER";
+    if (!mayDecideFor(personOf(ctx), { id: existing.requestedById, tier: raiserTier })) {
+      throw new Error(raiserTier === "TEAM_LEADER" ? "A Team Leader's advance request is approved by Super Admin." : "You may not decide your own request.");
+    }
 
     const per = recoveryPerPeriod === undefined || recoveryPerPeriod === null || recoveryPerPeriod === ("" as unknown)
       ? null
@@ -133,6 +142,11 @@ export async function decideAdvanceAction(
           actorId: ctx.id,
         });
       }
+      await notifyChainDecided(tx, ctx, {
+        raisedById: existing.requestedById && existing.requestedById !== rider.userId ? existing.requestedById : null,
+        decision, what: `Advance ₹${result.amount.toLocaleString("en-IN")} for ${rider.name}`,
+        note: remarks?.trim() || null, href: "/advances", entity: "Advance", entityId: id,
+      });
       return result;
     });
 

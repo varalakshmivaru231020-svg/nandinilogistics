@@ -84,6 +84,11 @@ export function EmployeeDetail({
       setError(res.error ?? "Something went wrong.");
       return;
     }
+    if (res.data?.pending) {
+      setConfirming(false);
+      router.refresh();
+      return;
+    }
     router.push(listHref);
   }
 

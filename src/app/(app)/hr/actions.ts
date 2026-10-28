@@ -24,6 +24,8 @@ import { saveEmployeeFiles } from "@/lib/hr/employee-files";
 import { PROFILE_EDIT_LABEL, profileEditChanges, storedChanges, type ProfileEditKey } from "@/lib/hr/profile-edit";
 import { initialApproval, leadWorkBlock } from "@/lib/approvals/rule";
 import { notifyApprovalRequested } from "@/lib/approvals/inbox";
+import { notifyChainRequested, personOf, requestChange, type EmployeeUpdatePayload } from "@/lib/approvals/changes";
+import { needsApproval } from "@/lib/approvals/rule";
 import { checkReferrer } from "@/lib/riders/referrals";
 import { attendanceDay, checkCoordinates, planPunchIn, planPunchOut } from "@/lib/hr/punch";
 import { teamLeadersOf } from "@/lib/advances/service";
@@ -197,12 +199,35 @@ async function scopedEmployee(ctx: Awaited<ReturnType<typeof authorize>>, id: st
   return employee;
 }
 
-export async function createEmployeeAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
+/** Internal Staff and Team Leader records are added by Super Admin only. */
+async function assertMayAddType(ctx: Awaited<ReturnType<typeof authorize>>, employmentTypeId: string) {
+  const type = await prisma.employmentType.findUnique({ where: { id: employmentTypeId }, select: { name: true } });
+  if (!type) throw new Error("Pick an employment type from the list.");
+  const staff = isInternalStaffType(type.name) || type.name.trim().toLowerCase() === "team leader";
+  if (staff && !ctx.has(PERM.hr.employee.createStaff)) {
+    throw new Error("Only Super Admin can add Internal Staff or Team Leader records. Riders can be added by anyone.");
+  }
+}
+
+/**
+ * Whether this person's changes to this record wait for approval. Everyone's
+ * do but Super Admin's — except a creator still working on their own new
+ * record, which is itself waiting for approval as a whole.
+ */
+function holdsChanges(ctx: Awaited<ReturnType<typeof authorize>>, e: { approval: string; createdById: string | null }) {
+  if (!needsApproval(personOf(ctx))) return false;
+  return !(e.approval === "PENDING" && e.createdById === ctx.id);
+}
+
+export async function createEmployeeAction(formData: FormData): Promise<ActionResult<{ id: string; pending: boolean }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.hr.employee.create);
     const parsed = EmployeeSchema.safeParse(Object.fromEntries(formData));
     if (!parsed.success) throw new Error(parsed.error.issues[0].message);
     const data = particularsOf(parsed.data);
+    await assertMayAddType(ctx, data.employmentTypeId);
+    // A Team Leader's or tele-caller's new record waits for approval.
+    const pending = needsApproval(personOf(ctx));
     const companyIds = readCompanyIds(formData);
     await assertCompaniesExist(companyIds);
     const referrer = await readReferrer(formData, null);
@@ -217,6 +242,10 @@ export async function createEmployeeAction(formData: FormData): Promise<ActionRe
           ...data,
           ...referral,
           referralCode: referralCodeFor(employeeCode),
+          createdById: ctx.id,
+          approval: pending ? "PENDING" : "APPROVED",
+          approvalById: pending ? null : ctx.id,
+          approvalAt: pending ? null : new Date(),
           companies: companyIds.length ? { create: companyIds.map((companyId) => ({ companyId })) } : undefined,
         },
       });
@@ -224,20 +253,30 @@ export async function createEmployeeAction(formData: FormData): Promise<ActionRe
 
     await saveFiles(employee.id, formData, ctx.id);
     if (employee.referralApproval === "PENDING") await askReferralApproval(ctx, employee, companyIds);
+    if (pending) {
+      await notifyChainRequested(prisma, ctx, {
+        companyIds,
+        title: `New record ${employee.employeeCode} — ${employee.name} waits for approval`,
+        entity: "Employee",
+        entityId: employee.id,
+      });
+    }
 
     await recordAudit({
       action: "CREATE", entity: "Employee", entityId: employee.id, userId: ctx.id,
       summary: `Added ${employee.name} as ${employee.employeeCode} — onboarding draft` +
+        (pending ? " — waiting for approval" : "") +
         (employee.referredById ? (employee.referralApproval === "PENDING" ? " — referral pending approval" : " — referral recorded") : ""),
     });
     revalidatePath("/hr", "layout");
     revalidatePath("/hr/referrals");
     revalidatePath("/hr/onboarding");
-    return { id: employee.id };
+    revalidatePath("/approvals");
+    return { id: employee.id, pending };
   });
 }
 
-export async function updateEmployeeAction(id: string, formData: FormData): Promise<ActionResult<null>> {
+export async function updateEmployeeAction(id: string, formData: FormData): Promise<ActionResult<{ pending: boolean }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.hr.employee.update);
     const parsed = EmployeeSchema.safeParse(Object.fromEntries(formData));
@@ -250,7 +289,46 @@ export async function updateEmployeeAction(id: string, formData: FormData): Prom
     if (companyIds.join() !== before.companies.map((c) => c.companyId).sort().join() && !ctx.has(PERM.hr.employee.manageCompanies)) {
       throw new Error("You do not have permission to change the companies this rider is deployed to.");
     }
+    if (data.employmentTypeId !== before.employmentTypeId) await assertMayAddType(ctx, data.employmentTypeId);
     const referrer = await readReferrer(formData, id, before.referredById);
+
+    if (holdsChanges(ctx, before)) {
+      // Nothing changes until a Team Leader or Super Admin approves. Photos
+      // and KYC copies are attached now; the particulars wait.
+      const beforeView = editableEmployee({ ...before, monthlySalary: before.monthlySalary === null ? null : Number(before.monthlySalary), joinedOn: before.joinedOn ? before.joinedOn.toISOString().slice(0, 10) : null, companyIds: before.companies.map((c) => c.companyId).sort() });
+      const afterView = editableEmployee({ ...data, joinedOn: data.joinedOn ? data.joinedOn.toISOString().slice(0, 10) : null, companyIds });
+      const changed = Object.keys(diff(beforeView, afterView) ?? {});
+      const referralChanged = referrer !== undefined && referrer !== before.referredById;
+      if (referralChanged) changed.push("referredBy");
+      await saveFiles(id, formData, ctx.id);
+      if (changed.length === 0) return { pending: false };
+      const payload: EmployeeUpdatePayload = {
+        data: {
+          ...data,
+          joinedOn: data.joinedOn ? data.joinedOn.toISOString().slice(0, 10) : null,
+          ...(referralChanged ? { referredById: referrer, referralSetById: ctx.id } : {}),
+        },
+        companyIds,
+        fields: changed,
+      };
+      const request = await requestChange(prisma, ctx, {
+        kind: "UPDATE", entity: "Employee", entityId: id,
+        title: `Edit ${before.employeeCode} — ${before.name}`,
+        detail: `Changes: ${changed.join(", ")}`,
+        payload: payload as unknown as import("@prisma/client").Prisma.InputJsonValue,
+        companyIds,
+      });
+      await recordAudit({
+        action: "SUBMIT", entity: "Employee", entityId: id, userId: ctx.id,
+        summary: `Asked to edit ${before.name} (${before.employeeCode}) — ${changed.join(", ")} — waiting for approval`,
+        changes: maskIdentityChanges(diff(beforeView, afterView)),
+      });
+      void request;
+      revalidatePath(`/hr/${id}`);
+      revalidatePath("/approvals");
+      return { pending: true };
+    }
+
     const referral = referrer !== undefined && referrer !== before.referredById ? referralWrite(ctx, referrer) : {};
 
     await prisma.$transaction(async (tx) => {
@@ -284,7 +362,7 @@ export async function updateEmployeeAction(id: string, formData: FormData): Prom
     });
     revalidatePath("/hr", "layout");
     revalidatePath(`/hr/${id}`);
-    return null;
+    return { pending: false };
   });
 }
 
@@ -297,14 +375,35 @@ export async function setEmployeeStatusAction(
   id: string,
   status: string,
   reason: string,
-): Promise<ActionResult<null>> {
+): Promise<ActionResult<{ pending: boolean }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.hr.employee.update);
-    const before = await prisma.employee.findFirst({ where: { id, ...employeeScope(ctx) }, select: { id: true, name: true, status: true } });
+    const before = await prisma.employee.findFirst({
+      where: { id, ...employeeScope(ctx) },
+      select: { id: true, name: true, employeeCode: true, status: true, approval: true, createdById: true, companies: { select: { companyId: true } } },
+    });
     if (!before) throw new Error("Rider not found.");
 
     const change = checkStatusChange(before.status, status, reason);
     if (!change.ok) throw new Error(change.error);
+
+    if (holdsChanges(ctx, before)) {
+      const label = change.next === "INACTIVE" ? "Mark Left" : "Reactivate";
+      await requestChange(prisma, ctx, {
+        kind: "STATUS", entity: "Employee", entityId: id,
+        title: `${label} ${before.employeeCode} — ${before.name}`,
+        detail: change.reason,
+        payload: { from: before.status, to: change.next, reason: change.reason ?? null },
+        companyIds: before.companies.map((c) => c.companyId),
+      });
+      await recordAudit({
+        action: "SUBMIT", entity: "Employee", entityId: id, userId: ctx.id,
+        summary: `Asked to ${label.toLowerCase()} ${before.name} (${before.employeeCode})${change.reason ? ` — ${change.reason}` : ""} — waiting for approval`,
+      });
+      revalidatePath(`/hr/${id}`);
+      revalidatePath("/approvals");
+      return { pending: true };
+    }
 
     const claimed = await claimEmployeeStatus(prisma, id, before.status, change.next);
     if (!claimed) {
@@ -325,16 +424,19 @@ export async function setEmployeeStatusAction(
     });
     revalidatePath("/hr", "layout");
     revalidatePath(`/hr/${id}`);
-    return null;
+    return { pending: false };
   });
 }
 
-export async function deleteEmployeeAction(id: string): Promise<ActionResult<null>> {
+export async function deleteEmployeeAction(id: string): Promise<ActionResult<{ pending: boolean }>> {
   return runAction(async () => {
     const ctx = await authorize(PERM.hr.employee.delete);
     const employee = await prisma.employee.findFirst({
       where: { id, ...employeeScope(ctx) },
-      include: { _count: { select: { attendance: true, payoutLines: true, advances: true } } },
+      include: {
+        companies: { select: { companyId: true } },
+        _count: { select: { attendance: true, payoutLines: true, advances: true } },
+      },
     });
     if (!employee) throw new Error("Rider not found.");
     if (employee._count.attendance > 0 || employee._count.payoutLines > 0 || employee._count.advances > 0) {
@@ -342,13 +444,29 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult<nul
         `${employee.name} has attendance, payouts or advances on record. Mark them as Left instead of deleting.`,
       );
     }
+    if (holdsChanges(ctx, employee)) {
+      await requestChange(prisma, ctx, {
+        kind: "DELETE", entity: "Employee", entityId: id,
+        title: `Delete ${employee.employeeCode} — ${employee.name}`,
+        payload: {},
+        companyIds: employee.companies.map((c) => c.companyId),
+      });
+      await recordAudit({
+        action: "SUBMIT", entity: "Employee", entityId: id, userId: ctx.id,
+        summary: `Asked to delete ${employee.name} (${employee.employeeCode}) — waiting for approval`,
+      });
+      revalidatePath(`/hr/${id}`);
+      revalidatePath("/approvals");
+      return { pending: true };
+    }
+    await prisma.changeRequest.updateMany({ where: { entity: "Employee", entityId: id, status: "PENDING" }, data: { status: "REJECTED", note: "The record was deleted." } });
     await prisma.employee.delete({ where: { id } });
     await recordAudit({
       action: "DELETE", entity: "Employee", entityId: id, userId: ctx.id,
       summary: `Removed ${employee.name}`,
     });
     revalidatePath("/hr", "layout");
-    return null;
+    return { pending: false };
   });
 }
 
@@ -362,6 +480,8 @@ export async function submitOnboardingAction(id: string): Promise<ActionResult<n
   return runAction(async () => {
     const ctx = await authorize(PERM.hr.employee.submitOnboarding);
     const e = await scopedEmployee(ctx, id);
+    if (e.approval === "PENDING") throw new Error("This record is waiting for a Team Leader or Super Admin to approve it.");
+    if (e.approval === "REJECTED") throw new Error("This record was rejected and cannot be submitted.");
     const move = onboardingTransition(e.onboardingStatus, "SUBMITTED");
     if (!move.ok) throw new Error(move.error);
 

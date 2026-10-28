@@ -7,6 +7,7 @@ import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
 import { decideLeadApproval, decideReferralApproval } from "@/lib/approvals/inbox";
+import { decideChange, decideNewEmployee } from "@/lib/approvals/changes";
 import { checkDecision, isApprovalKind } from "@/lib/approvals/rule";
 import { acceptOnboardingAction, decideProfileEditAction, rejectOnboardingAction } from "@/app/(app)/hr/actions";
 import { decideAdvanceAction } from "@/app/(app)/advances/actions";
@@ -79,6 +80,27 @@ export async function decideApprovalAction(
       case "PROFILE":
         unwrap(await decideProfileEditAction(id, check.decision, why));
         break;
+      case "RIDER": {
+        const e = await prisma.$transaction((tx) => decideNewEmployee(tx, ctx, id, check.decision, why, now));
+        await recordAudit({
+          action: check.decision === "APPROVED" ? "APPROVE" : "REJECT", entity: "Employee", entityId: id, userId: ctx.id,
+          summary: `New record ${e.employeeCode} — ${e.name} ${check.decision === "APPROVED" ? "approved" : `rejected — ${why}`}`,
+          changes: { approval: { from: "PENDING", to: check.decision } },
+        });
+        revalidatePath("/hr", "layout");
+        revalidatePath(`/hr/${id}`);
+        break;
+      }
+      case "CHANGE": {
+        const r = await prisma.$transaction((tx) => decideChange(tx, ctx, id, check.decision, why, now));
+        await recordAudit({
+          action: check.decision === "APPROVED" ? "APPROVE" : "REJECT", entity: r.entity, entityId: r.entityId, userId: ctx.id,
+          summary: `${r.title} ${check.decision === "APPROVED" ? "approved" : `rejected — ${why}`}`,
+        });
+        revalidatePath("/hr", "layout");
+        revalidatePath(`/hr/${r.entityId}`);
+        break;
+      }
     }
     revalidatePath("/approvals");
     return null;

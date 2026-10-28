@@ -136,6 +136,8 @@ export const ROLES: RoleSeed[] = [
       // Onboarding review for own team, the rider record and its ID card.
       "hr.employee.create",
       "hr.employee.update",
+      // Asks; Super Admin approves the deletion.
+      "hr.employee.delete",
       "hr.employee.viewIdentity",
       "hr.employee.submitOnboarding",
       "hr.employee.acceptOnboarding",
@@ -179,6 +181,8 @@ export const ROLES: RoleSeed[] = [
       "hr.attendance.punch",
       "hr.employee.create",
       "hr.employee.update",
+      // Asks; a Team Leader or Super Admin approves the deletion.
+      "hr.employee.delete",
       "hr.employee.tabStaff",
       "hr.employee.viewIdentity",
       "hr.employee.submitOnboarding",

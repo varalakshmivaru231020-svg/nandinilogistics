@@ -151,6 +151,7 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
           designation: e.designation?.name ?? null,
           status: e.status,
           onboardingStatus: e.onboardingStatus as OnboardingStatus,
+          approval: e.approval,
           emergencyMobileFamily: e.emergencyMobileFamily,
           emergencyMobileFriend: e.emergencyMobileFriend,
           bankAccountNo: canIdentity ? e.bankAccountNo : maskId(e.bankAccountNo),
@@ -199,6 +200,7 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
         can={{
           tabStaff: ctx.has(PERM.hr.employee.tabStaff),
           create: ctx.has(PERM.hr.employee.create),
+          createStaff: ctx.has(PERM.hr.employee.createStaff),
           update: ctx.has(PERM.hr.employee.update),
           remove: ctx.has(PERM.hr.employee.delete),
           viewIdentity: canIdentity,

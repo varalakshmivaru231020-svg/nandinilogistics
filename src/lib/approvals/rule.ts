@@ -13,7 +13,7 @@
 export type ApprovalState = "APPROVED" | "PENDING" | "REJECTED";
 export type ApprovalDecision = "APPROVED" | "REJECTED";
 
-export const APPROVAL_KINDS = ["LEAD", "ONBOARDING", "REFERRAL", "ADVANCE", "PROFILE"] as const;
+export const APPROVAL_KINDS = ["LEAD", "ONBOARDING", "REFERRAL", "ADVANCE", "PROFILE", "RIDER", "CHANGE"] as const;
 export type ApprovalKind = (typeof APPROVAL_KINDS)[number];
 
 export const APPROVAL_KIND_LABEL: Record<ApprovalKind, string> = {
@@ -22,6 +22,8 @@ export const APPROVAL_KIND_LABEL: Record<ApprovalKind, string> = {
   REFERRAL: "Referral",
   ADVANCE: "Advance",
   PROFILE: "Profile change",
+  RIDER: "New rider / staff",
+  CHANGE: "Edit / delete",
 };
 
 export function isApprovalKind(v: string): v is ApprovalKind {
@@ -70,4 +72,63 @@ export function waitingLabel(raisedAtMs: number, nowMs: number): string {
   if (h < 1) return "under an hour";
   if (h < 48) return `${h} h`;
   return `${Math.floor(h / 24)} days`;
+}
+
+/* ------------------------- who approves whom ----------------------------- */
+
+/**
+ * The approval chain for riders, advances, edits and deletions: anything a
+ * Tele-caller does waits for a Team Leader or Super Admin — whichever decides
+ * first; anything a Team Leader does waits for Super Admin. Super Admin's own
+ * work goes through at once. Nobody decides their own request.
+ *
+ * "Super Admin" is the super-admin flag, or an approver who sees every rider
+ * (the Admin role). "Team Leader" is any other approver.
+ */
+export interface ApprovalPerson {
+  id: string;
+  isSuperAdmin: boolean;
+  /** approvals.queue.decide */
+  canDecide: boolean;
+  /** hr.employee.viewAll */
+  seesAll: boolean;
+}
+
+export type ApprovalTier = "SUPER_ADMIN" | "TEAM_LEADER" | "MEMBER";
+
+export function approvalTier(p: Omit<ApprovalPerson, "id">): ApprovalTier {
+  if (p.isSuperAdmin || (p.canDecide && p.seesAll)) return "SUPER_ADMIN";
+  return p.canDecide ? "TEAM_LEADER" : "MEMBER";
+}
+
+export const TIER_LABEL: Record<ApprovalTier, string> = {
+  SUPER_ADMIN: "Super Admin",
+  TEAM_LEADER: "Team Leader",
+  MEMBER: "Tele-caller / staff",
+};
+
+/** Whether this person's own creates, edits and deletes wait for approval. */
+export function needsApproval(actor: Omit<ApprovalPerson, "id">): boolean {
+  return approvalTier(actor) !== "SUPER_ADMIN";
+}
+
+/**
+ * Whether `viewer` may decide something `raiser` asked for. A Team Leader's
+ * request goes to Super Admin only; a tele-caller's (or a rider's) to either.
+ * A raiser that is unknown (older records) counts as a tele-caller.
+ */
+export function mayDecideFor(
+  viewer: ApprovalPerson,
+  raiser: { id: string | null; tier: ApprovalTier },
+): boolean {
+  const tier = approvalTier(viewer);
+  if (tier === "MEMBER") return false;
+  if (tier === "SUPER_ADMIN") return true;
+  if (raiser.id && raiser.id === viewer.id) return false;
+  return raiser.tier === "MEMBER";
+}
+
+/** "Approved by Priya (Team Leader)", for the history and the notifications. */
+export function decidedByLabel(decision: ApprovalDecision, name: string, tier: ApprovalTier): string {
+  return `${decision === "APPROVED" ? "Approved" : "Rejected"} by ${name} (${TIER_LABEL[tier]})`;
 }

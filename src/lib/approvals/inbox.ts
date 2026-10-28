@@ -5,8 +5,8 @@ import { employeeScope } from "@/lib/hr/list-filters";
 import { usersHolding } from "@/lib/rbac/holders";
 
 import {
-  APPROVAL_KIND_LABEL, checkDecision, isApprovalKind,
-  type ApprovalDecision, type ApprovalKind,
+  APPROVAL_KIND_LABEL, approvalTier, checkDecision, isApprovalKind, mayDecideFor, TIER_LABEL,
+  type ApprovalDecision, type ApprovalKind, type ApprovalTier,
 } from "./rule";
 
 /**
@@ -22,6 +22,28 @@ export interface InboxViewer {
   id: string;
   isSuperAdmin?: boolean;
   has: (code: string) => boolean;
+}
+
+function chainPerson(v: InboxViewer) {
+  return {
+    id: v.id,
+    isSuperAdmin: Boolean(v.isSuperAdmin),
+    canDecide: v.has(PERM.approvals.queue.decide),
+    seesAll: v.has(PERM.hr.employee.viewAll),
+  };
+}
+
+/** Each user's place in the approval chain — the database half of rule.ts's tiers. */
+async function chainTiers(db: Db, ids: Array<string | null | undefined>): Promise<Map<string, ApprovalTier>> {
+  const unique = [...new Set(ids.filter((v): v is string => Boolean(v)))];
+  if (!unique.length) return new Map();
+  const [deciders, seeAll, supers] = await Promise.all([
+    usersHolding(db, PERM.approvals.queue.decide),
+    usersHolding(db, PERM.hr.employee.viewAll),
+    db.user.findMany({ where: { id: { in: unique }, isSuperAdmin: true }, select: { id: true } }),
+  ]);
+  const d = new Set(deciders); const a = new Set(seeAll); const s = new Set(supers.map((u) => u.id));
+  return new Map(unique.map((id) => [id, approvalTier({ isSuperAdmin: s.has(id), canDecide: d.has(id), seesAll: a.has(id) })]));
 }
 
 export const INBOX_HREF = "/approvals";
@@ -111,7 +133,7 @@ export async function loadInbox(db: Db, viewer: InboxViewer): Promise<InboxRow[]
   if (!viewer.has(PERM.approvals.queue.view)) return [];
   const scope = employeeScope(viewer as Parameters<typeof employeeScope>[0]);
 
-  const [leads, onboarding, referrals, advances, edits] = await Promise.all([
+  const [leads, onboarding, referrals, advancesAll, edits, newRecordsAll, changesAll] = await Promise.all([
     db.lead.findMany({
       where: { AND: [{ approval: "PENDING" }, leadApprovalScope(viewer)] },
       select: { id: true, leadNo: true, name: true, location: true, createdAt: true, createdById: true, ownerId: true },
@@ -135,7 +157,7 @@ export async function loadInbox(db: Db, viewer: InboxViewer): Promise<InboxRow[]
     viewer.has(PERM.advance.advance.approve)
       ? db.advance.findMany({
           where: { status: "PENDING", employee: scope },
-          select: { id: true, amount: true, createdAt: true, remarks: true, employee: { select: { name: true, employeeCode: true } } },
+          select: { id: true, amount: true, createdAt: true, remarks: true, requestedById: true, employee: { select: { name: true, employeeCode: true } } },
         })
       : [],
     viewer.has(PERM.hr.employee.update)
@@ -144,12 +166,46 @@ export async function loadInbox(db: Db, viewer: InboxViewer): Promise<InboxRow[]
           select: { id: true, createdAt: true, reason: true, employee: { select: { id: true, name: true, employeeCode: true } } },
         })
       : [],
+    viewer.has(PERM.approvals.queue.decide)
+      ? db.employee.findMany({
+          where: { AND: [{ approval: "PENDING" }, scope] },
+          select: { id: true, name: true, employeeCode: true, createdAt: true, createdById: true, employmentType: { select: { name: true } } },
+        })
+      : [],
+    viewer.has(PERM.approvals.queue.decide)
+      ? db.changeRequest.findMany({ where: { status: "PENDING" } })
+      : [],
   ]);
+
+  // Which of these may this viewer decide? A Team Leader's own items and the
+  // items other Team Leaders raised go to Super Admin; and a change is seen by
+  // a Team Leader only for riders in their scope.
+  const tiers = await chainTiers(db, [
+    ...advancesAll.map((a) => a.requestedById),
+    ...newRecordsAll.map((e) => e.createdById),
+    ...changesAll.map((c) => c.raisedById),
+  ]);
+  const me = chainPerson(viewer);
+  const decidable = (raiser: string | null) => mayDecideFor(me, { id: raiser, tier: (raiser && tiers.get(raiser)) || "MEMBER" });
+  const advances = advancesAll.filter((a) => decidable(a.requestedById));
+  const newRecords = newRecordsAll.filter((e) => decidable(e.createdById));
+  const inScope = changesAll.length && !seesAllApprovals(viewer)
+    ? new Set((await db.employee.findMany({ where: { AND: [{ id: { in: changesAll.map((c) => c.entityId) } }, scope] }, select: { id: true } })).map((e) => e.id))
+    : null;
+  const changes = changesAll.filter((c) => decidable(c.raisedById) && (!inScope || inScope.has(c.entityId)));
+  const who = (id: string | null | undefined, fallback: string) => {
+    if (!id) return fallback;
+    const name = names.get(id);
+    return name ? `${name} (${TIER_LABEL[tiers.get(id) ?? "MEMBER"]})` : fallback;
+  };
 
   const names = await namesOf(db, [
     ...leads.map((l) => l.createdById ?? l.ownerId),
     ...onboarding.map((e) => e.lead?.ownerId ?? null),
     ...referrals.map((r) => r.referralSetById),
+    ...advances.map((a) => a.requestedById),
+    ...newRecords.map((e) => e.createdById),
+    ...changes.map((c) => c.raisedById),
   ]);
 
   const rows: InboxRow[] = [
@@ -185,7 +241,7 @@ export async function loadInbox(db: Db, viewer: InboxViewer): Promise<InboxRow[]
       id: a.id,
       what: `Advance ₹${Number(a.amount).toLocaleString("en-IN")} — ${a.employee.name} (${a.employee.employeeCode})`,
       detail: a.remarks,
-      raisedBy: a.employee.name,
+      raisedBy: who(a.requestedById, a.employee.name),
       raisedAtMs: a.createdAt.getTime(),
       href: "/advances",
     })),
@@ -197,6 +253,24 @@ export async function loadInbox(db: Db, viewer: InboxViewer): Promise<InboxRow[]
       raisedBy: p.employee.name,
       raisedAtMs: p.createdAt.getTime(),
       href: `/hr/${p.employee.id}`,
+    })),
+    ...newRecords.map((e) => ({
+      kind: "RIDER" as const,
+      id: e.id,
+      what: `New ${e.employmentType.name.toLowerCase()} — ${e.name} (${e.employeeCode})`,
+      detail: "Added; approve to let onboarding go ahead.",
+      raisedBy: who(e.createdById, "—"),
+      raisedAtMs: e.createdAt.getTime(),
+      href: `/hr/${e.id}`,
+    })),
+    ...changes.map((c) => ({
+      kind: "CHANGE" as const,
+      id: c.id,
+      what: c.title,
+      detail: c.detail,
+      raisedBy: who(c.raisedById, "—"),
+      raisedAtMs: c.createdAt.getTime(),
+      href: c.entity === "Employee" ? `/hr/${c.entityId}` : INBOX_HREF,
     })),
   ];
   return rows.sort((a, b) => a.raisedAtMs - b.raisedAtMs);
@@ -340,4 +414,42 @@ export async function decideReferralApproval(
     entityId: e.id,
   });
   return { ...e, decision: check.decision, note: check.note };
+}
+
+/* --------------------------------- history -------------------------------- */
+
+export interface DecisionRow {
+  id: string;
+  atMs: number;
+  decision: "APPROVED" | "REJECTED";
+  what: string;
+  /** "Priya (Team Leader)" */
+  by: string;
+}
+
+/**
+ * Recent decisions, from the audit trail: Super Admin sees every one —
+ * including what Team Leaders approved — and a Team Leader their own.
+ */
+export async function decisionHistory(db: Db, viewer: InboxViewer, sinceMs: number): Promise<DecisionRow[]> {
+  const me = chainPerson(viewer);
+  const all = approvalTier(me) === "SUPER_ADMIN";
+  const rows = await db.auditLog.findMany({
+    where: {
+      action: { in: ["APPROVE", "REJECT"] },
+      createdAt: { gte: new Date(sinceMs) },
+      ...(all ? {} : { userId: viewer.id }),
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    select: { id: true, createdAt: true, action: true, summary: true, userId: true, user: { select: { name: true } } },
+  });
+  const tiers = await chainTiers(db, rows.map((r) => r.userId));
+  return rows.map((r) => ({
+    id: r.id,
+    atMs: r.createdAt.getTime(),
+    decision: r.action === "APPROVE" ? "APPROVED" : "REJECTED",
+    what: r.summary,
+    by: r.user ? `${r.user.name} (${TIER_LABEL[tiers.get(r.userId ?? "") ?? "MEMBER"]})` : "—",
+  }));
 }

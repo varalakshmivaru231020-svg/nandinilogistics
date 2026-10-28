@@ -137,6 +137,7 @@ export function employeeScope(ctx: AuthContext): Prisma.EmployeeWhereInput {
     OR: [
       { companies: { some: { company: { teamLeaders: { some: { userId: ctx.id } } } } } },
       { lead: { ownerId: ctx.id } },
+      { createdById: ctx.id },
     ],
   };
 }

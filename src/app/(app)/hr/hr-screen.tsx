@@ -35,6 +35,8 @@ interface Employee {
   designationId: string | null; designation: string | null;
   status: string;
   onboardingStatus: OnboardingStatus;
+  /** A new record waits for a Team Leader or Super Admin. */
+  approval: "APPROVED" | "PENDING" | "REJECTED";
   emergencyMobileFamily: string | null; emergencyMobileFriend: string | null;
   bankAccountNo: string | null; bankHolderName: string | null; bankIfsc: string | null; bankName: string | null;
   pfNumber: string | null; drivingLicence: string | null; insuranceNumber: string | null;
@@ -167,7 +169,7 @@ export function HrScreen({
     setBusy(false);
     if (!res.ok) { setError(res.error); setRemoving(null); return; }
     setRemoving(null);
-    flash(`${removing.name} removed`);
+    flash(res.data?.pending ? `Deletion of ${removing.name} sent for approval` : `${removing.name} removed`);
   }
 
   function openStatus(e: Employee) {
@@ -183,7 +185,9 @@ export function HrScreen({
     setBusy(false);
     if (!res.ok) { setError(res.error); return; }
     setStatusTarget(null);
-    flash(`${statusTarget.name} marked ${statusLabel(next).toLowerCase()}`);
+    flash(res.data?.pending
+      ? `Request to mark ${statusTarget.name} ${statusLabel(next).toLowerCase()} sent for approval`
+      : `${statusTarget.name} marked ${statusLabel(next).toLowerCase()}`);
   }
 
   const deactivating = statusTarget ? !isInactive(statusTarget.status) : false;
@@ -247,7 +251,13 @@ export function HrScreen({
       {editing && (
         <EmployeeForm
           employee={editing === "new" ? null : editing}
-          employmentTypes={employmentTypes}
+          // Internal Staff and Team Leader records are Super Admin's to add;
+          // an existing one keeps its own type in the list.
+          employmentTypes={can.createStaff ? employmentTypes : employmentTypes.filter((t) => {
+            const n = t.name.trim().toLowerCase();
+            const staff = n === "internal staff" || n === "team leader";
+            return !staff || (editing !== "new" && editing?.employmentTypeId === t.id);
+          })}
           defaultTypeId={defaultTypeId}
           referrers={referrers}
           designations={designations}
@@ -412,6 +422,12 @@ function StaffTab({
                   <span className={cn("inline-block whitespace-nowrap rounded-full px-2.5 py-[5px] text-[10.5px] font-bold", ONBOARDING_PILL[ONBOARDING_TONE[e.onboardingStatus]])}>
                     {ONBOARDING_LABEL[e.onboardingStatus]}
                   </span>
+                  {e.approval === "PENDING" && (
+                    <span className="ml-1 inline-block whitespace-nowrap rounded-full bg-warn-050 px-2.5 py-[5px] text-[10.5px] font-bold text-warn-800">Pending approval</span>
+                  )}
+                  {e.approval === "REJECTED" && (
+                    <span className="ml-1 inline-block whitespace-nowrap rounded-full bg-[#FCEDED] px-2.5 py-[5px] text-[10.5px] font-bold text-[#B23334]">Rejected</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-[12px] font-medium text-navy-500">{e.companies.join(", ") || "—"}</td>
                 <td className="px-4 py-3 text-[12px] font-medium text-navy-500">
@@ -770,7 +786,10 @@ export function EmployeeForm({
       : await createEmployeeAction(fd);
     setBusy(false);
     if (!res.ok) { setError(res.error); return; }
-    onSaved(employee ? `${fd.get("name")} updated` : `${fd.get("name")} added to the user master`);
+    const held = res.data?.pending;
+    onSaved(employee
+      ? (held ? `Changes to ${fd.get("name")} sent for approval` : `${fd.get("name")} updated`)
+      : (held ? `${fd.get("name")} added — waiting for Team Leader / Super Admin approval` : `${fd.get("name")} added to the user master`));
   }
 
   return (

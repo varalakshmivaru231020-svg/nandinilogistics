@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { checkDecision, initialApproval, leadWorkBlock, waitingLabel } from "@/lib/approvals/rule";
+import {
+  approvalTier, checkDecision, decidedByLabel, initialApproval, leadWorkBlock, mayDecideFor, needsApproval, waitingLabel,
+} from "@/lib/approvals/rule";
 import { filterInbox, leadApprovalScope, readInboxParams, seesAllApprovals, type InboxRow } from "@/lib/approvals/inbox";
 import { checkReferrer } from "@/lib/riders/referrals";
 import { staffTypeFor } from "@/lib/hr/staff-link";
@@ -100,5 +102,44 @@ describe("staff person records and the web's check in", () => {
     expect(out.ok && out.data.status).toBe("HALF_DAY");
     expect(checkInCard(day)).toEqual({ state: "PUNCHED_IN", inAt: "09:00", outAt: null });
     expect(checkInCard(null).state).toBe("NOT_PUNCHED");
+  });
+});
+
+describe("who approves whom", () => {
+  const superAdmin = { id: "sa", isSuperAdmin: true, canDecide: true, seesAll: true };
+  const admin = { id: "ad", isSuperAdmin: false, canDecide: true, seesAll: true };
+  const tl = { id: "tl", isSuperAdmin: false, canDecide: true, seesAll: false };
+  const tl2 = { id: "tl2", isSuperAdmin: false, canDecide: true, seesAll: false };
+  const caller = { id: "tc", isSuperAdmin: false, canDecide: false, seesAll: false };
+
+  it("sorts people into Super Admin, Team Leader and everyone else", () => {
+    expect(approvalTier(superAdmin)).toBe("SUPER_ADMIN");
+    expect(approvalTier(admin)).toBe("SUPER_ADMIN");
+    expect(approvalTier(tl)).toBe("TEAM_LEADER");
+    expect(approvalTier(caller)).toBe("MEMBER");
+  });
+
+  it("holds everyone's work for approval but Super Admin's", () => {
+    expect(needsApproval(superAdmin)).toBe(false);
+    expect(needsApproval(tl)).toBe(true);
+    expect(needsApproval(caller)).toBe(true);
+  });
+
+  it("lets a Team Leader or Super Admin decide a tele-caller's request", () => {
+    const raiser = { id: "tc", tier: "MEMBER" as const };
+    expect(mayDecideFor(tl, raiser)).toBe(true);
+    expect(mayDecideFor(superAdmin, raiser)).toBe(true);
+    expect(mayDecideFor(caller, raiser)).toBe(false);
+  });
+
+  it("sends a Team Leader's request to Super Admin only", () => {
+    const raiser = { id: "tl", tier: "TEAM_LEADER" as const };
+    expect(mayDecideFor(tl2, raiser)).toBe(false);
+    expect(mayDecideFor(tl, raiser)).toBe(false);
+    expect(mayDecideFor(superAdmin, raiser)).toBe(true);
+  });
+
+  it("names who decided", () => {
+    expect(decidedByLabel("APPROVED", "Priya", "TEAM_LEADER")).toBe("Approved by Priya (Team Leader)");
   });
 });
