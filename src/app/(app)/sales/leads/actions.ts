@@ -141,6 +141,83 @@ export async function updateLeadAction(id: string, formData: FormData): Promise<
 
 type Stage = "NEW" | "CONTACTED" | "SITE_VISIT_SCHEDULED" | "VISIT_DONE" | "NEGOTIATION" | "BOOKED" | "LOST";
 
+/**
+ * A date as a screen sends it.
+ *
+ * Two of the three follow-up dialogs send a bare `2026-12-18`, which
+ * `new Date()` reads as UTC midnight — the previous evening in half the world
+ * — while `2026-12-18T09:00` from the third is read as local. Supplying the
+ * time makes both local, so what is stored against the lead and what the
+ * client is told are the same moment.
+ */
+function whenTyped(value: string): Date | null {
+  if (!value) return null;
+  const parsed = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00` : value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Tells the client their site visit is on, from whichever action learned of it.
+ *
+ * Three doors lead here and one message comes out of all of them: the schedule
+ * form, the card moved to Site Visit, and a follow-up logged as a site visit.
+ * Composing it in one place is what stops them drifting into three slightly
+ * different confirmations.
+ *
+ * `when` is the time the calling action already holds — the follow-up's next
+ * action. Without one, the soonest visit booked against the lead is used, then
+ * the lead's own next action if that is still ahead. With no time at all
+ * nothing is sent and the log says why: a confirmation that cannot name a time
+ * is not a confirmation.
+ */
+async function tellClientAboutSiteVisit(
+  lead: { id: string; name: string; phone: string | null; projectId: string | null; nextActionAt: Date | null },
+  ctx: { id: string; name: string },
+  when?: Date | null,
+): Promise<void> {
+  const now = new Date();
+  const [visit, project, executive] = await Promise.all([
+    prisma.siteVisit.findFirst({
+      where: { leadId: lead.id, visitedAt: null, scheduledAt: { gte: now } },
+      orderBy: { scheduledAt: "asc" },
+      select: { scheduledAt: true, projectId: true },
+    }),
+    lead.projectId
+      ? prisma.project.findUnique({
+          where: { id: lead.projectId },
+          select: { name: true, addressLine: true, city: { select: { name: true } } },
+        })
+      : null,
+    prisma.user.findUnique({ where: { id: ctx.id }, select: { name: true, phone: true } }),
+  ]);
+
+  const scheduledAt =
+    when ??
+    visit?.scheduledAt ??
+    (lead.nextActionAt && lead.nextActionAt > now ? lead.nextActionAt : null);
+
+  // The visit's own project where that is not the lead's: somebody can be
+  // shown a different tower from the one they enquired about.
+  const site =
+    visit?.projectId && visit.projectId !== lead.projectId
+      ? await prisma.project.findUnique({
+          where: { id: visit.projectId },
+          select: { name: true, addressLine: true, city: { select: { name: true } } },
+        })
+      : project;
+
+  const queued = await whatsappSiteVisitScheduled(prisma, {
+    leadId: lead.id,
+    client: { name: lead.name, phone: lead.phone },
+    project: site?.name ?? "our project",
+    address: [site?.addressLine, site?.city?.name].filter(Boolean).join(", ") || "—",
+    scheduledAt,
+    executive: { name: executive?.name ?? ctx.name, phone: executive?.phone ?? null },
+  });
+  // Sent now, as from the form — the sweep is the backstop, not the path.
+  if (queued.queued) await sendWhatsappNow(queued.id);
+}
+
 export async function changeLeadStageAction(
   id: string,
   state: Stage,
@@ -182,52 +259,10 @@ export async function changeLeadStageAction(
      * Moved to Site Visit — on the board, or from the record — tells the
      * client, the same message the schedule form sends. Dragging a card is
      * what the sales team actually does, and it was the one path that told
-     * nobody.
-     *
-     * The board captures no time, so one is found: the soonest visit already
-     * booked against this lead, or the next action if that is still ahead. If
-     * there is neither, nothing is sent and the log says why — a confirmation
-     * that cannot name a time is not a confirmation.
+     * nobody. The board captures no time, so the helper finds one.
      */
     if (state === "SITE_VISIT_SCHEDULED") {
-      const now = new Date();
-      const [visit, project, executive] = await Promise.all([
-        prisma.siteVisit.findFirst({
-          where: { leadId: id, visitedAt: null, scheduledAt: { gte: now } },
-          orderBy: { scheduledAt: "asc" },
-          select: { scheduledAt: true, projectId: true },
-        }),
-        lead.projectId
-          ? prisma.project.findUnique({
-              where: { id: lead.projectId },
-              select: { name: true, addressLine: true, city: { select: { name: true } } },
-            })
-          : null,
-        prisma.user.findUnique({ where: { id: ctx.id }, select: { name: true, phone: true } }),
-      ]);
-
-      const when =
-        visit?.scheduledAt ??
-        (lead.nextActionAt && lead.nextActionAt > now ? lead.nextActionAt : null);
-
-      const site =
-        visit?.projectId && visit.projectId !== lead.projectId
-          ? await prisma.project.findUnique({
-              where: { id: visit.projectId },
-              select: { name: true, addressLine: true, city: { select: { name: true } } },
-            })
-          : project;
-
-      const queued = await whatsappSiteVisitScheduled(prisma, {
-        leadId: id,
-        client: { name: lead.name, phone: lead.phone },
-        project: site?.name ?? "our project",
-        address: [site?.addressLine, site?.city?.name].filter(Boolean).join(", ") || "—",
-        scheduledAt: when,
-        executive: { name: executive?.name ?? ctx.name, phone: executive?.phone ?? null },
-      });
-      // Sent now, as from the form — the sweep is the backstop, not the path.
-      if (queued.queued) await sendWhatsappNow(queued.id);
+      await tellClientAboutSiteVisit(lead, ctx);
     }
 
     revalidatePath("/sales/leads");
@@ -282,6 +317,7 @@ export async function logFollowUpAction(
       throw new PermissionError(PERM.sales.lead.viewAll, "You can only follow up leads assigned to you.");
     }
 
+    const nextAt = whenTyped(nextActionAt);
     await prisma.$transaction([
       prisma.leadFollowUp.create({
         data: {
@@ -290,14 +326,14 @@ export async function logFollowUpAction(
           channel,
           notes,
           outcome: outcome || null,
-          nextActionAt: nextActionAt ? new Date(nextActionAt) : null,
+          nextActionAt: nextAt,
         },
       }),
       prisma.lead.update({
         where: { id: leadId },
         // A new next action is a new lapse: clearing escalatedAt lets it escalate
         // again if this one is missed too.
-        data: { nextActionAt: nextActionAt ? new Date(nextActionAt) : null, escalatedAt: null },
+        data: { nextActionAt: nextAt, escalatedAt: null },
       }),
     ]);
     await recordFirstResponse(prisma, leadId, new Date());
@@ -306,6 +342,19 @@ export async function logFollowUpAction(
       action: "CREATE", entity: "LeadFollowUp", entityId: leadId, userId: ctx.id,
       summary: `Logged a ${channel.toLowerCase()} follow-up on lead ${lead.leadNo}`,
     });
+
+    /*
+     * A follow-up logged as a site visit *is* the visit being arranged — on
+     * the phone, with the client still on the line — so they are told then and
+     * there rather than when somebody remembers to move the card. The date
+     * typed into the follow-up is the date the message carries.
+     *
+     * The stage move that usually follows sends nothing further: it looks for
+     * the same time and finds this one already told.
+     */
+    if (channel === "SITE_VISIT") {
+      await tellClientAboutSiteVisit(lead, ctx, nextAt);
+    }
 
     revalidatePath("/sales/leads");
     return null;

@@ -20,10 +20,20 @@ type Db = PrismaClient | Prisma.TransactionClient;
 const day = (d: Date | string | null | undefined): string =>
   d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
-const at = (d: Date | string | null | undefined): string =>
-  d
-    ? `${day(d)} ${new Date(d).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`
-    : "—";
+/**
+ * The day, and the time where there is one.
+ *
+ * A follow-up logged against a lead carries a date and no time on two of the
+ * three screens that log one, which arrives here as midnight. "When: 30 Oct
+ * 2026 00:00" is a worse thing to send a client than "When: 30 Oct 2026", and
+ * nobody is shown a flat at midnight.
+ */
+const at = (d: Date | string | null | undefined): string => {
+  if (!d) return "—";
+  const when = new Date(d);
+  if (when.getHours() === 0 && when.getMinutes() === 0) return day(when);
+  return `${day(when)} ${when.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+};
 
 /**
  * The client's own confirmation of a site visit.

@@ -16,7 +16,7 @@ WhatsApp**, and needs an approved template — the words are in
 
 | Event | In the code |
 |---|---|
-| `SITE_VISIT_SCHEDULED` | `sales/site-visits/actions.ts` → `scheduleSiteVisitAction` (the form), and `sales/leads/actions.ts` → `changeLeadStageAction` when a lead is moved to Site Visit (the board, or the record) |
+| `SITE_VISIT_SCHEDULED` | `sales/site-visits/actions.ts` → `scheduleSiteVisitAction` (the form). In `sales/leads/actions.ts`, `tellClientAboutSiteVisit()` sends the same message from two more doors: `changeLeadStageAction` when a lead is moved to Site Visit (the board, or the record), and `logFollowUpAction` when a follow-up is logged as a site visit — the date typed on the follow-up is the date the client is given. Whichever comes second is deduplicated on that time, so the client is told once |
 
 ## How it travels
 

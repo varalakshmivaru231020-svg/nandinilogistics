@@ -18,7 +18,7 @@ import { actAs, bindCookieBox, cleanupActionSessions } from "./action-harness";
 import { prisma, tag } from "./helpers";
 
 import { scheduleSiteVisitAction } from "@/app/(app)/sales/site-visits/actions";
-import { changeLeadStageAction } from "@/app/(app)/sales/leads/actions";
+import { changeLeadStageAction, logFollowUpAction } from "@/app/(app)/sales/leads/actions";
 import { seedWhatsapp } from "../../prisma/whatsapp-seed";
 
 bindCookieBox(cookieBox);
@@ -27,9 +27,10 @@ bindCookieBox(cookieBox);
  * The alert, from the actions a salesperson actually presses.
  *
  * `whatsapp-outbox.test.ts` proves the outbox and the dispatcher; this proves
- * the wiring into the two places that raise the event — the schedule form and
- * the board — with a lead created for it and taken away afterwards. Without
- * this, both could be disconnected and every other test would still pass.
+ * the wiring into the three places that raise the event — the schedule form,
+ * the board, and a follow-up logged as a site visit — with a lead created for
+ * it and taken away afterwards. Without this, all three could be disconnected
+ * and every other test would still pass.
  */
 describe("a site visit tells the client", () => {
   const suffix = tag();
@@ -95,6 +96,7 @@ describe("a site visit tells the client", () => {
   afterAll(async () => {
     await prisma.whatsappMessage.deleteMany({ where: { entityId: leadId } });
     await prisma.siteVisit.deleteMany({ where: { leadId } });
+    await prisma.leadFollowUp.deleteMany({ where: { leadId } });
     await prisma.lead.deleteMany({ where: { id: leadId } });
     if (previous) {
       await prisma.whatsappTrigger.update({
@@ -201,5 +203,69 @@ describe("a site visit tells the client", () => {
     // One visit, one message: the board and the form are the same event.
     const after = await prisma.whatsappMessage.count({ where: { entityId: leadId } });
     expect(after).toBe(before);
+  });
+
+  /*
+   * The visit is usually arranged on the call, and what the executive does on
+   * the call is log a follow-up. Waiting for the card to be dragged afterwards
+   * is waiting for a step nobody owes anybody.
+   */
+  describe("a follow-up logged as a site visit", () => {
+    const FOLLOW_UP_DAY = "2026-12-18";
+
+    beforeAll(async () => {
+      await prisma.whatsappMessage.deleteMany({ where: { entityId: leadId } });
+      await prisma.siteVisit.deleteMany({ where: { leadId } });
+      await prisma.leadFollowUp.deleteMany({ where: { leadId } });
+    });
+
+    it("tells the client at once, with the date typed on the follow-up", async () => {
+      metaAnswers(200, { messages: [{ id: "wamid.FOLLOWUP" }] });
+
+      const res = await logFollowUpAction(
+        leadId,
+        "SITE_VISIT",
+        "Agreed to come and see the 3 BHK",
+        "Interested",
+        FOLLOW_UP_DAY,
+      );
+      expect(res.ok, res.ok ? "" : res.error).toBe(true);
+
+      const message = await prisma.whatsappMessage.findFirstOrThrow({
+        where: { entityId: leadId, event: "SITE_VISIT_SCHEDULED" },
+        orderBy: { createdAt: "desc" },
+      });
+      // Sent, not merely queued: the client hears while the call is still warm.
+      expect(message.status).toBe("SENT");
+      expect(message.metaMessageId).toBe("wamid.FOLLOWUP");
+
+      const variables = message.variables as string[];
+      expect(variables[0]).toBe(CLIENT);
+      // The day as typed, and no midnight: these screens log a date, not a time.
+      expect(variables[3]).toBe("18 Dec 2026");
+
+      vi.unstubAllGlobals();
+    });
+
+    it("is not sent twice when the card is dragged over afterwards", async () => {
+      const before = await prisma.whatsappMessage.count({ where: { entityId: leadId } });
+
+      const res = await changeLeadStageAction(leadId, "SITE_VISIT_SCHEDULED");
+      expect(res.ok, res.ok ? "" : res.error).toBe(true);
+
+      // The stage move reads the same next action and finds it already told.
+      const after = await prisma.whatsappMessage.count({ where: { entityId: leadId } });
+      expect(after).toBe(before);
+    });
+
+    it("says nothing for a follow-up that is not a site visit", async () => {
+      const before = await prisma.whatsappMessage.count({ where: { entityId: leadId } });
+
+      const res = await logFollowUpAction(leadId, "CALL", "Not reachable", "", "2026-12-20");
+      expect(res.ok, res.ok ? "" : res.error).toBe(true);
+
+      const after = await prisma.whatsappMessage.count({ where: { entityId: leadId } });
+      expect(after).toBe(before);
+    });
   });
 });
