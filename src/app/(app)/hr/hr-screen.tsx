@@ -749,6 +749,8 @@ export function EmployeeForm({
   const internal = isInternalStaffType(typeName);
   const [error, setError] = React.useState<string | null>(null);
   const [photoName, setPhotoName] = React.useState<string | null>(null);
+  // A local preview of the picked file, so the square shows the face being uploaded.
+  const [photoPreview, setPhotoPreview] = React.useState<string | null>(null);
   const [docs, setDocs] = React.useState<Record<string, { name: string; size: string } | null>>({});
   /** The live file inputs, so Remove can clear the one it is undoing. */
   const docInputs = React.useRef<Record<string, HTMLInputElement | null>>({});
@@ -804,7 +806,15 @@ export function EmployeeForm({
                 : "border-dashed border-muted-200 bg-surface-sunken text-muted-400 hover:border-brand-500",
             )}
           >
-            {employee?.hasPhoto && !photoName ? (
+            {photoPreview ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photoPreview} alt="Photo to upload" className="absolute inset-0 h-full w-full object-cover" />
+                <span className="absolute inset-x-0 bottom-0 bg-navy-950/60 py-[3px] text-[9px] font-bold text-white">
+                  Change
+                </span>
+              </>
+            ) : employee?.hasPhoto ? (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -830,9 +840,11 @@ export function EmployeeForm({
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 const problem = f ? uploadProblem([f]) : null;
-                if (problem) { setError(problem); e.target.value = ""; setPhotoName(null); return; }
+                if (photoPreview) URL.revokeObjectURL(photoPreview);
+                if (problem) { setError(problem); e.target.value = ""; setPhotoName(null); setPhotoPreview(null); return; }
                 setError(null);
                 setPhotoName(f?.name ?? null);
+                setPhotoPreview(f ? URL.createObjectURL(f) : null);
               }}
             />
           </label>
