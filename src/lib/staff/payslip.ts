@@ -43,30 +43,73 @@ export function payableDays(entries: ReadonlyArray<{ status: string }>): number 
 }
 
 export interface PayslipFigures {
+  basic: number;
+  hra: number;
+  others: number;
   gross: number;
+  pf: number;
+  esi: number;
   advance: number;
   deductions: number;
   netPay: number;
 }
 
 const money = (v: unknown, label: string): number => {
-  const n = typeof v === "number" ? v : Number(String(v ?? "").replace(/[₹,\s]/g, ""));
+  const n = typeof v === "number" ? v : Number(String(v ?? "").replace(/[₹,s]/g, ""));
   if (!Number.isFinite(n) || n < 0) throw new Error(`${label} must be a number, zero or more.`);
   return Math.round(n * 100) / 100;
 };
 
+const blank = (v: unknown) => v === undefined || v === null || String(v).trim() === "";
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Employee PF: 12% of basic. */
+export const PF_RATE = 0.12;
+/** Employee ESI: 0.75% of gross, rounded up to the rupee. */
+export const ESI_RATE = 0.0075;
+/** ESI applies only while monthly gross is at or under this. */
+export const ESI_CEILING = 21000;
+
 /**
- * Net pay from the three figures, refusing a slip that pays out less than
- * nothing — a deduction larger than the gross is a mistake, not a payslip.
+ * The statutory deductions a salary sheet starts from — PF on basic, ESI on
+ * gross while under the ceiling. Suggestions only; the form may override them.
  */
-export function computePayslip(input: { gross: unknown; advance: unknown; deductions: unknown }): PayslipFigures {
-  const gross = money(input.gross, "Gross");
-  const advance = money(input.advance, "Advance");
-  const deductions = money(input.deductions, "Deductions");
+export function statutoryDeductions(basic: number, gross: number): { pf: number; esi: number } {
+  const pf = Math.round(basic * PF_RATE);
+  const esi = gross > 0 && gross <= ESI_CEILING ? Math.ceil(gross * ESI_RATE) : 0;
+  return { pf, esi };
+}
+
+/**
+ * The payslip from its parts. Earnings are basic + HRA + others when the
+ * split is given (gross is then their total, not typed); otherwise the gross
+ * as entered. Net is gross less PF, ESI, advance and other deductions, and a
+ * slip that pays out less than nothing is refused — that is a mistake, not a
+ * payslip.
+ */
+export function computePayslip(input: {
+  gross?: unknown; basic?: unknown; hra?: unknown; others?: unknown;
+  pf?: unknown; esi?: unknown; advance?: unknown; deductions?: unknown;
+}): PayslipFigures {
+  const split = !blank(input.basic) || !blank(input.hra) || !blank(input.others);
+  const basic = split ? money(input.basic ?? 0, "Basic") : 0;
+  const hra = split ? money(input.hra ?? 0, "HRA") : 0;
+  const others = split ? money(input.others ?? 0, "Others") : 0;
+  const gross = split ? round2(basic + hra + others) : money(input.gross, "Gross");
+  const pf = money(input.pf ?? 0, "PF");
+  const esi = money(input.esi ?? 0, "ESI");
+  const advance = money(input.advance ?? 0, "Advance");
+  const deductions = money(input.deductions ?? 0, "Deductions");
   if (gross <= 0) throw new Error("Gross salary must be more than zero.");
-  const netPay = Math.round((gross - advance - deductions) * 100) / 100;
-  if (netPay < 0) throw new Error("Advance and deductions come to more than the gross salary.");
-  return { gross, advance, deductions, netPay };
+  const netPay = round2(gross - pf - esi - advance - deductions);
+  if (netPay < 0) throw new Error("PF, ESI, advance and deductions come to more than the gross salary.");
+  return { basic: split ? basic : gross, hra, others, gross, pf, esi, advance, deductions, netPay };
+}
+
+/** Days in the month — the salary sheet's Pay Days. */
+export function daysInMonth(month: string): number {
+  const { from, to } = monthRange(month);
+  return Math.round((to.getTime() - from.getTime()) / 86_400_000);
 }
 
 /**

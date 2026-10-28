@@ -14,8 +14,14 @@ export interface PayslipPdfInput {
   name: string;
   designation: string | null;
   month: string;
+  payDays: number | null;
   payableDays: number | null;
+  basic: number;
+  hra: number;
+  others: number;
   gross: number;
+  pf: number;
+  esi: number;
   advance: number;
   deductions: number;
   netPay: number;
@@ -58,12 +64,19 @@ export async function toPayslipPdf(input: PayslipPdfInput): Promise<Buffer> {
 
   row("Employee", `${input.name} (${input.employeeCode})`);
   row("Designation", input.designation ?? "—");
-  row("Payable days", input.payableDays === null ? "—" : String(input.payableDays));
+  row("Pay days", input.payDays === null ? "—" : String(input.payDays));
+  row("Present days", input.payableDays === null ? "—" : String(input.payableDays));
   doc.moveDown(0.4);
   doc.moveTo(left, doc.y).lineTo(left + width, doc.y).strokeColor("#E3E7F2").stroke();
   doc.moveDown(0.6);
 
-  row("Gross salary", rupees(input.gross));
+  row("Basic", rupees(input.basic));
+  if (input.hra) row("HRA", rupees(input.hra));
+  if (input.others) row("Others", rupees(input.others));
+  row("Total earning", rupees(input.gross), true);
+  doc.moveDown(0.3);
+  row("Less: PF", rupees(input.pf));
+  row("Less: ESI", rupees(input.esi));
   row("Less: advance recovery", rupees(input.advance));
   row("Less: deductions", rupees(input.deductions));
   doc.moveDown(0.3);

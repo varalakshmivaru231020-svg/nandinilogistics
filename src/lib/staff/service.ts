@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-import { advanceDueThisMonth, monthRange, payableDays } from "./payslip";
+import { advanceDueThisMonth, daysInMonth, monthRange, payableDays, statutoryDeductions } from "./payslip";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -38,9 +38,13 @@ export async function payslipDraft(db: Db, employeeId: string, month: string) {
     }),
   ]);
   if (!employee) throw new Error("Staff member not found.");
+  const gross = employee.monthlySalary === null ? 0 : Number(employee.monthlySalary);
   return {
     employee,
-    gross: employee.monthlySalary === null ? 0 : Number(employee.monthlySalary),
+    gross,
+    // The salary on file is taken as basic; HRA and others are added on the form.
+    ...statutoryDeductions(gross, gross),
+    payDays: daysInMonth(month),
     payableDays: payableDays(entries),
     marked: entries.length,
     advance: advanceDueThisMonth(advances),

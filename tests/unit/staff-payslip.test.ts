@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { advanceDueThisMonth, computePayslip, isMonth, monthLabel, monthRange, payableDays } from "@/lib/staff/payslip";
+import { advanceDueThisMonth, computePayslip, daysInMonth, statutoryDeductions, isMonth, monthLabel, monthRange, payableDays } from "@/lib/staff/payslip";
 import { payslipBandFigures, payslipListWhere, readPayslipListParams } from "@/lib/staff/list-filters";
 
 describe("the month", () => {
@@ -30,7 +30,7 @@ describe("payable days", () => {
 describe("the payslip arithmetic", () => {
   it("is gross less advance less deductions", () => {
     expect(computePayslip({ gross: "25,000", advance: 2000, deductions: "500.50" })).toEqual({
-      gross: 25000, advance: 2000, deductions: 500.5, netPay: 22499.5,
+      basic: 25000, hra: 0, others: 0, gross: 25000, pf: 0, esi: 0, advance: 2000, deductions: 500.5, netPay: 22499.5,
     });
   });
 
@@ -66,5 +66,25 @@ describe("the payslip list", () => {
     expect(read("Payslips")).toBe("2");
     expect(read("Gross")).toBe("₹3,000");
     expect(read("Net pay")).toBe("₹2,850");
+  });
+});
+
+describe("the salary sheet figures", () => {
+  it("matches the Sep 2026 sheet: PF 12% of basic, ESI 0.75% of gross rounded up", () => {
+    expect(statutoryDeductions(17000, 17000)).toEqual({ pf: 2040, esi: 128 });
+    expect(statutoryDeductions(17000, 20000)).toEqual({ pf: 2040, esi: 150 });
+    // Over the ESI ceiling, no ESI.
+    expect(statutoryDeductions(20000, 25000).esi).toBe(0);
+  });
+
+  it("totals basic, HRA and others into gross, and takes PF and ESI off it", () => {
+    const p = computePayslip({ basic: 17000, hra: 2000, others: 1000, pf: 2040, esi: 150 });
+    expect(p.gross).toBe(20000);
+    expect(p.netPay).toBe(17810);
+  });
+
+  it("counts the days in the month", () => {
+    expect(daysInMonth("2026-09")).toBe(30);
+    expect(daysInMonth("2028-02")).toBe(29);
   });
 });

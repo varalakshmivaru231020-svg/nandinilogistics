@@ -23,13 +23,13 @@ const paths = (id?: string) => {
 
 /** The figures the form starts from, for the person and month picked. */
 export async function payslipDraftAction(employeeId: string, month: string): Promise<ActionResult<{
-  gross: number; payableDays: number; marked: number; advance: number; name: string;
+  gross: number; pf: number; esi: number; payDays: number; payableDays: number; marked: number; advance: number; name: string;
 }>> {
   return runAction(async () => {
     await authorize(PERM.staff.payslip.create);
     if (!isMonth(month)) throw new Error("Pick a month.");
     const draft = await payslipDraft(prisma, employeeId, month);
-    return { gross: draft.gross, payableDays: draft.payableDays, marked: draft.marked, advance: draft.advance, name: draft.employee.name };
+    return { gross: draft.gross, pf: draft.pf, esi: draft.esi, payDays: draft.payDays, payableDays: draft.payableDays, marked: draft.marked, advance: draft.advance, name: draft.employee.name };
   });
 }
 
@@ -59,6 +59,11 @@ export async function generatePayslipAction(formData: FormData): Promise<ActionR
 
     const figures = computePayslip({
       gross: formData.get("gross"),
+      basic: formData.get("basic"),
+      hra: formData.get("hra"),
+      others: formData.get("others"),
+      pf: formData.get("pf") ?? 0,
+      esi: formData.get("esi") ?? 0,
       advance: formData.get("advance") ?? 0,
       deductions: formData.get("deductions") ?? 0,
     });
@@ -67,6 +72,11 @@ export async function generatePayslipAction(formData: FormData): Promise<ActionR
     if (payable !== null && (!Number.isFinite(payable) || payable < 0 || payable > 31)) {
       throw new Error("Payable days must be between 0 and 31.");
     }
+    const payDaysRaw = String(formData.get("payDays") ?? "").trim();
+    const payDays = payDaysRaw === "" ? null : Number(payDaysRaw);
+    if (payDays !== null && (!Number.isInteger(payDays) || payDays < 1 || payDays > 31)) {
+      throw new Error("Pay days must be a whole number between 1 and 31.");
+    }
     const notes = String(formData.get("notes") ?? "").trim() || null;
 
     const pdf = await toPayslipPdf({
@@ -74,6 +84,7 @@ export async function generatePayslipAction(formData: FormData): Promise<ActionR
       name: employee.name,
       designation: employee.designation?.name ?? null,
       month,
+      payDays,
       payableDays: payable,
       ...figures,
       notes,
@@ -84,7 +95,7 @@ export async function generatePayslipAction(formData: FormData): Promise<ActionR
 
     const payslip = await prisma.payslip.create({
       data: {
-        employeeId, month, ...figures, payableDays: payable, notes,
+        employeeId, month, ...figures, payDays, payableDays: payable, notes,
         pdfKey: stored.key, generatedById: ctx.id,
       },
     });

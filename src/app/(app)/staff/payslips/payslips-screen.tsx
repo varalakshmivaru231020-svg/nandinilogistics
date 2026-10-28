@@ -11,7 +11,7 @@ import { ConfirmDialog, Modal } from "@/components/ui/modal";
 import { Alert, Field, Input, PageHeader, Select, Textarea } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { PAYSLIP_EMPTY_FILTERED, PAYSLIP_EMPTY_NONE } from "@/lib/staff/list-filters";
-import { monthLabel } from "@/lib/staff/payslip";
+import { monthLabel, statutoryDeductions } from "@/lib/staff/payslip";
 import { cn, money } from "@/lib/utils";
 import { deletePayslipAction, generatePayslipAction, payslipDraftAction } from "./actions";
 
@@ -84,6 +84,15 @@ export function PayslipsScreen({
         actions={
           <div className="flex items-center gap-2">
             {can.export && <ExportMenu href={(f) => exportHref("/api/staff/payslips/export", f, query)} />}
+            {can.export && (
+              <a
+                href={`/api/staff/payslips/sheet?month=${picked.month || thisMonth}`}
+                className="rounded-[9px] border border-line-400 bg-white px-3 py-[7px] text-[12px] font-semibold text-brand-700 hover:border-brand-500"
+                title="The month's salary sheet in Excel: Basic, HRA, Others, PF, ESI and net, with a grand total"
+              >
+                Salary sheet · {monthLabel(picked.month || thisMonth)}
+              </a>
+            )}
             {can.create && <Button size="sm" onClick={() => setCreating(true)}>+ Generate payslip</Button>}
           </div>
         }
@@ -190,8 +199,12 @@ function GeneratePayslip({
   const toast = useToast();
   const [employeeId, setEmployeeId] = React.useState("");
   const [month, setMonth] = React.useState(thisMonth);
-  const [draft, setDraft] = React.useState<{ gross: string; payableDays: string; advance: string; marked: number } | null>(null);
-  const [gross, setGross] = React.useState("");
+  const [draft, setDraft] = React.useState<{ payDays: string; payableDays: string; marked: number } | null>(null);
+  const [basic, setBasic] = React.useState("");
+  const [hra, setHra] = React.useState("0");
+  const [others, setOthers] = React.useState("0");
+  const [pf, setPf] = React.useState("0");
+  const [esi, setEsi] = React.useState("0");
   const [advance, setAdvance] = React.useState("0");
   const [deductions, setDeductions] = React.useState("0");
   const [busy, setBusy] = React.useState(false);
@@ -205,14 +218,28 @@ function GeneratePayslip({
     const res = await payslipDraftAction(who, when);
     if (!res.ok) { setError(res.error); setDraft(null); return; }
     setError(null);
-    const d = { gross: String(res.data.gross), payableDays: String(res.data.payableDays), advance: String(res.data.advance), marked: res.data.marked };
-    setDraft(d);
-    setGross(d.gross);
-    setAdvance(d.advance);
+    setDraft({ payDays: String(res.data.payDays), payableDays: String(res.data.payableDays), marked: res.data.marked });
+    setBasic(String(res.data.gross));
+    setHra("0");
+    setOthers("0");
+    setPf(String(res.data.pf));
+    setEsi(String(res.data.esi));
+    setAdvance(String(res.data.advance));
   }, []);
 
 
-  const net = Math.max(0, Number(gross || 0) - Number(advance || 0) - Number(deductions || 0));
+  const gross = Number(basic || 0) + Number(hra || 0) + Number(others || 0);
+  const net = Math.max(0, gross - Number(pf || 0) - Number(esi || 0) - Number(advance || 0) - Number(deductions || 0));
+
+  // Changing an earning re-suggests PF and ESI; either can still be typed over.
+  function earning(set: (v: string) => void, value: string, next: { basic?: string; hra?: string; others?: string }) {
+    set(value);
+    const b = Number(next.basic ?? basic) || 0;
+    const g = b + (Number(next.hra ?? hra) || 0) + (Number(next.others ?? others) || 0);
+    const st = statutoryDeductions(b, g);
+    setPf(String(st.pf));
+    setEsi(String(st.esi));
+  }
 
   async function submit(fd: FormData) {
     setBusy(true);
@@ -227,7 +254,7 @@ function GeneratePayslip({
   return (
     <Modal
       open onClose={onClose} title="Generate payslip" size="sm"
-      description="Pick the staff member and the month. Gross starts from the salary on file; days and the advance recovery come from the records."
+      description="Pick the staff member and the month. Basic starts from the salary on file, PF and ESI are suggested from it, and days and the advance recovery come from the records."
       footer={
         <>
           <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
@@ -248,11 +275,29 @@ function GeneratePayslip({
           <Input name="month" type="month" value={month} onChange={(e) => { setMonth(e.target.value); void loadDraft(employeeId, e.target.value); }} required />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Gross salary (₹)" required hint={draft && Number(draft.gross) === 0 ? "No monthly salary on file — enter it." : undefined}>
-            <Input name="gross" type="number" min={1} step="0.01" value={gross} onChange={(e) => setGross(e.target.value)} required />
+          <Field label="Pay days" hint="Days in the month.">
+            <Input name="payDays" type="number" min={1} max={31} defaultValue={draft?.payDays ?? ""} key={`pd-${draft?.payDays ?? "none"}`} />
           </Field>
-          <Field label="Payable days" hint={draft ? `${draft.marked} day(s) marked this month` : undefined}>
+          <Field label="Present days" hint={draft ? `${draft.marked} day(s) marked this month` : undefined}>
             <Input name="payableDays" type="number" min={0} max={31} step="0.5" defaultValue={draft?.payableDays ?? ""} key={draft?.payableDays ?? "none"} />
+          </Field>
+          <Field label="Basic (₹)" required hint={draft && Number(basic) === 0 ? "No monthly salary on file — enter it." : undefined}>
+            <Input name="basic" type="number" min={1} step="0.01" value={basic} onChange={(e) => earning(setBasic, e.target.value, { basic: e.target.value })} required />
+          </Field>
+          <Field label="HRA (₹)">
+            <Input name="hra" type="number" min={0} step="0.01" value={hra} onChange={(e) => earning(setHra, e.target.value, { hra: e.target.value })} />
+          </Field>
+          <Field label="Others (₹)">
+            <Input name="others" type="number" min={0} step="0.01" value={others} onChange={(e) => earning(setOthers, e.target.value, { others: e.target.value })} />
+          </Field>
+          <Field label="Total earning (₹)">
+            <Input value={gross.toFixed(2)} readOnly className="num" />
+          </Field>
+          <Field label="PF (₹)" hint="12% of basic.">
+            <Input name="pf" type="number" min={0} step="0.01" value={pf} onChange={(e) => setPf(e.target.value)} />
+          </Field>
+          <Field label="ESI (₹)" hint="0.75% of gross, up to ₹21,000.">
+            <Input name="esi" type="number" min={0} step="0.01" value={esi} onChange={(e) => setEsi(e.target.value)} />
           </Field>
           <Field label="Advance recovery (₹)" hint="From approved advances being recovered.">
             <Input name="advance" type="number" min={0} step="0.01" value={advance} onChange={(e) => setAdvance(e.target.value)} />

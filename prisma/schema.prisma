@@ -1191,10 +1191,18 @@ model Payslip {
   employeeId    String
   /// The month, as yyyy-mm.
   month         String
+  /// Earnings, as the salary sheet lays them out; gross is their total.
+  basic         Decimal  @default(0) @db.Decimal(12, 2)
+  hra           Decimal  @default(0) @db.Decimal(12, 2)
+  others        Decimal  @default(0) @db.Decimal(12, 2)
   gross         Decimal  @db.Decimal(12, 2)
+  pf            Decimal  @default(0) @db.Decimal(12, 2)
+  esi           Decimal  @default(0) @db.Decimal(12, 2)
   advance       Decimal  @default(0) @db.Decimal(12, 2)
   deductions    Decimal  @default(0) @db.Decimal(12, 2)
   netPay        Decimal  @db.Decimal(12, 2)
+  /// Days in the pay period (the sheet's Pay Days); payableDays is Present Days.
+  payDays       Int?
   payableDays   Int?
   notes         String?
   pdfKey        String?
