@@ -759,7 +759,10 @@ export function EmployeeForm({
   // Which particulars the form asks for follows the employment type picked:
   // a rider has emergency numbers, a bank account and companies; internal
   // staff a monthly salary.
-  const [typeId, setTypeId] = React.useState(employee?.employmentTypeId ?? defaultTypeId ?? employmentTypes[0]?.id ?? "");
+  const [pickedTypeId, setTypeId] = React.useState(employee?.employmentTypeId ?? defaultTypeId ?? employmentTypes[0]?.id ?? "");
+  // The default may be a type this person cannot add (Internal Staff, for a
+  // Team Leader); fall back to the first one they can.
+  const typeId = employmentTypes.some((t) => t.id === pickedTypeId) ? pickedTypeId : (employmentTypes[0]?.id ?? "");
   const typeName = employmentTypes.find((t) => t.id === typeId)?.name ?? "";
   const rider = isRiderType(typeName);
   const internal = isInternalStaffType(typeName);
@@ -870,9 +873,19 @@ export function EmployeeForm({
 
           <div className="grid min-w-[240px] flex-1 gap-3">
             <Field label="Type of employment" required>
-              <Select name="employmentTypeId" value={typeId} onChange={(e) => setTypeId(e.target.value)} className="font-semibold" required>
-                {employmentTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </Select>
+              {employmentTypes.length === 1 ? (
+                // One type to choose from: say so rather than offer a one-item list.
+                <>
+                  <input type="hidden" name="employmentTypeId" value={typeId} />
+                  <div className="flex h-[44px] items-center rounded-[10px] border border-line-400 bg-surface-sunken px-3.5 text-[13.5px] font-semibold text-navy-900">
+                    {employmentTypes[0].name}
+                  </div>
+                </>
+              ) : (
+                <Select name="employmentTypeId" value={typeId} onChange={(e) => setTypeId(e.target.value)} className="font-semibold" required>
+                  {employmentTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </Select>
+              )}
             </Field>
             <Field label="Name" required>
               <Input name="name" defaultValue={employee?.name} placeholder="Full name" required autoFocus />
