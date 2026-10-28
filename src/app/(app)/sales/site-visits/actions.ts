@@ -5,8 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { authorize, runAction, PermissionError, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
-import { sendWhatsappNow } from "@/lib/whatsapp/dispatch";
-import { whatsappSiteVisitScheduled } from "@/lib/whatsapp/notify";
+import { tellClientAboutSiteVisit } from "@/lib/sales/site-visit-alert";
 import { PERM } from "@/lib/permissions/codes";
 
 export async function scheduleSiteVisitAction(
@@ -50,37 +49,17 @@ export async function scheduleSiteVisitAction(
     /*
      * And the client is told, on WhatsApp — where to come, when, and who will
      * meet them. After the audit row: the visit is booked whatever happens to
-     * the message, and `enqueueWhatsApp` never throws into this flow.
+     * the message, and nothing in there throws into this flow.
      *
      * Off until an administrator switches it on at Masters & Users → WhatsApp,
      * and refused there until the template is approved by Meta.
      */
-    const [site, executive] = await Promise.all([
-      prisma.project.findUnique({
-        where: { id: projectId ?? lead.projectId ?? "" },
-        select: { name: true, addressLine: true, city: { select: { name: true } } },
-      }),
-      // Their own number, so the client can reach somebody before setting off.
-      prisma.user.findUnique({ where: { id: ctx.id }, select: { name: true, phone: true } }),
-    ]);
-    const queued = await whatsappSiteVisitScheduled(prisma, {
+    await tellClientAboutSiteVisit(prisma, {
       leadId,
-      client: { name: lead.name, phone: lead.phone },
-      project: site?.name ?? "our project",
-      address: [site?.addressLine, site?.city?.name].filter(Boolean).join(", ") || "—",
       scheduledAt: new Date(scheduledAt),
-      executive: { name: executive?.name ?? ctx.name, phone: executive?.phone ?? null },
+      by: { id: ctx.id, name: ctx.name },
+      projectId: projectId ?? lead.projectId,
     });
-
-    /*
-     * And sent now, not on the next sweep.
-     *
-     * A client who is told four minutes after the call has ended has been told
-     * late. `sendWhatsappNow` never throws and gives up after eight seconds —
-     * the row stays queued for the sweep to pick up, so a provider having a
-     * slow minute delays the message rather than failing the visit.
-     */
-    if (queued.queued) await sendWhatsappNow(queued.id);
 
     revalidatePath("/sales/site-visits");
     revalidatePath("/sales/leads");

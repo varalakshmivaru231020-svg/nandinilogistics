@@ -27,10 +27,15 @@ bindCookieBox(cookieBox);
  * The alert, from the actions a salesperson actually presses.
  *
  * `whatsapp-outbox.test.ts` proves the outbox and the dispatcher; this proves
- * the wiring into the three places that raise the event — the schedule form,
- * the board, and a follow-up logged as a site visit — with a lead created for
- * it and taken away afterwards. Without this, all three could be disconnected
- * and every other test would still pass.
+ * the wiring into the two actions that raise the event — the schedule form,
+ * and a follow-up logged as a site visit — with a lead created for it and
+ * taken away afterwards. Without this, both could be disconnected and every
+ * other test would still pass.
+ *
+ * It also pins what the client is actually told. The first messages this
+ * platform ever sent read "Project: our project / Address: — / When: —",
+ * because the action had no project in its hand and the board it was raised
+ * from had no time. A message that names nothing is worse than no message.
  */
 describe("a site visit tells the client", () => {
   const suffix = tag();
@@ -194,13 +199,17 @@ describe("a site visit tells the client", () => {
     expect(variables[4].length).toBeGreaterThan(0);
   });
 
-  it("says nothing further when the card is then dragged to Site Visit", async () => {
+  /*
+   * The board is not a booking. It carries no time, so a message raised from
+   * it could only ever have read "When: —" — which is what the first ones
+   * did.
+   */
+  it("says nothing at all when the card is dragged to Site Visit", async () => {
     const before = await prisma.whatsappMessage.count({ where: { entityId: leadId } });
 
     const res = await changeLeadStageAction(leadId, "SITE_VISIT_SCHEDULED");
     expect(res.ok, res.ok ? "" : res.error).toBe(true);
 
-    // One visit, one message: the board and the form are the same event.
     const after = await prisma.whatsappMessage.count({ where: { entityId: leadId } });
     expect(after).toBe(before);
   });
@@ -244,16 +253,33 @@ describe("a site visit tells the client", () => {
       // The day as typed, and no midnight: these screens log a date, not a time.
       expect(variables[3]).toBe("18 Dec 2026");
 
+      /*
+       * And it names the place. The follow-up form asks for no project, so
+       * these come from the lead's own — the step that was missing when the
+       * client was sent "Project: our project / Address: —".
+       */
+      expect(variables[1]).not.toBe("our project");
+      expect(variables[2]).not.toBe("—");
+      // Somebody to ring: the executive's number, their owner's, the
+      // company's, or the WhatsApp line the message itself arrives from.
+      expect(variables[5]).not.toBe("—");
+
       vi.unstubAllGlobals();
     });
 
-    it("is not sent twice when the card is dragged over afterwards", async () => {
+    it("is not sent twice when the same visit is logged again", async () => {
       const before = await prisma.whatsappMessage.count({ where: { entityId: leadId } });
 
-      const res = await changeLeadStageAction(leadId, "SITE_VISIT_SCHEDULED");
+      const res = await logFollowUpAction(
+        leadId,
+        "SITE_VISIT",
+        "Confirmed the time again",
+        "",
+        FOLLOW_UP_DAY,
+      );
       expect(res.ok, res.ok ? "" : res.error).toBe(true);
 
-      // The stage move reads the same next action and finds it already told.
+      // Matched on the time it names: the same time twice is not news.
       const after = await prisma.whatsappMessage.count({ where: { entityId: leadId } });
       expect(after).toBe(before);
     });

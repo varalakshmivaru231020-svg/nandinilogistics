@@ -48,13 +48,14 @@ if (events.length === 0) throw new Error("No events parsed — has events.ts cha
 
 const WHERE = {
   SITE_VISIT_SCHEDULED:
-    "`sales/site-visits/actions.ts` → `scheduleSiteVisitAction` (the form). In " +
-    "`sales/leads/actions.ts`, `tellClientAboutSiteVisit()` sends the same " +
-    "message from two more doors: `changeLeadStageAction` when a lead is moved " +
-    "to Site Visit (the board, or the record), and `logFollowUpAction` when a " +
-    "follow-up is logged as a site visit — the date typed on the follow-up is " +
-    "the date the client is given. Whichever comes second is deduplicated on " +
-    "that time, so the client is told once",
+    "`lib/sales/site-visit-alert.ts` → `tellClientAboutSiteVisit()`, which " +
+    "composes it and sends it. Two actions call it: " +
+    "`sales/site-visits/actions.ts` → `scheduleSiteVisitAction` (the form), " +
+    "and `sales/leads/actions.ts` → `logFollowUpAction` when a follow-up is " +
+    "logged as a site visit, carrying the date typed on it. **Moving a lead " +
+    "to the Site Visit stage sends nothing** — the board holds no time, so " +
+    "the only message it could raise would read \"When: —\". The same visit " +
+    "logged twice is sent once: it is matched on the time it names",
 };
 
 const L = [];
