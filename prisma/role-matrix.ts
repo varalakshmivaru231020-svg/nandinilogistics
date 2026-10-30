@@ -155,6 +155,10 @@ export const ROLES: RoleSeed[] = [
       "advance.advance.approve",
       "advance.advance.export",
       "advance.bikeRent.view",
+      "advance.bikeRent.create",
+      "advance.bikeRent.update",
+      "advance.bikeRent.delete",
+      "advance.bikeRent.export",
 
       "masters.company.view",
       "masters.company.viewRateCard",
@@ -191,6 +195,13 @@ export const ROLES: RoleSeed[] = [
 
       // Payout status of the riders they onboarded, read-only.
       "payout.payout.view",
+      "advance.advance.view",
+      "advance.advance.create",
+      "advance.bikeRent.view",
+      "advance.bikeRent.create",
+      "advance.bikeRent.update",
+      "advance.bikeRent.export",
+      "admin.user.view",
 
       "masters.company.view",
       "reports.teleCallerDaily.view",

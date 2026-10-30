@@ -105,6 +105,7 @@ export default async function LeadsPage({
           lostReason: l.lostReason?.name ?? null,
           followUpCount: l._count.followUps,
           isDuplicate: Boolean(l.duplicateOfId),
+          approval: l.approval,
         }))}
         can={{
           create: ctx.has(PERM.sales.lead.create),

@@ -632,6 +632,14 @@ model Employee {
   /// Aadhaar is mandatory, alongside name, mobile and photo.
   aadhaar          String
   pan              String?
+  temporaryStreet  String?
+  temporaryCity    String?
+  temporaryState   String?
+  temporaryPinCode String?
+  permanentStreet  String?
+  permanentCity    String?
+  permanentState   String?
+  permanentPinCode String?
   address          String?
   drivingLicence   String?
   pfNumber         String?

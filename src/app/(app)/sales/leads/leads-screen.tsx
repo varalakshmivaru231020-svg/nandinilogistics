@@ -26,7 +26,7 @@ interface Lead {
   ownerId: string | null; ownerName: string | null;
   companies: string[]; requirement: string | null;
   nextActionAt: string | null; lostReason: string | null;
-  followUpCount: number; isDuplicate: boolean;
+  followUpCount: number; isDuplicate: boolean; approval: string;
 }
 
 type Lookup = Array<{ id: string; name: string }>;
@@ -281,13 +281,13 @@ export function LeadsScreen({
                     return (
                       <div
                         key={c.id}
-                        draggable={can.changeStage}
+                        draggable={can.changeStage && c.approval === "APPROVED"}
                         onDragStart={() => setDragging(c.id)}
                         onDragEnd={() => setDragging(null)}
                         onClick={() => router.push(`/sales/leads/${c.id}`)}
                         className={cn(
                           "rounded-[11px] border border-line-400 bg-white px-[13px] py-3 transition-shadow",
-                          can.changeStage ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+                          can.changeStage && c.approval === "APPROVED" ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                           dragging === c.id && "opacity-40",
                           "hover:border-brand-150 hover:shadow-[0_6px_18px_rgba(25,26,92,.1)]",
                         )}
@@ -295,6 +295,11 @@ export function LeadsScreen({
                         <div className="mb-1.5 flex items-center justify-between gap-1.5">
                           <span className="text-[12.5px] font-bold text-navy-950">{c.name}</span>
                           {c.isDuplicate && <Copy className="h-3 w-3 shrink-0 text-warn-700" />}
+                          {c.approval !== "APPROVED" && (
+                            <Badge tone={c.approval === "REJECTED" ? "bad" : "warn"}>
+                              {c.approval === "REJECTED" ? "Rejected" : "Pending approval"}
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-[11.5px] font-medium text-navy-500">
                           {[c.companies.join(", "), c.location].filter(Boolean).join(" · ") || "—"}
@@ -372,6 +377,11 @@ export function LeadsScreen({
                         <span className="text-[13px] font-bold text-navy-950">{r.name}</span>
                         <span className="num text-[10.5px] font-medium text-muted-400">{r.leadNo}</span>
                         {r.isDuplicate && <Copy className="h-3 w-3 text-warn-700" />}
+                        {r.approval !== "APPROVED" && (
+                          <Badge tone={r.approval === "REJECTED" ? "bad" : "warn"}>
+                            {r.approval === "REJECTED" ? "Rejected" : "Pending approval"}
+                          </Badge>
+                        )}
                       </div>
                       <div className="mt-1 text-[12px] font-semibold text-brand-700">
                         <PhoneLink phone={r.phone} visible={can.viewContact} />

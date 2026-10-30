@@ -32,6 +32,8 @@ function fileSize(bytes: number) {
 interface Employee {
   id: string; code: string; name: string; mobile: string; altContact: string | null;
   aadhaar: string | null; pan: string | null; address: string | null;
+  temporaryStreet: string | null; temporaryCity: string | null; temporaryState: string | null; temporaryPinCode: string | null;
+  permanentStreet: string | null; permanentCity: string | null; permanentState: string | null; permanentPinCode: string | null;
   employmentTypeId: string; employmentType: string;
   designationId: string | null; designation: string | null;
   status: string;
@@ -480,7 +482,14 @@ function StaffTab({
                 <td className="px-4 py-3 text-[12px] font-medium text-navy-500">{e.address ?? "—"}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1.5">
-                    {isInactive(e.status) && can.update ? (
+                    {e.approval === "PENDING" ? (
+                      <Link
+                        href={`/hr/${e.id}`}
+                        className="rounded-[7px] bg-brand-500 px-[13px] py-1.5 text-[11px] font-bold text-white hover:bg-brand-600"
+                      >
+                        View
+                      </Link>
+                    ) : isInactive(e.status) && can.update ? (
                       <button
                         type="button"
                         onClick={() => onStatus(e)}
@@ -514,7 +523,7 @@ function StaffTab({
                         </button>
                       </>
                     )}
-                    {can.update && (
+                    {can.update && e.approval !== "PENDING" && (
                       <button
                         type="button"
                         onClick={() => onEdit(e)}
@@ -523,7 +532,7 @@ function StaffTab({
                         Edit
                       </button>
                     )}
-                    {can.remove && (
+                    {can.remove && e.approval !== "PENDING" && (
                       <button
                         type="button"
                         onClick={() => onRemove(e)}
@@ -827,6 +836,7 @@ export function EmployeeForm({
   const rider = isRiderType(typeName);
   const internal = isInternalStaffType(typeName);
   const [error, setError] = React.useState<string | null>(null);
+  const [selectedCompanyIds, setSelectedCompanyIds] = React.useState<string[]>(employee?.companyIds ?? []);
   const [photoName, setPhotoName] = React.useState<string | null>(null);
   // A local preview of the picked file, so the square shows the face being uploaded.
   const [photoPreview, setPhotoPreview] = React.useState<string | null>(null);
@@ -985,9 +995,24 @@ export function EmployeeForm({
           </Field>
         </div>
 
-        <Field label="Address">
-          <Textarea name="address" defaultValue={employee?.address ?? ""} placeholder="House, area, city" className="min-h-[74px]" />
-        </Field>
+        <div className="!mt-4">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">Temporary address</p>
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+            <Field label="Street"><Input name="temporaryStreet" defaultValue={employee?.temporaryStreet ?? ""} placeholder="House, street, area" /></Field>
+            <Field label="City"><Input name="temporaryCity" defaultValue={employee?.temporaryCity ?? ""} placeholder="City" /></Field>
+            <Field label="State"><Input name="temporaryState" defaultValue={employee?.temporaryState ?? ""} placeholder="State" /></Field>
+            <Field label="PIN code"><Input name="temporaryPinCode" inputMode="numeric" defaultValue={employee?.temporaryPinCode ?? ""} placeholder="600001" maxLength={6} /></Field>
+          </div>
+        </div>
+        <div className="!mt-4">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">Permanent address</p>
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+            <Field label="Street"><Input name="permanentStreet" defaultValue={employee?.permanentStreet ?? ""} placeholder="House, street, area" /></Field>
+            <Field label="City"><Input name="permanentCity" defaultValue={employee?.permanentCity ?? ""} placeholder="City" /></Field>
+            <Field label="State"><Input name="permanentState" defaultValue={employee?.permanentState ?? ""} placeholder="State" /></Field>
+            <Field label="PIN code"><Input name="permanentPinCode" inputMode="numeric" defaultValue={employee?.permanentPinCode ?? ""} placeholder="600001" maxLength={6} /></Field>
+          </div>
+        </div>
 
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
           <Field label="Joining date">
@@ -1066,16 +1091,36 @@ export function EmployeeForm({
             </div>
 
             <Field label="Companies deployed to" required>
+              {selectedCompanyIds.map((id) => <input key={id} type="hidden" name="companyIds" value={id} />)}
               <select
-                name="companyIds"
-                multiple
-                defaultValue={employee?.companyIds ?? []}
+                value=""
+                onChange={(e) => {
+                  const id = e.target.value;
+                  if (id && !selectedCompanyIds.includes(id)) setSelectedCompanyIds((current) => [...current, id]);
+                }}
                 disabled={Boolean(employee) && !canManageCompanies}
-                className="min-h-[88px] w-full rounded-[9px] border border-line-400 bg-surface-sunken px-3 py-2 text-[12.5px] font-medium text-navy-900 focus:border-brand-500 focus:bg-white focus:outline-none disabled:opacity-60"
+                className="w-full rounded-[9px] border border-line-400 bg-surface-sunken px-3 py-2 text-[12.5px] font-medium text-navy-900 focus:border-brand-500 focus:bg-white focus:outline-none disabled:opacity-60"
               >
-                {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <option value="">Select a company…</option>
+                {companies.filter((c) => !selectedCompanyIds.includes(c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-              <p className="mt-1 text-[11px] font-medium text-muted-400">Hold Ctrl (or Cmd) to pick more than one.</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {selectedCompanyIds.map((id) => {
+                  const company = companies.find((c) => c.id === id);
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setSelectedCompanyIds((current) => current.filter((value) => value !== id))}
+                      className="rounded-full bg-brand-100 px-2.5 py-1 text-[11px] font-semibold text-brand-700"
+                      disabled={Boolean(employee) && !canManageCompanies}
+                    >
+                      {company?.name ?? id} ×
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1 text-[11px] font-medium text-muted-400">Choose one or more active companies.</p>
             </Field>
           </>
         )}

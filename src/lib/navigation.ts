@@ -78,6 +78,7 @@ export const NAVIGATION: NavSection[] = [
     items: [
       { label: "Reports", href: "/reports", icon: "reports", anyPermission: REPORT_VIEW_CODES() },
       { label: "Masters & Users", href: "/masters", icon: "masters", anyPermission: MASTER_VIEW_CODES() },
+      { label: "Users", href: "/admin/users", icon: "masters", permission: PERM.admin.user.view },
     ],
   },
 ];

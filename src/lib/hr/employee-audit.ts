@@ -6,6 +6,14 @@ export type EditableEmployee = {
   mobile: string;
   aadhaar: string | null;
   pan: string | null;
+  temporaryStreet?: string | null;
+  temporaryCity?: string | null;
+  temporaryState?: string | null;
+  temporaryPinCode?: string | null;
+  permanentStreet?: string | null;
+  permanentCity?: string | null;
+  permanentState?: string | null;
+  permanentPinCode?: string | null;
   address: string | null;
   altContact: string | null;
   employmentTypeId: string;
@@ -33,6 +41,14 @@ export function editableEmployee(e: EditableEmployee): EditableEmployee {
     mobile: e.mobile,
     aadhaar: e.aadhaar,
     pan: e.pan,
+    temporaryStreet: e.temporaryStreet ?? null,
+    temporaryCity: e.temporaryCity ?? null,
+    temporaryState: e.temporaryState ?? null,
+    temporaryPinCode: e.temporaryPinCode ?? null,
+    permanentStreet: e.permanentStreet ?? null,
+    permanentCity: e.permanentCity ?? null,
+    permanentState: e.permanentState ?? null,
+    permanentPinCode: e.permanentPinCode ?? null,
     address: e.address,
     altContact: e.altContact,
     employmentTypeId: e.employmentTypeId,

@@ -187,7 +187,8 @@ export default async function EmployeeDetailPage({
           { k: "PF number", v: employee.pfNumber || "—" },
           { k: "Insurance number", v: employee.insuranceNumber || "—" },
           ...(employee.monthlySalary !== null ? [{ k: "Monthly salary", v: `₹${Number(employee.monthlySalary).toLocaleString("en-IN")}` }] : []),
-          { k: "Address", v: employee.address || "—" },
+          { k: "Temporary address", v: [employee.temporaryStreet, employee.temporaryCity, employee.temporaryState, employee.temporaryPinCode].filter(Boolean).join(", ") || employee.address || "—" },
+          { k: "Permanent address", v: [employee.permanentStreet, employee.permanentCity, employee.permanentState, employee.permanentPinCode].filter(Boolean).join(", ") || "—" },
         ],
       }}
       extras={
