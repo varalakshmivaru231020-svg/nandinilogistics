@@ -92,10 +92,10 @@ class NotificationsScreenState extends State<NotificationsScreen> {
     }
     await load();
     messenger.showSnackBar(SnackBar(
-      backgroundColor: T.navy950,
+      backgroundColor: T.dark950,
       behavior: SnackBarBehavior.floating,
       margin: const EdgeInsets.all(T.gutter),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(T.rButton)),
       content: Text('All marked read.',
           style: T.body(color: Colors.white, weight: FontWeight.w500).copyWith(fontSize: 13.5)),
     ));
@@ -193,8 +193,8 @@ class _Row extends StatelessWidget {
 
     return Panel(
       // An unread one is bordered, as the web tints it.
-      border: read ? T.line : T.brand500,
-      fill: read ? T.card : T.brand100,
+      border: read ? T.line : T.accent500,
+      fill: read ? T.card : T.accent100,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       onTap: opens ? onOpen : (read ? null : onMarkRead),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -204,7 +204,7 @@ class _Row extends StatelessWidget {
             width: 8,
             height: 8,
             decoration: BoxDecoration(
-              color: read ? T.line400 : T.brand500,
+              color: read ? T.line400 : T.accent500,
               shape: BoxShape.circle,
             ),
           ),
@@ -219,7 +219,7 @@ class _Row extends StatelessWidget {
             GestureDetector(
               onTap: onMarkRead,
               child: Text('Mark read',
-                  style: T.caption(color: T.brand700).copyWith(fontWeight: FontWeight.w700)),
+                  style: T.caption(color: T.accent700).copyWith(fontWeight: FontWeight.w700)),
             ),
           ],
         ]),

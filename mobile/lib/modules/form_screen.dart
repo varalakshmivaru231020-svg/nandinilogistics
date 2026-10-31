@@ -140,10 +140,10 @@ class _FormScreenState extends State<FormScreen> {
     if (res.ok) {
       navigator.pop(true);
       messenger.showSnackBar(SnackBar(
-        backgroundColor: T.navy950,
+        backgroundColor: T.dark950,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(T.gutter),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(T.rButton)),
         content: Text(def.done ?? '${def.title} — done.',
             style: T.body(color: Colors.white, weight: FontWeight.w500).copyWith(fontSize: 13.5)),
       ));

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
-/// The ERP's tokens, taken from the design canvas, unchanged.
+/// The app's design tokens.
 ///
-/// A number that is navy on the desktop is navy on the phone. Only the chrome
-/// is rebuilt for Android. Every value here is quoted from `Main.dc.html` —
-/// nothing is approximated, because the last attempt approximated and the
-/// result did not look like the design.
+/// A warm, premium palette for a rider's phone: an ember-red accent on a
+/// warm off-white page, charcoal rather than black for the dark surfaces
+/// (the splash, the drawer, the hero card), soft shadows instead of hard
+/// hairlines, and generous radii. Sora carries display and numbers, Public
+/// Sans the reading text. Every value lives here; a screen never names a
+/// colour of its own.
 class T {
   /// Sora for display, numbers and titles; Public Sans for everything else.
   /// Both bundled — see pubspec.yaml for why.
@@ -13,37 +15,44 @@ class T {
   static const _sans = 'PublicSans';
 
   // ---------------------------------------------------------------- colour
-  static const navy950 = Color(0xFF191A5C);
-  static const navy800 = Color(0xFF2F308C);
-  /// The bottom bar inside the navy drawer, a shade below the drawer itself.
-  static const navyBar = Color(0xFF15164F);
+  /// The dark surfaces: splash, drawer, hero card. Warm charcoal, not black.
+  static const dark950 = Color(0xFF17141A);
+  static const dark800 = Color(0xFF2A2530);
+  /// The bottom bar inside the drawer, a shade below the drawer itself.
+  static const darkBar = Color(0xFF110F13);
 
-  static const brand500 = Color(0xFF0089C9);
-  static const brand700 = Color(0xFF0672A6);
-  static const brand300 = Color(0xFF5BC8F2);
-  static const brand100 = Color(0xFFE3F2FC);
+  /// The accent. White on it clears WCAG AA (4.7:1).
+  static const accent500 = Color(0xFFD93337);
+  /// The accent as ink — on its own tint, and for a link.
+  static const accent700 = Color(0xFFA51F27);
+  /// The accent on a dark surface.
+  static const accent300 = Color(0xFFF29A9B);
+  /// The accent's tint.
+  static const accent100 = Color(0xFFFDEBEB);
+  /// The faintest wash of the accent, behind a hero illustration.
+  static const accent050 = Color(0xFFFFF5F5);
 
-  static const page = Color(0xFFF4F6FB);
+  static const page = Color(0xFFF7F4F3);
   static const card = Color(0xFFFFFFFF);
-  static const line = Color(0xFFE3E7F2);
+  static const line = Color(0xFFECE7E6);
   /// A heavier line, for a field that must read as an input.
-  static const line400 = Color(0xFFD4DAEA);
+  static const line400 = Color(0xFFDCD5D4);
   /// The fill of a resting input.
-  static const fieldFill = Color(0xFFF1F4FB);
+  static const fieldFill = Color(0xFFF3EFEE);
   /// A neutral chip or an unreached step in a chain.
-  static const neutralTint = Color(0xFFEEF1F9);
+  static const neutralTint = Color(0xFFF0ECEB);
 
   /// Ink. `body` is the reading colour; `secondary` is the second line.
-  static const ink = Color(0xFF22264A);
-  static const secondary = Color(0xFF5A6080);
-  static const muted = Color(0xFF7A80A3);
-  static const faint = Color(0xFF8A90B3);
-  static const disabledInk = Color(0xFF9BA1C2);
-  static const disabledFill = Color(0xFFE9EDF6);
-  static const chevron = Color(0xFFC0C5DC);
-  /// On navy: a secondary line, and a menu label.
-  static const onNavySecondary = Color(0xFF9BA1C2);
-  static const onNavyBody = Color(0xFFD7DAEA);
+  static const ink = Color(0xFF1C181B);
+  static const secondary = Color(0xFF5E5760);
+  static const muted = Color(0xFF837B86);
+  static const faint = Color(0xFF978F9A);
+  static const disabledInk = Color(0xFFA79FAA);
+  static const disabledFill = Color(0xFFECE7E8);
+  static const chevron = Color(0xFFCCC5CC);
+  /// On a dark surface: a secondary line, and a menu label.
+  static const onDarkSecondary = Color(0xFFA9A3AE);
+  static const onDarkBody = Color(0xFFE2DDE3);
 
   // Status. Each has a solid, a tint and an ink — and the tints differ in
   // lightness as well as hue, so status survives greyscale and colour blindness.
@@ -70,9 +79,16 @@ class T {
   static const plumLine = Color(0xFFDDD3F6);
   static const plumInk = Color(0xFF5636A8);
 
+  /// Information — a cool blue, so it is never mistaken for the accent or
+  /// for an error.
+  static const info = Color(0xFF2F6FED);
+  static const infoTint = Color(0xFFD8E6FF);
+  static const infoLine = Color(0xFFCCDCFB);
+  static const infoInk = Color(0xFF1F4FB8);
+
   /// A draft — no status at all, rather than a bad one.
-  static const draftTint = Color(0xFFEEF1F9);
-  static const draftInk = Color(0xFF4A5077);
+  static const draftTint = Color(0xFFF0ECEB);
+  static const draftInk = Color(0xFF4F4852);
 
   // ------------------------------------------------------------------ space
   /// Screen gutter.
@@ -85,60 +101,75 @@ class T {
   static const sectionGap = 24.0;
 
   // ------------------------------------------------------------------ shape
-  static const rButton = 8.0;
-  static const rControl = 9.0;
-  static const rCard = 13.0;
-  static const rBand = 12.0;
+  static const rButton = 14.0;
+  static const rControl = 12.0;
+  static const rCard = 18.0;
+  static const rBand = 16.0;
   static const rPill = 999.0;
-  static const rSheet = 20.0;
+  static const rSheet = 26.0;
 
   /// The minimum target, always — even where the glyph inside is 20dp.
   static const target = 48.0;
 
   // -------------------------------------------------------------- elevation
-  /// An app bar once the content is scrolled under it.
+  /// A card resting on the page.
+  static const soft = <BoxShadow>[
+    BoxShadow(color: Color(0x0F2A1A1E), blurRadius: 18, offset: Offset(0, 6)),
+    BoxShadow(color: Color(0x05000000), blurRadius: 2, offset: Offset(0, 1)),
+  ];
+  /// A round control floating on the page.
   static const raised = <BoxShadow>[
-    BoxShadow(color: Color(0x1A191A5C), blurRadius: 8, offset: Offset(0, 2)),
+    BoxShadow(color: Color(0x142A1A1E), blurRadius: 10, offset: Offset(0, 3)),
+  ];
+  /// The primary button.
+  static const glow = <BoxShadow>[
+    BoxShadow(color: Color(0x3DD93337), blurRadius: 18, offset: Offset(0, 8)),
   ];
   /// A sheet or a dialog.
   static const sheet = <BoxShadow>[
-    BoxShadow(color: Color(0x29191A5C), blurRadius: 28, offset: Offset(0, -8)),
+    BoxShadow(color: Color(0x2917141A), blurRadius: 28, offset: Offset(0, -8)),
   ];
   /// The action bar pinned to the bottom of a detail screen.
   static const actionBar = <BoxShadow>[
-    BoxShadow(color: Color(0x0F191A5C), blurRadius: 16, offset: Offset(0, -4)),
+    BoxShadow(color: Color(0x1217141A), blurRadius: 20, offset: Offset(0, -6)),
   ];
 
   // ------------------------------------------------------------------- type
   // Sora for display, numbers and titles; Public Sans for everything else.
   // Body never below 14, captions never below 12.
 
+  /// Sora 800 · 28/34. The hero line on sign-in and the splash.
+  static TextStyle hero({Color? color}) => TextStyle(
+      fontFamily: _sora, fontSize: 28, height: 34 / 28, letterSpacing: -0.4,
+      fontWeight: FontWeight.w800, color: color ?? ink);
+
   /// Sora 800 · 26/32.
   static TextStyle display({Color? color}) => TextStyle(
-      fontFamily: _sora, fontSize: 26, height: 32 / 26,
-      fontWeight: FontWeight.w800, color: color ?? navy950);
+      fontFamily: _sora, fontSize: 26, height: 32 / 26, letterSpacing: -0.3,
+      fontWeight: FontWeight.w800, color: color ?? ink);
 
   /// Sora 700 · 19/26. The screen title.
   static TextStyle screenTitle({Color? color}) => TextStyle(
       fontFamily: _sora, fontSize: 19, height: 26 / 19,
-      fontWeight: FontWeight.w700, color: color ?? navy950);
+      fontWeight: FontWeight.w700, color: color ?? ink);
 
   /// Sora 700 · 18 — a title inside an app bar, which has its own line height.
   static TextStyle barTitle({Color? color}) => TextStyle(
       fontFamily: _sora, fontSize: 18, fontWeight: FontWeight.w700,
-      color: color ?? Colors.white);
+      letterSpacing: -0.2, color: color ?? ink);
 
   /// Sora 700 · 15/22.
   static TextStyle section({Color? color}) => TextStyle(
       fontFamily: _sora, fontSize: 15, height: 22 / 15,
-      fontWeight: FontWeight.w700, color: color ?? navy950);
+      fontWeight: FontWeight.w700, color: color ?? ink);
 
   /// Sora 800, tabular — a metric. The band uses 20–21, a hero 28.
   static TextStyle metric(double size, {Color? color}) => TextStyle(
         fontFamily: _sora,
         fontSize: size,
         fontWeight: FontWeight.w800,
-        color: color ?? navy950,
+        letterSpacing: size >= 24 ? -0.5 : 0,
+        color: color ?? ink,
         fontFeatures: const [FontFeature.tabularFigures()],
       );
 
@@ -179,15 +210,50 @@ class T {
   /// A label on a button. 14/700.
   static TextStyle buttonLabel({Color? color}) => TextStyle(
       fontFamily: _sans, fontSize: 14, fontWeight: FontWeight.w700,
-      color: color ?? Colors.white);
+      letterSpacing: 0.1, color: color ?? Colors.white);
 
   static ThemeData get theme => ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: page,
-        colorScheme: ColorScheme.fromSeed(seedColor: navy950, primary: brand500, surface: card),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: accent500,
+          primary: accent500,
+          onPrimary: Colors.white,
+          secondary: dark950,
+          surface: card,
+          onSurface: ink,
+          error: bad,
+        ),
         fontFamily: _sans,
         dividerColor: line,
         splashFactory: InkSparkle.splashFactory,
+        iconTheme: const IconThemeData(color: ink),
+        progressIndicatorTheme: const ProgressIndicatorThemeData(color: accent500),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: accent700,
+            textStyle: buttonLabel(),
+            minimumSize: const Size(target, target),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(rButton)),
+          ),
+        ),
+        iconButtonTheme: IconButtonThemeData(
+          style: IconButton.styleFrom(foregroundColor: ink),
+        ),
+        tooltipTheme: TooltipThemeData(
+          decoration: BoxDecoration(color: dark950, borderRadius: BorderRadius.circular(8)),
+          textStyle: caption(color: Colors.white),
+        ),
+        listTileTheme: const ListTileThemeData(iconColor: ink, textColor: ink),
+        bottomSheetTheme: const BottomSheetThemeData(
+          backgroundColor: card,
+          surfaceTintColor: Colors.transparent,
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: card,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(rCard)),
+        ),
       );
 }
 

@@ -169,10 +169,10 @@ Future<bool> confirmAndRun(
   if (ran != true) return false;
 
   messenger.showSnackBar(SnackBar(
-    backgroundColor: T.navy950,
+    backgroundColor: T.dark950,
     behavior: SnackBarBehavior.floating,
     margin: const EdgeInsets.all(T.gutter),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(T.rButton)),
     content: Text(act.done ?? '${act.label} — done.',
         style: T.body(color: Colors.white, weight: FontWeight.w500).copyWith(fontSize: 13.5)),
   ));

@@ -6,7 +6,7 @@ import 'tokens.dart';
 /// Every control the modules need, at the sizes the design gives them.
 ///
 /// Nothing here is decorative — each one exists because a screen uses it, and
-/// each is built to `Components.dc.html` rather than to a guess at it.
+/// each is built to the tokens in `tokens.dart` rather than to a guess at it.
 
 /// The tones a status can carry. Each is a (fill, border, ink) triple.
 enum Tone { good, warn, bad, plum, info, draft, neutral }
@@ -16,7 +16,7 @@ enum Tone { good, warn, bad, plum, info, draft, neutral }
       Tone.warn => (fill: T.warnTint, line: T.warnLine, ink: T.warnInk),
       Tone.bad => (fill: T.badTint, line: T.badLine, ink: T.badInk),
       Tone.plum => (fill: T.plumTint, line: T.plumLine, ink: T.plumInk),
-      Tone.info => (fill: T.brand100, line: T.brand100, ink: T.brand700),
+      Tone.info => (fill: T.infoTint, line: T.infoLine, ink: T.infoInk),
       Tone.draft => (fill: T.draftTint, line: T.draftTint, ink: T.draftInk),
       Tone.neutral => (fill: T.card, line: T.line, ink: T.secondary),
     };
@@ -59,11 +59,11 @@ class Btn extends StatelessWidget {
     final off = onPressed == null || busy;
 
     final (Color bg, Color fg, Color? border) = switch (emphasis) {
-      Emphasis.primary => (T.brand500, Colors.white, null),
+      Emphasis.primary => (T.accent500, Colors.white, null),
       Emphasis.approve => (T.good, Colors.white, null),
       Emphasis.reject => (T.badTint, T.badInk, T.badLine),
       Emphasis.outline => (T.card, T.ink, T.line),
-      Emphasis.text => (Colors.transparent, T.brand700, null),
+      Emphasis.text => (Colors.transparent, T.accent700, null),
     };
 
     final child = busy
@@ -84,25 +84,36 @@ class Btn extends StatelessWidget {
             ],
           );
 
+    // The one call to action a screen gets floats a little off the page.
+    final lifted = !off && (emphasis == Emphasis.primary || emphasis == Emphasis.approve);
+
     final button = Semantics(
       button: true,
       enabled: !off,
       label: label,
-      child: Material(
-        color: off && emphasis != Emphasis.text ? T.disabledFill : bg,
-        borderRadius: BorderRadius.circular(T.rButton),
-        child: InkWell(
-          onTap: off ? null : onPressed,
+      child: Container(
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(T.rButton),
-          child: Container(
-            height: height,
-            padding: EdgeInsets.symmetric(horizontal: emphasis == Emphasis.text ? 14 : 18),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(T.rButton),
-              border: border == null || off ? null : Border.all(color: border),
+          boxShadow: lifted
+              ? [BoxShadow(color: bg.withValues(alpha: 0.28), blurRadius: 16, offset: const Offset(0, 7))]
+              : null,
+        ),
+        child: Material(
+          color: off && emphasis != Emphasis.text ? T.disabledFill : bg,
+          borderRadius: BorderRadius.circular(T.rButton),
+          child: InkWell(
+            onTap: off ? null : onPressed,
+            borderRadius: BorderRadius.circular(T.rButton),
+            child: Container(
+              height: height,
+              padding: EdgeInsets.symmetric(horizontal: emphasis == Emphasis.text ? 14 : 20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(T.rButton),
+                border: border == null || off ? null : Border.all(color: border),
+              ),
+              alignment: Alignment.center,
+              child: child,
             ),
-            alignment: Alignment.center,
-            child: child,
           ),
         ),
       ),
@@ -122,7 +133,7 @@ class Pill extends StatelessWidget {
   final Tone tone;
   final bool compact;
 
-  /// A solid pill, for the one status an app bar carries over navy.
+  /// A solid pill, for the one status an app bar carries.
   final ({Color bg, Color ink})? solid;
 
   @override
@@ -231,15 +242,17 @@ class Chain extends StatelessWidget {
 
 /* ---------------------------------------------------------------- surfaces */
 
-/// A card. Radius 13, hairline border, white — no shadow on the page.
+/// A card. Radius 18, white, resting on a soft shadow with the faintest
+/// hairline — so it reads as a surface, not as a box drawn on the page.
 class Panel extends StatelessWidget {
   const Panel({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(14),
+    this.padding = const EdgeInsets.all(T.cardPad),
     this.border,
     this.fill,
     this.onTap,
+    this.flat = false,
   });
 
   final Widget child;
@@ -248,24 +261,30 @@ class Panel extends StatelessWidget {
   final Color? fill;
   final VoidCallback? onTap;
 
+  /// No shadow — for a card inside another card.
+  final bool flat;
+
   @override
   Widget build(BuildContext context) {
+    final shadowed = !flat && (fill == null || fill == T.card);
+    final shape = BorderRadius.circular(T.rCard);
     final body = Container(
       padding: padding,
       decoration: BoxDecoration(
         color: fill ?? T.card,
         border: Border.all(color: border ?? T.line),
-        borderRadius: BorderRadius.circular(T.rCard),
+        borderRadius: shape,
+        boxShadow: shadowed ? T.soft : null,
       ),
       child: child,
     );
     if (onTap == null) return body;
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(T.rCard),
+      borderRadius: shape,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(T.rCard),
+        borderRadius: shape,
         child: body,
       ),
     );
@@ -331,6 +350,7 @@ class Band extends StatelessWidget {
         color: c?.fill ?? T.card,
         border: Border.all(color: f.tone == Tone.warn ? T.warnLineStrong : (c?.line ?? T.line)),
         borderRadius: BorderRadius.circular(T.rBand),
+        boxShadow: c == null ? T.soft : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,9 +391,9 @@ class FilterChip2 extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final applied = onRemove != null;
-    final bg = selected ? T.brand500 : (applied ? T.brand100 : T.card);
-    final border = selected ? T.brand500 : (applied ? T.brand500 : T.line);
-    final ink = selected ? Colors.white : (applied ? T.brand700 : T.secondary);
+    final bg = selected ? T.dark950 : (applied ? T.accent100 : T.card);
+    final border = selected ? T.dark950 : (applied ? T.accent300 : T.line400);
+    final ink = selected ? Colors.white : (applied ? T.accent700 : T.secondary);
 
     return Semantics(
       button: true,
@@ -386,7 +406,7 @@ class FilterChip2 extends StatelessWidget {
           borderRadius: BorderRadius.circular(T.rPill),
           child: Container(
             // 36 high, inside a 48 row — the row gives the target, see Chips.
-            padding: EdgeInsets.fromLTRB(13, 8, applied ? 11 : 13, 8),
+            padding: EdgeInsets.fromLTRB(14, 8, applied ? 12 : 14, 8),
             decoration: BoxDecoration(
               border: Border.all(color: border),
               borderRadius: BorderRadius.circular(T.rPill),
@@ -440,19 +460,19 @@ class Chips extends StatelessWidget {
 
 /* ---------------------------------------------------------------- feedback */
 
-/// A snackbar: navy, with its action in brand 300.
+/// A snackbar: charcoal, with its action in the accent.
 void notify(BuildContext context, String message, {String? action, VoidCallback? onAction}) {
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    backgroundColor: T.navy950,
+    backgroundColor: T.dark950,
     behavior: SnackBarBehavior.floating,
     margin: const EdgeInsets.all(T.gutter),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(T.rButton)),
     content: Text(message, style: T.body(color: Colors.white, weight: FontWeight.w500).copyWith(fontSize: 13.5)),
     action: action == null
         ? null
         : SnackBarAction(
             label: action,
-            textColor: T.brand300,
+            textColor: T.accent300,
             onPressed: onAction ?? () {},
           ),
     duration: const Duration(seconds: 4),
@@ -475,7 +495,7 @@ class Alert extends StatelessWidget {
       decoration: BoxDecoration(
         color: c.fill,
         border: Border.all(color: c.line),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(T.rControl),
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Icon(
@@ -526,7 +546,7 @@ class Empty extends StatelessWidget {
 
 /* ------------------------------------------------------------------ fields */
 
-/// A field. 48 high, radius 9, filled when resting, brand-bordered on focus,
+/// A field. 48 high, radius 12, filled when resting, accent-bordered on focus,
 /// and red with a reason underneath when it is wrong.
 class Field extends StatelessWidget {
   const Field({
@@ -597,9 +617,9 @@ class Field extends StatelessWidget {
           fillColor: wrong ? T.badField : T.fieldFill,
           isDense: true,
           suffixIcon: suffix,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           enabledBorder: border(wrong ? T.bad : T.line, wrong ? 1.5 : 1),
-          focusedBorder: border(wrong ? T.bad : T.brand500, 1.5),
+          focusedBorder: border(wrong ? T.bad : T.accent500, 1.5),
           disabledBorder: border(T.line),
         ),
       ),
@@ -628,7 +648,7 @@ Future<T2?> sheet<T2>(
       context: context,
       backgroundColor: T.card,
       isScrollControlled: true,
-      barrierColor: const Color(0x6B191A5C),
+      barrierColor: const Color(0x7317141A),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(T.rSheet)),
       ),
@@ -667,8 +687,8 @@ Future<T2?> sheet<T2>(
 
 /* -------------------------------------------------------------- the app bar */
 
-/// The navy bar every screen wears, with up to two trailing controls and an
-/// optional row of status pills beneath the title.
+/// The bar every screen wears: light, on the page itself, with the title in
+/// ink, round white controls, and an optional row of status pills beneath.
 class Bar extends StatelessWidget {
   const Bar({
     super.key,
@@ -695,9 +715,9 @@ class Bar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: T.navy950,
+      color: T.page,
       padding: EdgeInsets.fromLTRB(
-          T.gutter, MediaQuery.of(context).padding.top + 10, T.gutter, pills.isEmpty ? 14 : 16),
+          T.gutter, MediaQuery.of(context).padding.top + 10, T.gutter, pills.isEmpty ? 12 : 14),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           if (onBack != null) ...[
@@ -717,7 +737,7 @@ class Bar extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 1),
                   child: Text(subtitle!,
-                      style: T.num(11.5, color: T.onNavySecondary, weight: FontWeight.w500),
+                      style: T.num(12, color: T.muted, weight: FontWeight.w600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                 ),
@@ -756,7 +776,7 @@ class Bar extends StatelessWidget {
   }
 }
 
-/// A 40dp translucent square in the app bar, inside a 48dp target.
+/// A 40dp white disc in the app bar, inside a 48dp target.
 class BarButton extends StatelessWidget {
   const BarButton({
     super.key,
@@ -778,7 +798,7 @@ class BarButton extends StatelessWidget {
         message: label,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
+          customBorder: const CircleBorder(),
           child: SizedBox(
             width: T.target,
             height: T.target,
@@ -787,20 +807,25 @@ class BarButton extends StatelessWidget {
                 width: 40,
                 height: 40,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(10),
+                decoration: const BoxDecoration(
+                  color: T.card,
+                  shape: BoxShape.circle,
+                  boxShadow: T.raised,
                 ),
                 child: Stack(clipBehavior: Clip.none, children: [
-                  Center(child: Icon(icon, size: 20, color: Colors.white)),
+                  Center(child: Icon(icon, size: 20, color: T.ink)),
                   if (dot)
                     Positioned(
-                      top: 4,
-                      right: 4,
+                      top: 6,
+                      right: 6,
                       child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(color: T.warn, shape: BoxShape.circle),
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: T.accent500,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: T.card, width: 1.5),
+                        ),
                       ),
                     ),
                 ]),
@@ -825,7 +850,7 @@ class ActionBar extends StatelessWidget {
             T.gutter, 12, T.gutter, MediaQuery.of(context).padding.bottom + 12),
         decoration: const BoxDecoration(
           color: T.card,
-          border: Border(top: BorderSide(color: T.line)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(T.rSheet)),
           boxShadow: T.actionBar,
         ),
         child: Row(children: children),

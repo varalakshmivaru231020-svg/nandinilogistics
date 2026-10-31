@@ -8,7 +8,8 @@ import 'session.dart';
 ///
 /// The third tab takes the name of whatever module is open, which is how the
 /// design shows it on every list — the tab is "where you are", not a
-/// fixed destination.
+/// fixed destination. The active tab sits in an accent-tinted pill, the way
+/// a premium bar marks the place you are without a line under it.
 class BottomBar extends StatelessWidget {
   const BottomBar({
     super.key,
@@ -32,11 +33,12 @@ class BottomBar extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         color: T.card,
-        border: Border(top: BorderSide(color: T.line)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(T.rSheet)),
+        boxShadow: T.actionBar,
       ),
       // A little air at the ends, so the first and last tabs are not hard
       // against the edge of the glass.
-      padding: EdgeInsets.fromLTRB(12, 8, 12, MediaQuery.of(context).padding.bottom + 10),
+      padding: EdgeInsets.fromLTRB(12, 10, 12, MediaQuery.of(context).padding.bottom + 10),
       child: Row(children: [
         _tab('Home', Icons.grid_view_rounded, current == 'dashboard', onHome),
         _tab(thirdLabel, thirdIcon, current == 'third', onThird),
@@ -55,7 +57,7 @@ class BottomBar extends StatelessWidget {
      * nothing. Stacked on the icon it is in the same place every time.
      */
     final mark = Stack(clipBehavior: Clip.none, children: [
-      Icon(icon, size: 21, color: active ? T.brand500 : T.faint),
+      Icon(icon, size: 21, color: active ? T.accent500 : T.faint),
       if (badge != null && badge > 0)
         Positioned(
           top: -6,
@@ -66,11 +68,11 @@ class BottomBar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 4),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: T.warn,
+              color: T.accent500,
               borderRadius: BorderRadius.circular(T.rPill),
               border: Border.all(color: T.card, width: 1.5),
             ),
-            child: Text('$badge', style: T.num(10, color: T.navy950, weight: FontWeight.w800)),
+            child: Text('$badge', style: T.num(10, color: Colors.white, weight: FontWeight.w800)),
           ),
         ),
     ]);
@@ -81,29 +83,39 @@ class BottomBar extends StatelessWidget {
         selected: active,
         child: InkWell(
           onTap: onTap,
+          borderRadius: BorderRadius.circular(T.rButton),
           child: SizedBox(
-            height: T.target,
-            // Centred as a pair, so every tab's icon sits on the same line and
-            // every label under it — whatever the label's length.
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                mark,
-                const SizedBox(height: 3),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: Text(label,
-                      maxLines: 1,
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-                        color: active ? T.brand700 : T.muted,
-                      )),
+            height: T.target + 4,
+            child: Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: active ? T.accent100 : Colors.transparent,
+                  borderRadius: BorderRadius.circular(T.rPill),
                 ),
-              ],
+                // Centred as a pair, so every tab's icon sits on the same line
+                // and every label under it — whatever the label's length.
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    mark,
+                    const SizedBox(height: 3),
+                    Text(label,
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                          color: active ? T.accent700 : T.muted,
+                        )),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -112,7 +124,8 @@ class BottomBar extends StatelessWidget {
   }
 }
 
-/// The drawer: navy, full height, with the account at the top and the menu built from what the viewer may actually open.
+/// The drawer: charcoal, full height, with the account at the top and the
+/// menu built from what the viewer may actually open.
 class NavDrawer extends StatelessWidget {
   const NavDrawer({
     super.key,
@@ -141,42 +154,45 @@ class NavDrawer extends StatelessWidget {
     final groups = sections;
 
     return Drawer(
-      backgroundColor: T.navy950,
+      backgroundColor: T.dark950,
       width: 320,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.horizontal(right: Radius.circular(T.rSheet)),
+      ),
       child: Column(children: [
         // account
         Container(
-          padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 18, 16, 18),
+          padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 20, 16, 20),
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.12))),
+            border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
           ),
           child: Row(children: [
             Container(
-              width: 46,
-              height: 46,
+              width: 48,
+              height: 48,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(T.rButton),
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [T.brand500, T.navy800],
+                  colors: [T.accent500, T.accent700],
                 ),
+                boxShadow: T.glow,
               ),
               child: Text(session.initials,
                   style: T.metric(15, color: Colors.white).copyWith(height: 1)),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(session.name,
-                    style: T.body(color: Colors.white, weight: FontWeight.w700)
-                        .copyWith(fontSize: 15),
+                    style: T.section(color: Colors.white),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 2),
                 Text(session.standing,
-                    style: T.caption(color: T.onNavySecondary),
+                    style: T.caption(color: T.onDarkSecondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
               ]),
@@ -186,10 +202,10 @@ class NavDrawer extends StatelessWidget {
 
         // menu
         Expanded(
-          child: ListView(padding: const EdgeInsets.fromLTRB(10, 6, 10, 0), children: [
+          child: ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 0), children: [
             for (final g in groups) ...[
               Padding(
-                padding: const EdgeInsets.fromLTRB(10, 13, 10, 5),
+                padding: const EdgeInsets.fromLTRB(12, 14, 12, 6),
                 child: Text(g.label.toUpperCase(),
                     style: const TextStyle(
                         fontSize: 10,
@@ -205,7 +221,7 @@ class NavDrawer extends StatelessWidget {
                 child: Text(
                   'Nothing here is available to you yet. Your administrator '
                   'decides what you can open.',
-                  style: T.secondaryText(color: T.onNavyBody),
+                  style: T.secondaryText(color: T.onDarkBody),
                 ),
               ),
           ]),
@@ -214,18 +230,18 @@ class NavDrawer extends StatelessWidget {
         // sign out
         Container(
           decoration: BoxDecoration(
-            color: T.navyBar,
-            border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.12))),
+            color: T.darkBar,
+            border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
           ),
           child: SafeArea(
             top: false,
             child: InkWell(
               onTap: onSignOut,
               child: Container(
-                height: 56,
+                height: 58,
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(children: [
-                  const Icon(Icons.logout_rounded, size: 20, color: T.brand300),
+                  const Icon(Icons.logout_rounded, size: 20, color: T.accent300),
                   const SizedBox(width: 12),
                   Text('Sign out',
                       style: T.body(color: Colors.white, weight: FontWeight.w700)),
@@ -235,7 +251,7 @@ class NavDrawer extends StatelessWidget {
                   Flexible(
                     child: Text(session.email,
                         textAlign: TextAlign.right,
-                        style: T.caption(color: T.onNavySecondary).copyWith(fontSize: 11),
+                        style: T.caption(color: T.onDarkSecondary).copyWith(fontSize: 11),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
                   ),
@@ -252,33 +268,28 @@ class NavDrawer extends StatelessWidget {
     final active = m.href == current;
     final count = badges[m.href];
     return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.only(bottom: 3),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(T.rButton),
         child: Ink(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            gradient: active
-                ? const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [T.brand500, T.navy800])
-                : null,
+            borderRadius: BorderRadius.circular(T.rButton),
+            color: active ? T.accent500 : null,
           ),
           child: InkWell(
             onTap: () => onPick(m),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(T.rButton),
             child: Container(
               constraints: const BoxConstraints(minHeight: T.target),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Row(children: [
-                Icon(m.icon, size: 19, color: active ? Colors.white : T.onNavySecondary),
+                Icon(m.icon, size: 19, color: active ? Colors.white : T.onDarkSecondary),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(m.label,
                       style: T.body(
-                        color: active ? Colors.white : T.onNavyBody,
+                        color: active ? Colors.white : T.onDarkBody,
                         weight: active ? FontWeight.w700 : FontWeight.w600,
                       ).copyWith(fontSize: 14.5)),
                 ),
@@ -289,13 +300,11 @@ class NavDrawer extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 7),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: active ? Colors.white.withValues(alpha: 0.22) : T.warn,
+                      color: active ? Colors.white.withValues(alpha: 0.22) : T.accent500,
                       borderRadius: BorderRadius.circular(T.rPill),
                     ),
                     child: Text('$count',
-                        style: T.num(11.5,
-                            color: active ? Colors.white : T.navy950,
-                            weight: FontWeight.w800)),
+                        style: T.num(11.5, color: Colors.white, weight: FontWeight.w800)),
                   ),
               ]),
             ),

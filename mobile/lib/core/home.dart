@@ -11,7 +11,7 @@ import 'session.dart';
 import 'shell.dart';
 
 /// The shell: one module at a time, with the drawer and the bottom bar around
-/// it. Each module draws its own navy bar, because the bar carries that
+/// it. Each module draws its own bar, because the bar carries that
 /// module's title, counts and controls.
 class Home extends StatefulWidget {
   const Home({

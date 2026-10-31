@@ -78,7 +78,7 @@ class _ReferralScreenState extends State<ReferralScreen> {
                 const SizedBox(height: 6),
                 Text(_code ?? 'Given once your onboarding is accepted',
                     key: const Key('referral-code'),
-                    style: _code == null ? T.secondaryText() : T.metric(26, color: T.brand700)),
+                    style: _code == null ? T.secondaryText() : T.metric(26, color: T.accent700)),
                 const SizedBox(height: 6),
                 Text('A friend who signs up with it and stays 25 days counts as your referral.',
                     style: T.caption(color: T.muted)),

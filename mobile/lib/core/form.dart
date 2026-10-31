@@ -646,9 +646,9 @@ class _Check extends StatelessWidget {
             width: 20,
             height: 20,
             decoration: BoxDecoration(
-              color: value ? T.brand500 : T.card,
+              color: value ? T.accent500 : T.card,
               borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: value ? T.brand500 : T.line400, width: 1.4),
+              border: Border.all(color: value ? T.accent500 : T.line400, width: 1.4),
             ),
             child: value
                 ? const Icon(Icons.check_rounded, size: 15, color: Colors.white)

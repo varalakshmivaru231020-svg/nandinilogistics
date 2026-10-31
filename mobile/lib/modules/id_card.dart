@@ -139,7 +139,7 @@ class IdCard extends StatelessWidget {
         Container(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
           decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: [T.navy950, T.navy800]),
+            gradient: LinearGradient(colors: [T.dark950, T.dark800]),
           ),
           child: Row(children: [
             const Icon(Icons.two_wheeler_rounded, color: Colors.white),
@@ -148,7 +148,7 @@ class IdCard extends StatelessWidget {
               child: Text('Nandini Logistics',
                   style: T.body(color: Colors.white, weight: FontWeight.w800).copyWith(fontSize: 16)),
             ),
-            Text(_s('status'), style: T.caption(color: T.onNavyBody)),
+            Text(_s('status'), style: T.caption(color: T.onDarkBody)),
           ]),
         ),
         Padding(
@@ -174,7 +174,7 @@ class IdCard extends StatelessWidget {
                 Text(_s('name'), style: T.screenTitle()),
                 const SizedBox(height: 2),
                 Text('Rider ID ${_s("riderId")}',
-                    style: T.num(14, color: T.brand700, weight: FontWeight.w800)),
+                    style: T.num(14, color: T.accent700, weight: FontWeight.w800)),
               ]),
             ),
           ]),

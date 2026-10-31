@@ -11,11 +11,10 @@ import 'support.dart';
 
 /// The design, asserted.
 ///
-/// The first attempt was rejected for not looking like the canvas, and it was
-/// right to be: the tokens were approximated from memory, the shell was a light
-/// drawer instead of a navy one with a bottom bar, and the type ran below the
-/// floor the design sets. Approximation is what this file exists to prevent —
-/// every value below is quoted from `Main.dc.html` or `Components.dc.html`.
+/// The palette is the app's own — an ember-red accent on a warm off-white
+/// page, charcoal for the dark surfaces — and every value below is the one
+/// `tokens.dart` sets, so a stray approximation in a screen cannot drift the
+/// look. The type floor and the 48dp target are held here too.
 
 double contrast(Color a, Color b) {
   double lum(Color c) {
@@ -29,15 +28,24 @@ double contrast(Color a, Color b) {
 }
 
 void main() {
-  group('the palette is the canvas palette', () {
-    test('navy, brand and the page', () {
-      expect(T.navy950, const Color(0xFF191A5C));
-      expect(T.navy800, const Color(0xFF2F308C));
-      expect(T.brand500, const Color(0xFF0089C9));
-      expect(T.brand700, const Color(0xFF0672A6));
-      expect(T.brand100, const Color(0xFFE3F2FC));
-      expect(T.page, const Color(0xFFF4F6FB));
-      expect(T.line, const Color(0xFFE3E7F2));
+  group('the palette is the design palette', () {
+    test('charcoal, the accent and the page', () {
+      expect(T.dark950, const Color(0xFF17141A));
+      expect(T.dark800, const Color(0xFF2A2530));
+      expect(T.accent500, const Color(0xFFD93337));
+      expect(T.accent700, const Color(0xFFA51F27));
+      expect(T.accent100, const Color(0xFFFDEBEB));
+      expect(T.page, const Color(0xFFF7F4F3));
+      expect(T.line, const Color(0xFFECE7E6));
+    });
+
+    /// The primary button is white on the accent, so the accent has to be
+    /// deep enough to carry it — a brighter coral reads better in a mock-up
+    /// and fails AA on a phone in the sun.
+    test('white is legible on the accent, and the accent ink on its tint', () {
+      expect(contrast(Colors.white, T.accent500), greaterThanOrEqualTo(4.5));
+      expect(contrast(T.accent700, T.accent100), greaterThanOrEqualTo(4.5));
+      expect(contrast(T.accent700, T.card), greaterThanOrEqualTo(4.5));
     });
 
     /*
@@ -56,10 +64,10 @@ void main() {
           (const Color(0xFF6A46C8), const Color(0xFFEFE9FC), const Color(0xFF5636A8)));
     });
 
-    /// The canvas names this and the first attempt did not have it at all,
+    /// The design names this and the first attempt did not have it at all,
     /// using the lighter `muted` for second lines instead.
-    test('secondary ink exists and is the canvas value', () {
-      expect(T.secondary, const Color(0xFF5A6080));
+    test('secondary ink exists and is the design value', () {
+      expect(T.secondary, const Color(0xFF5E5760));
     });
 
     test('status ink on its own tint is legible', () {
@@ -68,7 +76,7 @@ void main() {
         ('warn', T.warnInk, T.warnTint),
         ('bad', T.badInk, T.badTint),
         ('plum', T.plumInk, T.plumTint),
-        ('info', T.brand700, T.brand100),
+        ('info', T.infoInk, T.infoTint),
         ('draft', T.draftInk, T.draftTint),
       ]) {
         expect(contrast(ink, tint), greaterThanOrEqualTo(4.5), reason: name);
@@ -82,9 +90,15 @@ void main() {
       }
     });
 
-    test('white is legible on the navy bar and the drawer', () {
-      expect(contrast(Colors.white, T.navy950), greaterThanOrEqualTo(4.5));
-      expect(contrast(T.onNavySecondary, T.navy950), greaterThanOrEqualTo(4.5));
+    test('white is legible on the dark surfaces', () {
+      expect(contrast(Colors.white, T.dark950), greaterThanOrEqualTo(4.5));
+      expect(contrast(T.onDarkSecondary, T.dark950), greaterThanOrEqualTo(4.5));
+      expect(contrast(T.accent300, T.dark950), greaterThanOrEqualTo(4.5));
+    });
+
+    /// The bar is light now — its title is ink on the page.
+    test('the bar title is legible on the page', () {
+      expect(contrast(T.barTitle().color!, T.page), greaterThanOrEqualTo(4.5));
     });
   });
 
@@ -100,7 +114,7 @@ void main() {
       expect(T.caption().fontSize, 12);
     });
 
-    test('the screen title and the section are Sora at the canvas sizes', () {
+    test('the screen title and the section are Sora at the design sizes', () {
       expect(T.screenTitle().fontSize, 19);
       expect(T.section().fontSize, 15);
       expect(T.display().fontSize, 26);
@@ -115,10 +129,10 @@ void main() {
   });
 
   group('shape and space', () {
-    test('are the canvas scale', () {
-      expect(T.rButton, 8);
-      expect(T.rControl, 9);
-      expect(T.rCard, 13);
+    test('are the design scale', () {
+      expect(T.rButton, 14);
+      expect(T.rControl, 12);
+      expect(T.rCard, 18);
       expect(T.gutter, 16);
       expect(T.cardPad, 16);
       expect(T.cardGap, 12);
@@ -181,7 +195,7 @@ void main() {
     });
   });
 
-  group('the shell is the one the canvas draws', () {
+  group('the shell is the one the design draws', () {
     testWidgets('three tabs — Home, the module, More', (tester) async {
       await tester.pumpWidget(MaterialApp(
         theme: T.theme,
@@ -204,7 +218,7 @@ void main() {
       expect(find.text('More'), findsOneWidget);
     });
 
-    testWidgets('the drawer is navy, with the account on it',
+    testWidgets('the drawer is charcoal, with the account on it',
         (tester) async {
       useEmptyPrefs();
       await tester.pumpWidget(MaterialApp(
@@ -236,7 +250,7 @@ void main() {
       expect(find.text('6'), findsOneWidget);
 
       final drawer = tester.widget<Drawer>(find.byType(Drawer));
-      expect(drawer.backgroundColor, T.navy950);
+      expect(drawer.backgroundColor, T.dark950);
     });
 
     /*
@@ -302,7 +316,7 @@ void main() {
     test('the tints differ in lightness, not only in hue', () {
       final tints = {
         'good': T.goodTint, 'warn': T.warnTint, 'bad': T.badTint,
-        'plum': T.plumTint, 'info': T.brand100, 'draft': T.draftTint,
+        'plum': T.plumTint, 'info': T.infoTint, 'draft': T.draftTint,
       };
       final seen = <String, double>{};
       tints.forEach((name, c) => seen[name] = contrast(c, Colors.black));

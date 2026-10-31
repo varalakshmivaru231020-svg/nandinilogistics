@@ -237,7 +237,7 @@ class DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: T.page,
       body: Column(children: [
         Bar(
-          title: s.rider != null ? 'Hello, ${s.rider!.name.split(' ').first}' : 'Home',
+          title: 'Home',
           subtitle: s.roleNames.isEmpty ? (s.isSuperAdmin ? 'Super admin' : 'No role') : s.roleNames.first,
           onMenu: widget.onMenu,
           actions: [
@@ -254,23 +254,29 @@ class DashboardScreenState extends State<DashboardScreen> {
           child: RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(T.gutter, 14, T.gutter, 24),
+              padding: const EdgeInsets.fromLTRB(T.gutter, 6, T.gutter, 24),
               children: [
+                _greeting(s),
+                const SizedBox(height: 18),
                 if (s.rider != null) ...[
                   _header(s.rider!),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: T.cardGap),
                   if (s.can('payout.payout.view')) ...[
                     _payoutCard(),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: T.cardGap),
                   ],
                 ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(2, 8, 2, 10),
+                  child: Text('Quick actions', style: T.section()),
+                ),
                 GridView.count(
                   crossAxisCount: 2,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: 1.6,
+                  mainAxisSpacing: T.cardGap,
+                  crossAxisSpacing: T.cardGap,
+                  childAspectRatio: 1.45,
                   children: [for (final t in tiles) _tile(t)],
                 ),
               ],
@@ -279,6 +285,24 @@ class DashboardScreenState extends State<DashboardScreen> {
         ),
         widget.bottom,
       ]),
+    );
+  }
+
+  /// "Hey Raju, ready to ride?" — the first name in ink, the question in the
+  /// accent. Staff get the same greeting with their own second line.
+  Widget _greeting(Session s) {
+    final first = (s.rider?.name ?? s.name).trim().split(' ').first;
+    final tail = s.rider != null ? 'ready to ride?' : "here's your day.";
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Text.rich(
+        TextSpan(children: [
+          TextSpan(text: 'Hey ${first.isEmpty ? 'there' : first},\n'),
+          TextSpan(text: tail, style: T.hero(color: T.accent500)),
+        ]),
+        key: const Key('greeting'),
+        style: T.hero(),
+      ),
     );
   }
 
@@ -295,18 +319,27 @@ class DashboardScreenState extends State<DashboardScreen> {
     return Panel(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundColor: T.brand100,
-            backgroundImage: _photo == null ? null : MemoryImage(_photo!),
-            child: _photo == null ? const Icon(Icons.person_rounded, color: T.brand700) : null,
+          Container(
+            padding: const EdgeInsets.all(2.5),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: T.accent500, width: 2),
+            ),
+            child: CircleAvatar(
+              radius: 27,
+              backgroundColor: T.accent100,
+              backgroundImage: _photo == null ? null : MemoryImage(_photo!),
+              child: _photo == null ? const Icon(Icons.person_rounded, color: T.accent700) : null,
+            ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(r.name, style: T.body(weight: FontWeight.w800).copyWith(fontSize: 16)),
+              Text(r.name, style: T.section()),
+              const SizedBox(height: 2),
               Text(r.riderId == null ? 'Rider ID pending' : 'Rider ID ${r.riderId}',
-                  key: const Key('rider-id'), style: T.caption(color: T.brand700)),
+                  key: const Key('rider-id'),
+                  style: T.num(12.5, color: T.accent700, weight: FontWeight.w700)),
               if (r.companies.isNotEmpty)
                 Text(r.companies.join(', '), style: T.caption(color: T.muted)),
             ]),
@@ -324,34 +357,89 @@ class DashboardScreenState extends State<DashboardScreen> {
     final p = _payout;
     num n(String k) => (p?[k] as num?) ?? num.tryParse('${p?[k]}') ?? 0;
     final status = '${p?["status"] ?? ""}';
+    final held = status.toLowerCase().contains('hold');
+    // The hero card: charcoal, with the week's figure in white and the accent
+    // glowing behind it — the one number a rider opens the app for.
     return Panel(
       key: const Key('payout-card'),
+      fill: T.dark950,
+      border: T.dark950,
+      padding: EdgeInsets.zero,
       onTap: () => widget.onOpen('payouts', const {}),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          const Expanded(child: Overline("This week's payout")),
-          if (p != null)
-            Pill(status, tone: status.toLowerCase().contains('hold') ? Tone.bad : Tone.good, compact: true),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(T.rCard),
+        child: Stack(children: [
+          Positioned(
+            right: -40,
+            top: -60,
+            child: Container(
+              width: 180,
+              height: 180,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(colors: [
+                  T.accent500.withValues(alpha: 0.55),
+                  T.accent500.withValues(alpha: 0),
+                ]),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Expanded(child: Overline("This week's payout", color: T.onDarkSecondary)),
+                if (p != null)
+                  Pill(status,
+                      compact: true,
+                      solid: held
+                          ? (bg: T.accent500, ink: Colors.white)
+                          : (bg: T.good, ink: Colors.white)),
+              ]),
+              const SizedBox(height: 10),
+              if (p == null)
+                Text(_payoutProblem ?? 'Loading…', style: T.secondaryText(color: T.onDarkBody))
+              else ...[
+                Text(money(n('finalPayout')), style: T.metric(30, color: Colors.white)),
+                const SizedBox(height: 2),
+                Text('${shortDate(p["periodFrom"])} – ${shortDate(p["periodTo"])}',
+                    style: T.caption(color: T.onDarkSecondary)),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.07),
+                    borderRadius: BorderRadius.circular(T.rControl),
+                  ),
+                  child: Row(children: [
+                    for (final (label, key) in const [
+                      ('Total', 'totalPayout'),
+                      ('Advance', 'advance'),
+                      ('Bike rent', 'bikeRental'),
+                      ('TDS', 'tds'),
+                    ])
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(label, style: T.caption(color: T.onDarkSecondary).copyWith(fontSize: 11)),
+                          Text(money(n(key), short: true),
+                              style: T.num(12.5, color: Colors.white, weight: FontWeight.w700),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ]),
+                      ),
+                  ]),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Row(children: [
+                Text('See all payouts', style: T.caption(color: T.accent300)),
+                const SizedBox(width: 4),
+                const Icon(Icons.arrow_forward_rounded, size: 14, color: T.accent300),
+              ]),
+            ]),
+          ),
         ]),
-        const SizedBox(height: 8),
-        if (p == null)
-          Text(_payoutProblem ?? 'Loading…', style: T.secondaryText())
-        else ...[
-          Text(money(n('finalPayout')), style: T.metric(26, color: T.navy950)),
-          Text('${shortDate(p["periodFrom"])} – ${shortDate(p["periodTo"])}',
-              style: T.caption(color: T.muted)),
-          const SizedBox(height: 8),
-          Wrap(spacing: 14, runSpacing: 4, children: [
-            for (final (label, key) in const [
-              ('Total', 'totalPayout'),
-              ('Advance', 'advance'),
-              ('Bike rent', 'bikeRental'),
-              ('TDS', 'tds'),
-            ])
-              Text('$label ${money(n(key))}', style: T.caption()),
-          ]),
-        ],
-      ]),
+      ),
     );
   }
 
@@ -360,25 +448,28 @@ class DashboardScreenState extends State<DashboardScreen> {
     final badge = t.id == 'notifications' ? widget.unread : null;
     return Panel(
       key: Key('tile-${t.id}'),
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       onTap: () => _go(t),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 40,
+            height: 40,
             alignment: Alignment.center,
-            decoration: BoxDecoration(color: c.fill, borderRadius: BorderRadius.circular(10)),
-            child: Icon(t.icon, size: 19, color: c.ink),
+            decoration: BoxDecoration(color: c.fill, shape: BoxShape.circle),
+            child: Icon(t.icon, size: 20, color: c.ink),
           ),
           const Spacer(),
-          if (badge != null && badge > 0) Pill('$badge', tone: Tone.warn, compact: true),
+          if (badge != null && badge > 0)
+            Pill('$badge', compact: true, solid: (bg: T.accent500, ink: Colors.white))
+          else
+            const Icon(Icons.arrow_outward_rounded, size: 16, color: T.chevron),
         ]),
         const Spacer(),
         Text(t.label,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: T.body(weight: FontWeight.w700).copyWith(fontSize: 13.5)),
+            style: T.body(weight: FontWeight.w700).copyWith(fontSize: 14)),
       ]),
     );
   }

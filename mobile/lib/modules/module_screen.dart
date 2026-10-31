@@ -283,7 +283,7 @@ class ModuleScreenState extends State<ModuleScreen> {
               onSubmit: () => _set('q', _search.text),
               suffix: IconButton(
                 tooltip: 'Search',
-                icon: const Icon(Icons.search_rounded, size: 20, color: T.brand700),
+                icon: const Icon(Icons.search_rounded, size: 20, color: T.accent700),
                 onPressed: () => _set('q', _search.text),
               ),
             ),
@@ -815,10 +815,10 @@ class _Reach extends StatelessWidget {
     final problem = await how();
     if (problem == null) return;
     messenger.showSnackBar(SnackBar(
-      backgroundColor: T.navy950,
+      backgroundColor: T.dark950,
       behavior: SnackBarBehavior.floating,
       margin: const EdgeInsets.all(T.gutter),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(T.rButton)),
       content: Text(problem,
           style: T.body(color: Colors.white, weight: FontWeight.w500).copyWith(fontSize: 13.5)),
     ));
@@ -831,7 +831,7 @@ class _Reach extends StatelessWidget {
         key: Key('call:$number'),
         icon: Icons.phone_rounded,
         tooltip: 'Call $name',
-        tone: T.brand500,
+        tone: T.accent500,
         onTap: () => _go(context, () => Dial.live.call(number)),
       ),
       const SizedBox(width: 7),

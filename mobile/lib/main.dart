@@ -90,25 +90,68 @@ class _Splash extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: T.navy950,
-        body: Center(
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Container(
-              width: 56,
-              height: 56,
+        backgroundColor: T.dark950,
+        body: Stack(children: [
+          // A warm glow behind the mark, so the dark screen is not flat.
+          Positioned(
+            top: -120,
+            right: -80,
+            child: Container(
+              width: 320,
+              height: 320,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [T.brand500, T.navy800],
-                ),
+                shape: BoxShape.circle,
+                gradient: RadialGradient(colors: [
+                  T.accent500.withValues(alpha: 0.35),
+                  T.accent500.withValues(alpha: 0),
+                ]),
               ),
-              child: const Icon(Icons.two_wheeler_rounded, color: Colors.white, size: 29),
             ),
-            const SizedBox(height: 16),
-            Text('Nandini Rider', style: T.display(color: Colors.white)),
-          ]),
+          ),
+          Center(
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const LogoMark(size: 72),
+              const SizedBox(height: 20),
+              Text('Nandini Rider', style: T.display(color: Colors.white)),
+              const SizedBox(height: 6),
+              Text('Ride your own road.', style: T.secondaryText(color: T.onDarkSecondary)),
+            ]),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: MediaQuery.of(context).padding.bottom + 36,
+            child: const Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.4, color: T.accent300),
+              ),
+            ),
+          ),
+        ]),
+      );
+}
+
+/// The app's mark: a rounded square in the accent with the rider's bike on it.
+/// The same one everywhere — splash, sign-in, the drawer's account card.
+class LogoMark extends StatelessWidget {
+  const LogoMark({super.key, this.size = 56});
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(size * 0.3),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFF0565A), T.accent700],
+          ),
+          boxShadow: T.glow,
         ),
+        child: Icon(Icons.two_wheeler_rounded, color: Colors.white, size: size * 0.52),
       );
 }

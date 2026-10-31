@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../core/session.dart';
 import '../design/components.dart';
 import '../design/tokens.dart';
+import '../main.dart' show LogoMark;
 import 'sign_up.dart';
 
 /// The two ways in: a rider's mobile number and four-digit PIN (the default),
@@ -128,55 +129,72 @@ class SignInScreenState extends State<SignInScreen> {
     final pin = _mode == SignInMode.pin;
     return Scaffold(
       backgroundColor: T.page,
-      body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Container(
-          color: T.navy950,
-          padding: EdgeInsets.fromLTRB(24, MediaQuery.of(context).padding.top + 40, 24, 26),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(13),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [T.brand500, T.navy800],
-                ),
+      body: Stack(children: [
+        // A wash of the accent behind the hero, fading into the page.
+        Positioned(
+          top: -140,
+          left: -60,
+          right: -60,
+          child: IgnorePointer(
+            child: Container(
+              height: 380,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(colors: [T.accent100, T.page]),
               ),
-              child: const Icon(Icons.two_wheeler_rounded, color: Colors.white, size: 26),
             ),
-            const SizedBox(height: 16),
-            Text('Nandini Rider', style: T.display(color: Colors.white)),
-            const SizedBox(height: 5),
-            Text(
-              pin
-                  ? 'Nandini Logistics.\nSign in with your mobile number and PIN.'
-                  : 'Nandini Logistics.\nStaff: sign in with the account you use on the web.',
-              style: T.secondaryText(color: T.onNavySecondary),
-            ),
-          ]),
+          ),
         ),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(24, MediaQuery.of(context).padding.top + 28, 24, 8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                FilterChip2(
-                  key: const Key('mode-pin'),
-                  label: 'Mobile + PIN',
-                  selected: pin,
-                  onTap: () => _switch(SignInMode.pin),
-                ),
-                const SizedBox(width: 8),
-                FilterChip2(
-                  key: const Key('mode-email'),
-                  label: 'Email + password',
-                  selected: !pin,
-                  onTap: () => _switch(SignInMode.email),
-                ),
+                const LogoMark(size: 44),
+                const SizedBox(width: 12),
+                Text('Nandini Rider', style: T.section().copyWith(fontSize: 17)),
               ]),
-              const SizedBox(height: 16),
+              const SizedBox(height: 28),
+              Text.rich(
+                TextSpan(children: [
+                  const TextSpan(text: 'Welcome back,\n'),
+                  TextSpan(text: 'ready to ride?', style: T.hero(color: T.accent500)),
+                ]),
+                style: T.hero(),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                pin
+                    ? 'Nandini Logistics. Sign in with your mobile number and PIN.'
+                    : 'Nandini Logistics. Staff: sign in with the account you use on the web.',
+                style: T.secondaryText(),
+              ),
+            ]),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Row(children: [
+                  FilterChip2(
+                    key: const Key('mode-pin'),
+                    label: 'Mobile + PIN',
+                    selected: pin,
+                    onTap: () => _switch(SignInMode.pin),
+                  ),
+                  const SizedBox(width: 8),
+                  FilterChip2(
+                    key: const Key('mode-email'),
+                    label: 'Email + password',
+                    selected: !pin,
+                    onTap: () => _switch(SignInMode.email),
+                  ),
+                ]),
+                const SizedBox(height: 18),
+                Panel(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+
               if (pin) ...[
                 Field(
                   fieldKey: const Key('mobile'),
@@ -229,7 +247,7 @@ class SignInScreenState extends State<SignInScreen> {
                       icon: Icon(
                           _reveal ? Icons.visibility_off_rounded : Icons.visibility_rounded,
                           size: 20,
-                          color: T.brand700),
+                          color: T.accent700),
                       onPressed: () => setState(() => _reveal = !_reveal),
                     ),
                   ),
@@ -256,27 +274,30 @@ class SignInScreenState extends State<SignInScreen> {
               Btn('Sign in',
                   key: const Key('submit'),
                   expand: true,
-                  height: 50,
+                  height: 52,
                   busy: _busy,
                   onPressed: _final ? null : _submit),
-              if (pin) ...[
-                const SizedBox(height: 6),
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  TextButton(
-                    key: const Key('forgot-pin'),
-                    onPressed: _busy ? null : _forgot,
-                    child: const Text('Forgot PIN?'),
-                  ),
-                  TextButton(
-                    key: const Key('sign-up'),
-                    onPressed: _busy ? null : _signUp,
-                    child: const Text('New rider? Sign up'),
-                  ),
-                ]),
-              ],
-            ]),
+                  ]),
+                ),
+                if (pin) ...[
+                  const SizedBox(height: 8),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    TextButton(
+                      key: const Key('forgot-pin'),
+                      onPressed: _busy ? null : _forgot,
+                      child: const Text('Forgot PIN?'),
+                    ),
+                    TextButton(
+                      key: const Key('sign-up'),
+                      onPressed: _busy ? null : _signUp,
+                      child: const Text('New rider? Sign up'),
+                    ),
+                  ]),
+                ],
+              ]),
+            ),
           ),
-        ),
+        ]),
       ]),
     );
   }
