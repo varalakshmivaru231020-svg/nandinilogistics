@@ -126,7 +126,9 @@ describe("employee edit audit", () => {
       [
         "aadhaar", "address", "altContact", "bankAccountNo", "bankHolderName", "bankIfsc", "bankName",
         "companyIds", "designationId", "drivingLicence", "emergencyMobileFamily", "emergencyMobileFriend",
-        "employmentTypeId", "insuranceNumber", "joinedOn", "mobile", "monthlySalary", "name", "pan", "pfNumber",
+        "employmentTypeId", "insuranceNumber", "joinedOn", "mobile", "monthlySalary", "name", "pan",
+        "permanentCity", "permanentPinCode", "permanentState", "permanentStreet", "pfNumber",
+        "temporaryCity", "temporaryPinCode", "temporaryState", "temporaryStreet",
       ],
     );
   });

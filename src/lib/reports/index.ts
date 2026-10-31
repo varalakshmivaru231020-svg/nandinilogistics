@@ -5,6 +5,8 @@ import type { AuthContext } from "@/lib/rbac/context";
 import { PERM } from "@/lib/permissions/codes";
 import { usersHolding } from "@/lib/rbac/holders";
 import { referralStatus } from "@/lib/riders/referrals";
+import { employeeScope } from "@/lib/hr/list-filters";
+import { attendanceDay } from "@/lib/hr/punch";
 
 import { dateCondition, filterSpecFor, type ReportFilters } from "./filters";
 import type { ReportDef, ReportResult } from "./types";
@@ -21,6 +23,7 @@ export const REPORTS: ReportDef[] = [
   { key: "payoutSummary", label: "Payout summary", audience: "Admin", description: "Posted payouts per company and period — total, deductions, final, and what is on hold." },
   { key: "advanceOutstanding", label: "Advance outstanding", audience: "Admin", description: "Approved advances against what has been recovered, per rider." },
   { key: "teleCallerDaily", label: "Tele-caller daily summary", audience: "Tele-caller", description: "Calls logged, leads moved per stage and onboardings completed, per tele-caller per day." },
+  { key: "attendanceRegister", label: "Attendance register", audience: "Team Leader", description: "A month's register, one row per rider or staff member and one column per day — P, H or A — with present, half-day, absent and payable totals, from app punches and marked attendance alike." },
 ];
 
 export function getReport(key: string): ReportDef | undefined {
@@ -43,6 +46,93 @@ export async function runReport(
   const now = new Date();
 
   switch (key) {
+    /* --------------------------- Attendance register ----------------------- */
+    case "attendanceRegister": {
+      // One month at most, on the Indian calendar; this month when no range is given.
+      const today = attendanceDay(now);
+      const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+      const from = filters.from ? new Date(`${filters.from}T00:00:00.000Z`) : monthStart;
+      let to = filters.to ? new Date(`${filters.to}T00:00:00.000Z`) : new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 0));
+      if ((to.getTime() - from.getTime()) / DAY > 30) to = new Date(from.getTime() + 30 * DAY);
+      const dayCount = Math.round((to.getTime() - from.getTime()) / DAY) + 1;
+      const days = Array.from({ length: dayCount }, (_, i) => new Date(from.getTime() + i * DAY));
+
+      const scope = employeeScope(ctx);
+      const companyWhere = filters.companyId ? { companies: { some: { companyId: filters.companyId } } } : {};
+      const people = await prisma.employee.findMany({
+        where: {
+          AND: [
+            scope,
+            companyWhere,
+            { onboardingStatus: "ACCEPTED" },
+            { OR: [{ status: "ACTIVE" }, { attendance: { some: { attendanceOn: { gte: from, lte: to } } } }] },
+          ],
+        },
+        orderBy: [{ employmentType: { sortOrder: "asc" } }, { name: "asc" }],
+        select: {
+          id: true, employeeCode: true, name: true, status: true,
+          employmentType: { select: { name: true } },
+          attendance: {
+            where: { attendanceOn: { gte: from, lte: to } },
+            select: { attendanceOn: true, status: true, overtimeHours: true, punchInAt: true, punchOutAt: true },
+          },
+        },
+      });
+
+      const dayKey = (d: Date) => `d${d.getUTCDate()}`;
+      const mark = (s: string) => (s === "PRESENT" ? "P" : s === "HALF_DAY" ? "H" : s === "ABSENT" ? "A" : "");
+      const rows = people.map((p) => {
+        const cells: Record<string, unknown> = {};
+        let present = 0, half = 0, absent = 0, overtime = 0, punches = 0;
+        for (const d of days) cells[dayKey(d)] = "";
+        for (const a of p.attendance) {
+          cells[dayKey(a.attendanceOn)] = mark(a.status);
+          if (a.status === "PRESENT") present += 1;
+          else if (a.status === "HALF_DAY") half += 1;
+          else if (a.status === "ABSENT") absent += 1;
+          overtime += num(a.overtimeHours);
+          if (a.punchInAt) punches += 1;
+        }
+        return {
+          code: p.employeeCode,
+          name: p.status === "INACTIVE" ? `${p.name} (left)` : p.name,
+          type: p.employmentType.name,
+          ...cells,
+          present, half, absent,
+          payable: present + half * 0.5,
+          overtime,
+          punches,
+        };
+      });
+
+      const totalPayable = rows.reduce((s, r) => s + r.payable, 0);
+      const label = `${from.toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "UTC" })} – ${to.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })}`;
+      return {
+        columns: [
+          { key: "code", header: "ID" },
+          { key: "name", header: "Name" },
+          { key: "type", header: "Type" },
+          ...days.map((d) => ({ key: dayKey(d), header: String(d.getUTCDate()), align: "center" as const })),
+          { key: "present", header: "P", align: "right" as const, format: "number" as const },
+          { key: "half", header: "H", align: "right" as const, format: "number" as const },
+          { key: "absent", header: "A", align: "right" as const, format: "number" as const },
+          { key: "payable", header: "Payable days", align: "right" as const, format: "number" as const },
+          { key: "overtime", header: "OT hrs", align: "right" as const, format: "number" as const },
+          { key: "punches", header: "App punches", align: "right" as const, format: "number" as const },
+        ],
+        rows,
+        summary: [
+          { label: "Period", value: label },
+          { label: "People", value: String(rows.length) },
+          { label: "Present days", value: String(rows.reduce((s, r) => s + r.present, 0)), tone: "good" },
+          { label: "Absent days", value: String(rows.reduce((s, r) => s + r.absent, 0)), tone: rows.some((r) => r.absent) ? "bad" : "default" },
+          { label: "Payable days", value: String(totalPayable) },
+          { label: "Marked today", value: String(people.filter((p) => p.attendance.some((a) => a.attendanceOn.getTime() === today.getTime())).length) + ` of ${people.filter((p) => p.status === "ACTIVE").length}` },
+        ],
+        emptyMessage: "Nobody in your scope has attendance in this range.",
+      };
+    }
+
     /* --------------------------------- TL report --------------------------- */
     case "teamLeader": {
       const leaderIds = await usersHolding(prisma, PERM.task.task.start);

@@ -12,6 +12,7 @@ import { EmployeeDetail, type AttendanceDay, type AttendanceRow } from "./employ
 import { RiderPanel } from "./rider-panel";
 import { EditRequestsPanel } from "../edit-requests/edit-requests-panel";
 import { editRequestRows } from "@/lib/hr/edit-request-rows";
+import { PERSONAL_ADDRESS_LABEL, PROFESSIONAL_ADDRESS_LABEL, personalAddress, professionalAddress } from "@/lib/hr/address";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -187,8 +188,8 @@ export default async function EmployeeDetailPage({
           { k: "PF number", v: employee.pfNumber || "—" },
           { k: "Insurance number", v: employee.insuranceNumber || "—" },
           ...(employee.monthlySalary !== null ? [{ k: "Monthly salary", v: `₹${Number(employee.monthlySalary).toLocaleString("en-IN")}` }] : []),
-          { k: "Temporary address", v: [employee.temporaryStreet, employee.temporaryCity, employee.temporaryState, employee.temporaryPinCode].filter(Boolean).join(", ") || employee.address || "—" },
-          { k: "Permanent address", v: [employee.permanentStreet, employee.permanentCity, employee.permanentState, employee.permanentPinCode].filter(Boolean).join(", ") || "—" },
+          { k: PROFESSIONAL_ADDRESS_LABEL, v: professionalAddress(employee) ?? "—" },
+          { k: PERSONAL_ADDRESS_LABEL, v: personalAddress(employee) ?? "—" },
         ],
       }}
       extras={

@@ -15,6 +15,8 @@ import { Modal } from "@/components/ui/modal";
 import { decideApprovalAction } from "@/app/(app)/approvals/actions";
 import { COUNTRY_CODES } from "@/lib/forms/dial-codes";
 import { cn } from "@/lib/utils";
+import { SearchSelect } from "@/components/ui/search-select";
+import { personalAddress, professionalAddress } from "@/lib/hr/address";
 import { uploadProblem } from "@/lib/upload-rules";
 import type { AttendanceSummaryRow } from "@/lib/hr/attendance-report";
 import { isInactive, statusLabel } from "@/lib/hr/employee-status";
@@ -98,6 +100,17 @@ interface Mark {
 /** Someone who can be marked — active employees only. */
 interface MarkRow { id: string; code: string; name: string; employmentType: string; designation: string | null }
 
+/** One day of one person in the punch log. */
+export interface LogRow {
+  id: string; date: string; name: string; code: string; employmentType: string;
+  status: string; overtimeHours: number;
+  checkIn: string | null; checkOut: string | null; hours: number | null;
+  inMap: string | null; outMap: string | null;
+  /** Where the row came from — the app, or whoever marked it. */
+  source: string;
+  noCheckOut: boolean;
+}
+
 /** The design's three marks, with its own colours. */
 const MARKS = [
   { key: "PRESENT", short: "P", label: "Present", tone: "good" as const },
@@ -108,12 +121,13 @@ const MARKS = [
 const TABS = [
   { key: "staff", label: "Riders & Staff" },
   { key: "mark", label: "Mark Attendance" },
+  { key: "log", label: "Punch Log" },
   { key: "report", label: "Attendance Report" },
 ];
 
 export function HrScreen({
   tabs, newLabel, defaultTypeId, referrers = [],
-  tab, date, from, to, rangeError, employees, markable, employmentTypes, designations, companies, dayMarks, report, can,
+  tab, date, from, to, rangeError, employees, markable, employmentTypes, designations, companies, dayMarks, report, log = [], can,
 }: {
   /** Which tabs this sidebar entry shows — the list, or mark and report. */
   tabs: string[];
@@ -130,6 +144,8 @@ export function HrScreen({
   /** The active client companies a rider can be deployed to. */
   companies: Array<{ id: string; name: string }>;
   dayMarks: Mark[]; report: AttendanceSummaryRow[];
+  /** The punch log for the range, newest first. */
+  log?: LogRow[];
   can: Record<string, boolean>;
 }) {
   const router = useRouter();
@@ -159,6 +175,7 @@ export function HrScreen({
       tabs.includes(t.key) &&
       (t.key !== "staff" || can.tabStaff) &&
       (t.key !== "mark" || can.viewAttendance) &&
+      (t.key !== "log" || can.log) &&
       (t.key !== "report" || can.report),
   );
   const active = visibleTabs.some((t) => t.key === tab) ? tab : (visibleTabs[0]?.key ?? "staff");
@@ -252,6 +269,16 @@ export function HrScreen({
           onDate={(v) => setParam({ date: v })}
           onDone={flash}
           onError={setError}
+        />
+      )}
+
+      {active === "log" && can.log && (
+        <LogTab
+          rows={log}
+          from={from}
+          to={to}
+          rangeError={rangeError}
+          onRange={(f, t) => setParam({ from: f, to: t })}
         />
       )}
 
@@ -479,7 +506,12 @@ function StaffTab({
                   <br />
                   <span className="num text-[11px] text-muted-400">{e.pan ?? "—"}</span>
                 </td>
-                <td className="px-4 py-3 text-[12px] font-medium text-navy-500">{e.address ?? "—"}</td>
+                <td className="px-4 py-3 text-[12px] font-medium text-navy-500">
+                  <span className="block">{professionalAddress(e) ?? "—"}</span>
+                  {personalAddress(e) && (
+                    <span className="block text-[11px] text-muted-400">Personal: {personalAddress(e)}</span>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1.5">
                     {e.approval === "PENDING" ? (
@@ -711,6 +743,146 @@ function MarkTab({
                 </tr>
               );
             })}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
+/* ------------------------------ Punch log --------------------------------- */
+
+const LOG_STATUS: Record<string, { label: string; cls: string }> = {
+  PRESENT: { label: "Present", cls: "bg-good-050 text-good-700" },
+  HALF_DAY: { label: "Half day", cls: "bg-warn-050 text-warn-700" },
+  ABSENT: { label: "Absent", cls: "bg-bad-050 text-bad-600" },
+};
+
+function logDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00.000Z`);
+  return d.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", timeZone: "UTC" });
+}
+
+/**
+ * Every check-in and check-out in the range, newest day first — the answer
+ * to "did they log in from the app today, and from where".
+ */
+function LogTab({
+  rows, from, to, rangeError, onRange,
+}: {
+  rows: LogRow[]; from: string; to: string; rangeError: string | null;
+  onRange: (f: string, t: string) => void;
+}) {
+  const [f, setF] = React.useState(from);
+  const [t, setT] = React.useState(to);
+  const [who, setWho] = React.useState("");
+
+  const needle = who.trim().toLowerCase();
+  const shown = needle ? rows.filter((r) => `${r.name} ${r.code}`.toLowerCase().includes(needle)) : rows;
+  const punched = shown.filter((r) => r.checkIn).length;
+  const open = shown.filter((r) => r.noCheckOut).length;
+
+  const where = (href: string | null) =>
+    href ? <a href={href} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline">map</a> : <span className="text-muted-400">no location</span>;
+
+  // Rows are grouped by day so a day's check-ins read as one block.
+  const days: Array<{ date: string; rows: LogRow[] }> = [];
+  for (const r of shown) {
+    const last = days[days.length - 1];
+    if (last && last.date === r.date) last.rows.push(r);
+    else days.push({ date: r.date, rows: [r] });
+  }
+
+  return (
+    <div>
+      <div className="mb-3.5 flex flex-wrap items-end gap-2.5">
+        <Field label="From" className="w-[160px]">
+          <Input type="date" value={f} onChange={(e) => setF(e.target.value)} />
+        </Field>
+        <Field label="To" className="w-[160px]">
+          <Input type="date" value={t} onChange={(e) => setT(e.target.value)} />
+        </Field>
+        <Button size="md" variant="secondary" onClick={() => onRange(f, t)}>Apply</Button>
+        <Field label="Find" className="w-[220px]">
+          <Input placeholder="Name or ID" value={who} onChange={(e) => setWho(e.target.value)} />
+        </Field>
+      </div>
+
+      {rangeError && (
+        <div className="mb-3.5">
+          <Alert tone="error" title="Range not applied">{rangeError}</Alert>
+        </div>
+      )}
+
+      <div className="mb-3.5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+        {[
+          { v: String(shown.length), l: "Attendance rows", cls: "bg-surface-hover text-navy-800 border-line-400" },
+          { v: String(punched), l: "App check-ins", cls: "bg-good-050 text-good-700 border-good-050" },
+          { v: String(shown.length - punched), l: "Marked by hand", cls: "bg-surface-field text-navy-500 border-line-400" },
+          { v: String(open), l: "No check-out", cls: open ? "bg-warn-050 text-warn-700 border-warn-050" : "bg-surface-hover text-navy-800 border-line-400" },
+        ].map((k) => (
+          <div key={k.l} className={cn("rounded-[11px] border px-3.5 py-3", k.cls)}>
+            <p className="num font-display text-[20px] font-bold">{k.v}</p>
+            <p className="text-[11px] font-bold uppercase tracking-[.08em] opacity-80">{k.l}</p>
+          </div>
+        ))}
+      </div>
+
+      <Card className="overflow-x-auto">
+        <table className="w-full min-w-[820px] border-collapse">
+          <thead>
+            <tr className="bg-surface-sunken">
+              {["Day", "Employee", "Type", "Status", "Check-in", "Check-out", "Hours", "Source"].map((h, i) => (
+                <th key={h} className={cn(
+                  "border-b border-line-300 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
+                  i === 6 ? "text-right" : "text-left",
+                )}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 ? (
+              <tr><td colSpan={8} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
+                No check-ins or marks in this range. Punches from the app land here the moment they are made.
+              </td></tr>
+            ) : days.map((d) => (
+              <React.Fragment key={d.date}>
+                <tr className="bg-surface-field/60">
+                  <td colSpan={8} className="px-4 py-1.5 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500">
+                    {logDay(d.date)} · {d.rows.length} {d.rows.length === 1 ? "person" : "people"}
+                  </td>
+                </tr>
+                {d.rows.map((r) => {
+                  const st = LOG_STATUS[r.status] ?? { label: r.status, cls: "bg-surface-field text-navy-500" };
+                  return (
+                    <tr key={r.id} className="border-b border-line-200 last:border-0">
+                      <td className="num px-4 py-2.5 text-[11.5px] font-medium text-muted-400">{r.date.slice(8)}</td>
+                      <td className="px-4 py-2.5">
+                        <p className="text-[12.5px] font-bold text-navy-950">{r.name}</p>
+                        <p className="num text-[11px] font-medium text-muted-400">{r.code}</p>
+                      </td>
+                      <td className="px-4 py-2.5"><span className={cn("inline-block whitespace-nowrap rounded-full px-2.5 py-[5px] text-[10.5px] font-bold", typePill(r.employmentType))}>{r.employmentType}</span></td>
+                      <td className="px-4 py-2.5"><span className={cn("inline-block whitespace-nowrap rounded-full px-2.5 py-[5px] text-[10.5px] font-bold", st.cls)}>{st.label}</span></td>
+                      <td className="num px-4 py-2.5 text-[12px] font-semibold text-navy-900">
+                        {r.checkIn ? <>{r.checkIn} <span className="text-[11px] font-medium">({where(r.inMap)})</span></> : <span className="text-muted-400">—</span>}
+                      </td>
+                      <td className="num px-4 py-2.5 text-[12px] font-semibold text-navy-900">
+                        {r.checkOut
+                          ? <>{r.checkOut} <span className="text-[11px] font-medium">({where(r.outMap)})</span></>
+                          : r.noCheckOut
+                            ? <span className="font-semibold text-warn-700">no check-out</span>
+                            : r.checkIn ? <span className="text-muted-400">on duty</span> : <span className="text-muted-400">—</span>}
+                      </td>
+                      <td className="num px-4 py-2.5 text-right text-[12px] font-semibold text-navy-900">
+                        {r.hours === null ? "—" : r.hours.toFixed(1)}
+                        {r.overtimeHours > 0 && <span className="block text-[10.5px] font-medium text-muted-400">+{r.overtimeHours} OT</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-[11.5px] font-medium text-navy-500">{r.source}</td>
+                    </tr>
+                  );
+                })}
+              </React.Fragment>
+            ))}
           </tbody>
         </table>
       </Card>
@@ -996,7 +1168,8 @@ export function EmployeeForm({
         </div>
 
         <div className="!mt-4">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">Temporary address</p>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">Professional address</p>
+          <p className="-mt-1 mb-2 text-[11px] font-medium text-muted-400">Where they stay while on duty.</p>
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
             <Field label="Street"><Input name="temporaryStreet" defaultValue={employee?.temporaryStreet ?? ""} placeholder="House, street, area" /></Field>
             <Field label="City"><Input name="temporaryCity" defaultValue={employee?.temporaryCity ?? ""} placeholder="City" /></Field>
@@ -1005,7 +1178,8 @@ export function EmployeeForm({
           </div>
         </div>
         <div className="!mt-4">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">Permanent address</p>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">Personal address</p>
+          <p className="-mt-1 mb-2 text-[11px] font-medium text-muted-400">Their permanent home address.</p>
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
             <Field label="Street"><Input name="permanentStreet" defaultValue={employee?.permanentStreet ?? ""} placeholder="House, street, area" /></Field>
             <Field label="City"><Input name="permanentCity" defaultValue={employee?.permanentCity ?? ""} placeholder="City" /></Field>
@@ -1092,18 +1266,26 @@ export function EmployeeForm({
 
             <Field label="Companies deployed to" required>
               {selectedCompanyIds.map((id) => <input key={id} type="hidden" name="companyIds" value={id} />)}
-              <select
-                value=""
-                onChange={(e) => {
-                  const id = e.target.value;
-                  if (id && !selectedCompanyIds.includes(id)) setSelectedCompanyIds((current) => [...current, id]);
-                }}
-                disabled={Boolean(employee) && !canManageCompanies}
-                className="w-full rounded-[9px] border border-line-400 bg-surface-sunken px-3 py-2 text-[12.5px] font-medium text-navy-900 focus:border-brand-500 focus:bg-white focus:outline-none disabled:opacity-60"
-              >
-                <option value="">Select a company…</option>
-                {companies.filter((c) => !selectedCompanyIds.includes(c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              {Boolean(employee) && !canManageCompanies ? (
+                <p className="rounded-[9px] border border-line-400 bg-surface-sunken px-3 py-2 text-[12.5px] font-medium text-muted-400">
+                  Companies are changed by Admin.
+                </p>
+              ) : (
+                <SearchSelect
+                  id="companyIds-picker"
+                  // Always empty: each pick is added to the chips below, so the
+                  // box is ready for the next one.
+                  value=""
+                  placeholder={selectedCompanyIds.length ? "Add another company…" : "Search and pick a company…"}
+                  emptyLabel="No company by that name"
+                  options={companies
+                    .filter((c) => !selectedCompanyIds.includes(c.id))
+                    .map((c) => ({ id: c.id, label: c.name }))}
+                  onChange={(id) => {
+                    if (id && !selectedCompanyIds.includes(id)) setSelectedCompanyIds((current) => [...current, id]);
+                  }}
+                />
+              )}
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {selectedCompanyIds.map((id) => {
                   const company = companies.find((c) => c.id === id);
@@ -1120,7 +1302,7 @@ export function EmployeeForm({
                   );
                 })}
               </div>
-              <p className="mt-1 text-[11px] font-medium text-muted-400">Choose one or more active companies.</p>
+              <p className="mt-1 text-[11px] font-medium text-muted-400">Type to search. Pick one or more active companies; tap a chip to remove it.</p>
             </Field>
           </>
         )}

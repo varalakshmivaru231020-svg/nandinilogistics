@@ -353,6 +353,8 @@ export async function decideLeadApproval(
   decision: ApprovalDecision,
   note: string | null | undefined,
   at: Date,
+  /** False when the caller notifies the whole chain itself (the approvals action does). */
+  notify = true,
 ) {
   const lead = await tx.lead.findFirst({
     where: { AND: [{ id: leadId }, leadApprovalScope(viewer)] },
@@ -366,15 +368,17 @@ export async function decideLeadApproval(
     data: { approval: check.decision, approvedById: viewer.id, approvedAt: at, approvalNote: check.note },
   });
   if (claimed.count !== 1) throw new ApprovalError("This has already been decided.");
-  await notifyApprovalDecided(tx, {
-    userId: lead.createdById ?? lead.ownerId,
-    actorId: viewer.id,
-    title: `Lead ${lead.leadNo} ${check.decision === "APPROVED" ? "approved" : "rejected"}`,
-    body: check.note,
-    href: `/sales/leads/${lead.id}`,
-    entity: "Lead",
-    entityId: lead.id,
-  });
+  if (notify) {
+    await notifyApprovalDecided(tx, {
+      userId: lead.createdById ?? lead.ownerId,
+      actorId: viewer.id,
+      title: `Lead ${lead.leadNo} ${check.decision === "APPROVED" ? "approved" : "rejected"}`,
+      body: check.note,
+      href: `/sales/leads/${lead.id}`,
+      entity: "Lead",
+      entityId: lead.id,
+    });
+  }
   return { ...lead, decision: check.decision, note: check.note };
 }
 

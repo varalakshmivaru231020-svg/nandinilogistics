@@ -5,6 +5,7 @@ import type { ScreenRow } from "@/lib/screens/rows";
 import { asRowActions } from "@/lib/screens/rows/row-actions";
 import { ONBOARDING_LABEL, ONBOARDING_TONE, type OnboardingStatus } from "@/lib/riders/onboarding";
 import type { ReferralStatus } from "@/lib/riders/referrals";
+import { PROFESSIONAL_ADDRESS_LABEL } from "@/lib/hr/address";
 
 export { ATTENDANCE_EMPTY, EMPLOYEE_EMPTY } from "@/lib/hr/list-display";
 
@@ -49,7 +50,7 @@ export function employeeScreenRow(
       { value: `${e.designation ?? "—"} · alt ${e.altContact ?? "—"}` },
       { label: "Companies", value: e.companies.join(", ") || "—" },
       { label: "Aadhaar · PAN", value: `${e.aadhaar ?? "—"} · ${e.pan ?? "—"}` },
-      { label: "Address", value: e.address ?? "—" },
+      { label: PROFESSIONAL_ADDRESS_LABEL, value: e.address ?? "—" },
     ],
     /*
      * The web row offers Activate only on somebody who is inactive — an active

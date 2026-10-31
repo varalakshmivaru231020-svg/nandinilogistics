@@ -31,6 +31,7 @@ export const REPORT_FILTER_SPEC: Record<string, ReportFilterSpec> = {
   payoutSummary: { company: true, date: "Payout period start" },
   advanceOutstanding: { company: false, date: "Approved on" },
   teleCallerDaily: { company: false, date: "Day" },
+  attendanceRegister: { company: true, date: "Attendance day (one month at most; this month when blank)" },
 };
 
 const NO_FILTERS: ReportFilterSpec = { company: false, date: null };

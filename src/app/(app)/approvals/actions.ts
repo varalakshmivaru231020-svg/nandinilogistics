@@ -7,8 +7,8 @@ import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
 import { decideLeadApproval, decideReferralApproval } from "@/lib/approvals/inbox";
-import { decideChange, decideNewEmployee } from "@/lib/approvals/changes";
-import { checkDecision, isApprovalKind } from "@/lib/approvals/rule";
+import { decideChange, decideNewEmployee, notifyChainDecided, personOf, tiersOf } from "@/lib/approvals/changes";
+import { checkDecision, isApprovalKind, mayDecideFor } from "@/lib/approvals/rule";
 import { acceptOnboardingAction, decideProfileEditAction, rejectOnboardingAction } from "@/app/(app)/hr/actions";
 import { decideAdvanceAction } from "@/app/(app)/advances/actions";
 
@@ -45,7 +45,23 @@ export async function decideApprovalAction(
 
     switch (kind) {
       case "LEAD": {
-        const lead = await prisma.$transaction((tx) => decideLeadApproval(tx, ctx, id, check.decision, why, now));
+        // The same chain as a rider: a Team Leader decides a tele-caller's
+        // lead, never their own; Super Admin decides anyone's — and is told
+        // what a Team Leader decided.
+        const lead = await prisma.$transaction(async (tx) => {
+          const raised = await tx.lead.findUnique({ where: { id }, select: { createdById: true, ownerId: true } });
+          const raiserId = raised?.createdById ?? raised?.ownerId ?? null;
+          const tier = raiserId ? (await tiersOf(tx, [raiserId])).get(raiserId) ?? "MEMBER" : "MEMBER";
+          if (!mayDecideFor(personOf(ctx), { id: raiserId, tier })) {
+            throw new Error(tier === "TEAM_LEADER" ? "A Team Leader's lead is approved by Super Admin." : "You may not decide this lead.");
+          }
+          const decided = await decideLeadApproval(tx, ctx, id, check.decision, why, now, false);
+          await notifyChainDecided(tx, ctx, {
+            raisedById: raiserId, decision: check.decision, what: `Lead ${decided.leadNo} — ${decided.name}`,
+            note: check.note, href: `/sales/leads/${id}`, entity: "Lead", entityId: id,
+          });
+          return decided;
+        });
         await recordAudit({
           action: check.decision === "APPROVED" ? "APPROVE" : "REJECT", entity: "Lead", entityId: id, userId: ctx.id,
           summary: `Lead ${lead.leadNo} ${check.decision === "APPROVED" ? "approved" : `rejected — ${why}`}`,

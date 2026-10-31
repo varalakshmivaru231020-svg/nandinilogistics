@@ -10,7 +10,8 @@ import { ModuleStats } from "@/components/list/module-stats";
 import { employeeFigures } from "@/lib/metrics/figures";
 import type { OnboardingStatus } from "@/lib/riders/onboarding";
 import { isRiderType } from "@/lib/riders/onboarding";
-import { istClock, mapsHref } from "@/lib/hr/punch";
+import { attendanceDay, istClock, mapsHref } from "@/lib/hr/punch";
+import { professionalAddress } from "@/lib/hr/address";
 import { HrScreen } from "./hr-screen";
 
 export type WorkforceView = "riders" | "staff" | "attendance";
@@ -28,9 +29,11 @@ export type WorkforceSearch = Promise<{
  */
 export async function Workforce({ searchParams, view }: { searchParams: WorkforceSearch; view: WorkforceView }) {
   const ctx = await requirePermission(PERM.hr.employee.view);
-  const today = new Date().toISOString().slice(0, 10);
+  // Today on the Indian calendar — punches are filed under the IST day, and a
+  // UTC "today" opened on yesterday between midnight and 05:30.
+  const today = attendanceDay(new Date()).toISOString().slice(0, 10);
   const raw = await searchParams;
-  const tabs = view === "attendance" ? ["mark", "report"] : ["staff"];
+  const tabs = view === "attendance" ? ["mark", "log", "report"] : ["staff"];
   const date = raw.date ?? today;
   const tab = raw.tab && tabs.includes(raw.tab) ? raw.tab : tabs[0];
   const range = parseAttendanceRange({ from: raw.from, to: raw.to }, today);
@@ -45,6 +48,7 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
   const canIdentity = ctx.has(PERM.hr.employee.viewIdentity);
   const canViewAttendance = ctx.has(PERM.hr.attendance.view);
   const canReport = ctx.has(PERM.hr.attendance.tabReport);
+  const canLog = ctx.has(PERM.hr.attendance.tabLog);
 
   const listing = view !== "attendance";
   const [employees, employmentTypes, designations, companies] = await Promise.all([
@@ -93,6 +97,30 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
     : [[], []];
 
   const report = canReport && range.ok && !listing ? await loadAttendanceReport(prisma, range, peopleParams, scope) : [];
+
+  /*
+   * The punch log: every attendance row in the range, newest day first, with
+   * where each punch came from. This is where a rider's or a staff member's
+   * check-in from the phone is seen on the web — the mark tab shows one day,
+   * the report sums a range, and neither answered "who checked in, when".
+   */
+  const logEntries = canLog && range.ok && !listing && tab === "log"
+    ? await prisma.attendanceEntry.findMany({
+        where: {
+          attendanceOn: { gte: new Date(`${range.from}T00:00:00.000Z`), lte: new Date(`${range.to}T00:00:00.000Z`) },
+          employee: { AND: [scope, employeeListWhere(peopleParams)] },
+        },
+        orderBy: [{ attendanceOn: "desc" }, { punchInAt: "asc" }, { employee: { name: "asc" } }],
+        take: 1500,
+        select: {
+          id: true, attendanceOn: true, status: true, overtimeHours: true,
+          punchInAt: true, punchOutAt: true, punchInLat: true, punchInLng: true, punchOutLat: true, punchOutLng: true,
+          markedById: true,
+          employee: { select: { name: true, employeeCode: true, userId: true, employmentType: { select: { name: true } } } },
+          markedBy: { select: { name: true } },
+        },
+      })
+    : [];
 
   /*
    * The band reads everyone in view and today's marks against them, so it
@@ -144,7 +172,7 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
           altContact: e.altContact,
           aadhaar: canIdentity ? e.aadhaar : maskId(e.aadhaar),
           pan: canIdentity ? e.pan : maskId(e.pan),
-          address: e.address,
+          address: professionalAddress(e),
           temporaryStreet: e.temporaryStreet,
           temporaryCity: e.temporaryCity,
           temporaryState: e.temporaryState,
@@ -205,6 +233,29 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
           noCheckOut: Boolean(e.punchInAt && !e.punchOutAt && date < today),
         }))}
         report={report}
+        log={logEntries.map((e) => {
+          const day = e.attendanceOn.toISOString().slice(0, 10);
+          const self = e.markedById !== null && e.markedById === e.employee.userId;
+          const hours = e.punchInAt && e.punchOutAt ? (e.punchOutAt.getTime() - e.punchInAt.getTime()) / 3_600_000 : null;
+          return {
+            id: e.id,
+            date: day,
+            name: e.employee.name,
+            code: e.employee.employeeCode,
+            employmentType: e.employee.employmentType.name,
+            status: e.status,
+            overtimeHours: Number(e.overtimeHours),
+            checkIn: e.punchInAt ? istClock(e.punchInAt) : null,
+            checkOut: e.punchOutAt ? istClock(e.punchOutAt) : null,
+            hours: hours === null ? null : Math.round(hours * 10) / 10,
+            inMap: mapsHref(e.punchInLat === null ? null : Number(e.punchInLat), e.punchInLng === null ? null : Number(e.punchInLng)),
+            outMap: mapsHref(e.punchOutLat === null ? null : Number(e.punchOutLat), e.punchOutLng === null ? null : Number(e.punchOutLng)),
+            source: e.punchInAt
+              ? (self ? "App / check-in" : e.markedBy ? `Punched · corrected by ${e.markedBy.name}` : "App / check-in")
+              : e.markedBy ? `Marked by ${e.markedBy.name}` : "Marked",
+            noCheckOut: Boolean(e.punchInAt && !e.punchOutAt && day < today),
+          };
+        })}
         can={{
           tabStaff: ctx.has(PERM.hr.employee.tabStaff),
           create: ctx.has(PERM.hr.employee.create),
@@ -220,6 +271,7 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
           mark: ctx.has(PERM.hr.attendance.mark),
           markAll: ctx.has(PERM.hr.attendance.markAll),
           report: canReport,
+          log: canLog,
           exportReport: canViewAttendance && canReport && ctx.has(PERM.hr.attendance.export),
           exportEmployees: ctx.has(PERM.hr.employee.export),
         }}

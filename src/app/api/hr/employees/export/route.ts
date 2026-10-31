@@ -9,6 +9,7 @@ import {
 } from "@/lib/hr/list-filters";
 import { ONBOARDING_LABEL, type OnboardingStatus } from "@/lib/riders/onboarding";
 import { PERM } from "@/lib/permissions/codes";
+import { PERSONAL_ADDRESS_LABEL, PROFESSIONAL_ADDRESS_LABEL, personalAddress, professionalAddress } from "@/lib/hr/address";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +78,7 @@ export async function GET(request: Request) {
           employmentType: e.employmentType.name,
           aadhaar: canIdentity ? e.aadhaar : maskId(e.aadhaar),
           pan: canIdentity ? e.pan : maskId(e.pan),
-          address: e.address,
+          address: professionalAddress(e),
           status: e.status,
           onboardingStatus: e.onboardingStatus as OnboardingStatus,
           companies: e.companies.map((c) => c.company.name),
@@ -125,7 +126,8 @@ export async function GET(request: Request) {
         { key: "aadhaar", header: "Aadhaar" },
         { key: "pan", header: "PAN" },
         { key: "bank", header: "Bank" },
-        { key: "address", header: "Address" },
+        { key: "address", header: PROFESSIONAL_ADDRESS_LABEL },
+        { key: "personalAddress", header: PERSONAL_ADDRESS_LABEL },
         { key: "status", header: "Status" },
         { key: "joinedOn", header: "Joined on", format: "date" },
         { key: "leftOn", header: "Left on", format: "date" },
@@ -144,7 +146,8 @@ export async function GET(request: Request) {
         aadhaar: (canIdentity ? e.aadhaar : maskId(e.aadhaar)) ?? "",
         pan: (canIdentity ? e.pan : maskId(e.pan)) ?? "",
         bank: e.bankName ? `${e.bankName} · ${(canIdentity ? e.bankAccountNo : maskId(e.bankAccountNo)) ?? ""} · ${e.bankIfsc ?? ""}` : "",
-        address: e.address ?? "",
+        address: professionalAddress(e) ?? "",
+        personalAddress: personalAddress(e) ?? "",
         status: e.status === "INACTIVE" ? "Left" : "Active",
         joinedOn: e.joinedOn,
         leftOn: e.leftOn,

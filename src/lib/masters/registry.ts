@@ -166,7 +166,7 @@ export const MASTERS: MasterDef[] = [
     model: "offerLetterTemplate",
     label: "Offer Letter Templates",
     singular: "offer letter template",
-    description: "Per company, for internal staff and for outsourced vendor riders. {{name}}, {{riderId}}, {{company}}, {{joiningDate}} and {{rateCard}} are merged in on acceptance.",
+    description: "Per company, for internal staff and for outsourced vendor riders. {{name}}, {{riderId}}, {{designation}}, {{company}}, {{joiningDate}}, {{salary}} and {{rateCard}} are merged in on acceptance; the letterhead, addressee block, salary annexure and signatures are added by the system.",
     group: "Companies",
     icon: "FileText",
     searchFields: ["code", "name", "subject"],
@@ -185,7 +185,7 @@ export const MASTERS: MasterDef[] = [
         ],
       },
       { name: "subject", label: "Subject", type: "text", required: true, colSpan: 2, placeholder: "Offer of engagement as a delivery rider" },
-      { name: "body", label: "Letter body", type: "textarea", required: true, colSpan: 2, hint: "Use {{name}}, {{riderId}}, {{company}}, {{joiningDate}} and {{rateCard}} where the rider's details go." },
+      { name: "body", label: "Letter body", type: "textarea", required: true, colSpan: 2, hint: "Use {{name}}, {{riderId}}, {{designation}}, {{company}}, {{joiningDate}}, {{salary}} and {{rateCard}} where the details go. Start a line with \"- \" for a bullet. The letterhead, salary annexure and signature block are added automatically." },
     ],
   },
 

@@ -140,7 +140,7 @@ describe("hr: employee status and edit audit", () => {
         mobile: "9111111111",
         aadhaar: "999988887777",
         pan: "ABCDE1234F",
-        address: "12 Site Road",
+        temporaryStreet: "12 Site Road",
         altContact: "",
         employmentTypeId: otherType.id,
         designationId: "",
@@ -151,11 +151,11 @@ describe("hr: employee status and edit audit", () => {
         where: { entity: "Employee", entityId: e.id, action: "UPDATE" }, orderBy: { createdAt: "desc" },
       });
       const changes = audit.changes as Record<string, { from: unknown; to: unknown }>;
-      expect(Object.keys(changes).sort()).toEqual(["aadhaar", "address", "employmentTypeId", "mobile", "name", "pan"]);
+      expect(Object.keys(changes).sort()).toEqual(["aadhaar", "employmentTypeId", "mobile", "name", "pan", "temporaryStreet"]);
       expect(changes.name).toEqual({ from: e.name, to: `${e.name} renamed` });
       expect(changes.mobile).toEqual({ from: "9000000000", to: "9111111111" });
       expect(changes.employmentTypeId).toEqual({ from: typeId, to: otherType.id });
-      expect(changes.address).toEqual({ from: null, to: "12 Site Road" });
+      expect(changes.temporaryStreet).toEqual({ from: null, to: "12 Site Road" });
       expect(changes.aadhaar).toEqual({ from: `•••••••• ${e.aadhaar.slice(-4)}`, to: "•••••••• 7777" });
       expect(changes.pan).toEqual({ from: null, to: "•••••• 234F" });
       expect(JSON.stringify(audit.changes)).not.toContain("999988887777");

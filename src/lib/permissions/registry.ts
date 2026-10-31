@@ -225,6 +225,7 @@ perm("hr", "attendance", "view", "See attendance", G_HR, "TAB");
 perm("hr", "attendance", "mark", "Mark attendance for a day", G_HR, "BUTTON", "Re-marking a day corrects it; it never stacks a second row.");
 perm("hr", "attendance", "markAll", "Mark everyone present at once", G_HR, "BUTTON");
 perm("hr", "attendance", "tabReport", "Workforce tab — Attendance report", G_HR, "TAB");
+perm("hr", "attendance", "tabLog", "Workforce tab — Punch log", G_HR, "TAB", "Every check-in and check-out from the app or the top bar, day by day.");
 perm("hr", "attendance", "export", "Export the attendance report", G_HR, "BUTTON");
 perm("hr", "attendance", "punch", "Punch in / out from the app", G_HR, "ACTION", "One's own attendance, with the phone's location.");
 
@@ -438,6 +439,7 @@ const REPORTS: Array<[key: string, label: string]> = [
   ["payoutSummary", "Payout summary"],
   ["advanceOutstanding", "Advance outstanding"],
   ["teleCallerDaily", "Tele-caller daily summary"],
+  ["attendanceRegister", "Attendance register"],
 ];
 
 for (const [key, label] of REPORTS) {

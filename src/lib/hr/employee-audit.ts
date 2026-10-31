@@ -14,7 +14,7 @@ export type EditableEmployee = {
   permanentCity?: string | null;
   permanentState?: string | null;
   permanentPinCode?: string | null;
-  address: string | null;
+  address?: string | null;
   altContact: string | null;
   employmentTypeId: string;
   designationId: string | null;
@@ -49,7 +49,7 @@ export function editableEmployee(e: EditableEmployee): EditableEmployee {
     permanentCity: e.permanentCity ?? null,
     permanentState: e.permanentState ?? null,
     permanentPinCode: e.permanentPinCode ?? null,
-    address: e.address,
+    address: e.address ?? null,
     altContact: e.altContact,
     employmentTypeId: e.employmentTypeId,
     designationId: e.designationId,

@@ -10,6 +10,7 @@ import {
 import { referralStatus } from "@/lib/riders/referrals";
 import { PROFILE_EDIT_LABEL, storedChanges, type ProfileEditKey } from "@/lib/hr/profile-edit";
 import { formatDate } from "@/lib/utils";
+import { PERSONAL_ADDRESS_LABEL, PROFESSIONAL_ADDRESS_LABEL, personalAddress, professionalAddress } from "@/lib/hr/address";
 
 import { toneOf, words, type RecordAction, type RecordView } from "./shared";
 
@@ -306,7 +307,8 @@ export async function employeeRecord(ctx: AuthContext, id: string): Promise<Reco
           { label: "Left on", value: employee.leftOn?.toISOString() ?? null, format: "date" },
           { label: "Referral ID", value: employee.referralCode },
           { label: "Referred by", value: employee.referredBy ? `${employee.referredBy.name} (${employee.referredBy.employeeCode})` : null },
-          { label: "Address", value: employee.address, wide: true },
+          { label: PROFESSIONAL_ADDRESS_LABEL, value: professionalAddress(employee), wide: true },
+          { label: PERSONAL_ADDRESS_LABEL, value: personalAddress(employee), wide: true },
         ],
       },
     ],

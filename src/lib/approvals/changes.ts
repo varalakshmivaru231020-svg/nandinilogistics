@@ -5,6 +5,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { PERM } from "@/lib/permissions/codes";
 import { usersHolding } from "@/lib/rbac/holders";
 import { claimEmployeeStatus } from "@/lib/hr/employee-status";
+import { autoSubmitOnboarding } from "@/lib/riders/auto-submit";
 
 import { approversFor, INBOX_HREF } from "./inbox";
 import {
@@ -209,6 +210,8 @@ async function applyChange(
         data: p.companyIds.map((companyId) => ({ employeeId: id, companyId })),
         skipDuplicates: true,
       });
+      // The approved edit may be what completed the form.
+      await autoSubmitOnboarding(tx, id, { resubmitRejected: true });
       return;
     }
     case "STATUS": {
@@ -300,5 +303,7 @@ export async function decideNewEmployee(
     raisedById: e.createdById, decision: check.decision, what: `New record ${e.employeeCode} — ${e.name}`,
     note: check.note, href: `/hr/${e.id}`, entity: "Employee", entityId: e.id,
   });
+  // Approved and already complete: into the Onboarding queue at once.
+  if (check.decision === "APPROVED") await autoSubmitOnboarding(tx, e.id);
   return { ...e, decision: check.decision, note: check.note };
 }
