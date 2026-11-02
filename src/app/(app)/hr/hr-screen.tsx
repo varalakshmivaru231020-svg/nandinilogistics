@@ -10,6 +10,7 @@ import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components
 import { Button } from "@/components/ui/button";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { useToast } from "@/components/ui/toast";
+import { Drawer } from "@/components/ui/drawer";
 import { Modal } from "@/components/ui/modal";
 import { decideApprovalAction } from "@/app/(app)/approvals/actions";
 import { COUNTRY_CODES } from "@/lib/forms/dial-codes";
@@ -1070,11 +1071,12 @@ export function EmployeeForm({
   }
 
   return (
-    <Modal
+    <Drawer
       open
       onClose={onClose}
       title={employee ? "Edit employee" : "New employee"}
       description="Name, mobile, photo and Aadhaar are mandatory"
+      size="full"
       footer={
         <>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
@@ -1452,6 +1454,6 @@ export function EmployeeForm({
         </div>
 
       </form>
-    </Modal>
+    </Drawer>
   );
 }
