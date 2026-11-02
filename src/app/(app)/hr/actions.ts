@@ -222,7 +222,7 @@ async function assertMayAddType(ctx: Awaited<ReturnType<typeof authorize>>, empl
   if (!type) throw new Error("Pick an employment type from the list.");
   const staff = isInternalStaffType(type.name) || type.name.trim().toLowerCase() === "team leader";
   if (staff && !ctx.has(PERM.hr.employee.createStaff)) {
-    throw new Error("Only Super Admin can add Internal Staff or Team Leader records. Riders can be added by anyone.");
+    throw new Error("You do not have permission to add Internal Staff or Team Leader records.");
   }
 }
 

@@ -136,6 +136,9 @@ export const ROLES: RoleSeed[] = [
 
       // Onboarding review for own team, the rider record and its ID card.
       "hr.employee.create",
+      // Team Leaders also take on the tele-callers and office staff under
+      // them; the record still waits for Super Admin's approval.
+      "hr.employee.createStaff",
       "hr.employee.update",
       // Asks; Super Admin approves the deletion.
       "hr.employee.delete",

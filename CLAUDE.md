@@ -63,7 +63,7 @@ decides their own request. "Super Admin" is the flag or an approver holding
   creator's edits to their own still-pending record apply directly.
 - Advances record `requestedById`; a Team Leader cannot approve one they
   raised.
-- Only `hr.employee.createStaff` (Admin) adds Internal Staff or Team Leader
+- Only `hr.employee.createStaff` (Admin and Team Leader by default) adds Internal Staff or Team Leader
   records.
 
 Everything waiting is one list, `/approvals` (`src/lib/approvals/inbox.ts`),

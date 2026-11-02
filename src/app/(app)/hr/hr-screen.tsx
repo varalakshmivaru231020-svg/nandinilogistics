@@ -255,7 +255,7 @@ export function HrScreen({
   // would have nothing honest to offer.
   const canAdd = Boolean(can.create) && (view !== "staff" || Boolean(can.createStaff));
   const addBlockedReason = view === "staff" && can.create && !can.createStaff
-    ? "Only Super Admin adds Internal Staff and Team Leader records."
+    ? "Your role cannot add Internal Staff or Team Leader records. Ask Admin to grant it under Administration → Roles."
     : null;
 
   return (
