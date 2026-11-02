@@ -11,8 +11,7 @@ import { LeadSchema, readIdList } from "@/lib/sales/lead-schema";
 import { captureLead, recordFirstResponse } from "@/lib/sales/lead-service";
 import { LeadEditError } from "@/lib/sales/lead-edit";
 import { applyLeadEdit } from "@/lib/sales/lead-edit-service";
-import { initialApproval, leadWorkBlock } from "@/lib/approvals/rule";
-import { notifyApprovalRequested } from "@/lib/approvals/inbox";
+import { leadWorkBlock } from "@/lib/approvals/rule";
 
 /** Refuses work on a lead still waiting for approval, or rejected. */
 function assertWorkable(lead: { approval: string }) {
@@ -73,11 +72,7 @@ export async function createLeadAction(formData: FormData): Promise<ActionResult
       canAssign: ctx.has(PERM.sales.lead.assign),
       receivesLeads: ctx.has(PERM.sales.lead.receiveAssignment),
     };
-    // The fixed approval rule: a tele-caller's lead waits for a Team Leader.
-    const approval = initialApproval({
-      receivesLeads: ctx.has(PERM.sales.lead.receiveAssignment),
-      canDecide: ctx.has(PERM.approvals.queue.decide),
-    });
+    // Leads do not require approval; they go straight to APPROVED
     const { lead, auto, duplicateOf } = await prisma.$transaction(async (tx) => {
       const captured = await captureLead(
         tx,
@@ -86,21 +81,11 @@ export async function createLeadAction(formData: FormData): Promise<ActionResult
           companyIds,
           customFields,
           ownerId: String(formData.get("ownerId") ?? "") || null,
-          approval: approval === "PENDING" ? "PENDING" : "APPROVED",
+          approval: "APPROVED",
         },
         actor,
         new Date(),
       );
-      if (captured.lead.approval === "PENDING") {
-        await notifyApprovalRequested(tx, {
-          companyIds,
-          actorId: ctx.id,
-          title: `Lead ${captured.lead.leadNo} — ${captured.lead.name} waits for approval`,
-          body: `Captured by ${ctx.name}`,
-          entity: "Lead",
-          entityId: captured.lead.id,
-        });
-      }
       return captured;
     });
 
@@ -108,8 +93,7 @@ export async function createLeadAction(formData: FormData): Promise<ActionResult
       action: "CREATE", entity: "Lead", entityId: lead.id, userId: ctx.id,
       summary:
         `Captured lead ${lead.leadNo} — ${lead.name}${duplicateOf ? ` (possible duplicate of ${duplicateOf.name})` : ""}` +
-        (auto ? " — assigned round-robin" : "") +
-        (lead.approval === "PENDING" ? " — pending approval" : ""),
+        (auto ? " — assigned round-robin" : ""),
     });
 
     revalidatePath("/sales/leads");

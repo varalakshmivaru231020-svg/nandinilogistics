@@ -16,6 +16,8 @@ import { Drawer } from "@/components/ui/drawer";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { COUNTRY_CODES } from "@/lib/forms/dial-codes";
+import { MobileInput } from "@/components/ui/mobile-input";
+import { MultiPick } from "@/components/ui/multi-pick";
 import { cn, maskPhone, phone } from "@/lib/utils";
 import { changeLeadStageAction, createLeadAction, logFollowUpAction } from "./actions";
 
@@ -493,6 +495,7 @@ function NewLeadModal({
 }) {
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [companyIds, setCompanyIds] = React.useState<string[]>([]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -562,22 +565,29 @@ function NewLeadModal({
                     >
                       {COUNTRY_CODES.map((c) => <option key={c} value={c}>{c}</option>)}
                     </Select>
-                    <Input name="phone" type="tel" required={f.required} placeholder={placeholderFor("PHONE")} />
+                    <MobileInput name="phone" required={f.required} placeholder={placeholderFor("PHONE")} />
                   </div>
                 </Field>
               );
             case "altPhone":
-              return <Field key={f.id} label={f.label} required={f.required}><Input name="altPhone" type="tel" required={f.required} placeholder={placeholderFor("PHONE")} /></Field>;
+              return <Field key={f.id} label={f.label} required={f.required}><MobileInput name="altPhone" required={f.required} placeholder={placeholderFor("PHONE")} /></Field>;
             case "email":
               return <Field key={f.id} label={f.label} required={f.required}><Input name="email" type="email" required={f.required} placeholder="Type here" /></Field>;
             case "location":
               return <Field key={f.id} label={f.label} required={f.required}><Input name="location" required={f.required} placeholder="Area or hub" /></Field>;
             case "companyIds":
               return (
-                <Field key={f.id} label={f.label} required={f.required} hint="Hold Ctrl / ⌘ to tag more than one.">
-                  <Select name="companyIds" multiple required={f.required} className="min-h-[88px]">
-                    {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </Select>
+                <Field key={f.id} label={f.label} required={f.required} hint="Type to search. Pick one or more; tap a chip to remove it.">
+                  <MultiPick
+                    name="companyIds"
+                    required={f.required}
+                    options={companies.map((c) => ({ id: c.id, label: c.name }))}
+                    value={companyIds}
+                    onChange={setCompanyIds}
+                    placeholder="Search and pick a company…"
+                    addMorePlaceholder="Add another company…"
+                    emptyLabel="No company by that name"
+                  />
                 </Field>
               );
             case "ownerId":

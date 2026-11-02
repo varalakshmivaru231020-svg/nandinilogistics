@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isValidMobile } from "@/lib/forms/phone";
+
 /**
  * What a lead must look like to be captured — the SOW's New stage: name,
  * mobile number, companies and location. Shared by the capture action and
@@ -10,8 +12,8 @@ import { z } from "zod";
  */
 export const LeadSchema = z.object({
   name: z.string().trim().min(2, "Name is required"),
-  phone: z.string().trim().min(8, "A valid mobile number is required"),
-  altPhone: z.string().trim().optional(),
+  phone: z.string().trim().refine(isValidMobile, "Mobile number must be a 10-digit mobile number."),
+  altPhone: z.string().trim().refine((v) => v === "" || isValidMobile(v), "Alternate number must be a 10-digit mobile number.").optional(),
   email: z.string().trim().email("Enter a valid email").or(z.literal("")).optional(),
   location: z.string().trim().optional(),
   requirement: z.string().trim().optional(),

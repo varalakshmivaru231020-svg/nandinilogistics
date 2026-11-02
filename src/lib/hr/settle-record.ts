@@ -3,7 +3,6 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { recordAudit } from "@/lib/audit";
 import { isRiderType } from "@/lib/riders/onboarding";
-import { autoSubmitOnboarding } from "@/lib/riders/auto-submit";
 
 import { generateOfferLetter } from "./offer-letter-service";
 
@@ -37,17 +36,36 @@ export async function settleApprovedRecord(
   });
   if (!e || e.approval !== "APPROVED") return "unchanged";
 
+  // Tele-caller's/TL's rider in DRAFT: when approved, move to SUBMITTED for KYC review
   if (isRiderType(e.employmentType.name)) {
-    return (await autoSubmitOnboarding(prisma, e.id)) ? "submitted" : "unchanged";
+    if (e.onboardingStatus === "DRAFT") {
+      const now = new Date();
+      await prisma.employee.update({
+        where: { id: e.id },
+        data: {
+          onboardingStatus: "SUBMITTED",
+          decidedAt: now,
+          decidedById: byUserId,
+          rejectionReason: null,
+        },
+      });
+      await recordAudit({
+        action: "APPROVE", entity: "Employee", entityId: e.id, userId: byUserId,
+        summary: `${e.name} (${e.employeeCode}) approved — rider submitted for onboarding review`,
+        changes: { onboardingStatus: { from: "DRAFT", to: "SUBMITTED" } },
+      });
+      return "submitted";
+    }
+    return "unchanged";
   }
 
+  // Tele-caller's/TL's staff in DRAFT: when approved, move to ACCEPTED
   if (e.onboardingStatus === "ACCEPTED") return "unchanged";
   const now = new Date();
   const claimed = await prisma.employee.updateMany({
     where: { id: e.id, onboardingStatus: e.onboardingStatus },
     data: {
       onboardingStatus: "ACCEPTED",
-      status: "ACTIVE",
       decidedAt: now,
       decidedById: byUserId,
       rejectionReason: null,
@@ -59,7 +77,7 @@ export async function settleApprovedRecord(
   const letter = await generateOfferLetter(e.id);
   await recordAudit({
     action: "APPROVE", entity: "Employee", entityId: e.id, userId: byUserId,
-    summary: `${e.name} (${e.employeeCode}) accepted as staff` +
+    summary: `${e.name} (${e.employeeCode}) approved — staff accepted` +
       (letter.ok ? "; offer letter generated" : `; no offer letter: ${letter.reason}`),
     changes: { onboardingStatus: { from: e.onboardingStatus, to: "ACCEPTED" } },
   });

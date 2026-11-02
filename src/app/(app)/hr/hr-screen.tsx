@@ -16,6 +16,7 @@ import { decideApprovalAction } from "@/app/(app)/approvals/actions";
 import { COUNTRY_CODES } from "@/lib/forms/dial-codes";
 import { cn } from "@/lib/utils";
 import { SearchSelect } from "@/components/ui/search-select";
+import { MobileInput } from "@/components/ui/mobile-input";
 import { personalAddress, professionalAddress } from "@/lib/hr/address";
 import { uploadProblem } from "@/lib/upload-rules";
 import type { AttendanceSummaryRow } from "@/lib/hr/attendance-report";
@@ -1183,7 +1184,7 @@ export function EmployeeForm({
             >
               {COUNTRY_CODES.map((c) => <option key={c} value={c}>{c}</option>)}
             </Select>
-            <Input name="mobile" defaultValue={employee?.mobile} placeholder="98765 43210" required />
+            <MobileInput name="mobile" defaultValue={employee?.mobile} placeholder="98765 43210" required />
           </div>
         </Field>
 
@@ -1195,7 +1196,7 @@ export function EmployeeForm({
             <Input name="pan" defaultValue={employee?.pan ?? ""} placeholder="ABCDE1234F" className="uppercase" />
           </Field>
           <Field label="Alternate number">
-            <Input name="altContact" defaultValue={employee?.altContact ?? ""} placeholder="+91 90000 00000" />
+            <MobileInput name="altContact" defaultValue={employee?.altContact ?? ""} placeholder="+91 90000 00000" />
           </Field>
         </div>
 
@@ -1270,10 +1271,10 @@ export function EmployeeForm({
               <p className="mb-2 text-[11px] font-bold uppercase tracking-[.12em] text-muted-400">Emergency contacts · mandatory for riders</p>
               <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
                 <Field label="Father / mother mobile" required>
-                  <Input name="emergencyMobileFamily" defaultValue={employee?.emergencyMobileFamily ?? ""} placeholder="98765 43210" />
+                  <MobileInput name="emergencyMobileFamily" defaultValue={employee?.emergencyMobileFamily ?? ""} placeholder="98765 43210" />
                 </Field>
                 <Field label="Friend mobile" required>
-                  <Input name="emergencyMobileFriend" defaultValue={employee?.emergencyMobileFriend ?? ""} placeholder="98765 43210" />
+                  <MobileInput name="emergencyMobileFriend" defaultValue={employee?.emergencyMobileFriend ?? ""} placeholder="98765 43210" />
                 </Field>
               </div>
             </div>

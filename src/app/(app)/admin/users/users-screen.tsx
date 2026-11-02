@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Badge, Field, Input, Select } from "@/components/ui/primitives";
+import { MobileInput } from "@/components/ui/mobile-input";
 import { ListToolbar } from "@/components/list/list-toolbar";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { USER_STATUSES, USER_STATUS_LABEL } from "@/lib/admin/list-filters";
@@ -271,7 +272,7 @@ function UserForm({
             <Input name="email" type="email" required defaultValue={user?.email ?? ""} />
           </Field>
           <Field label="Phone">
-            <Input name="phone" type="tel" defaultValue={user?.phone ?? ""} />
+            <MobileInput name="phone" defaultValue={user?.phone ?? ""} />
           </Field>
           <Field label="Department">
             <Select name="departmentId" defaultValue={user?.departmentId ?? ""}>

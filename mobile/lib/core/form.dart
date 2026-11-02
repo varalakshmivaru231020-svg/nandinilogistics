@@ -537,7 +537,12 @@ class _FormBodyState extends State<FormBody> {
           'textarea' => TextInputType.multiline,
           _ => TextInputType.text,
         },
-        formatters: f.caps ? [UpperCaseFormatter()] : null,
+        // A mobile number is ten digits, as the web's own box enforces.
+        formatters: kind == 'phone'
+            ? [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)]
+            : f.caps
+                ? [UpperCaseFormatter()]
+                : null,
       );
 
       // The web's datalist: typed, with the names it would suggest offered

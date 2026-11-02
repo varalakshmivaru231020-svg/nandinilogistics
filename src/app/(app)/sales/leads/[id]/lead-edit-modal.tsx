@@ -5,6 +5,8 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Alert, Field, Input, Select, Textarea } from "@/components/ui/primitives";
+import { MobileInput } from "@/components/ui/mobile-input";
+import { MultiPick } from "@/components/ui/multi-pick";
 import { updateLeadAction } from "../actions";
 
 type Lookup = Array<{ id: string; name: string }>;
@@ -38,6 +40,7 @@ export function EditLeadModal({
 }) {
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [companyIds, setCompanyIds] = React.useState<string[]>(lead.companyIds);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -72,14 +75,14 @@ export function EditLeadModal({
           </Field>
           <Field label="Mobile number" required hint={contactHint}>
             {contact ? (
-              <Input name="phone" type="tel" required defaultValue={contact.phone} />
+              <MobileInput name="phone" required defaultValue={contact.phone} />
             ) : (
               <Input type="tel" value={lead.maskedPhone} disabled readOnly />
             )}
           </Field>
           <Field label="Alternate number" hint={contactHint}>
             {contact ? (
-              <Input name="altPhone" type="tel" defaultValue={contact.altPhone} />
+              <MobileInput name="altPhone" defaultValue={contact.altPhone} />
             ) : (
               <Input value="••••" disabled readOnly />
             )}
@@ -95,9 +98,15 @@ export function EditLeadModal({
             <Input name="location" defaultValue={lead.location} placeholder="Area or hub" />
           </Field>
           <Field label="Companies" hint="Hold Ctrl / ⌘ to tag more than one.">
-            <Select name="companyIds" multiple defaultValue={lead.companyIds} className="min-h-[88px]">
-              {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </Select>
+            <MultiPick
+              name="companyIds"
+              options={companies.map((c) => ({ id: c.id, label: c.name }))}
+              value={companyIds}
+              onChange={setCompanyIds}
+              placeholder="Search and pick a company…"
+              addMorePlaceholder="Add another company…"
+              emptyLabel="No company by that name"
+            />
           </Field>
           <Field label="Notes" className="sm:col-span-2">
             <Textarea name="requirement" rows={2} defaultValue={lead.requirement} placeholder="Has own bike, prefers evening shift" />

@@ -3,6 +3,7 @@
  * fields may be asked for, and what a request actually changes.
  */
 import { IFSC_RE } from "@/lib/riders/onboarding";
+import { isValidMobile } from "@/lib/forms/phone";
 
 export const PROFILE_EDIT_KEYS = [
   "mobile", "altContact", "address", "emergencyMobileFamily", "emergencyMobileFriend",
@@ -40,8 +41,8 @@ export function profileEditChanges(
     let v = String(posted[key] ?? "").trim();
     if (!v) continue;
     if (key === "bankIfsc") v = v.toUpperCase();
-    if (PHONES.has(key) && v.replace(/\D/g, "").length < 10) {
-      return { ok: false, error: `${PROFILE_EDIT_LABEL[key]} must be a valid number.` };
+    if (PHONES.has(key) && !isValidMobile(v)) {
+      return { ok: false, error: `${PROFILE_EDIT_LABEL[key]} must be a 10-digit mobile number.` };
     }
     if (key === "bankIfsc" && !IFSC_RE.test(v)) return { ok: false, error: "IFSC should look like HDFC0001234" };
     if (v !== (current[key] ?? "")) changes[key] = v;

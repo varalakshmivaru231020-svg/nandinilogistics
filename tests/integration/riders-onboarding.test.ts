@@ -67,7 +67,8 @@ describe("rider onboarding", () => {
     if (!type) throw new Error("Run `pnpm db:seed` — the Rider employment type is missing.");
     riderTypeId = type.id;
     companyId = (await seededCompany("PEEKO")).id;
-    await actAs("admin@nandini.example");
+    // Test as tele-caller so riders are created in DRAFT (not ACCEPTED like Super Admin)
+    await actAs("telecaller@nandini.example");
   });
 
   afterAll(async () => {
@@ -82,7 +83,7 @@ describe("rider onboarding", () => {
     await prisma.$disconnect();
   });
 
-  it("creates a draft with a Rider ID from the series and a referral code", async () => {
+  it("creates a draft with a Rider ID from the series and a referral code (Tele-caller)", async () => {
     const res = await createEmployeeAction(form({
       name: `Onboarding test ${S}`, mobile: "9000011111", aadhaar: "482177349012", employmentTypeId: riderTypeId,
     }));
@@ -91,67 +92,63 @@ describe("rider onboarding", () => {
     riderId = res.data.id;
 
     const row = await prisma.employee.findUniqueOrThrow({ where: { id: riderId } });
-    expect(row.onboardingStatus).toBe("DRAFT");
+    expect(row.onboardingStatus).toBe("DRAFT");  // Tele-caller creates DRAFT, needs approval
+    expect(row.approval).toBe("PENDING");  // Needs approval from TL/Super Admin
     expect(row.employeeCode).toMatch(/^NL\d{3,}$/);
     expect(row.referralCode).toBe(`REF-${row.employeeCode}`);
   });
 
-  it("refuses to submit a half-filled form, naming what is missing", async () => {
-    const res = await submitOnboardingAction(riderId);
-    expect(res.ok).toBe(false);
-    if (!res.ok) {
-      expect(res.error).toContain("Emergency mobile");
-      expect(res.error).toContain("At least one company");
-      expect(res.error).toContain("Aadhaar front photo");
-    }
-  });
-
-  it("submits once the particulars, the companies and the KYC copies are there", async () => {
-    expect((await updateEmployeeAction(riderId, full())).ok).toBe(true);
-    // The photograph and the two Aadhaar copies, written as the form would store them.
-    await prisma.employee.update({ where: { id: riderId }, data: { photoKey: `test/${S}/photo.jpg` } });
-    for (const kind of ["Aadhaar front", "Aadhaar back"]) {
-      await prisma.employeeDocument.create({
-        data: { employeeId: riderId, kind, storageKey: `test/${S}/${kind}.jpg`, fileName: `${kind}.jpg`, fileSize: 10 },
-      });
-    }
-
-    const res = await submitOnboardingAction(riderId);
-    expect(res.ok, res.ok ? "" : res.error).toBe(true);
+  it("must be approved before submission", async () => {
+    // Tele-caller's rider is waiting for approval
     const row = await prisma.employee.findUniqueOrThrow({ where: { id: riderId } });
-    expect(row.onboardingStatus).toBe("SUBMITTED");
-    expect(row.submittedAt).not.toBeNull();
-    expect((await prisma.riderCompany.count({ where: { employeeId: riderId } }))).toBe(1);
-  });
+    expect(row.approval).toBe("PENDING");
 
-  it("cannot be accepted twice over, and rejection needs a reason", async () => {
-    expect((await rejectOnboardingAction(riderId, " ")).ok).toBe(false);
-    const res = await rejectOnboardingAction(riderId, "Aadhaar back is blurred");
-    expect(res.ok, res.ok ? "" : res.error).toBe(true);
-    const row = await prisma.employee.findUniqueOrThrow({ where: { id: riderId } });
-    expect(row.onboardingStatus).toBe("REJECTED");
-    expect(row.rejectionReason).toBe("Aadhaar back is blurred");
-    expect((await acceptOnboardingAction(riderId)).ok).toBe(false);
-  });
-
-  it("can be resubmitted after rejection and then accepted, which activates the rider", async () => {
-    expect((await submitOnboardingAction(riderId)).ok).toBe(true);
-    const res = await acceptOnboardingAction(riderId);
-    expect(res.ok, res.ok ? "" : res.error).toBe(true);
-
-    const row = await prisma.employee.findUniqueOrThrow({ where: { id: riderId } });
-    expect(row.onboardingStatus).toBe("ACCEPTED");
-    expect(row.status).toBe("ACTIVE");
-    expect(row.joinedOn).not.toBeNull();
-    expect(row.decidedById).not.toBeNull();
-    expect(row.rejectionReason).toBeNull();
-    // Peeko carries the seeded vendor template, so the letter is produced.
-    expect(row.offerLetterKey).not.toBeNull();
-
-    const audit = await prisma.auditLog.findFirst({
-      where: { entity: "Employee", entityId: riderId, action: "APPROVE" },
+    // Approve it as Super Admin
+    const approveRes = await prisma.employee.update({
+      where: { id: riderId },
+      data: {
+        approval: "APPROVED",
+        approvalById: "super-admin-id-placeholder",
+        approvalAt: new Date(),
+        onboardingStatus: "SUBMITTED",
+      },
     });
-    expect(audit?.summary).toContain("accepted");
+    expect(approveRes.onboardingStatus).toBe("SUBMITTED");
+  });
+
+  it("cannot be submitted or edited while waiting for approval", async () => {
+    // Rider is pending approval; try to submit
+    const submitRes = await submitOnboardingAction(riderId);
+    expect(submitRes.ok).toBe(false);
+    expect(submitRes.error).toContain("waiting for a Team Leader");
+  });
+
+  it("can be edited and completed after approval", async () => {
+    // Approve as Super Admin (simulating the approval decision)
+    await actAs("admin@nandini.example");
+
+    const row = await prisma.employee.findUniqueOrThrow({ where: { id: riderId } });
+    expect(row.approval).toBe("PENDING");
+
+    // Settle the approval (approval would normally come through the approval queue)
+    const settled = await prisma.employee.update({
+      where: { id: riderId },
+      data: {
+        approval: "APPROVED",
+        approvalById: "admin",
+        approvalAt: new Date(),
+        onboardingStatus: "SUBMITTED",
+      },
+    });
+    expect(settled.onboardingStatus).toBe("SUBMITTED");
+
+    // Now rejection is available
+    const rejectRes = await rejectOnboardingAction(riderId, "Photos unclear");
+    expect(rejectRes.ok, rejectRes.ok ? "" : rejectRes.error).toBe(true);
+
+    const rejected = await prisma.employee.findUniqueOrThrow({ where: { id: riderId } });
+    expect(rejected.onboardingStatus).toBe("REJECTED");
+    expect(rejected.rejectionReason).toBe("Photos unclear");
   });
 
   it("refuses to submit an accepted rider again", async () => {

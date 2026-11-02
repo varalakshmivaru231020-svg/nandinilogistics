@@ -15,6 +15,7 @@ import { checkStatusChange, claimEmployeeStatus, statusLabel } from "@/lib/hr/em
 import { employeeScope } from "@/lib/hr/list-filters";
 import { nextDocumentNumber } from "@/lib/numbering";
 import { generateOfferLetter } from "@/lib/hr/offer-letter-service";
+import { isValidMobile } from "@/lib/forms/phone";
 import {
   AADHAAR_RE, aadhaarDigits, IFSC_RE, isInternalStaffType, isRiderType, MANDATORY_RIDER_DOCS,
   onboardingChecklist, onboardingTransition, PAN_RE,
@@ -42,7 +43,7 @@ import { sendWhatsAppTemplate } from "@/lib/whatsapp";
  */
 const EmployeeSchema = z.object({
   name: z.string().trim().min(2, "Name is required"),
-  mobile: z.string().trim().min(8, "A valid mobile number is required"),
+  mobile: z.string().trim().refine(isValidMobile, "Mobile number must be a 10-digit mobile number."),
   aadhaar: z.string().trim().refine((v) => AADHAAR_RE.test(aadhaarDigits(v)), "Aadhaar must be 12 digits"),
   pan: z.string().trim().toUpperCase().refine((v) => v === "" || PAN_RE.test(v), "PAN should look like ABCDE1234F").optional(),
   temporaryStreet: z.string().trim().optional(),
@@ -53,11 +54,11 @@ const EmployeeSchema = z.object({
   permanentCity: z.string().trim().optional(),
   permanentState: z.string().trim().optional(),
   permanentPinCode: z.string().trim().regex(/^(|[0-9]{6})$/, "Personal address PIN code must be 6 digits").optional(),
-  altContact: z.string().trim().optional(),
+  altContact: z.string().trim().refine((v) => v === "" || isValidMobile(v), "Alternate number must be a 10-digit mobile number.").optional(),
   employmentTypeId: z.string().min(1, "Employment type is required"),
   designationId: z.string().optional(),
-  emergencyMobileFamily: z.string().trim().optional(),
-  emergencyMobileFriend: z.string().trim().optional(),
+  emergencyMobileFamily: z.string().trim().refine((v) => v === "" || isValidMobile(v), "Emergency mobile (family) must be a 10-digit mobile number.").optional(),
+  emergencyMobileFriend: z.string().trim().refine((v) => v === "" || isValidMobile(v), "Emergency mobile (friend) must be a 10-digit mobile number.").optional(),
   bankAccountNo: z.string().trim().optional(),
   bankHolderName: z.string().trim().optional(),
   bankIfsc: z.string().trim().toUpperCase().refine((v) => v === "" || IFSC_RE.test(v), "IFSC should look like HDFC0001234").optional(),
@@ -240,8 +241,9 @@ export async function createEmployeeAction(formData: FormData): Promise<ActionRe
     if (!parsed.success) throw new Error(parsed.error.issues[0].message);
     const data = particularsOf(parsed.data);
     await assertMayAddType(ctx, data.employmentTypeId);
-    // A Team Leader's or tele-caller's new record waits for approval.
-    const pending = needsApproval(personOf(ctx));
+    // Super Admin's records go straight to ACTIVE. Tele-caller's and Team Leader's wait for approval.
+    const isSuperAdmin = !needsApproval(personOf(ctx));
+    const pending = !isSuperAdmin;
     const companyIds = readCompanyIds(formData);
     await assertCompaniesExist(companyIds);
     const referrer = await readReferrer(formData, null);
@@ -250,6 +252,7 @@ export async function createEmployeeAction(formData: FormData): Promise<ActionRe
     const employee = await prisma.$transaction(async (tx) => {
       // The Rider ID — NL001 — from the series Masters holds.
       const employeeCode = await nextDocumentNumber(tx, "RIDER");
+      const now = new Date();
       return tx.employee.create({
         data: {
           employeeCode,
@@ -259,17 +262,18 @@ export async function createEmployeeAction(formData: FormData): Promise<ActionRe
           createdById: ctx.id,
           approval: pending ? "PENDING" : "APPROVED",
           approvalById: pending ? null : ctx.id,
-          approvalAt: pending ? null : new Date(),
+          approvalAt: pending ? null : now,
+          // Super Admin's records go straight to ACCEPTED, not DRAFT
+          onboardingStatus: pending ? "DRAFT" : "ACCEPTED",
+          decidedAt: pending ? null : now,
+          decidedById: pending ? null : ctx.id,
           companies: companyIds.length ? { create: companyIds.map((companyId) => ({ companyId })) } : undefined,
         },
       });
     });
 
     await saveFiles(employee.id, formData, ctx.id);
-    // Approved on the spot (Super Admin's own record): staff are accepted at
-    // once with their offer letter; a complete rider goes straight to the
-    // Onboarding queue without a separate Submit.
-    if (!pending) await settleApprovedRecord(employee.id, ctx.id);
+    // Super Admin's record created and immediately active; no further approval or settling needed.
     if (employee.referralApproval === "PENDING") await askReferralApproval(ctx, employee, companyIds);
     if (pending) {
       await notifyChainRequested(prisma, ctx, {
@@ -282,8 +286,8 @@ export async function createEmployeeAction(formData: FormData): Promise<ActionRe
 
     await recordAudit({
       action: "CREATE", entity: "Employee", entityId: employee.id, userId: ctx.id,
-      summary: `Added ${employee.name} as ${employee.employeeCode} — onboarding draft` +
-        (pending ? " — waiting for approval" : "") +
+      summary: `Added ${employee.name} as ${employee.employeeCode}` +
+        (pending ? " — draft, waiting for approval" : " — accepted, active immediately") +
         (employee.referredById ? (employee.referralApproval === "PENDING" ? " — referral pending approval" : " — referral recorded") : ""),
     });
     revalidatePath("/hr", "layout");

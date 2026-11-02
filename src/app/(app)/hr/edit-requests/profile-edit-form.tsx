@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Alert, Field, Input, Textarea } from "@/components/ui/primitives";
+import { MobileInput } from "@/components/ui/mobile-input";
 import { useToast } from "@/components/ui/toast";
 import { requestProfileEditAction } from "../actions";
 
@@ -34,10 +35,10 @@ export function ProfileEditForm({ current }: { current: Record<string, string> }
     >
       <h2 className="text-sm font-semibold text-navy-800 sm:col-span-2">Request a profile change</h2>
       {error && <div className="sm:col-span-2"><Alert tone="error">{error}</Alert></div>}
-      <Field label="Mobile number"><Input name="mobile" type="tel" defaultValue={current.mobile} placeholder="98765 43210" /></Field>
-      <Field label="Alternate number"><Input name="altContact" type="tel" defaultValue={current.altContact} placeholder="98765 43210" /></Field>
-      <Field label="Father / mother mobile"><Input name="emergencyMobileFamily" type="tel" defaultValue={current.emergencyMobileFamily} placeholder="98765 43210" /></Field>
-      <Field label="Friend mobile"><Input name="emergencyMobileFriend" type="tel" defaultValue={current.emergencyMobileFriend} placeholder="98765 43210" /></Field>
+      <Field label="Mobile number"><MobileInput name="mobile" defaultValue={current.mobile} placeholder="98765 43210" /></Field>
+      <Field label="Alternate number"><MobileInput name="altContact" defaultValue={current.altContact} placeholder="98765 43210" /></Field>
+      <Field label="Father / mother mobile"><MobileInput name="emergencyMobileFamily" defaultValue={current.emergencyMobileFamily} placeholder="98765 43210" /></Field>
+      <Field label="Friend mobile"><MobileInput name="emergencyMobileFriend" defaultValue={current.emergencyMobileFriend} placeholder="98765 43210" /></Field>
       <div className="sm:col-span-2">
         <Field label="Address"><Textarea name="address" rows={2} defaultValue={current.address} placeholder="House, area, city" /></Field>
       </div>
