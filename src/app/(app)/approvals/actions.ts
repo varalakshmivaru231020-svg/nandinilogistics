@@ -9,6 +9,7 @@ import { PERM } from "@/lib/permissions/codes";
 import { decideLeadApproval, decideReferralApproval } from "@/lib/approvals/inbox";
 import { decideChange, decideNewEmployee, notifyChainDecided, personOf, tiersOf } from "@/lib/approvals/changes";
 import { checkDecision, isApprovalKind, mayDecideFor } from "@/lib/approvals/rule";
+import { settleApprovedRecord } from "@/lib/hr/settle-record";
 import { acceptOnboardingAction, decideProfileEditAction, rejectOnboardingAction } from "@/app/(app)/hr/actions";
 import { decideAdvanceAction } from "@/app/(app)/advances/actions";
 
@@ -98,6 +99,9 @@ export async function decideApprovalAction(
         break;
       case "RIDER": {
         const e = await prisma.$transaction((tx) => decideNewEmployee(tx, ctx, id, check.decision, why, now));
+        // Approved: staff are accepted with their offer letter; a complete
+        // rider is submitted for onboarding review.
+        if (check.decision === "APPROVED") await settleApprovedRecord(id, ctx.id);
         await recordAudit({
           action: check.decision === "APPROVED" ? "APPROVE" : "REJECT", entity: "Employee", entityId: id, userId: ctx.id,
           summary: `New record ${e.employeeCode} — ${e.name} ${check.decision === "APPROVED" ? "approved" : `rejected — ${why}`}`,

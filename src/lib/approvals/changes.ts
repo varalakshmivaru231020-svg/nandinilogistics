@@ -303,7 +303,5 @@ export async function decideNewEmployee(
     raisedById: e.createdById, decision: check.decision, what: `New record ${e.employeeCode} — ${e.name}`,
     note: check.note, href: `/hr/${e.id}`, entity: "Employee", entityId: e.id,
   });
-  // Approved and already complete: into the Onboarding queue at once.
-  if (check.decision === "APPROVED") await autoSubmitOnboarding(tx, e.id);
   return { ...e, decision: check.decision, note: check.note };
 }
