@@ -155,6 +155,7 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
       <ModuleStats figures={employeeFigures(statRows)} />
       <HrScreen
         tabs={tabs}
+        view={view}
         newLabel={view === "staff" ? "+ New staff member" : "+ New rider"}
         defaultTypeId={
           employmentTypes.find((t) => (view === "staff" ? t.name.trim().toLowerCase() === "internal staff" : isRiderType(t.name)))?.id ?? null

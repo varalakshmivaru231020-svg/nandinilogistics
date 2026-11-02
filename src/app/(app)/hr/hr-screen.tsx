@@ -126,11 +126,19 @@ const TABS = [
 ];
 
 export function HrScreen({
-  tabs, newLabel, defaultTypeId, referrers = [],
+  tabs, view = "riders", newLabel, defaultTypeId, referrers = [],
   tab, date, from, to, rangeError, employees, markable, employmentTypes, designations, companies, dayMarks, report, log = [], can,
 }: {
   /** Which tabs this sidebar entry shows — the list, or mark and report. */
   tabs: string[];
+  /**
+   * Which people this entry is about. The Internal Staff page offers the staff
+   * employment types (Internal Staff, Team Leader — the tele-callers, managers
+   * and leaders); the Riders page offers Rider. A form opened from the staff
+   * page used to default to Rider whenever the viewer could not add staff,
+   * which is the one type that page is not for.
+   */
+  view?: "riders" | "staff" | "attendance";
   /** "+ New rider" or "+ New staff member". */
   newLabel: string;
   /** The employment type a new record starts on. */
@@ -227,6 +235,29 @@ export function HrScreen({
 
   const deactivating = statusTarget ? !isInactive(statusTarget.status) : false;
 
+  const isStaffType = (name: string) => {
+    const n = name.trim().toLowerCase();
+    return n === "internal staff" || n === "team leader";
+  };
+  // The types this page is about…
+  const pageTypes = view === "staff"
+    ? employmentTypes.filter((t) => isStaffType(t.name))
+    : view === "riders"
+      ? employmentTypes.filter((t) => !isStaffType(t.name))
+      : employmentTypes;
+  // …less the staff ones, for someone who may not add staff. Internal Staff
+  // and Team Leader records are Super Admin's to add; an existing record
+  // keeps its own type in the list.
+  const formTypes = can.createStaff
+    ? pageTypes
+    : pageTypes.filter((t) => !isStaffType(t.name) || (editing !== "new" && editing !== null && editing.employmentTypeId === t.id));
+  // On the staff page, adding needs the staff permission — otherwise the form
+  // would have nothing honest to offer.
+  const canAdd = Boolean(can.create) && (view !== "staff" || Boolean(can.createStaff));
+  const addBlockedReason = view === "staff" && can.create && !can.createStaff
+    ? "Only Super Admin adds Internal Staff and Team Leader records."
+    : null;
+
   return (
     <div className="animate-fade-up">
       {/* Tabs, underlined as the design draws them — only when there is a choice */}
@@ -252,6 +283,8 @@ export function HrScreen({
         <StaffTab
           employees={employees}
           can={can}
+          canAdd={canAdd}
+          addBlockedReason={addBlockedReason}
           newLabel={newLabel}
           onEdit={setEditing}
           onRemove={setRemoving}
@@ -321,13 +354,7 @@ export function HrScreen({
       {editing && (
         <EmployeeForm
           employee={editing === "new" ? null : editing}
-          // Internal Staff and Team Leader records are Super Admin's to add;
-          // an existing one keeps its own type in the list.
-          employmentTypes={can.createStaff ? employmentTypes : employmentTypes.filter((t) => {
-            const n = t.name.trim().toLowerCase();
-            const staff = n === "internal staff" || n === "team leader";
-            return !staff || (editing !== "new" && editing?.employmentTypeId === t.id);
-          })}
+          employmentTypes={formTypes.length ? formTypes : employmentTypes}
           defaultTypeId={defaultTypeId}
           referrers={referrers}
           designations={designations}
@@ -398,11 +425,14 @@ export function HrScreen({
 /* -------------------------------- Employees -------------------------------- */
 
 function StaffTab({
-  employees, can, newLabel, onEdit, onRemove, onStatus, onDecide,
+  employees, can, canAdd, addBlockedReason, newLabel, onEdit, onRemove, onStatus, onDecide,
 }: {
   employees: Employee[];
   newLabel: string;
   can: Record<string, boolean>;
+  /** Whether the New button is offered on this page, and if not, why. */
+  canAdd: boolean;
+  addBlockedReason: string | null;
   onEdit: (e: Employee | "new") => void; onRemove: (e: Employee) => void;
   onStatus: (e: Employee) => void;
   onDecide: (e: Employee, decision: "APPROVED" | "REJECTED") => void;
@@ -414,11 +444,13 @@ function StaffTab({
         <span className="text-[13px] font-medium text-muted-600">
           {employees.length} {employees.length === 1 ? "person" : "people"} on record
         </span>
-        {can.create && (
+        {canAdd ? (
           <Button size="md" onClick={() => onEdit("new")}>
             {newLabel}
           </Button>
-        )}
+        ) : addBlockedReason ? (
+          <span className="text-[12px] font-medium text-muted-500">{addBlockedReason}</span>
+        ) : null}
       </div>
 
       <Card className="overflow-x-auto">
