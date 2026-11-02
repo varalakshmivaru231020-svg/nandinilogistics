@@ -120,7 +120,9 @@ describe("rider onboarding", () => {
     // Rider is pending approval; try to submit
     const submitRes = await submitOnboardingAction(riderId);
     expect(submitRes.ok).toBe(false);
-    expect(submitRes.error).toContain("waiting for a Team Leader");
+    if (!submitRes.ok) {
+      expect(submitRes.error).toContain("waiting for a Team Leader");
+    }
   });
 
   it("can be edited and completed after approval", async () => {
