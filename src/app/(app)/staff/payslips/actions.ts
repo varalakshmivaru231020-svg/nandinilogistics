@@ -8,7 +8,7 @@ import { recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
 import { put, remove } from "@/lib/storage";
 import { computePayslip, isMonth } from "@/lib/staff/payslip";
-import { toPayslipPdf } from "@/lib/staff/payslip-pdf";
+import { PAYSLIP_EMPLOYEE_SELECT, payslipIssuer, payslipPdfInput, storePayslipPdf } from "@/lib/staff/payslip-render";
 import { payslipDraft } from "@/lib/staff/service";
 
 /**
@@ -43,11 +43,7 @@ export async function generatePayslipAction(formData: FormData): Promise<ActionR
 
     const employee = await prisma.employee.findUnique({
       where: { id: employeeId },
-      select: {
-        id: true, name: true, employeeCode: true, status: true,
-        designation: { select: { name: true } },
-        employmentType: { select: { name: true } },
-      },
+      select: PAYSLIP_EMPLOYEE_SELECT,
     });
     if (!employee) throw new Error("Staff member not found.");
     if (employee.employmentType.name.toLowerCase() !== "internal staff") {
@@ -79,10 +75,7 @@ export async function generatePayslipAction(formData: FormData): Promise<ActionR
     }
     const notes = String(formData.get("notes") ?? "").trim() || null;
 
-    const pdf = await toPayslipPdf({
-      employeeCode: employee.employeeCode,
-      name: employee.name,
-      designation: employee.designation?.name ?? null,
+    const pdfKey = await storePayslipPdf(employeeId, payslipPdfInput(employee, {
       month,
       payDays,
       payableDays: payable,
@@ -90,13 +83,13 @@ export async function generatePayslipAction(formData: FormData): Promise<ActionR
       notes,
       generatedBy: ctx.name,
       generatedAt: new Date(),
-    });
-    const stored = await put(`payslip-${employeeId}`, `payslip-${month}.pdf`, pdf, "application/pdf");
+      issuer: await payslipIssuer(prisma),
+    }));
 
     const payslip = await prisma.payslip.create({
       data: {
         employeeId, month, ...figures, payDays, payableDays: payable, notes,
-        pdfKey: stored.key, generatedById: ctx.id,
+        pdfKey, generatedById: ctx.id,
       },
     });
 

@@ -127,3 +127,34 @@ export function advanceDueThisMonth(
   }
   return Math.round(due * 100) / 100;
 }
+
+const ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+
+function belowThousand(n: number): string {
+  const parts: string[] = [];
+  if (n >= 100) { parts.push(`${ONES[Math.floor(n / 100)]} Hundred`); n %= 100; }
+  if (n >= 20) { parts.push(TENS[Math.floor(n / 10)] + (n % 10 ? ` ${ONES[n % 10]}` : "")); }
+  else if (n > 0) parts.push(ONES[n]);
+  return parts.join(" ");
+}
+
+/**
+ * "Rupees Twelve Thousand Nine Hundred Sixty Only" — the Indian way, in
+ * crores and lakhs, for the payslip's net-pay line. Paise are spelt out when
+ * present.
+ */
+export function rupeesInWords(amount: number): string {
+  const whole = Math.floor(Math.abs(amount));
+  const paise = Math.round((Math.abs(amount) - whole) * 100);
+  const words: string[] = [];
+  const units: Array<[number, string]> = [[1e7, "Crore"], [1e5, "Lakh"], [1e3, "Thousand"]];
+  let rest = whole;
+  for (const [size, name] of units) {
+    if (rest >= size) { words.push(`${belowThousand(Math.floor(rest / size))} ${name}`); rest %= size; }
+  }
+  if (rest > 0 || whole === 0) words.push(belowThousand(rest) || "Zero");
+  let out = `Rupees ${words.join(" ")}`;
+  if (paise > 0) out += ` and ${belowThousand(paise)} Paise`;
+  return `${out} Only`;
+}
