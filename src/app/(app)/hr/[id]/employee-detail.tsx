@@ -130,7 +130,7 @@ export function EmployeeDetail({
         )}
         {can.update && (
           <Link
-            href={`${listHref}?edit=${employee.id}`}
+            href={`/hr/${employee.id}/edit`}
             className="rounded-[9px] bg-brand-500 px-4 py-2.5 text-[12.5px] font-bold text-white transition-colors hover:bg-brand-600"
           >
             ✎ Edit

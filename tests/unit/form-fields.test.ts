@@ -22,8 +22,8 @@ const read = (p: string) => readFileSync(`${ROOT}/src/app/(app)/${p}`, "utf-8");
 /** Which screen each form was copied from. */
 const SOURCE: Record<string, string> = {
   "sales/leads:edit": "sales/leads/[id]/lead-edit-modal.tsx",
-  "hr/employees:create": "hr/hr-screen.tsx",
-  "hr/employees:edit": "hr/hr-screen.tsx",
+  "hr/employees:create": "hr/employee-form.tsx",
+  "hr/employees:edit": "hr/employee-form.tsx",
   "tasks:create": "tasks/new/new-task-form.tsx",
   "tasks:edit": "tasks/new/new-task-form.tsx",
 };

@@ -70,8 +70,8 @@ const TASK_FIELDS: ReadonlyArray<FormFieldDef> = [
 ];
 
 /*
- * src/app/(app)/hr/hr-screen.tsx → the person drawer, which is one form for
- * both the new record and the edit.
+ * src/app/(app)/hr/employee-form.tsx → the employee page, which is one form
+ * for both the new record and the edit.
  *
  * The photograph and the two identity copies are part of it: `saveFiles()`
  * reads `photo` and `doc:<kind>` out of the same body as the particulars.

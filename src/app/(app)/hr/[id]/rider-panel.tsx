@@ -53,7 +53,7 @@ export function RiderPanel({
   referrals: ReferralRow[];
   can: {
     submit: boolean; accept: boolean; reject: boolean;
-    offerLetter: boolean; idCard: boolean; setPin: boolean;
+    offerLetter: boolean; setPin: boolean;
   };
 }) {
   const router = useRouter();
@@ -144,14 +144,6 @@ export function RiderPanel({
             <Button size="sm" variant="danger" onClick={() => { setReason(""); setRejecting(true); }}>
               Reject…
             </Button>
-          )}
-          {status === "ACCEPTED" && can.idCard && (
-            <Link
-              href={`/hr/${rider.id}/id-card`}
-              className="rounded-[9px] border border-line-400 bg-white px-3.5 py-[7px] text-[12px] font-semibold text-navy-600 transition-colors hover:border-brand-500 hover:text-brand-700"
-            >
-              ID card
-            </Link>
           )}
           {status === "ACCEPTED" && can.offerLetter && rider.hasOfferLetter && (
             <a

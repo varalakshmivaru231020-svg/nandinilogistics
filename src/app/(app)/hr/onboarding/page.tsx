@@ -12,8 +12,6 @@ import { Badge, PageHeader } from "@/components/ui/primitives";
 import { ExportMenu, exportHref } from "@/components/export/export-menu";
 import { formatDateTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { isRiderType } from "@/lib/riders/onboarding";
-import { loadReferrers } from "../workforce";
 import { NewRiderButton } from "../new-rider-button";
 
 export const metadata = { title: "Onboarding" };
@@ -123,17 +121,6 @@ export default async function OnboardingPage({
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(raw)) if (v) sp.set(k, String(v));
 
-  // The "+ New rider" drawer's lists, only for whoever may create.
-  const canCreate = ctx.has(PERM.hr.employee.create);
-  const [formTypes, formDesignations, formCompanies, referrers] = canCreate
-    ? await Promise.all([
-        prisma.employmentType.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
-        prisma.designation.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-        prisma.company.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-        loadReferrers(),
-      ])
-    : [[], [], [], []];
-
   return (
     <div className="animate-fade-up">
       <PageHeader
@@ -144,16 +131,7 @@ export default async function OnboardingPage({
             {ctx.has(PERM.hr.employee.export) && (
               <ExportMenu href={(format) => exportHref("/api/hr/onboarding/export", format, sp)} />
             )}
-            {canCreate && (
-              <NewRiderButton
-                employmentTypes={formTypes}
-                riderTypeId={formTypes.find((t) => isRiderType(t.name))?.id ?? null}
-                referrers={referrers}
-                designations={formDesignations}
-                companies={formCompanies}
-                canManageCompanies={ctx.has(PERM.hr.employee.manageCompanies)}
-              />
-            )}
+            <NewRiderButton />
           </div>
         }
       />

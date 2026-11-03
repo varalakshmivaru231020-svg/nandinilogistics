@@ -235,7 +235,6 @@ export default async function EmployeeDetailPage({
             accept: ctx.has(PERM.hr.employee.acceptOnboarding),
             reject: ctx.has(PERM.hr.employee.rejectOnboarding),
             offerLetter: ctx.has(PERM.hr.employee.offerLetter),
-            idCard: ctx.has(PERM.hr.employee.idCard),
             setPin: ctx.has(PERM.hr.employee.setPin),
           }}
         />

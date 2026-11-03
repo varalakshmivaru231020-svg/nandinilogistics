@@ -3,15 +3,13 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/rbac/guard";
 import { prisma } from "@/lib/db";
 import { PERM } from "@/lib/permissions/codes";
-import { employeeGroupWhere, employeeListWhere, employeeScope, maskId, readEmployeeListParams } from "@/lib/hr/list-filters";
+import { employeeGroupWhere, employeeListWhere, employeeScope, readEmployeeListParams } from "@/lib/hr/list-filters";
 import { parseAttendanceRange } from "@/lib/hr/attendance-report";
 import { loadAttendanceReport } from "@/lib/hr/attendance-report-data";
 import { ModuleStats } from "@/components/list/module-stats";
 import { employeeFigures } from "@/lib/metrics/figures";
-import type { OnboardingStatus } from "@/lib/riders/onboarding";
-import { isRiderType } from "@/lib/riders/onboarding";
 import { attendanceDay, istClock, mapsHref } from "@/lib/hr/punch";
-import { professionalAddress } from "@/lib/hr/address";
+import { EMPLOYEE_FORM_INCLUDE, employeeFormRow } from "./employee-form-data";
 import { HrScreen } from "./hr-screen";
 
 export type WorkforceView = "riders" | "staff" | "attendance";
@@ -51,25 +49,12 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
   const canLog = ctx.has(PERM.hr.attendance.tabLog);
 
   const listing = view !== "attendance";
-  const [employees, employmentTypes, designations, companies] = await Promise.all([
-    !listing ? [] : prisma.employee.findMany({
-      // Search, employment type, designation and status — the same function the export uses.
-      where: { AND: [scope, employeeListWhere(listParams)] },
-      orderBy: { name: "asc" },
-      include: {
-        employmentType: { select: { id: true, name: true } },
-        designation: { select: { id: true, name: true } },
-        documents: { select: { id: true, kind: true, fileName: true, fileSize: true } },
-        companies: { select: { company: { select: { id: true, name: true } } } },
-      },
-    }),
-    prisma.employmentType.findMany({
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      include: { _count: { select: { employees: true } } },
-    }),
-    prisma.designation.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.company.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-  ]);
+  const employees = !listing ? [] : await prisma.employee.findMany({
+    // Search, employment type, designation and status — the same function the export uses.
+    where: { AND: [scope, employeeListWhere(listParams)] },
+    orderBy: { name: "asc" },
+    include: EMPLOYEE_FORM_INCLUDE,
+  });
 
   // The day being marked: active, accepted people only, and only their marks.
   const markDate = new Date(`${date}T00:00:00.000Z`);
@@ -137,8 +122,6 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
     },
   });
 
-  const referrers = listing && ctx.has(PERM.hr.employee.create) ? await loadReferrers() : [];
-
   const pendingEdits = ctx.has(PERM.hr.employee.update)
     ? await prisma.profileEditRequest.count({ where: { status: "PENDING", employee: employeeScope(ctx) } })
     : 0;
@@ -157,56 +140,12 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
         tabs={tabs}
         view={view}
         newLabel={view === "staff" ? "+ New staff member" : "+ New rider"}
-        defaultTypeId={
-          employmentTypes.find((t) => (view === "staff" ? t.name.trim().toLowerCase() === "internal staff" : isRiderType(t.name)))?.id ?? null
-        }
         tab={tab}
         date={date}
         from={range.from}
         to={range.to}
         rangeError={range.ok ? null : range.error}
-        employees={employees.map((e) => ({
-          id: e.id,
-          code: e.employeeCode,
-          name: e.name,
-          mobile: e.mobile,
-          altContact: e.altContact,
-          aadhaar: canIdentity ? e.aadhaar : maskId(e.aadhaar),
-          pan: canIdentity ? e.pan : maskId(e.pan),
-          address: professionalAddress(e),
-          temporaryStreet: e.temporaryStreet,
-          temporaryCity: e.temporaryCity,
-          temporaryState: e.temporaryState,
-          temporaryPinCode: e.temporaryPinCode,
-          permanentStreet: e.permanentStreet,
-          permanentCity: e.permanentCity,
-          permanentState: e.permanentState,
-          permanentPinCode: e.permanentPinCode,
-          employmentTypeId: e.employmentType.id,
-          employmentType: e.employmentType.name,
-          designationId: e.designation?.id ?? null,
-          designation: e.designation?.name ?? null,
-          status: e.status,
-          onboardingStatus: e.onboardingStatus as OnboardingStatus,
-          approval: e.approval,
-          emergencyMobileFamily: e.emergencyMobileFamily,
-          emergencyMobileFriend: e.emergencyMobileFriend,
-          bankAccountNo: canIdentity ? e.bankAccountNo : maskId(e.bankAccountNo),
-          bankHolderName: e.bankHolderName,
-          bankIfsc: e.bankIfsc,
-          bankName: e.bankName,
-          pfNumber: e.pfNumber,
-          drivingLicence: canIdentity ? e.drivingLicence : maskId(e.drivingLicence),
-          insuranceNumber: e.insuranceNumber,
-          monthlySalary: e.monthlySalary === null ? null : Number(e.monthlySalary),
-          joinedOn: e.joinedOn ? e.joinedOn.toISOString().slice(0, 10) : null,
-          companyIds: e.companies.map((c) => c.company.id),
-          companies: e.companies.map((c) => c.company.name),
-          hasPhoto: e.photoKey !== null,
-          referredById: e.referredById,
-          referralApproval: e.referralApproval,
-          documents: e.documents,
-        }))}
+        employees={employees.map((e) => employeeFormRow(e, canIdentity))}
         markable={markable.map((e) => ({
           id: e.id,
           code: e.employeeCode,
@@ -214,15 +153,6 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
           employmentType: e.employmentType.name,
           designation: e.designation?.name ?? null,
         }))}
-        employmentTypes={employmentTypes.map((t) => ({
-          id: t.id,
-          name: t.name,
-          count: t._count.employees,
-          canDelete: t._count.employees === 0,
-        }))}
-        designations={designations}
-        companies={companies}
-        referrers={referrers}
         dayMarks={dayEntries.map((e) => ({
           employeeId: e.employeeId,
           status: e.status,
@@ -279,18 +209,4 @@ export async function Workforce({ searchParams, view }: { searchParams: Workforc
       />
     </div>
   );
-}
-
-/** Who may be picked as "Referred by": active, accepted riders. */
-export async function loadReferrers() {
-  const rows = await prisma.employee.findMany({
-    where: {
-      onboardingStatus: "ACCEPTED",
-      status: { not: "INACTIVE" },
-      employmentType: { name: { equals: "Rider", mode: "insensitive" } },
-    },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true, employeeCode: true, referralCode: true },
-  });
-  return rows.map((r) => ({ id: r.id, name: r.name, code: r.employeeCode, referralCode: r.referralCode }));
 }
