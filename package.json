@@ -14,6 +14,7 @@
     "perms:grants": "tsx scripts/sync-role-grants.ts",
     "perms:prune": "tsx scripts/prune-permissions.ts",
     "staff:link": "tsx --conditions=react-server scripts/link-staff-employees.ts",
+    "letters:regen": "tsx --conditions=react-server scripts/regenerate-offer-letters.ts",
     "seed:reference": "tsx scripts/seed-reference-data.ts",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",

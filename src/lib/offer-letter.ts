@@ -200,12 +200,12 @@ export async function renderOfferLetterPdf(
   doc.moveDown(1.4);
 
   /* ------------------------------------------------------------ addressee */
-  doc.font("Helvetica").fontSize(9).fillColor(MUTED).text("To,");
-  doc.font("Helvetica-Bold").fontSize(11.5).fillColor(INK).text(pdfSafe(meta.addressee.name));
+  doc.font("Helvetica").fontSize(9).fillColor(MUTED).text("To,", MARGIN, doc.y);
+  doc.font("Helvetica-Bold").fontSize(11.5).fillColor(INK).text(pdfSafe(meta.addressee.name), MARGIN, doc.y);
   const who = [meta.addressee.designation, `ID ${meta.riderId}`].filter(Boolean).join("  ·  ");
-  doc.font("Helvetica").fontSize(9.5).fillColor(MUTED).text(who);
-  if (meta.addressee.address) doc.text(pdfSafe(meta.addressee.address), { width: CONTENT_W * 0.7 });
-  if (meta.addressee.mobile) doc.text(`Mobile: ${meta.addressee.mobile}`);
+  doc.font("Helvetica").fontSize(9.5).fillColor(MUTED).text(who, MARGIN, doc.y);
+  if (meta.addressee.address) doc.text(pdfSafe(meta.addressee.address), MARGIN, doc.y, { width: CONTENT_W * 0.7 });
+  if (meta.addressee.mobile) doc.text(`Mobile: ${meta.addressee.mobile}`, MARGIN, doc.y);
   doc.moveDown(1.3);
 
   /* -------------------------------------------------------------- subject */
@@ -230,8 +230,9 @@ export async function renderOfferLetterPdf(
     // A line that starts with "-" or "•" is a bullet in the template.
     const bullet = /^\s*[-•]\s+/.test(text);
     if (bullet) {
-      doc.text("•", MARGIN + 8, doc.y, { continued: true, lineBreak: false });
-      doc.text(text.replace(/^\s*[-•]\s+/, ""), MARGIN + 22, doc.y, { width: CONTENT_W - 22, align: "left", lineGap: 2 });
+      const y = doc.y;
+      doc.text("•", MARGIN + 8, y, { lineBreak: false });
+      doc.text(text.replace(/^\s*[-•]\s+/, ""), MARGIN + 22, y, { width: CONTENT_W - 22, align: "left", lineGap: 2 });
     } else {
       doc.text(text, MARGIN, doc.y, { width: CONTENT_W, align: "justify", lineGap: 2.5 });
     }
@@ -239,10 +240,10 @@ export async function renderOfferLetterPdf(
 
   /* -------------------------------------------------------- salary annexure */
   if (meta.salary && meta.salary.lines.length) {
-    const rowH = 20;
+    const rowH = 18;
     const needed = rowH * (meta.salary.lines.length + 3) + 70;
     if (doc.y + needed > PAGE.h - 100) doc.addPage();
-    doc.moveDown(1.2);
+    doc.moveDown(0.9);
     doc.font("Helvetica-Bold").fontSize(11).fillColor(NAVY).text("Annexure A — Salary structure", MARGIN, doc.y);
     doc.font("Helvetica").fontSize(8.5).fillColor(MUTED).text("Figures are per month. Deductions are shown in brackets.");
     doc.moveDown(0.6);
@@ -286,8 +287,10 @@ export async function renderOfferLetterPdf(
   }
 
   /* ------------------------------------------------------------ signatures */
-  if (doc.y + 100 > PAGE.h - 84) doc.addPage();
-  doc.moveDown(1.8);
+  // The block is 52pt of signing space plus two lines of caption; it must sit
+  // above the footer rule at PAGE.h - 56 and never be orphaned on its own page.
+  if (doc.y + 112 > PAGE.h - 60) doc.addPage();
+  doc.moveDown(1.4);
   const sigY = doc.y;
   const half = CONTENT_W / 2 - 16;
   doc.font("Helvetica").fontSize(9.5).fillColor(MUTED).text(`For ${issuer.name}`, MARGIN, sigY, { width: half });

@@ -59,7 +59,7 @@ const ADVANCE_REASONS = [
   { code: "OTHER", name: "Other" },
 ];
 
-const OFFER_TEMPLATES = [
+export const OFFER_TEMPLATES = [
   {
     code: "VENDOR_STD",
     name: "Standard offer — vendor rider",
