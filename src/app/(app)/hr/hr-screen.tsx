@@ -1076,7 +1076,7 @@ export function EmployeeForm({
       onClose={onClose}
       title={employee ? "Edit employee" : "New employee"}
       description="Name, mobile, photo and Aadhaar are mandatory"
-      size="full"
+      size="xl"
       footer={
         <>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
