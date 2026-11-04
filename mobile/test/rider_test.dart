@@ -116,6 +116,7 @@ void main() {
       await tester.enterText(find.byKey(const Key('mobile')), '9876543210');
       // Letters and a fifth digit are refused by the field itself.
       await tester.enterText(find.byKey(const Key('pin')), '12a345');
+      await tester.ensureVisible(find.byKey(const Key('submit')));
       await tester.tap(find.byKey(const Key('submit')));
       // Not settled: the button keeps turning, since the app swaps the screen.
       for (var i = 0; i < 5; i++) {
@@ -133,6 +134,7 @@ void main() {
       });
       await tester.enterText(find.byKey(const Key('mobile')), '9876543210');
       await tester.enterText(find.byKey(const Key('pin')), '0000');
+      await tester.ensureVisible(find.byKey(const Key('submit')));
       await tester.tap(find.byKey(const Key('submit')));
       await tester.pumpAndSettle();
       expect(find.text('That mobile number and PIN do not match.'), findsOneWidget);
@@ -144,6 +146,7 @@ void main() {
       await pump(tester, {});
       await tester.enterText(find.byKey(const Key('mobile')), '9876543210');
       await tester.enterText(find.byKey(const Key('pin')), '1234');
+      await tester.ensureVisible(find.byKey(const Key('submit')));
       await tester.tap(find.byKey(const Key('submit')));
       await tester.pumpAndSettle();
       expect(find.text(notOnServer), findsOneWidget);
@@ -154,6 +157,7 @@ void main() {
         '/auth/forgot-pin': const {'message': 'Your tele-caller will reset your PIN.'},
       });
       await tester.enterText(find.byKey(const Key('mobile')), '9876543210');
+      await tester.ensureVisible(find.byKey(const Key('forgot-pin')));
       await tester.tap(find.byKey(const Key('forgot-pin')));
       await tester.pumpAndSettle();
       expect(find.text('Your tele-caller will reset your PIN.'), findsOneWidget);
@@ -242,14 +246,20 @@ void main() {
         'advance.advance.create',
       ]));
 
-      for (final id in ['idCard', 'punch', 'advances', 'requestAdvance', 'referFriend',
-          'referRider', 'profile', 'notifications']) {
+      // A rider's four quick actions, and no more: referrals, incentives and
+      // support are in the menu, the profile is a tab.
+      for (final id in ['attendance', 'earnings', 'advances', 'notifications']) {
         expect(find.byKey(Key('tile-$id')), findsOneWidget, reason: id);
       }
-      // Staff tiles are not a rider's, whatever else they hold.
-      for (final id in ['team', 'leads', 'onboarding', 'advanceApprovals', 'tlReport']) {
+      // Staff tiles are not a rider's, whatever else they hold; and there is
+      // no ID card tile — riders carry none, whatever permission they hold.
+      for (final id in ['team', 'leads', 'onboarding', 'advanceApprovals', 'tlReport', 'idCard',
+          'punch', 'requestAdvance', 'referFriend', 'referRider', 'profile']) {
         expect(find.byKey(Key('tile-$id')), findsNothing, reason: id);
       }
+      // The punch button sits in the bar, beside the bell.
+      expect(find.byKey(const Key('bar-punch')), findsOneWidget);
+      expect(find.byKey(const Key('attendance-card')), findsOneWidget);
       expect(find.text('Rider ID NL009'), findsOneWidget);
       expect(find.text('₹3,948'), findsOneWidget);
       // Accepted: no banner.

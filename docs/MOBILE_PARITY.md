@@ -7,14 +7,14 @@ the registries that decide the behaviour: `src/lib/screens/registry.ts`,
 `src/lib/api/parity.ts`. `tests/unit/mobile-parity.test.ts` fails if an
 action is unreachable from the app and unexplained.
 
-Last written 2026-10-27.
+Last written 2026-11-04.
 
 ## In one line
 
 | | |
 |---|---|
-| Web actions on the boundary | **65** |
-| Reachable from the app | **37** |
+| Web actions on the boundary | **66** |
+| Reachable from the app | **38** |
 | Not reachable, with a reason | 28 |
 | Web list screens | 0 |
 | …with a record screen | 0 |

@@ -19,6 +19,8 @@ class BottomBar extends StatelessWidget {
     this.thirdLabel = 'Tasks',
     this.thirdIcon = Icons.check_box_outlined,
     this.onThird,
+    this.moreLabel = 'More',
+    this.moreIcon = Icons.menu_rounded,
   });
 
   final String current;
@@ -27,6 +29,10 @@ class BottomBar extends StatelessWidget {
   final String thirdLabel;
   final IconData thirdIcon;
   final VoidCallback? onThird;
+
+  /// The last tab: the drawer for staff, Profile for a rider.
+  final String moreLabel;
+  final IconData moreIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +48,7 @@ class BottomBar extends StatelessWidget {
       child: Row(children: [
         _tab('Home', Icons.grid_view_rounded, current == 'dashboard', onHome),
         _tab(thirdLabel, thirdIcon, current == 'third', onThird),
-        _tab('More', Icons.menu_rounded, false, onMore),
+        _tab(moreLabel, moreIcon, current == 'more', onMore),
       ]),
     );
   }

@@ -135,6 +135,10 @@ export const MOBILE_ACTIONS: Record<string, MobileActionDef> = {
     fn: a4.acceptOnboardingAction as MobileAction,
     args: [{ name: "id", kind: "text" }],
   },
+  "hr/changeOwnPin": {
+    fn: a4.changeOwnPinAction as MobileAction,
+    args: [{ name: "currentPin", kind: "text" }, { name: "newPin", kind: "text" }],
+  },
   "hr/createEmployee": {
     fn: a4.createEmployeeAction as MobileAction,
     args: [{ name: "formData", kind: "form" }],

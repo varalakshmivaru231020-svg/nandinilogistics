@@ -1,5 +1,5 @@
 import { actorPayload, apiOk, mobileRoute } from "@/lib/api/mobile";
-import { ownRider, riderPayload } from "@/lib/api/mobile-rider";
+import { ownIncentives, ownRider, riderPayload, supportContact } from "@/lib/api/mobile-rider";
 
 /**
  * Who the app is signed in as, and what it may show.
@@ -10,12 +10,15 @@ import { ownRider, riderPayload } from "@/lib/api/mobile-rider";
  *
  * `rider` is the caller's own rider record where their login has one — a
  * rider's Draft / Submitted / Rejected status is what their home screen shows.
+ * `rider.incentives` is what their companies' sheets have paid them in
+ * incentive columns, or null where no sheet has one.
  */
 export const GET = mobileRoute([], async (_req, actor) => {
-  const rider = await ownRider(actor.id);
+  const [rider, support] = await Promise.all([ownRider(actor.id), supportContact()]);
   return apiOk({
     user: actorPayload(actor),
-    rider: rider ? riderPayload(rider) : null,
+    rider: rider ? riderPayload(rider, { incentives: await ownIncentives(rider.id) }) : null,
+    support,
     serverTime: new Date().toISOString(),
   });
 });

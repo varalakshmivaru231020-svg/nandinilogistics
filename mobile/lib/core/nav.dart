@@ -61,6 +61,14 @@ const _icons = <String, IconData>{
   '/staff/payslips': Icons.description_outlined,
   '/reports': Icons.bar_chart_outlined,
   '/masters': Icons.settings_outlined,
+  // The rider's own menu — screens of the app's, not web routes.
+  '/earnings': Icons.currency_rupee_rounded,
+  '/attendance': Icons.event_available_outlined,
+  '/incentives': Icons.emoji_events_outlined,
+  '/referrals': Icons.group_add_outlined,
+  '/notifications': Icons.notifications_none_rounded,
+  '/support': Icons.support_agent_rounded,
+  '/profile': Icons.person_outline_rounded,
 };
 
 /// The routes the app shows a notice for rather than a screen: they are the

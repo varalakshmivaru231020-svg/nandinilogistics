@@ -18,6 +18,7 @@ class Session {
     required this.permissions,
     required this.roleNames,
     this.rider,
+    this.support = const SupportContact(),
   });
 
   final String token;
@@ -30,6 +31,9 @@ class Session {
 
   /// The rider this account is, where it is one. Null for staff.
   final RiderProfile? rider;
+
+  /// Who to call for help — from the server, so Admin can change it.
+  final SupportContact support;
 
   bool can(String code) => isSuperAdmin || permissions.contains(code);
   bool canAny(Iterable<String> codes) => codes.any(can);
@@ -53,9 +57,10 @@ class Session {
   }
 
   static Session fromPayload(String token, Map<String, dynamic> user,
-          {Map<String, dynamic>? rider}) =>
+          {Map<String, dynamic>? rider, Map<String, dynamic>? support}) =>
       Session(
         rider: rider == null ? null : RiderProfile.from(rider),
+        support: support == null ? const SupportContact() : SupportContact.from(support),
         token: token,
         id: user['id'] as String,
         name: user['name'] as String,
@@ -69,6 +74,18 @@ class Session {
 }
 
 /// The rider behind a rider's account, as `/me` sends it.
+/// Nandini Logistics' own phone and email, for the Support screen.
+class SupportContact {
+  const SupportContact({this.phone, this.email});
+  final String? phone;
+  final String? email;
+  bool get isEmpty => (phone == null || phone!.isEmpty) && (email == null || email!.isEmpty);
+  static SupportContact from(Map<String, dynamic> d) => SupportContact(
+        phone: RiderProfile._s(d['phone']),
+        email: RiderProfile._s(d['email']),
+      );
+}
+
 class RiderProfile {
   const RiderProfile({
     required this.id,
@@ -83,6 +100,9 @@ class RiderProfile {
     this.insuranceNumber,
     this.emergencyMobileFamily,
     this.joinedOn,
+    this.incentives,
+    this.location,
+    this.status,
   });
 
   final String id;
@@ -99,6 +119,18 @@ class RiderProfile {
   final String? insuranceNumber;
   final String? emergencyMobileFamily;
   final String? joinedOn;
+
+  /// What the companies' sheets have paid in incentive columns — null where
+  /// no sheet has one, and then the app shows no Incentives entry at all.
+  final double? incentives;
+
+  /// Where they are deployed — the current address's city and state.
+  final String? location;
+
+  /// ACTIVE · INACTIVE, the employee record's own status.
+  final String? status;
+
+  bool get isActive => (status ?? 'ACTIVE').toUpperCase() == 'ACTIVE';
 
   static String? _s(Object? v) => v == null || '$v'.isEmpty ? null : '$v';
 
@@ -118,6 +150,9 @@ class RiderProfile {
         insuranceNumber: _s(d['insuranceNumber']),
         emergencyMobileFamily: _s(d['emergencyMobileFamily']),
         joinedOn: _s(d['joinedOn']),
+        incentives: d['incentives'] == null ? null : double.tryParse('${d['incentives']}'),
+        location: _s(d['location']),
+        status: _s(d['status']),
       );
 }
 
@@ -222,6 +257,7 @@ class Auth {
         token,
         me.data!['user'] as Map<String, dynamic>,
         rider: me.data!['rider'] as Map<String, dynamic>?,
+        support: me.data!['support'] as Map<String, dynamic>?,
       );
       return Res.ok(s);
     } catch (_) {

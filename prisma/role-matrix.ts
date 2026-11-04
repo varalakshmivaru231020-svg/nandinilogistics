@@ -235,6 +235,7 @@ export const ROLES: RoleSeed[] = [
       "hr.attendance.mark",
       "hr.attendance.punch",
       "hr.employee.requestEdit",
+      "hr.employee.changeOwnPin",
     ],
   },
 ];

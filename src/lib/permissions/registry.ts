@@ -205,6 +205,7 @@ crud({
     ["idCard", "View the digital ID card", "BUTTON"],
     ["manageCompanies", "Change the companies a rider is deployed to", "BUTTON"],
     ["setPin", "Set or reset a rider's app PIN", "BUTTON", "The PIN is stored hashed; nobody can read it back."],
+    ["changeOwnPin", "Change one's own app PIN", "ACTION", "From the app's Profile screen; the current PIN is checked first."],
     ["requestEdit", "Ask for a change to one's own profile", "ACTION", "The change waits for someone with update to approve it."],
     ["createStaff", "Add internal staff and Team Leader records", "BUTTON", "Riders may be added by anyone with create; Internal Staff and Team Leader records only by holders of this."],
   ],

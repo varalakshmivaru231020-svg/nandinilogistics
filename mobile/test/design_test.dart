@@ -32,11 +32,11 @@ void main() {
     test('charcoal, the accent and the page', () {
       expect(T.dark950, const Color(0xFF17141A));
       expect(T.dark800, const Color(0xFF2A2530));
-      expect(T.accent500, const Color(0xFFD93337));
-      expect(T.accent700, const Color(0xFFA51F27));
-      expect(T.accent100, const Color(0xFFFDEBEB));
-      expect(T.page, const Color(0xFFF7F4F3));
-      expect(T.line, const Color(0xFFECE7E6));
+      expect(T.accent500, const Color(0xFFD92F38));
+      expect(T.accent700, const Color(0xFFA52B35));
+      expect(T.accent100, const Color(0xFFFCE9EB));
+      expect(T.page, const Color(0xFFF8F5F5));
+      expect(T.line, const Color(0xFFEBE6E6));
     });
 
     /// The primary button is white on the accent, so the accent has to be
@@ -55,7 +55,7 @@ void main() {
      */
     test('each status has its solid, its tint and its ink', () {
       expect((T.good, T.goodTint, T.goodInk),
-          (const Color(0xFF1F9D66), const Color(0xFFE4F6EC), const Color(0xFF177049)));
+          (const Color(0xFF22A45A), const Color(0xFFE4F6EC), const Color(0xFF177049)));
       expect((T.warn, T.warnTint, T.warnInk),
           (const Color(0xFFE8A13A), const Color(0xFFFDF3E7), const Color(0xFF8A5A12)));
       expect((T.bad, T.badTint, T.badInk),

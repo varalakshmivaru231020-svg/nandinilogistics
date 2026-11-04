@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 import { authorize, runAction, type ActionResult } from "@/lib/rbac/guard";
 import { diff, recordAudit } from "@/lib/audit";
 import { PERM } from "@/lib/permissions/codes";
-import { hashPassword } from "@/lib/auth/password";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { markAttendance } from "@/lib/hr/attendance-marking";
 import { editableEmployee, maskIdentityChanges } from "@/lib/hr/employee-audit";
 import { checkStatusChange, claimEmployeeStatus, statusLabel } from "@/lib/hr/employee-status";
@@ -680,6 +680,28 @@ export async function sendOfferLetterWhatsAppAction(id: string): Promise<ActionR
         : `Offer letter WhatsApp to ${e.name} not sent (${result.reason})`,
     });
     return result.sent ? { sent: true } : { sent: false, reason: result.reason };
+  });
+}
+
+/**
+ * A rider changing their own app PIN, from the phone: the current PIN is
+ * checked first, so a handset left unlocked cannot be re-keyed by whoever
+ * picks it up. Stored hashed, like the password.
+ */
+export async function changeOwnPinAction(currentPin: string, newPin: string): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const ctx = await authorize(PERM.hr.employee.changeOwnPin);
+    if (!/^\d{4}$/.test(newPin)) throw new Error("The new PIN must be exactly 4 digits.");
+    if (newPin === currentPin) throw new Error("Choose a PIN different from the current one.");
+    const user = await prisma.user.findUnique({ where: { id: ctx.id }, select: { pinHash: true } });
+    if (!user?.pinHash) throw new Error("No PIN is set on this login yet — ask your tele-caller to set one.");
+    if (!(await verifyPassword(currentPin, user.pinHash))) throw new Error("The current PIN is not right.");
+    await prisma.user.update({ where: { id: ctx.id }, data: { pinHash: await hashPassword(newPin) } });
+    await recordAudit({
+      action: "UPDATE", entity: "User", entityId: ctx.id, userId: ctx.id,
+      summary: `${ctx.name} changed their app PIN`,
+    });
+    return null;
   });
 }
 

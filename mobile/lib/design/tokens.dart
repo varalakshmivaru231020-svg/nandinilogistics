@@ -22,19 +22,19 @@ class T {
   static const darkBar = Color(0xFF110F13);
 
   /// The accent. White on it clears WCAG AA (4.7:1).
-  static const accent500 = Color(0xFFD93337);
+  static const accent500 = Color(0xFFD92F38);
   /// The accent as ink — on its own tint, and for a link.
-  static const accent700 = Color(0xFFA51F27);
+  static const accent700 = Color(0xFFA52B35);
   /// The accent on a dark surface.
   static const accent300 = Color(0xFFF29A9B);
   /// The accent's tint.
-  static const accent100 = Color(0xFFFDEBEB);
+  static const accent100 = Color(0xFFFCE9EB);
   /// The faintest wash of the accent, behind a hero illustration.
   static const accent050 = Color(0xFFFFF5F5);
 
-  static const page = Color(0xFFF7F4F3);
+  static const page = Color(0xFFF8F5F5);
   static const card = Color(0xFFFFFFFF);
-  static const line = Color(0xFFECE7E6);
+  static const line = Color(0xFFEBE6E6);
   /// A heavier line, for a field that must read as an input.
   static const line400 = Color(0xFFDCD5D4);
   /// The fill of a resting input.
@@ -43,9 +43,9 @@ class T {
   static const neutralTint = Color(0xFFF0ECEB);
 
   /// Ink. `body` is the reading colour; `secondary` is the second line.
-  static const ink = Color(0xFF1C181B);
+  static const ink = Color(0xFF201D21);
   static const secondary = Color(0xFF5E5760);
-  static const muted = Color(0xFF837B86);
+  static const muted = Color(0xFF858087);
   static const faint = Color(0xFF978F9A);
   static const disabledInk = Color(0xFFA79FAA);
   static const disabledFill = Color(0xFFECE7E8);
@@ -56,7 +56,7 @@ class T {
 
   // Status. Each has a solid, a tint and an ink — and the tints differ in
   // lightness as well as hue, so status survives greyscale and colour blindness.
-  static const good = Color(0xFF1F9D66);
+  static const good = Color(0xFF22A45A);
   static const goodTint = Color(0xFFE4F6EC);
   static const goodLine = Color(0xFFC4E8D4);
   static const goodInk = Color(0xFF177049);
