@@ -28,7 +28,7 @@ export async function payoutLineRecord(ctx: AuthContext, id: string): Promise<Re
       import: {
         select: {
           status: true, periodFrom: true, periodTo: true, fileName: true, postedAt: true,
-          company: { select: { name: true } },
+          company: { select: { name: true, payoutColumnMap: true } },
           postedBy: { select: { name: true } },
         },
       },
@@ -37,6 +37,19 @@ export async function payoutLineRecord(ctx: AuthContext, id: string): Promise<Re
   if (!line) return null;
 
   const posted = line.import.status === "POSTED";
+
+  /*
+   * Everything else the company's sheet said about this rider — orders,
+   * incentives, penalties, whatever columns the company uses — kept on the
+   * line as `raw`. The figures already shown above are left out, so the
+   * breakdown is what the totals are made of, in the sheet's own words.
+   */
+  const mapped = new Set(Object.values((line.import.company.payoutColumnMap ?? {}) as Record<string, string>).map((h) => h.trim().toLowerCase()));
+  const raw = (line.raw ?? {}) as Record<string, unknown>;
+  const sheetFields = Object.entries(raw)
+    .filter(([k, v]) => !mapped.has(k.trim().toLowerCase()) && v !== null && v !== undefined && String(v).trim() !== "")
+    .map(([k, v]) => ({ label: k, value: String(v) }));
+
   return {
     key: "payouts",
     id: line.id,
@@ -62,6 +75,9 @@ export async function payoutLineRecord(ctx: AuthContext, id: string): Promise<Re
           ...(line.holdReason ? [{ label: "Hold reason", value: line.holdReason, wide: true }] : []),
         ],
       },
+      ...(sheetFields.length
+        ? [{ label: `From the ${line.import.company.name} sheet`, fields: sheetFields }]
+        : []),
     ],
     collections: [],
     actions: posted ? payoutDecisions({ id: line.id, status: line.status }, { hold: ctx.has(PERM.payout.payout.hold) }) : [],

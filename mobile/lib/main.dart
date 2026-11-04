@@ -24,8 +24,8 @@ import 'modules/sign_in.dart';
 /// is what a developer running `flutter run` wants.
 const _configured = String.fromEnvironment('NN_BASE_URL');
 
-/// The production host: nginx terminates TLS for it and proxies to the app.
-const productionBaseUrl = 'https://nninfra.zapeat.in';
+/// The production host — the live CRM on CloudPanel; nginx terminates TLS and proxies to the app.
+const productionBaseUrl = 'https://nandinilogistics.supremeonesoftware.com';
 
 /// What an emulator sees of the machine it is running on.
 const emulatorBaseUrl = 'http://10.0.2.2:3210';

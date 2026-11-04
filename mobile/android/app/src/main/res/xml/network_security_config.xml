@@ -19,7 +19,7 @@
         <!-- LAN:END -->
         <!--
           Production is **not** here any more, and that is the point.
-          `nninfra.zapeat.in` has a Let's Encrypt certificate and nginx in
+          `nandinilogistics.supremeonesoftware.com` has a Let's Encrypt certificate and nginx in
           front of it, so the release build talks HTTPS on 443 like anything
           else. The bare IP on port 3021 was the only reason this file ever
           named a production host.

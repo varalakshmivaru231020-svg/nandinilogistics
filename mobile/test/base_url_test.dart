@@ -14,7 +14,7 @@ import 'package:nninfra/main.dart';
 void main() {
   group('the address a build is given', () {
     test('production is the hostname, over TLS, on the standard port', () {
-      expect(productionBaseUrl, 'https://nninfra.zapeat.in');
+      expect(productionBaseUrl, 'https://nandinilogistics.supremeonesoftware.com');
       expect(productionBaseUrl.startsWith('https://'), isTrue);
       // No port: nginx terminates TLS on 443 and proxies to the app. A
       // non-standard port is what a mobile network drops.

@@ -24,7 +24,7 @@ flutter build apk --release
 flutter build apk --debug
 ```
 
-**A release build defaults to `https://nninfra.zapeat.in`** — nginx terminates
+**A release build defaults to `https://nandinilogistics.supremeonesoftware.com`** — nginx terminates
 TLS there and proxies to the app — and a debug build defaults to
 `http://10.0.2.2:3210`, which is this machine as an emulator sees it.
 `--dart-define=NN_BASE_URL=…` overrides either.
