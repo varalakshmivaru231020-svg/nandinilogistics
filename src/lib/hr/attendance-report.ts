@@ -82,6 +82,8 @@ export interface AttendanceReportEntry {
   /** Check in / out on the Indian clock, "09:12", when punched. */
   checkIn?: string | null;
   checkOut?: string | null;
+  /** Completed minutes between the punches; null while incomplete or unpunched. */
+  minutes?: number | null;
 }
 
 export interface AttendanceSummaryRow extends AttendanceReportEmployee {
@@ -96,6 +98,9 @@ export interface AttendanceSummaryRow extends AttendanceReportEmployee {
   lastCheckOut: string | null;
   /** Days checked in and never out. */
   noCheckOut: number;
+  /** Completed working minutes in the range, and the average over the days completed. */
+  minutes: number;
+  averageMinutes: number | null;
 }
 
 const toMinutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
@@ -115,13 +120,14 @@ export function summarizeAttendance(
   range: { from: string; to: string },
 ): AttendanceSummaryRow[] {
   const tally = new Map<string, { present: number; half: number; absent: number; overtime: number }>();
-  const clocks = new Map<string, { ins: string[]; outs: string[]; missing: number }>();
+  const clocks = new Map<string, { ins: string[]; outs: string[]; missing: number; minutes: number; completed: number }>();
   for (const e of entries) {
     if (e.attendanceOn < range.from || e.attendanceOn > range.to) continue;
     if (e.checkIn) {
-      const c = clocks.get(e.employeeId) ?? { ins: [], outs: [], missing: 0 };
+      const c = clocks.get(e.employeeId) ?? { ins: [], outs: [], missing: 0, minutes: 0, completed: 0 };
       c.ins.push(e.checkIn);
       if (e.checkOut) c.outs.push(e.checkOut); else c.missing += 1;
+      if (typeof e.minutes === "number") { c.minutes += e.minutes; c.completed += 1; }
       clocks.set(e.employeeId, c);
     }
     const t = tally.get(e.employeeId) ?? { present: 0, half: 0, absent: 0, overtime: 0 };
@@ -140,6 +146,8 @@ export function summarizeAttendance(
       firstCheckIn: c ? averageClock(c.ins) : null,
       lastCheckOut: c ? averageClock(c.outs) : null,
       noCheckOut: c?.missing ?? 0,
+      minutes: c?.minutes ?? 0,
+      averageMinutes: c && c.completed ? Math.round(c.minutes / c.completed) : null,
       ...emp,
       present: t.present,
       half: t.half,

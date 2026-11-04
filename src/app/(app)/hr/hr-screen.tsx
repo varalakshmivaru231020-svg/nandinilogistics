@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDuration } from "@/lib/hr/attendance-hours";
 import * as React from "react";
 
 import { ATTENDANCE_EMPTY, ATTENDANCE_MARK_EMPTY, EMPLOYEE_EMPTY } from "@/lib/hr/list-display";
@@ -901,7 +902,7 @@ function ReportTab({
         <table className="w-full min-w-[760px] border-collapse">
           <thead>
             <tr className="bg-surface-sunken">
-              {["Employee", "Type", "Present", "Half day", "Absent", "Payable days", "Overtime", "First check-in (avg)", "Last check-out (avg)"].map((h, i) => (
+              {["Employee", "Type", "Present", "Half day", "Absent", "Payable days", "Hours", "Avg / day", "Overtime", "First check-in (avg)", "Last check-out (avg)"].map((h, i) => (
                 <th key={h} className={cn(
                   "border-b border-line-300 px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-muted-500",
                   i >= 2 ? "text-right" : "text-left",
@@ -911,7 +912,7 @@ function ReportTab({
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={9} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
+              <tr><td colSpan={11} className="px-4 py-14 text-center text-[12px] font-medium text-muted-500">
                 {ATTENDANCE_EMPTY.title}
               </td></tr>
             ) : rows.map((r) => (
@@ -928,6 +929,8 @@ function ReportTab({
                 <td className="num px-4 py-2.5 text-right text-[12px] font-bold text-warn-700">{r.half}</td>
                 <td className="num px-4 py-2.5 text-right text-[12px] font-bold text-bad-600">{r.absent}</td>
                 <td className="num px-4 py-2.5 text-right text-[12px] font-bold text-navy-950">{r.payable}</td>
+                <td className="num px-4 py-2.5 text-right text-[12px] font-bold text-navy-950">{formatDuration(r.minutes)}</td>
+                <td className="num px-4 py-2.5 text-right text-[12px] font-medium text-navy-500">{r.averageMinutes === null ? "—" : formatDuration(r.averageMinutes)}</td>
                 <td className="num px-4 py-2.5 text-right text-[12px] font-medium text-muted-600">{r.overtime}</td>
                 <td className="num px-4 py-2.5 text-right text-[12px] font-medium text-navy-500">{r.firstCheckIn ?? "—"}</td>
                 <td className="num px-4 py-2.5 text-right text-[12px] font-medium text-navy-500">

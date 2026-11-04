@@ -125,6 +125,7 @@ export const ROLES: RoleSeed[] = [
       "hr.attendance.tabLog",
       "hr.attendance.export",
       "hr.attendance.punch",
+      "hr.attendance.exportOwn",
       "hr.employee.requestEdit",
 
       // Tasks Admin assigns: view, start, finish, remark.
@@ -189,6 +190,7 @@ export const ROLES: RoleSeed[] = [
       // The riders they onboard: the form, the Rider ID, submission for review.
       "hr.employee.view",
       "hr.attendance.punch",
+      "hr.attendance.exportOwn",
       "hr.employee.create",
       "hr.employee.update",
       // Asks; a Team Leader or Super Admin approves the deletion.
@@ -234,6 +236,7 @@ export const ROLES: RoleSeed[] = [
       "hr.attendance.view",
       "hr.attendance.mark",
       "hr.attendance.punch",
+      "hr.attendance.exportOwn",
       "hr.employee.requestEdit",
       "hr.employee.changeOwnPin",
     ],

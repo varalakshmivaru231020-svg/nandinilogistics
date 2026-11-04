@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { capRows, exportGate, exportResponse, listWindow } from "@/lib/exports/respond";
 import { type ScreenShell } from "@/lib/screens/rows";
 import { ATTENDANCE_EMPTY, attendanceScreenRow } from "@/lib/screens/rows/hr";
+import { formatDuration } from "@/lib/hr/attendance-hours";
 import { attendanceTotals, parseAttendanceRange } from "@/lib/hr/attendance-report";
 import { loadAttendanceReport } from "@/lib/hr/attendance-report-data";
 import { statusLabel } from "@/lib/hr/employee-status";
@@ -96,6 +97,9 @@ export async function GET(request: Request) {
         { key: "half", header: "Half day", align: "right", format: "number" },
         { key: "absent", header: "Absent", align: "right", format: "number" },
         { key: "payable", header: "Payable days", align: "right", format: "number" },
+        { key: "hours", header: "Hours worked", align: "right" },
+        { key: "average", header: "Avg / day", align: "right" },
+        { key: "incomplete", header: "Incomplete", align: "right", format: "number" },
         { key: "overtime", header: "Overtime (hrs)", align: "right", format: "number" },
       ],
       rows: rows.map((r) => ({
@@ -110,6 +114,9 @@ export async function GET(request: Request) {
         half: r.half,
         absent: r.absent,
         payable: r.payable,
+        hours: formatDuration(r.minutes),
+        average: r.averageMinutes === null ? "—" : formatDuration(r.averageMinutes),
+        incomplete: r.noCheckOut,
         overtime: r.overtime,
       })),
       summary: [

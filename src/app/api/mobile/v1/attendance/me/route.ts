@@ -1,13 +1,22 @@
 import { prisma } from "@/lib/db";
 import { apiFail, apiOk, mobileRoute } from "@/lib/api/mobile";
+import { formatDuration, sessionMinutes, summarizeHours } from "@/lib/hr/attendance-hours";
 import { attendanceDay, monthRange, punchState } from "@/lib/hr/punch";
 import { PERM } from "@/lib/permissions/codes";
 
 /**
  * The caller's own attendance for a month, and where today's punch stands —
- * the app's monthly attendance report and its punch button.
+ * the app's monthly attendance screen and its punch button.
+ *
+ * One's own record: anyone who may punch may read it, so a tele-caller who
+ * holds `punch` but not the team's `view` still sees their own month. Each
+ * day carries its completed minutes (null while incomplete) and the month
+ * its totals, computed here so the phone, the web and the exports agree.
  */
-export const GET = mobileRoute([PERM.hr.attendance.view], async (req, actor) => {
+export const GET = mobileRoute([], async (req, actor) => {
+  if (!actor.has(PERM.hr.attendance.view) && !actor.has(PERM.hr.attendance.punch)) {
+    return apiFail(403, "You may not see attendance.", PERM.hr.attendance.view);
+  }
   const now = new Date();
   const todayOn = attendanceDay(now);
   const month = new URL(req.url).searchParams.get("month") ?? todayOn.toISOString().slice(0, 7);
@@ -30,18 +39,27 @@ export const GET = mobileRoute([PERM.hr.attendance.view], async (req, actor) => 
   ]);
 
   const iso = (d: Date | null) => (d ? d.toISOString() : null);
-  return apiOk({
-    month,
-    days: rows.map((r) => ({
+  const days = rows.map((r) => {
+    const minutes = sessionMinutes(r.punchInAt, r.punchOutAt);
+    return {
       date: r.attendanceOn.toISOString().slice(0, 10),
       status: r.status,
       punchInAt: iso(r.punchInAt),
       punchOutAt: iso(r.punchOutAt),
-    })),
+      minutes,
+      hours: minutes === null ? null : formatDuration(minutes),
+      incomplete: Boolean(r.punchInAt && !r.punchOutAt),
+    };
+  });
+  const hours = summarizeHours(days);
+  const todayMinutes = sessionMinutes(today?.punchInAt ?? null, today?.punchOutAt ?? null);
+  return apiOk({
+    month,
+    days,
     summary: {
-      present: rows.filter((r) => r.status === "PRESENT").length,
-      halfDay: rows.filter((r) => r.status === "HALF_DAY").length,
-      absent: rows.filter((r) => r.status === "ABSENT").length,
+      ...hours,
+      totalHours: formatDuration(hours.totalMinutes),
+      averageHours: hours.averageMinutes === null ? null : formatDuration(hours.averageMinutes),
     },
     today: {
       date: todayOn.toISOString().slice(0, 10),
@@ -49,6 +67,8 @@ export const GET = mobileRoute([PERM.hr.attendance.view], async (req, actor) => 
       status: today?.status ?? null,
       punchInAt: iso(today?.punchInAt ?? null),
       punchOutAt: iso(today?.punchOutAt ?? null),
+      minutes: todayMinutes,
+      hours: todayMinutes === null ? null : formatDuration(todayMinutes),
     },
     serverTime: now.toISOString(),
   });

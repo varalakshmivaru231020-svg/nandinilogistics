@@ -64,27 +64,27 @@ List<HomeTile> homeTiles(Session s) {
     return [
       if (s.canAny(const ['hr.attendance.view', 'hr.attendance.punch']))
         const HomeTile('attendance', 'Attendance', Icons.calendar_month_outlined, Tone.bad,
-            ScreenTarget('punch'), hint: 'View records'),
+            ScreenTarget('punch'), hint: 'Monthly records'),
       if (can('payout.payout.view'))
         const HomeTile('earnings', 'My Earnings', Icons.currency_rupee_rounded, Tone.good,
-            ScreenTarget('earnings'), hint: 'View details'),
+            ScreenTarget('earnings'), hint: 'Payout history'),
       if (can('advance.advance.view'))
         const HomeTile('advances', 'Advances', Icons.account_balance_wallet_outlined, Tone.warn,
             ListTarget('advances'), hint: 'Request & track'),
       const HomeTile('notifications', 'Notifications', Icons.notifications_none_rounded, Tone.info,
-          ScreenTarget('notifications'), hint: 'What changed'),
+          ScreenTarget('notifications'), hint: 'Announcements'),
     ];
   }
   return [
-    if (can('hr.attendance.punch'))
-      const HomeTile('punch', 'Punch in / out', Icons.fingerprint_rounded, Tone.good, ScreenTarget('punch')),
-    // §3.7 Team Leader and §3.8 Tele-caller
+    // Staff punch from the attendance card; their tiles are their lists.
     if (can('hr.employee.view'))
       HomeTile('team', can('hr.employee.viewAll') ? 'Riders' : 'My team', Icons.groups_outlined,
           Tone.good, const ListTarget('hr/employees')),
     if (can('hr.attendance.view'))
       const HomeTile('attendance', 'Team attendance', Icons.event_available_outlined, Tone.good,
           ListTarget('hr/attendance')),
+    if (can('hr.attendance.punch'))
+      const HomeTile('punch', 'My attendance', Icons.calendar_month_outlined, Tone.info, ScreenTarget('punch')),
     if (can('advance.advance.approve'))
       const HomeTile('advanceApprovals', 'Advance approvals', Icons.fact_check_outlined, Tone.warn,
           ListTarget('advances', {'status': 'PENDING'})),
@@ -152,12 +152,15 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => DashboardScreenState();
 }
 
+num _n(Map<String, dynamic>? p, String k) => (p?[k] as num?) ?? num.tryParse('${p?[k]}') ?? 0;
+
 class DashboardScreenState extends State<DashboardScreen> {
   Uint8List? _photo;
-  Map<String, dynamic>? _payout;
+  List<Map<String, dynamic>> _payouts = const [];
   String? _payoutProblem;
   List<Map<String, dynamic>> _activity = const [];
   late final PunchModel _punch = PunchModel(widget.api);
+  String? _lastNotice;
 
   Session get _s => widget.session;
   bool get _canPunch => _s.can('hr.attendance.punch');
@@ -186,21 +189,18 @@ class DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  String? _lastNotice;
-
   Future<void> _load() async {
     final r = _s.rider;
     if (_canPunch) _punch.load();
     if (r == null) return;
     final photo = widget.api.file(r.photoUrl ?? '/api/mobile/v1/photo');
     if (_s.can('payout.payout.view')) {
-      final res = await widget.api.get('/list/payouts', query: const {'page': '1', 'pageSize': '1'});
+      final res = await widget.api.get('/list/payouts', query: const {'page': '1', 'pageSize': '60'});
       if (mounted) {
         setState(() {
           if (res.ok) {
-            final rows = ListPage.from(res.data!).rows;
-            _payout = rows.isEmpty ? null : rows.first;
-            _payoutProblem = rows.isEmpty ? 'No payout posted yet.' : null;
+            _payouts = ListPage.from(res.data!).rows;
+            _payoutProblem = _payouts.isEmpty ? 'No payout posted yet.' : null;
           } else {
             _payoutProblem = res.missing ? notOnServer : res.error;
           }
@@ -285,6 +285,11 @@ class DashboardScreenState extends State<DashboardScreen> {
     if (yes == true) await _punch.punch();
   }
 
+  void _openAttendance() =>
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PunchScreen(api: widget.api))).then((_) {
+        if (mounted) _refresh();
+      });
+
   @override
   Widget build(BuildContext context) {
     final s = _s;
@@ -293,41 +298,29 @@ class DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       backgroundColor: T.page,
       body: Column(children: [
-        Bar(
-          title: 'Home',
-          subtitle: rider != null
-              ? null
-              : (s.roleNames.isEmpty ? (s.isSuperAdmin ? 'Super admin' : 'No role') : s.roleNames.first),
-          onMenu: widget.onMenu,
-          actions: [
-            BarButton(
-              icon: Icons.notifications_none_rounded,
-              label: 'Notifications',
-              dot: (widget.unread ?? 0) > 0,
-              onTap: widget.onNotifications,
-            ),
-            if (_canPunch) _punchButton(),
-          ],
-        ),
+        _header(),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(T.gutter, 8, T.gutter, 24),
+              padding: const EdgeInsets.fromLTRB(T.gutter, 14, T.gutter, 24),
               children: [
-                if (rider != null) ...[
-                  _riderGreeting(rider),
+                Text('Home', style: T.screenTitle()),
+                const SizedBox(height: 2),
+                Text(rider != null ? 'Welcome to your rider dashboard.' : 'Welcome to your dashboard.',
+                    style: T.secondaryText()),
+                const SizedBox(height: 14),
+                _welcomeCard(),
+                if (_canPunch) ...[
                   const SizedBox(height: T.cardGap),
-                  if (s.can('payout.payout.view')) ...[
-                    _payoutCard(),
-                    const SizedBox(height: T.cardGap),
-                  ],
-                ] else ...[
-                  _staffGreeting(s),
-                  const SizedBox(height: 18),
+                  _attendanceCard(),
+                ],
+                if (rider != null && s.can('payout.payout.view')) ...[
+                  const SizedBox(height: T.cardGap),
+                  _earningsCard(),
                 ],
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(2, 8, 2, 10),
+                  padding: const EdgeInsets.fromLTRB(2, 20, 2, 10),
                   child: Text('Quick Actions', style: T.section()),
                 ),
                 GridView.count(
@@ -336,27 +329,21 @@ class DashboardScreenState extends State<DashboardScreen> {
                   physics: const NeverScrollableScrollPhysics(),
                   mainAxisSpacing: T.cardGap,
                   crossAxisSpacing: T.cardGap,
-                  childAspectRatio: rider != null ? 1.6 : 1.45,
-                  children: [for (final t in tiles) rider != null ? _quickAction(t) : _tile(t)],
+                  childAspectRatio: 1.55,
+                  children: [for (final t in tiles) _tile(t)],
                 ),
-                if (rider != null && _canPunch) ...[
-                  const SizedBox(height: T.cardGap),
-                  _attendanceCard(),
+                if (_canPunch && _punch.today != null) ...[
+                  const SizedBox(height: 20),
+                  _attendancePreview(),
                 ],
                 if (rider != null && _activity.isNotEmpty) ...[
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 20),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
                     child: Row(children: [
                       Text('Recent Activity', style: T.section()),
                       const Spacer(),
-                      InkWell(
-                        onTap: widget.onNotifications,
-                        child: Row(children: [
-                          Text('See all', style: T.caption(color: T.accent700).copyWith(fontWeight: FontWeight.w700)),
-                          const Icon(Icons.arrow_forward_rounded, size: 14, color: T.accent700),
-                        ]),
-                      ),
+                      _link('View all', widget.onNotifications),
                     ]),
                   ),
                   Panel(
@@ -378,129 +365,133 @@ class DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// The red Punch In / Punch Out button beside the bell. Once the day is
-  /// done it turns into a quiet "Done" mark.
-  Widget _punchButton() {
-    final label = _punch.buttonLabel;
-    if (_punch.loading && _punch.today == null) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 8),
-        child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-      );
-    }
-    if (label == null) {
-      return Container(
-        key: const Key('punch-done'),
-        margin: const EdgeInsets.only(left: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(color: T.goodTint, borderRadius: BorderRadius.circular(T.rPill)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.check_circle_rounded, size: 16, color: T.goodInk),
-          const SizedBox(width: 6),
-          Text('Done', style: T.buttonLabel(color: T.goodInk).copyWith(fontSize: 12.5)),
-        ]),
-      );
-    }
-    final out = _punch.punchedIn;
-    return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: Semantics(
-        button: true,
-        label: label,
-        child: InkWell(
-          key: const Key('bar-punch'),
-          onTap: _punch.busy ? null : _confirmPunch,
-          borderRadius: BorderRadius.circular(T.rPill),
-          child: Container(
-            height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: out ? T.accent100 : T.accent500,
-              borderRadius: BorderRadius.circular(T.rPill),
-              boxShadow: out ? null : T.glow,
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              if (_punch.busy)
-                SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: out ? T.accent700 : Colors.white))
-              else
-                Icon(out ? Icons.logout_rounded : Icons.play_arrow_rounded,
-                    size: 18, color: out ? T.accent700 : Colors.white),
-              const SizedBox(width: 6),
-              Text(label, style: T.buttonLabel(color: out ? T.accent700 : Colors.white).copyWith(fontSize: 13)),
-            ]),
-          ),
-        ),
+  /// The company header: menu, the logo and name on the left, the bell on
+  /// the right. Compact, and nothing else in it.
+  Widget _header() {
+    final top = MediaQuery.of(context).padding.top;
+    return Container(
+      padding: EdgeInsets.fromLTRB(8, top + 6, 8, 8),
+      decoration: const BoxDecoration(
+        color: T.card,
+        border: Border(bottom: BorderSide(color: T.line)),
       ),
+      child: Row(children: [
+        IconButton(
+          tooltip: 'Menu',
+          onPressed: widget.onMenu,
+          icon: const Icon(Icons.menu_rounded, color: T.ink),
+          visualDensity: VisualDensity.compact,
+        ),
+        Image.asset('assets/brand/nandini-logo.png',
+            height: 30,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Icon(Icons.two_wheeler_rounded, size: 26, color: T.accent500)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text('NANDINI LOGISTICS',
+              style: T.section().copyWith(fontSize: 13.5, letterSpacing: 1.1),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+        ),
+        Stack(clipBehavior: Clip.none, children: [
+          IconButton(
+            tooltip: 'Notifications',
+            onPressed: widget.onNotifications,
+            icon: const Icon(Icons.notifications_none_rounded, color: T.ink),
+          ),
+          if ((widget.unread ?? 0) > 0)
+            Positioned(
+              right: 10,
+              top: 10,
+              child: Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  color: T.accent500,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: T.card, width: 1.5),
+                ),
+              ),
+            ),
+        ]),
+      ]),
     );
   }
 
-  /// "Good Morning, Suresh!" with the photo, Rider ID and where they ride.
-  Widget _riderGreeting(RiderProfile r) {
-    final first = r.name.trim().split(' ').first;
-    final place = r.location ?? (r.companies.isEmpty ? null : r.companies.join(', '));
-    final (String? banner, Tone tone) = switch (r.onboardingStatus) {
+  Widget _link(String label, VoidCallback onTap) => InkWell(
+        onTap: onTap,
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(label, style: T.caption(color: T.accent700).copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(width: 2),
+          const Icon(Icons.arrow_forward_rounded, size: 14, color: T.accent700),
+        ]),
+      );
+
+  /// "Welcome back, Suresh!" — or "Welcome to Nandini Logistics!" the first
+  /// time this phone signs in — with the photo or initials, Rider ID,
+  /// location and status.
+  Widget _welcomeCard() {
+    final s = _s;
+    final r = s.rider;
+    final name = (r?.name ?? s.name).trim();
+    final first = name.split(' ').first;
+    final place = r?.location ?? (r == null || r.companies.isEmpty ? null : r.companies.join(', '));
+    final (String? banner, Tone tone) = switch (r?.onboardingStatus) {
       'DRAFT' => ('Your form is being prepared', Tone.info),
       'SUBMITTED' => ('Under review', Tone.warn),
       'REJECTED' => (
-          'Not accepted${r.rejectionReason == null ? '' : ': ${r.rejectionReason}'}. Contact your tele-caller.',
+          'Not accepted${r?.rejectionReason == null ? '' : ': ${r!.rejectionReason}'}. Contact your tele-caller.',
           Tone.bad
         ),
       _ => (null, Tone.good),
     };
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(T.rCard),
-        gradient: const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [T.accent100, Color(0xFFFFF7F7)],
-        ),
-        border: Border.all(color: const Color(0xFFF6D9DB)),
-      ),
+    return Panel(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
+          Container(
+            width: 60,
+            height: 60,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: T.accent100,
+              shape: BoxShape.circle,
+              border: Border.all(color: T.accent500, width: 2),
+              image: _photo == null ? null : DecorationImage(image: MemoryImage(_photo!), fit: BoxFit.cover),
+            ),
+            child: _photo == null
+                ? Text(s.initials, style: T.metric(18, color: T.accent700).copyWith(height: 1))
+                : null,
+          ),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                const Icon(Icons.wb_sunny_rounded, size: 18, color: T.warn),
-                const SizedBox(width: 6),
-                Text(greetingFor(DateTime.now()), style: T.caption(color: T.accent700).copyWith(fontWeight: FontWeight.w700)),
-              ]),
-              const SizedBox(height: 4),
-              Text('${first.isEmpty ? 'there' : first}!',
-                  key: const Key('greeting'),
-                  style: T.display().copyWith(fontSize: 24, height: 1.1),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 6),
-              Text(r.riderId == null ? 'Rider ID pending' : 'Rider ID ${r.riderId}',
-                  key: const Key('rider-id'),
-                  style: T.num(12.5, color: T.accent700, weight: FontWeight.w700)),
+              Text(
+                s.returning ? 'Welcome back, ${first.isEmpty ? 'there' : first}!' : 'Welcome to Nandini Logistics!',
+                key: const Key('greeting'),
+                style: T.section().copyWith(fontSize: 17),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 3),
+              if (r != null)
+                Text(r.riderId == null ? 'Rider ID pending' : 'Rider ID ${r.riderId}',
+                    key: const Key('rider-id'),
+                    style: T.num(12.5, color: T.secondary, weight: FontWeight.w700))
+              else
+                Text(s.roleNames.isEmpty ? (s.isSuperAdmin ? 'Super admin' : 'Staff') : s.roleNames.first,
+                    style: T.caption(color: T.secondary)),
               if (place != null) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Row(children: [
-                  const Icon(Icons.location_on_rounded, size: 14, color: T.accent500),
+                  const Icon(Icons.location_on_outlined, size: 14, color: T.accent500),
                   const SizedBox(width: 3),
                   Flexible(child: Text(place, style: T.caption(color: T.secondary), maxLines: 1, overflow: TextOverflow.ellipsis)),
                 ]),
               ],
             ]),
           ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: T.soft),
-            child: CircleAvatar(
-              radius: 34,
-              backgroundColor: T.accent100,
-              backgroundImage: _photo == null ? null : MemoryImage(_photo!),
-              child: _photo == null ? const Icon(Icons.person_rounded, size: 32, color: T.accent700) : null,
-            ),
-          ),
+          if (r != null)
+            Pill(r.isActive ? 'Active' : 'Inactive', compact: true, tone: r.isActive ? Tone.good : Tone.bad),
         ]),
         if (banner != null) ...[
           const SizedBox(height: 10),
@@ -510,168 +501,182 @@ class DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// Staff get the greeting as a line: "Hey Priya, here's your day."
-  Widget _staffGreeting(Session s) {
-    final first = s.name.trim().split(' ').first;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Text.rich(
-        TextSpan(children: [
-          TextSpan(text: 'Hey ${first.isEmpty ? 'there' : first},\n'),
-          TextSpan(text: "here's your day.", style: T.hero(color: T.accent500)),
+  /// Today's attendance with the one valid action: Punch In, Punch Out, or
+  /// Completed. The working duration counts from the punch-in.
+  Widget _attendanceCard() {
+    final m = _punch;
+    final today = m.today;
+    final inAt = DateTime.tryParse('${today?['punchInAt'] ?? ''}');
+    final outAt = DateTime.tryParse('${today?['punchOutAt'] ?? ''}');
+    final worked = inAt == null ? null : (outAt ?? DateTime.now()).difference(inAt).inMinutes;
+    final (String state, Tone tone) = m.loadError != null
+        ? ('Unavailable', Tone.warn)
+        : !m.punchedIn
+            ? ('Not punched in', Tone.draft)
+            : !m.punchedOut
+                ? ('On duty', Tone.good)
+                : ('Completed', Tone.good);
+    return Panel(
+      key: const Key('attendance-card'),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          const Expanded(child: Overline("Today's attendance")),
+          const SizedBox(width: 8),
+          Pill(state, key: const Key('attendance-state'), compact: true, tone: tone),
         ]),
-        key: const Key('greeting'),
-        style: T.hero(),
-      ),
+        const SizedBox(height: 12),
+        Row(children: [
+          _fact('Punch in', inAt == null ? '—' : clock12(today!['punchInAt'])),
+          _fact(m.punchedOut ? 'Punch out' : 'On duty for',
+              m.punchedOut ? clock12(today!['punchOutAt']) : (worked == null ? '—' : duration(worked))),
+          _fact('Hours', worked == null ? '—' : duration(worked)),
+        ]),
+        const SizedBox(height: 14),
+        if (m.loadError != null)
+          Alert(m.loadError!, tone: Tone.warn)
+        else if (m.loading && today == null)
+          const Center(
+              child: Padding(
+                  padding: EdgeInsets.all(6),
+                  child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
+        else if (!m.punchedIn)
+          Btn('Punch In',
+              key: const Key('punch-action'),
+              icon: Icons.login_rounded,
+              expand: true,
+              height: 50,
+              busy: m.busy,
+              onPressed: m.busy ? null : _confirmPunch)
+        else if (!m.punchedOut)
+          Btn('Punch Out',
+              key: const Key('punch-action'),
+              icon: Icons.logout_rounded,
+              emphasis: Emphasis.outline,
+              expand: true,
+              height: 50,
+              busy: m.busy,
+              onPressed: m.busy ? null : _confirmPunch)
+        else
+          Container(
+            key: const Key('punch-done'),
+            height: 46,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: T.goodTint, borderRadius: BorderRadius.circular(T.rButton)),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.verified_rounded, size: 18, color: T.goodInk),
+              const SizedBox(width: 6),
+              Text('Shift completed', style: T.buttonLabel(color: T.goodInk)),
+            ]),
+          ),
+        if (m.error != null) ...[
+          const SizedBox(height: 10),
+          Alert(m.error!, tone: Tone.warn),
+        ],
+      ]),
     );
   }
 
-  Widget _payoutCard() {
-    final p = _payout;
-    num n(String k) => (p?[k] as num?) ?? num.tryParse('${p?[k]}') ?? 0;
-    final status = '${p?["status"] ?? ""}';
-    final held = status.toLowerCase().contains('hold');
-    // The hero card: dark red, with the week's figure in white — the one
-    // number a rider opens the app for. It is the latest posted payout.
+  Widget _fact(String label, String value) => Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: T.caption(color: T.muted)),
+          const SizedBox(height: 2),
+          Text(value, style: T.num(15, weight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
+        ]),
+      );
+
+  /// This week's earnings on a white card: the latest posted payout, what has
+  /// been paid and what is on hold across the posted lines, and the last
+  /// payout period. Nothing is projected.
+  Widget _earningsCard() {
+    final latest = _payouts.isEmpty ? null : _payouts.first;
+    num paid = 0;
+    num held = 0;
+    for (final p in _payouts) {
+      final st = '${p["status"] ?? ""}'.toLowerCase();
+      if (st.contains('hold')) {
+        held += _n(p, 'finalPayout');
+      } else {
+        paid += _n(p, 'finalPayout');
+      }
+    }
     return Panel(
       key: const Key('payout-card'),
-      fill: T.accent700,
-      border: T.accent700,
       padding: EdgeInsets.zero,
       onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => EarningsScreen(api: widget.api, session: _s))),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(T.rCard),
-        child: Container(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
           decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFFC8303A), Color(0xFF8E1F28)],
-            ),
+            border: Border(left: BorderSide(color: T.accent500, width: 4)),
           ),
-          child: Stack(children: [
-            Positioned(
-              right: -30,
-              top: -50,
-              child: Container(
-                width: 170,
-                height: 170,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.06),
-                ),
-              ),
-            ),
-            const Positioned(
-              right: 18,
-              top: 18,
-              child: Icon(Icons.trending_up_rounded, size: 40, color: Colors.white24),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Row(children: [
-                  Expanded(child: Overline("THIS WEEK'S EARNINGS", color: Colors.white.withValues(alpha: 0.8))),
-                  if (p != null)
-                    Pill(status,
-                        compact: true,
-                        solid: held
-                            ? (bg: T.warn, ink: Colors.white)
-                            : (bg: T.good, ink: Colors.white)),
-                ]),
-                const SizedBox(height: 10),
-                if (p == null)
-                  Text(_payoutProblem ?? 'Loading…', style: T.secondaryText(color: Colors.white70))
-                else ...[
-                  Text(money(n('finalPayout')), style: T.metric(34, color: Colors.white)),
-                  const SizedBox(height: 2),
-                  Text('${shortDate(p["periodFrom"])} – ${shortDate(p["periodTo"])}',
-                      style: T.caption(color: Colors.white70)),
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(T.rControl),
-                    ),
-                    child: Row(children: [
-                      for (final (label, key) in const [
-                        ('Total', 'totalPayout'),
-                        ('Advance', 'advance'),
-                        ('Bike rent', 'bikeRental'),
-                        ('TDS', 'tds'),
-                      ])
-                        Expanded(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(label, style: T.caption(color: Colors.white70).copyWith(fontSize: 11)),
-                            Text(money(n(key), short: true),
-                                style: T.num(12.5, color: Colors.white, weight: FontWeight.w700),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis),
-                          ]),
-                        ),
-                    ]),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                Row(children: [
-                  Text('See earnings summary', style: T.caption(color: Colors.white)),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.arrow_forward_rounded, size: 14, color: Colors.white),
-                ]),
-              ]),
-            ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Overline("This week's earnings"),
+              const Spacer(),
+              if (latest != null)
+                Pill('${latest["status"] ?? ""}',
+                    compact: true,
+                    tone: '${latest["status"] ?? ""}'.toLowerCase().contains('hold') ? Tone.warn : Tone.good),
+            ]),
+            const SizedBox(height: 6),
+            if (latest == null)
+              Text(_payoutProblem ?? 'Loading…', style: T.secondaryText())
+            else ...[
+              Text(money(_n(latest, 'finalPayout')), style: T.metric(30, color: T.accent700)),
+              const SizedBox(height: 2),
+              Text('${shortDate(latest["periodFrom"])} – ${shortDate(latest["periodTo"])}',
+                  style: T.caption(color: T.muted)),
+            ],
           ]),
         ),
-      ),
+        if (latest != null) ...[
+          const Divider(height: 1, thickness: 1, color: T.line),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Row(children: [
+              _fact('Paid', money(paid, short: true)),
+              _fact('On hold', money(held, short: true)),
+              _fact('Last payout', shortDate(latest['periodTo'])),
+            ]),
+          ),
+        ],
+        const Divider(height: 1, thickness: 1, color: T.line),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: Row(children: [
+            Text('View Earnings Summary', style: T.body(weight: FontWeight.w700, color: T.accent700)),
+            const Spacer(),
+            const Icon(Icons.arrow_forward_rounded, size: 16, color: T.accent700),
+          ]),
+        ),
+      ]),
     );
   }
 
-  /// Today's attendance, from the same model the header button uses.
-  Widget _attendanceCard() {
-    final m = _punch;
-    final (String state, String detail, Tone tone, IconData icon) = !m.punchedIn
-        ? ('Not punched in', 'Tap Punch In at the top when you start.', Tone.draft, Icons.schedule_rounded)
-        : !m.punchedOut
-            ? ('Punched In', 'Punch In Time: ${clock12(m.today!['punchInAt'])}', Tone.good, Icons.check_circle_rounded)
-            : ('Done for today', '${clock12(m.today!['punchInAt'])} – ${clock12(m.today!['punchOutAt'])}', Tone.good, Icons.verified_rounded);
-    final c = toneOf(tone);
+  /// Under the quick actions: today in one line, and the way to the month.
+  Widget _attendancePreview() {
+    final today = _punch.today!;
+    final inAt = DateTime.tryParse('${today['punchInAt'] ?? ''}');
+    final outAt = DateTime.tryParse('${today['punchOutAt'] ?? ''}');
+    final worked = inAt == null ? null : (outAt ?? DateTime.now()).difference(inAt).inMinutes;
     return Panel(
-      key: const Key('attendance-card'),
-      fill: tone == Tone.good ? T.goodTint : null,
-      border: tone == Tone.good ? T.goodLine : null,
-      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-      child: Row(children: [
-        Container(
-          width: 40,
-          height: 40,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(color: tone == Tone.good ? T.good : c.fill, shape: BoxShape.circle),
-          child: Icon(icon, size: 22, color: tone == Tone.good ? Colors.white : c.ink),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text("Today's Attendance", style: T.caption(color: T.secondary)),
-            Text(state, key: const Key('attendance-state'), style: T.body(weight: FontWeight.w800)),
-            Text(detail, style: T.caption(color: T.muted)),
-          ]),
-        ),
-        if (m.punchedIn && !m.punchedOut)
-          TextButton.icon(
-            key: const Key('card-punch-out'),
-            onPressed: m.busy ? null : _confirmPunch,
-            icon: const Icon(Icons.logout_rounded, size: 16),
-            label: const Text('Punch Out'),
-            style: TextButton.styleFrom(
-              foregroundColor: T.accent700,
-              backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(T.rPill), side: const BorderSide(color: T.accent300)),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-          ),
+      key: const Key('attendance-preview'),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      onTap: _openAttendance,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Text("Today's attendance", style: T.body(weight: FontWeight.w700)),
+          const Spacer(),
+          _link('View full attendance', _openAttendance),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          _fact('Punch in', inAt == null ? '—' : clock12(today['punchInAt'])),
+          _fact('Punch out', outAt == null ? (inAt == null ? '—' : 'Not yet') : clock12(today['punchOutAt'])),
+          _fact('Hours logged', worked == null ? '—' : duration(worked)),
+          _fact('Status', !_punch.punchedIn ? 'Pending' : (_punch.punchedOut ? 'Present' : 'On duty')),
+        ]),
       ]),
     );
   }
@@ -694,8 +699,8 @@ class DashboardScreenState extends State<DashboardScreen> {
             width: 32,
             height: 32,
             alignment: Alignment.center,
-            decoration: const BoxDecoration(color: T.goodTint, shape: BoxShape.circle),
-            child: Icon(icon, size: 17, color: T.goodInk),
+            decoration: BoxDecoration(color: T.neutralTint, borderRadius: BorderRadius.circular(9)),
+            child: Icon(icon, size: 17, color: T.secondary),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -710,37 +715,7 @@ class DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// A rider's quick action: a pastel square with the icon, the name and a hint.
-  Widget _quickAction(HomeTile t) {
-    final c = toneOf(t.tone);
-    final badge = t.id == 'notifications' ? widget.unread : null;
-    return Panel(
-      key: Key('tile-${t.id}'),
-      fill: c.fill,
-      border: c.fill,
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-      onTap: () => _go(t),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            child: Icon(t.icon, size: 21, color: c.ink),
-          ),
-          const Spacer(),
-          if (badge != null && badge > 0)
-            Pill('$badge', compact: true, solid: (bg: T.accent500, ink: Colors.white)),
-        ]),
-        const Spacer(),
-        Text(t.label, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: T.body(weight: FontWeight.w800, color: T.ink).copyWith(fontSize: 14.5)),
-        if (t.hint != null) Text(t.hint!, style: T.caption(color: T.secondary)),
-      ]),
-    );
-  }
-
+  /// A quick action: white, bordered, the icon on a small tinted square.
   Widget _tile(HomeTile t) {
     final c = toneOf(t.tone);
     final badge = t.id == 'notifications' ? widget.unread : null;
@@ -751,23 +726,24 @@ class DashboardScreenState extends State<DashboardScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 38,
+            height: 38,
             alignment: Alignment.center,
-            decoration: BoxDecoration(color: c.fill, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: c.fill, borderRadius: BorderRadius.circular(11)),
             child: Icon(t.icon, size: 20, color: c.ink),
           ),
           const Spacer(),
           if (badge != null && badge > 0)
             Pill('$badge', compact: true, solid: (bg: T.accent500, ink: Colors.white))
           else
-            const Icon(Icons.arrow_outward_rounded, size: 16, color: T.chevron),
+            const Icon(Icons.chevron_right_rounded, size: 18, color: T.chevron),
         ]),
         const Spacer(),
         Text(t.label,
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: T.body(weight: FontWeight.w700).copyWith(fontSize: 14)),
+            style: T.body(weight: FontWeight.w800).copyWith(fontSize: 14.5)),
+        if (t.hint != null) Text(t.hint!, style: T.caption(color: T.muted), maxLines: 1, overflow: TextOverflow.ellipsis),
       ]),
     );
   }

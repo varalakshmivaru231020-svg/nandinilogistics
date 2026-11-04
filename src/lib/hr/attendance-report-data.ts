@@ -1,3 +1,4 @@
+import { sessionMinutes } from "@/lib/hr/attendance-hours";
 import "server-only";
 
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -62,6 +63,7 @@ export async function loadAttendanceReport(
       status: e.status,
       overtimeHours: Number(e.overtimeHours),
       checkIn: e.punchInAt ? istClock(e.punchInAt) : null,
+      minutes: sessionMinutes(e.punchInAt, e.punchOutAt),
       checkOut: e.punchOutAt ? istClock(e.punchOutAt) : null,
     })),
     range,

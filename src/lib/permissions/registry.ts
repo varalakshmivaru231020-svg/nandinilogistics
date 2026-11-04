@@ -229,6 +229,7 @@ perm("hr", "attendance", "tabReport", "Workforce tab — Attendance report", G_H
 perm("hr", "attendance", "tabLog", "Workforce tab — Punch log", G_HR, "TAB", "Every check-in and check-out from the app or the top bar, day by day.");
 perm("hr", "attendance", "export", "Export the attendance report", G_HR, "BUTTON");
 perm("hr", "attendance", "punch", "Punch in / out from the app", G_HR, "ACTION", "One's own attendance, with the phone's location.");
+perm("hr", "attendance", "exportOwn", "Download one's own monthly attendance", G_HR, "ACTION", "PDF, Excel or CSV of the signed-in person's own month, never anyone else's.");
 
 // ===========================================================================
 // TASK MANAGEMENT (SOW §3.9) — Admin assigns, Team Leaders update

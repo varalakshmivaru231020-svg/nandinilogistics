@@ -561,6 +561,7 @@ class Field extends StatelessWidget {
     this.enabled = true,
     this.obscure = false,
     this.suffix,
+    this.prefix,
     this.onSubmit,
     this.onChanged,
     this.formatters,
@@ -582,6 +583,9 @@ class Field extends StatelessWidget {
   final bool enabled;
   final bool obscure;
   final Widget? suffix;
+
+  /// Inside the box, before the text: a country code, a currency sign.
+  final Widget? prefix;
   final VoidCallback? onSubmit;
   final ValueChanged<String>? onChanged;
   final List<TextInputFormatter>? formatters;
@@ -617,6 +621,8 @@ class Field extends StatelessWidget {
           fillColor: wrong ? T.badField : T.fieldFill,
           isDense: true,
           suffixIcon: suffix,
+          prefixIcon: prefix,
+          prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           enabledBorder: border(wrong ? T.bad : T.line, wrong ? 1.5 : 1),
           focusedBorder: border(wrong ? T.bad : T.accent500, 1.5),

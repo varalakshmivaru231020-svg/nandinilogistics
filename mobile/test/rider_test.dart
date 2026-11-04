@@ -257,11 +257,12 @@ void main() {
           'punch', 'requestAdvance', 'referFriend', 'referRider', 'profile']) {
         expect(find.byKey(Key('tile-$id')), findsNothing, reason: id);
       }
-      // The punch button sits in the bar, beside the bell.
-      expect(find.byKey(const Key('bar-punch')), findsOneWidget);
+      // Punch In lives in the attendance card, not the header.
       expect(find.byKey(const Key('attendance-card')), findsOneWidget);
+      expect(find.text('NANDINI LOGISTICS'), findsOneWidget);
       expect(find.text('Rider ID NL009'), findsOneWidget);
-      expect(find.text('₹3,948'), findsOneWidget);
+      // The latest payout, and again as the paid total under it.
+      expect(find.text('₹3,948'), findsAtLeastNWidgets(1));
       // Accepted: no banner.
       expect(find.byKey(const Key('onboarding-banner')), findsNothing);
     });

@@ -1,7 +1,7 @@
 name: nninfra
 description: Nandini Rider — Android client for the Nandini Logistics Rider CRM.
 publish_to: "none"
-version: 0.3.0+3
+version: 0.4.0+4
 
 environment:
   sdk: ^3.9.0

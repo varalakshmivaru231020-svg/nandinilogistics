@@ -35,6 +35,17 @@ class SignInScreenState extends State<SignInScreen> {
   bool _final = false;
   bool _unreachable = false;
 
+  /// Whether this phone has signed in before; decides the greeting.
+  bool _returning = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.auth.store.seen().then((seen) {
+      if (mounted && seen) setState(() => _returning = true);
+    });
+  }
+
   @override
   void dispose() {
     _email.dispose();
@@ -189,12 +200,14 @@ class SignInScreenState extends State<SignInScreen> {
             child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(20, top + 150, 20, 24),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text('Welcome to', style: T.display().copyWith(fontSize: 24, height: 1.15)),
+                Text(_returning ? 'Welcome back to' : 'Welcome to',
+                    style: T.display().copyWith(fontSize: 24, height: 1.15)),
                 Text('Nandini Logistics',
                     key: const Key('welcome'),
                     style: T.display(color: T.accent500).copyWith(fontSize: 28, height: 1.15)),
                 const SizedBox(height: 6),
-                Text("Let's get you started.", style: T.secondaryText()),
+                Text(_returning ? 'Sign in to continue.' : "Let's get you started.",
+                    style: T.secondaryText()),
                 const SizedBox(height: 18),
                 _modes(pin),
                 const SizedBox(height: 14),
@@ -213,9 +226,15 @@ class SignInScreenState extends State<SignInScreen> {
                           LengthLimitingTextInputFormatter(10),
                         ],
                         enabled: !_busy && !_final,
-                        suffix: const Padding(
-                          padding: EdgeInsets.only(right: 12),
-                          child: Text('+91', style: TextStyle(fontWeight: FontWeight.w700, color: T.secondary)),
+                        prefix: Padding(
+                          padding: const EdgeInsets.only(left: 14, right: 10),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.phone_android_rounded, size: 18, color: T.muted),
+                            const SizedBox(width: 6),
+                            Text('+91', style: T.num(15, weight: FontWeight.w700, color: T.ink)),
+                            const SizedBox(width: 8),
+                            Container(width: 1, height: 20, color: T.line400),
+                          ]),
                         ),
                       ),
                       const SizedBox(height: 13),
@@ -233,6 +252,10 @@ class SignInScreenState extends State<SignInScreen> {
                           ],
                           enabled: !_busy,
                           onSubmit: _submit,
+                          prefix: const Padding(
+                            padding: EdgeInsets.only(left: 14, right: 10),
+                            child: Icon(Icons.lock_outline_rounded, size: 18, color: T.muted),
+                          ),
                           suffix: IconButton(
                             tooltip: _revealPin ? 'Hide PIN' : 'Show PIN',
                             icon: Icon(

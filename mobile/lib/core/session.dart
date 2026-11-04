@@ -35,6 +35,10 @@ class Session {
   /// Who to call for help — from the server, so Admin can change it.
   final SupportContact support;
 
+  /// False only on the first sign-in from this phone: the home screen then
+  /// says "Welcome to Nandini Logistics" instead of "Welcome back".
+  bool returning = true;
+
   bool can(String code) => isSuperAdmin || permissions.contains(code);
   bool canAny(Iterable<String> codes) => codes.any(can);
 
@@ -161,10 +165,28 @@ class RiderProfile {
 /// this morning reaches a phone that signed in last night.
 class Store {
   static const _key = 'nn_token';
+  static const _seen = 'nn_seen';
 
   Future<String?> read() async => (await SharedPreferences.getInstance()).getString(_key);
   Future<void> write(String t) async => (await SharedPreferences.getInstance()).setString(_key, t);
   Future<void> clear() async => (await SharedPreferences.getInstance()).remove(_key);
+
+  /// Whether anyone has signed in on this phone before. Survives sign-out on
+  /// purpose: "Welcome back" is for a phone that has been here, and a fresh
+  /// install gets "Welcome to Nandini Logistics".
+  Future<bool> seen() async {
+    try {
+      return (await SharedPreferences.getInstance()).getBool(_seen) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> markSeen() async {
+    try {
+      await (await SharedPreferences.getInstance()).setBool(_seen, true);
+    } catch (_) {/* a greeting, nothing more */}
+  }
 }
 
 class Auth {
@@ -231,7 +253,11 @@ class Auth {
       await store.write(token);
     } catch (_) {/* costs nothing until the next launch */}
 
-    return _me(token);
+    final seen = await store.seen();
+    await store.markSeen();
+    final s = await _me(token);
+    if (s.ok) s.data!.returning = seen;
+    return s;
   }
 
   Future<Session?> resume() async {
